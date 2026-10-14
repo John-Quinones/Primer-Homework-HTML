@@ -42,7 +42,9 @@
     st.matrix ||= JSON.parse(JSON.stringify(AUTH.matrix));
     st.roles ||= AUTH.roles.map((name) => ({ name, builtin: true }));
     // Permissions added in later versions reach the built-in roles once.
-    st.info.knownPerms ||= Object.keys(AUTH.permissions).filter((p) => !["esign.use", "mail.send"].includes(p));
+    st.info.knownPerms ||= Object.keys(AUTH.permissions).filter((p) => !["esign.use", "mail.send", "payments.manage"].includes(p));
+    // Data saved before the payments module counted that permission as known without granting it.
+    if (!st.info.paymentsGranted) { st.info.knownPerms = st.info.knownPerms.filter((p) => p !== "payments.manage"); st.info.paymentsGranted = true; }
     for (const p of Object.keys(AUTH.permissions)) {
       if (st.info.knownPerms.includes(p)) continue;
       for (const [role, perms] of Object.entries(AUTH.matrix)) if (perms.includes(p) && st.matrix[role] && !st.matrix[role].includes(p)) st.matrix[role].push(p);
