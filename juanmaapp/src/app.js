@@ -13,6 +13,10 @@ import { courtsRouter } from "./courts.js";
 import { agendaRouter } from "./agenda-routes.js";
 import { monitorRouter } from "./monitor-routes.js";
 import { templatesRouter } from "./templates.js";
+import { esignRouter, esignPublicRouter } from "./esign.js";
+import { mailRouter, mailPublicRouter } from "./mailtrace.js";
+import { paymentsRouter } from "./payments.js";
+import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -64,9 +68,17 @@ export function createApp(db) {
   app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js")));
   app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
   app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
+  // Shared logic for the page (statuses, procedural roles, receivables math).
+  const shared = SHARED_MODULES.map(([file, name]) => asGlobal(path.join(root, file), name)).join("\n");
+  app.get("/shared.js", (_req, res) => res.type("text/javascript").send(shared));
   app.get("/vendor/purify.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/dompurify/dist/purify.min.js")));
 
+  // Behind Render/Nginx set TRUST_PROXY=1 so signature evidence records the real client IP.
+  app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
   app.use("/api/auth", authRouter(db));
+  // Signer and recipient pages: the link token is the credential, no session.
+  app.use("/api/public/sign", esignPublicRouter(db));
+  app.use("/api/public/mail", mailPublicRouter(db));
   app.use("/api", requireAuth);
   app.use("/api/admin", adminRouter(db));
   app.use("/api", recordsRouter(db));
@@ -76,6 +88,9 @@ export function createApp(db) {
   app.use("/api", agendaRouter(db));
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
   app.use("/api/templates", requirePerm("drafts.generate"), templatesRouter(db));
+  app.use("/api/esign", requirePerm("esign.use"), esignRouter(db));
+  app.use("/api/mail", requirePerm("mail.send"), mailRouter(db));
+  app.use("/api/payments", requirePerm("payments.manage"), paymentsRouter(db));
 
   app.post("/api/generate", requirePerm("drafts.generate"), async (req, res) => {
     let body = req.body ?? {};

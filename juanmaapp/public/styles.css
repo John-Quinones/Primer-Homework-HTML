@@ -386,6 +386,15 @@ button.mini { padding: 2px 8px; font-size: .74rem; }
 .var-picker .chip { margin: 0 4px 4px 0; }
 .base-note { background: color-mix(in srgb, var(--brand-blue) 8%, transparent); padding: 8px 10px; border-radius: 8px; }
 
+/* ---------- Signatures and traced e-mail ---------- */
+.signer-row { display: grid; grid-template-columns: 2fr 1fr 2fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+.signer-row input { margin: 0; }
+.signer-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.signer-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.signer-list li > div:last-child { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sig-img { height: 46px; background: #fff; border-radius: 6px; border: 1px solid var(--border); }
+.sig-canvas { width: 100%; height: 180px; border: 1px dashed var(--border); border-radius: 10px; background: #fff; display: block; margin-top: 6px; }
+
 /* ---------- Catalog ordering ---------- */
 .type-row { display: grid !important; grid-template-columns: 20px 1fr auto auto; align-items: center; gap: 8px; }
 .type-row.child { padding-left: 28px; }
@@ -512,6 +521,7 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
   .agenda-item .toolbar { grid-column: 1 / -1; }
   .perm-grid { grid-template-columns: 1fr; }
   .tpl-editor { grid-template-columns: 1fr; }
+  .signer-row { grid-template-columns: 1fr 1fr; }
   .var-picker { border-left: 0; padding-left: 0; max-height: 200px; }
   .type-row { grid-template-columns: 20px 1fr; }
   .type-row .uses { display: none; }
@@ -535,3 +545,23 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
   main { padding: 0; }
   mark.fill { background: #ffe680; }
 }
+
+/* ---------- Pagos y cartera ---------- */
+a.button {
+  display: inline-flex; align-items: center; font: inherit; font-size: .85rem; text-decoration: none; cursor: pointer;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--surface-muted); color: var(--text); padding: 6px 12px;
+}
+.pay-kpis .kpi-value { font-size: 1.45rem; }
+.pay-kpis .kpi:hover { transform: none; }
+#pay-aging .hbar { grid-template-columns: minmax(110px, 140px) 1fr minmax(96px, auto); }
+#pay-aging .hbar-fill.late { background: var(--warning, #b7791f); }
+#pay-aging .hbar-fill.bad { background: var(--error); }
+.pay-filter { margin: 4px 0 10px; }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay-state { display: inline-block; font-size: .74rem; padding: 1px 8px; border-radius: 999px; background: var(--surface-muted); white-space: nowrap; }
+.pay-state.vencido { background: color-mix(in srgb, var(--error) 14%, transparent); color: var(--error); }
+.pay-state.pagado { background: color-mix(in srgb, var(--success, #2f855a) 16%, transparent); color: var(--success, #2f855a); }
+.pay-state.parcial { background: color-mix(in srgb, var(--brand-blue) 14%, transparent); color: var(--brand-blue); }
+.pay-state.anulado { text-decoration: line-through; color: var(--text-muted); }
+tr.voided td { color: var(--text-muted); }
+tr.voided td:not(:last-child) { text-decoration: line-through; }

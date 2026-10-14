@@ -12,7 +12,8 @@ test("guesses columns from typical Access export headers", () => {
     "Nombre del cliente": "client.full_name", "No. Documento": "client.id_number", "Cédula": "client.id_number",
     "Correo Electrónico": "client.email", Celular: "client.phone", "Tipo de Proceso": "case.category",
     Proceso: "case.type", "Clase de proceso": "case.type", "Estado del proceso": "case.status",
-    Demandado: "case.counterparty", Radicado: "case.custom", "Nombre Abogado": "case.custom",
+    Demandado: "case.counterparty", Radicado: "case.radicado", "Nombre Abogado": "case.custom",
+    "Calidad del cliente": "case.client_role", Afiliado: "case.affiliated",
   };
   for (const [h, want] of Object.entries(cases)) assert.equal(guessTarget(h), want, h);
 });

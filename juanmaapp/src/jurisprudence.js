@@ -163,6 +163,41 @@ If you cannot find it on an official site, return {"found": false, "notes": "why
   return { ...data, verified: !!data.found && verifiedUrl(data.url, seen) };
 }
 
+// ---------- Analysis of a pasted judgment (no web tools) ----------
+const flat = (x) => String(x || "").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
+
+export async function analyzeText({ text, reference }) {
+  const msg = await client.beta.messages.stream({
+    model: MODEL,
+    max_tokens: 32000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    output_config: { effort: "high" },
+    system: SYSTEM,
+    messages: [{ role: "user", content: `Analyze ONLY the judgment text below. If something is not in the text, use null.
+Reference given by the user: ${reference || "[not given]"}
+
+<<<SENTENCIA
+${text.slice(0, 400000)}
+SENTENCIA>>>
+
+Return:
+\`\`\`json
+{"court": "", "sala": "", "reference": "", "date": "YYYY-MM-DD or null", "reporting_judge": "or null",
+ "legal_problem": "", "facts": "", "ratio_decidendi": "", "decision": "", "dissents": "or null",
+ "cited_norms": [""], "summary": "150-250 palabras", "key_quotes": [{"text": "verbatim", "section": ""}], "notes": ""}
+\`\`\`` }],
+  }).finalMessage();
+  if (msg.stop_reason === "refusal") throw new Error("El modelo no pudo atender esta consulta.");
+  const data = lastJsonBlock(msg.content.filter((b) => b.type === "text").map((b) => b.text).join(""));
+  // Keep only quotes that really appear in the text.
+  const hay = flat(text);
+  const all = data.key_quotes || [];
+  const quotes = all.filter((q) => q?.text && hay.includes(flat(q.text)));
+  const notes = [data.notes, "Análisis del texto pegado; la fuente oficial no se verificó.", all.length > quotes.length ? `Se descartaron ${all.length - quotes.length} cita(s) que no aparecen textualmente.` : ""];
+  return { ...data, found: true, key_quotes: quotes, url: null, verified: false, notes: notes.filter(Boolean).join(" ") };
+}
+
 // ---------- Citation check ----------
 export async function verifyCitation({ citation, claim }) {
   const prompt = `An attorney's draft cites this Colombian judgment:

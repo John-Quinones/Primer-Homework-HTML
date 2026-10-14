@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 import { seedTemplates } from "./templates.js";
+import { normStatus } from "./case-meta.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -168,6 +169,84 @@ CREATE TABLE IF NOT EXISTS document_templates (
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Electronic signature requests, their signers and an audit trail.
+CREATE TABLE IF NOT EXISTS sign_requests (
+  id            INTEGER PRIMARY KEY,
+  title         TEXT NOT NULL,
+  case_id       INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+  office_id     INTEGER REFERENCES offices(id),
+  doc_kind      TEXT NOT NULL CHECK (doc_kind IN ('markdown','pdf')),
+  doc_text      TEXT,
+  doc_file      BLOB,
+  doc_name      TEXT NOT NULL DEFAULT '',
+  doc_hash      TEXT NOT NULL,
+  message       TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'enviada' CHECK (status IN ('enviada','completada','cancelada','rechazada')),
+  created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at  TEXT
+);
+CREATE TABLE IF NOT EXISTS sign_signers (
+  id              INTEGER PRIMARY KEY,
+  request_id      INTEGER NOT NULL REFERENCES sign_requests(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  id_type         TEXT NOT NULL DEFAULT 'CC',
+  id_number       TEXT NOT NULL DEFAULT '',
+  email           TEXT NOT NULL DEFAULT '',
+  phone           TEXT NOT NULL DEFAULT '',
+  token_hash      TEXT NOT NULL UNIQUE,
+  otp_hash        TEXT,
+  otp_expires_at  TEXT,
+  otp_sent_at     TEXT,
+  otp_attempts    INTEGER NOT NULL DEFAULT 0,
+  status          TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente','firmado','rechazado')),
+  method          TEXT,
+  signed_at       TEXT,
+  ip              TEXT,
+  user_agent      TEXT,
+  typed_name      TEXT,
+  signature_png   TEXT,
+  reject_reason   TEXT
+);
+CREATE TABLE IF NOT EXISTS sign_events (
+  id          INTEGER PRIMARY KEY,
+  request_id  INTEGER NOT NULL REFERENCES sign_requests(id) ON DELETE CASCADE,
+  signer_id   INTEGER REFERENCES sign_signers(id) ON DELETE CASCADE,
+  at          TEXT NOT NULL DEFAULT (datetime('now')),
+  event       TEXT NOT NULL,
+  detail      TEXT NOT NULL DEFAULT '',
+  ip          TEXT NOT NULL DEFAULT ''
+);
+
+-- E-mail with traceability: content hash, SMTP acceptance, opening and acknowledgment.
+CREATE TABLE IF NOT EXISTS mail_messages (
+  id               INTEGER PRIMARY KEY,
+  case_id          INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+  office_id        INTEGER REFERENCES offices(id),
+  to_addr          TEXT NOT NULL,
+  cc               TEXT NOT NULL DEFAULT '',
+  subject          TEXT NOT NULL,
+  body             TEXT NOT NULL,
+  content_hash     TEXT NOT NULL,
+  token_hash       TEXT NOT NULL UNIQUE,
+  status           TEXT NOT NULL CHECK (status IN ('enviado','fallido')),
+  smtp_message_id  TEXT NOT NULL DEFAULT '',
+  smtp_response    TEXT NOT NULL DEFAULT '',
+  sent_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  opened_at        TEXT, open_ip TEXT, open_ua TEXT,
+  confirmed_at     TEXT, confirm_ip TEXT, confirm_ua TEXT, confirm_name TEXT,
+  created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS mail_attachments (
+  id          INTEGER PRIMARY KEY,
+  message_id  INTEGER NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  mime        TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size        INTEGER NOT NULL,
+  sha256      TEXT NOT NULL,
+  data        BLOB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS role_permissions (
   role        TEXT NOT NULL,
   permission  TEXT NOT NULL,
@@ -222,7 +301,7 @@ CREATE TABLE IF NOT EXISTS cases (
   client_id        INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
   process_type_id  INTEGER NOT NULL REFERENCES process_types(id) ON DELETE RESTRICT,
   title            TEXT NOT NULL DEFAULT '',
-  status           TEXT NOT NULL DEFAULT 'Abierto',
+  status           TEXT NOT NULL DEFAULT 'Activo',
   counterparty     TEXT NOT NULL DEFAULT '',
   facts            TEXT NOT NULL DEFAULT '',
   field_values     TEXT NOT NULL DEFAULT '{}',  -- JSON keyed by custom_fields.id
@@ -232,6 +311,63 @@ CREATE TABLE IF NOT EXISTS cases (
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS cases_client ON cases(client_id);
+
+-- Payments: what the client owes (charges / installments) and what they paid (receipts).
+CREATE TABLE IF NOT EXISTS charges (
+  id               INTEGER PRIMARY KEY,
+  client_id        INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+  case_id          INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+  office_id        INTEGER REFERENCES offices(id),
+  concept          TEXT NOT NULL,
+  plan_label       TEXT NOT NULL DEFAULT '',     -- e.g. "Cuota 2 de 6"
+  amount           INTEGER NOT NULL CHECK (amount > 0),
+  due_date         TEXT NOT NULL,                -- YYYY-MM-DD
+  pay_link         TEXT NOT NULL DEFAULT '',
+  notes            TEXT NOT NULL DEFAULT '',
+  status           TEXT NOT NULL DEFAULT 'vigente' CHECK (status IN ('vigente','anulado')),
+  void_reason      TEXT NOT NULL DEFAULT '',
+  last_reminder_at TEXT,
+  created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS charges_client ON charges(client_id);
+
+CREATE TABLE IF NOT EXISTS receipts (
+  id           INTEGER PRIMARY KEY,
+  number       INTEGER NOT NULL UNIQUE,
+  client_id    INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+  charge_id    INTEGER REFERENCES charges(id) ON DELETE SET NULL,
+  case_id      INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+  office_id    INTEGER REFERENCES offices(id),
+  amount       INTEGER NOT NULL CHECK (amount > 0),
+  method       TEXT NOT NULL,
+  reference    TEXT NOT NULL DEFAULT '',
+  paid_on      TEXT NOT NULL,
+  concept      TEXT NOT NULL DEFAULT '',
+  notes        TEXT NOT NULL DEFAULT '',
+  voided_at    TEXT,
+  void_reason  TEXT NOT NULL DEFAULT '',
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS receipts_client ON receipts(client_id);
+
+CREATE TABLE IF NOT EXISTS payment_reminders (
+  id         INTEGER PRIMARY KEY,
+  charge_id  INTEGER REFERENCES charges(id) ON DELETE CASCADE,
+  client_id  INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+  channel    TEXT NOT NULL,
+  ok         INTEGER NOT NULL,
+  detail     TEXT NOT NULL DEFAULT '',
+  trigger    TEXT NOT NULL DEFAULT 'manual',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  sent_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 
 -- Judgments saved from the case-law search, optionally attached to a case.
 CREATE TABLE IF NOT EXISTS saved_rulings (
@@ -316,7 +452,13 @@ function migrate(db) {
     ["court_id", "INTEGER REFERENCES courts(id) ON DELETE SET NULL"], ["court_name", "TEXT NOT NULL DEFAULT ''"],
     ["court_email", "TEXT NOT NULL DEFAULT ''"], ["radicado", "TEXT NOT NULL DEFAULT ''"],
     ["monitor", "INTEGER NOT NULL DEFAULT 0"], ["ext_process_id", "TEXT NOT NULL DEFAULT ''"],
-    ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"]]) add("cases", col, def);
+    ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"],
+    ["client_role", "TEXT NOT NULL DEFAULT ''"], ["affiliated", "INTEGER NOT NULL DEFAULT 0"]]) add("cases", col, def);
+  // Three statuses: Activo, Archivo provisional, Archivo definitivo.
+  for (const row of db.prepare("SELECT DISTINCT status FROM cases").all()) {
+    const next = normStatus(row.status);
+    if (next !== row.status) db.prepare("UPDATE cases SET status = ? WHERE status = ?").run(next, row.status);
+  }
   db.exec("CREATE INDEX IF NOT EXISTS cases_radicado ON cases(radicado)");
   db.exec("CREATE INDEX IF NOT EXISTS cases_office ON cases(office_id)");
 
@@ -338,7 +480,7 @@ function migrate(db) {
   const known = new Set(db.prepare("SELECT permission FROM known_permissions").all().map((r) => r.permission));
   if (!known.size && db.prepare("SELECT COUNT(*) AS n FROM role_permissions").get().n) {
     // Databases from before this table existed already hold their matrix.
-    for (const p of Object.keys(PERMISSIONS)) if (!["processes.consult", "templates.manage"].includes(p)) known.add(p);
+    for (const p of Object.keys(PERMISSIONS)) if (!["processes.consult", "templates.manage", "esign.use", "mail.send"].includes(p)) known.add(p);
     const insK = db.prepare("INSERT OR IGNORE INTO known_permissions (permission) VALUES (?)");
     for (const p of known) insK.run(p);
   }

@@ -31,17 +31,20 @@ export const PERMISSIONS = {
   "reports.view": "Ve y exporta reportes",
   "processes.consult": "Consulta procesos en la Rama Judicial y recibe reportes",
   "templates.manage": "Crea, carga y edita plantillas de documentos",
+  "esign.use": "Envía documentos a firma electrónica",
+  "mail.send": "Envía correo electrónico con trazabilidad",
+  "payments.manage": "Registra cobros y recibos, maneja cartera y envía recordatorios de pago",
 };
 
 // Starting matrix; Gerencia edits it in Usuarios › Roles.
 export const DEFAULT_MATRIX = {
   "Gerencia": Object.keys(PERMISSIONS),
-  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage"],
-  "Director Contable": ["scope.all", "reports.view"],
-  "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult"],
-  "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view", "processes.consult"],
-  "Dependiente Judicial": ["cases.write", "jurisprudence.use", "processes.consult"],
-  "Asistente": ["clients.write", "cases.write", "drafts.generate"],
+  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage", "esign.use", "mail.send"],
+  "Director Contable": ["scope.all", "reports.view", "payments.manage"],
+  "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "esign.use", "mail.send", "payments.manage"],
+  "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view", "processes.consult", "esign.use", "mail.send"],
+  "Dependiente Judicial": ["cases.write", "jurisprudence.use", "processes.consult", "mail.send"],
+  "Asistente": ["clients.write", "cases.write", "drafts.generate", "payments.manage"],
 };
 
 const SESSION_HOURS = 12;

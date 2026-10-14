@@ -51,6 +51,14 @@ const httpBackend = {
 const backend = window.JuanmaBackend || httpBackend;
 const api = (method, url, body) => backend.request(method, url, body);
 if (window.JuanmaBackend) $("#demo-badge").hidden = false;
+// Published link: users pick their name to sign in; passwords belong to the installed app.
+const WEB = !!window.JuanmaBackend?.web;
+if (WEB) {
+  $$(".pw-field").forEach((l) => l.remove());
+  $("#login-form").remove();
+  $('[data-action="change-password"]')?.remove();
+  $('#user-dialog input[name="password"]')?.closest("label")?.remove();
+}
 
 // ---------- Shared state ----------
 const state = { catalog: [], clients: [], cases: [], selectedClientId: null };
@@ -90,6 +98,9 @@ const myOfficeIds = () => (can("scope.all") ? offices.map((o) => o.id) : me.offi
 const myOffices = () => offices.filter((o) => myOfficeIds().includes(o.id));
 
 const VIEW_PERMS = {
+  firmas: "esign.use",
+  correo: "mail.send",
+  pagos: "payments.manage",
   consulta: "processes.consult",
   borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
   importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage",
@@ -98,13 +109,15 @@ const VIEW_PERMS = {
 function applyPermissions() {
   $$(".sidenav a").forEach((a) => (a.hidden = !!VIEW_PERMS[a.dataset.view] && !can(VIEW_PERMS[a.dataset.view])));
   // Buttons that need a permission carry data-perm (set when rendered) or are matched here.
-  const needs = { "new-client": "clients.write", "new-case": "cases.write", "new-task": "cases.write", "add-radicado": "cases.write" };
+  const needs = { "new-receipt": "payments.manage", "new-charge": "payments.manage", "new-sign": "esign.use", "new-mail": "mail.send", "new-client": "clients.write", "new-case": "cases.write", "new-task": "cases.write", "add-radicado": "cases.write" };
   $$("[data-action]").forEach((b) => { if (needs[b.dataset.action]) b.hidden = !can(needs[b.dataset.action]); });
   $("#user-name").textContent = me.name;
   $("#user-role").textContent = me.role;
   $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   $("#courts-import-btn").hidden = !can("catalog.manage");
   $("#tpl-manage-bar").hidden = !can("templates.manage");
+  $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
+  $$('[data-tpl-out="mail"]').forEach((b) => (b.hidden = !can("mail.send")));
   $("#user-offices").textContent = can("scope.all") ? "Todas las oficinas" : `Oficina: ${me.offices.map((o) => o.name).join(", ")}`;
 }
 
@@ -116,10 +129,10 @@ function showAuth(status = {}) {
   me = null;
   $("#app-root").hidden = true;
   $("#auth-screen").hidden = false;
-  $("#login-form").hidden = !!status.setupNeeded;
+  if ($("#login-form")) $("#login-form").hidden = !!status.setupNeeded;
   $("#setup-form").hidden = !status.setupNeeded;
   const demo = backend.demoUsers?.();
-  $("#demo-logins").hidden = !demo;
+  $("#demo-logins").hidden = !demo?.length || !!status.setupNeeded;
   if (demo) {
     $("#demo-logins .demo-grid").innerHTML = demo.map((u) =>
       `<button type="button" data-demo-login="${escapeHtml(u.email)}"><strong>${escapeHtml(u.role)}</strong><span>${escapeHtml(u.name)} · ${escapeHtml(u.office)}</span></button>`).join("");
@@ -147,7 +160,7 @@ async function boot() {
 }
 
 for (const [formSel, url] of [["#login-form", "/auth/login"], ["#setup-form", "/auth/setup"]]) {
-  $(formSel).addEventListener("submit", async (e) => {
+  $(formSel)?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const err = $(".form-error", e.target);
     err.hidden = true;
@@ -247,7 +260,7 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
 function showView() {
   if (!me) return;
   let name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
@@ -307,12 +320,14 @@ async function renderClientDetail() {
 function caseCard(k) {
   return `<li class="case-card">
     <div><span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span></div>
+    ${partyLine(k) ? `<span class="muted">Cliente: ${escapeHtml(partyLine(k))}</span>` : ""}
     <strong>${escapeHtml(k.type_name)}</strong>
     ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
     <span>${escapeHtml(k.office_name || "")}${k.assigned_name ? " · " + escapeHtml(k.assigned_name) : " · Sin responsable"}</span>
     ${k.court_name ? `<span class="court-line">${escapeHtml(k.court_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : ""}</span>` : ""}
     <div class="toolbar">
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
+      ${can("mail.send") ? `<button data-action="mail-case" data-case="${k.id}">Correo</button>` : ""}
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
     </div>
   </li>`;
@@ -399,7 +414,7 @@ function renderCaseRows() {
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
-      <td>${escapeHtml(k.client_name)}</td>
+      <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
       <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
@@ -438,7 +453,19 @@ function fillTypeSelect(catId, selectedTypeId) {
     types.filter((x) => x.parent_id === t.id).map((x) => `<option value="${x.id}">&nbsp;&nbsp;&nbsp;› ${escapeHtml(x.name)}</option>`).join("")).join("");
   if (selectedTypeId) caseForm.elements.process_type_id.value = selectedTypeId;
   renderCustomFields(cat, {});
+  fillRoleSelect();
 }
+
+// Procedural role options follow the process: Demandante/Demandado, Ejecutante/Ejecutado, penal roles…
+function fillRoleSelect(selected = caseForm.elements.client_role.value) {
+  const cat = categoryOf(caseForm.elements.category_id.value);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const roles = window.JuanmaCaseMeta.partyRolesFor(cat?.name || "", type?.path || type?.name || "");
+  const opts = selected && !roles.includes(selected) ? [...roles, selected] : roles;
+  caseForm.elements.client_role.innerHTML = '<option value="">— Sin indicar —</option>' + opts.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
+  caseForm.elements.client_role.value = selected || "";
+}
+const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : ""].filter(Boolean).join(" · ");
 
 function renderCustomFields(cat, values) {
   const box = $("#custom-fields");
@@ -458,6 +485,7 @@ function renderCustomFields(cat, values) {
 }
 
 caseForm.elements.category_id.addEventListener("change", (e) => fillTypeSelect(e.target.value));
+caseForm.elements.process_type_id.addEventListener("change", () => fillRoleSelect());
 
 // Responsible people: users of the chosen office, plus roles that see every office.
 function fillAssignees(officeId, selected) {
@@ -522,8 +550,9 @@ async function openCaseDialog(k = null, clientId = null) {
   openDialog($("#case-dialog"), k ? "Editar expediente" : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
     radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
-    court_search: k.court_name, court_id: k.court_id ?? "",
-  } : {});
+    court_search: k.court_name, court_id: k.court_id ?? "", affiliated: k.affiliated ? "1" : "0",
+  } : { affiliated: "0" });
+  caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = k ? !!k.monitor || !k.radicado : true;
   showCourtEmail(k?.court_name ? { email: k.court_email } : null);
   caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
@@ -536,6 +565,7 @@ async function openCaseDialog(k = null, clientId = null) {
   const catId = k?.category_id ?? state.catalog[0]?.id;
   caseForm.elements.category_id.value = catId;
   fillTypeSelect(catId, k?.process_type_id);
+  fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
 }
 
@@ -547,6 +577,7 @@ wireDialog($("#case-dialog"), async (form) => {
     client_id: Number(form.elements.client_id.value),
     process_type_id: Number(d.process_type_id),
     title: d.title, status: d.status, counterparty: d.counterparty, facts: d.facts, field_values,
+    client_role: d.client_role, affiliated: d.affiliated === "1",
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, monitor: form.elements.monitor.checked,
@@ -713,6 +744,15 @@ document.addEventListener("click", (e) => {
     "change-password": () => {
       $(".user-menu").open = false;
       openDialog($("#password-dialog"), "Cambiar contraseña");
+    },
+    "new-sign": () => openSignDialog({}),
+    "open-sign": () => openSignDetail(id),
+    "new-mail": () => openMailDialog({}),
+    "mail-case": () => openMailDialog({ caseId: Number(btn.dataset.case) }),
+    "mail-court": () => openMailDialog({ to: btn.dataset.to }),
+    "mail-proof": async () => {
+      const m = mailList.find((x) => x.id === id);
+      await saveFile(`Constancia de envio - ${safeName(m.subject)}.pdf`, mailProof(m));
     },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id)),
@@ -962,6 +1002,9 @@ $(".actions").addEventListener("click", async (e) => {
     await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.md`, new Blob([lastResult.document], { type: "text/markdown" }));
   } else if (action === "pdf") {
     await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.pdf`, markdownToPdf(lastResult.document));
+  } else if (action === "sign") {
+    await openSignDialog({ title: lastResult.payload?.document_type ? `Borrador ${lastResult.payload.document_type}` : "Documento", text: lastResult.document,
+      caseId: Number(draftForm.caseId.value) || null });
   } else if (action === "verify") {
     $("#j-verify-text").value = lastResult.document;
     location.hash = "#jurisprudencia";
@@ -1111,7 +1154,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
 }));
 
 // ---------- Inicio ----------
-const OPEN_STATUSES = new Set(["Abierto", "En trámite", "En espera de respuesta"]);
+const OPEN_STATUSES = new Set(["Activo"]);
 
 async function renderInicio() {
   const now = bogotaNow();
@@ -1233,7 +1276,7 @@ async function runAnalysis(body) {
   showJTab("analizar");
   const box = $("#j-analysis");
   box.hidden = true;
-  setBox("#j-analyze-status", "Leyendo la sentencia en la fuente oficial…");
+  setBox("#j-analyze-status", body.text ? "NomosAI está leyendo el texto pegado…" : "Leyendo la sentencia en la fuente oficial…");
   $("button", jAnalyze).disabled = true;
   try {
     jAnalysis = await api("POST", "/jurisprudencia/analyze", body);
@@ -1388,7 +1431,7 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- PDF from Markdown (drafts) ----------
-function markdownToPdf(md) {
+function markdownToPdf(md, { returnDoc = false } = {}) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const margin = 64, width = doc.internal.pageSize.getWidth() - margin * 2, bottom = doc.internal.pageSize.getHeight() - margin;
@@ -1415,20 +1458,22 @@ function markdownToPdf(md) {
     else if (/^>\s?/.test(line)) write(clean(line.replace(/^>\s?/, "")), { indent: 14, gap: 4 });
     else write(clean(line));
   }
-  return doc.output("blob");
+  return returnDoc ? doc : doc.output("blob");
 }
 
 // ---------- Reportes ----------
 const REPORT_TYPES = {
   expedientes: "Expedientes", clientes: "Clientes", oficinas: "Resumen por oficina",
   responsables: "Carga por responsable", procesos: "Expedientes por tipo de proceso", jurisprudencia: "Sentencias guardadas",
+  cartera: "Cartera por cliente", recibos: "Recibos de caja",
 };
 let lastReport = null;
 
 async function renderReportes() {
   const f = $("#report-form");
   if (!f.type.options.length) {
-    f.type.innerHTML = Object.entries(REPORT_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+    f.type.innerHTML = Object.entries(REPORT_TYPES).filter(([k]) => !["cartera", "recibos"].includes(k) || can("payments.manage"))
+      .map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
   }
   const curOffice = f.officeId.value;
   f.officeId.innerHTML = '<option value="">Todas mis oficinas</option>' + myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
@@ -1581,8 +1626,8 @@ function openUserDialog(u) {
   form.elements.custom_permissions.checked = !!u?.custom_permissions;
   renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
-  form.elements.password.required = !u;
-  $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)" : "Contraseña inicial *";
+  if (form.elements.password) form.elements.password.required = !u;
+  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)" : "Contraseña inicial *";
 }
 
 // Per-user checklist: shows the role's permissions until "específicos" is on.
@@ -1819,6 +1864,12 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
     } else if (action === "copy") {
       try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
       catch { toast("No se pudo copiar; active “Editar el texto” y cópielo desde allí.", true); }
+    } else if (action === "sign") {
+      await openSignDialog({ title: tplActive.name, text: currentText(), caseId: Number($("#tpl-case").value) || null });
+    } else if (action === "mail") {
+      const blob = tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name);
+      await openMailDialog({ caseId: Number($("#tpl-case").value) || null, subject: tplActive.name,
+        files: [new File([blob], `${tplFileBase()}.docx`, { type: blob.type })] });
     } else if (action === "nomos") {
       setBaseTemplate({ name: tplActive.name, text: currentText() });
       const map = { Contrato: "CONTRACT", Poder: "POWER_OF_ATTORNEY", "Derecho de petición": "PETITION", Demanda: "LAWSUIT" };
@@ -1895,6 +1946,300 @@ function guessCategory(name) {
   if (/recurso|apelacion|reposicion/.test(n)) return "Recurso";
   if (/memorial/.test(n)) return "Memorial";
   return "Otro";
+}
+
+// ---------- Firma electrónica ----------
+const SIGN_STATUS = { enviada: ["warn", "En curso"], completada: ["ok", "Firmado por todos"], cancelada: ["", "Cancelada"], rechazada: ["bad", "Rechazada"] };
+let signList = [], signCurrent = null, inpersonSigner = null, inpersonPad = null;
+
+async function renderFirmas() {
+  signList = await api("GET", "/esign");
+  $("#sign-empty").hidden = signList.length > 0;
+  $("#sign-rows").innerHTML = signList.map((r) => {
+    const done = r.signers.filter((x) => x.status === "firmado").length;
+    const [cls, label] = SIGN_STATUS[r.status];
+    return `<tr>
+      <td><strong>${escapeHtml(r.title)}</strong><br><span class="muted">${r.doc_kind === "pdf" ? "PDF" : "Texto"} · SHA-256 ${escapeHtml(r.doc_hash.slice(0, 12))}…</span></td>
+      <td>${done}/${r.signers.length} · ${r.signers.map((x) => `${escapeHtml(x.name)} ${x.status === "firmado" ? "✓" : x.status === "rechazado" ? "✗" : "…"}`).join(", ")}</td>
+      <td><span class="badge ${cls}">${label}</span></td>
+      <td class="nowrap">${escapeHtml(r.created_at.slice(0, 16))} UTC</td>
+      <td class="row-actions"><button data-action="open-sign" data-id="${r.id}">Ver</button></td>
+    </tr>`;
+  }).join("");
+}
+
+const signForm = $("#sign-dialog form");
+function signerRow(v = {}) {
+  const div = document.createElement("div");
+  div.className = "signer-row";
+  div.innerHTML = `<input data-k="name" placeholder="Nombre completo" value="${escapeHtml(v.name || "")}" aria-label="Nombre del firmante" />
+    <input data-k="id_number" placeholder="Documento" value="${escapeHtml(v.id_number || "")}" aria-label="Documento del firmante" />
+    <input data-k="email" type="email" placeholder="Correo" value="${escapeHtml(v.email || "")}" aria-label="Correo del firmante" />
+    <button type="button" class="mini danger" data-rm aria-label="Quitar firmante">✕</button>`;
+  return div;
+}
+$("#add-signer").addEventListener("click", () => $("#signer-rows").append(signerRow()));
+$("#signer-rows").addEventListener("click", (e) => { if (e.target.closest("[data-rm]")) e.target.closest(".signer-row").remove(); });
+signForm.addEventListener("change", (e) => {
+  if (e.target.name === "source") {
+    const pdf = e.target.value === "pdf";
+    signForm.elements.doc_text.hidden = pdf;
+    signForm.elements.pdf.hidden = !pdf;
+  }
+});
+
+async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
+  const cases = await api("GET", "/cases");
+  signForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
+  openDialog($("#sign-dialog"), "Enviar documento a firma", { title, doc_text: text, case_id: caseId ?? "" });
+  signForm.elements.source.value = "text";
+  signForm.elements.doc_text.hidden = false;
+  signForm.elements.pdf.hidden = true;
+  $("#signer-rows").innerHTML = "";
+  // The case's client is the usual first signer.
+  const k = cases.find((x) => x.id === caseId);
+  const c = k && (await api("GET", `/clients/${k.client_id}`).catch(() => null));
+  $("#signer-rows").append(signerRow(c ? { name: c.full_name, id_number: c.id_number, email: c.email } : {}));
+  if (window.JuanmaBackend?.esignRemote === false) signForm.elements.mode.value = "presencial";
+}
+
+const fileToBase64 = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(",")[1]);
+  r.onerror = () => reject(new Error("No se pudo leer el archivo."));
+  r.readAsDataURL(file);
+});
+
+wireDialog($("#sign-dialog"), async (form) => {
+  const signers = $$("#signer-rows .signer-row").map((row) => Object.fromEntries($$("input", row).map((i) => [i.dataset.k, i.value.trim()])))
+    .filter((x) => x.name || x.email);
+  const body = { title: form.elements.title.value, case_id: Number(form.elements.case_id.value) || null, signers,
+    message: form.elements.message.value, mode: form.elements.mode.value };
+  if (form.elements.source.value === "pdf") {
+    const f = form.elements.pdf.files[0];
+    if (!f) throw new Error("Elija el archivo PDF.");
+    body.doc_pdf_base64 = await fileToBase64(f);
+    body.doc_name = f.name;
+  } else body.doc_text = form.elements.doc_text.value;
+  const r = await api("POST", "/esign", body);
+  const failed = (r.delivery || []).filter((d) => !d.ok);
+  toast(failed.length ? `Solicitud creada, pero ${failed.length} enlace(s) no se enviaron: ${failed[0].detail}` : body.mode === "presencial" ? "Solicitud creada. Abra “Ver” para firmar en persona." : "Enlaces de firma enviados.", !!failed.length);
+  location.hash === "#firmas" ? await renderFirmas() : (location.hash = "#firmas");
+});
+
+async function openSignDetail(id) {
+  signCurrent = await api("GET", `/esign/${id}`);
+  const r = signCurrent;
+  const dlg = $("#sign-detail");
+  $("[data-title]", dlg).textContent = r.title;
+  $("[data-sub]", dlg).textContent = `${SIGN_STATUS[r.status][1]} · Huella del documento (SHA-256): ${r.doc_hash}`;
+  $("#sign-detail-body").innerHTML = `
+    <ul class="signer-list">${r.signers.map((x) => `<li>
+      <div><strong>${escapeHtml(x.name)}</strong> <span class="muted">${escapeHtml([x.id_type + " " + x.id_number, x.email].filter((v) => v.trim()).join(" · "))}</span></div>
+      <div>${x.status === "firmado" ? `<span class="badge ok">Firmó ${escapeHtml(x.signed_at)} UTC · ${x.method === "presencial" ? "en persona" : "enlace + código"}</span>
+        <img class="sig-img" src="${escapeHtml(x.signature_png)}" alt="Firma de ${escapeHtml(x.name)}" />`
+        : x.status === "rechazado" ? `<span class="badge bad">No firmó: ${escapeHtml(x.reject_reason || "")}</span>`
+        : `<span class="badge warn">Pendiente</span>${r.status === "enviada" ? `
+          ${x.email && window.JuanmaBackend?.esignRemote !== false ? `<button type="button" class="mini" data-sign-remind="${x.id}">Reenviar enlace</button>` : ""}
+          <button type="button" class="mini" data-sign-inperson="${x.id}">Firmar en persona</button>` : ""}`}</div>
+    </li>`).join("")}</ul>
+    <details><summary>Registro de eventos (${r.events.length})</summary>
+      <table class="data-table"><tbody>${r.events.map((e) => `<tr><td class="nowrap">${escapeHtml(e.at)} UTC</td><td>${escapeHtml(e.event.replace(/_/g, " "))}</td><td>${escapeHtml(e.detail)}</td><td class="muted">${escapeHtml(e.ip)}</td></tr>`).join("")}</tbody></table>
+    </details>`;
+  $('[data-sign-out="cancel"]', dlg).hidden = r.status !== "enviada";
+  $('[data-sign-out="doc"]', dlg).hidden = r.status !== "completada";
+  if (!dlg.open) dlg.showModal();
+}
+
+$("#sign-detail").addEventListener("click", (e) => {
+  const remind = e.target.closest("[data-sign-remind]");
+  const inperson = e.target.closest("[data-sign-inperson]");
+  const out = e.target.closest("[data-sign-out]")?.dataset.signOut;
+  guarded(async () => {
+    if (remind) {
+      const d = await api("POST", `/esign/${signCurrent.id}/remind/${remind.dataset.signRemind}`);
+      toast(d.ok ? "Enlace reenviado. El anterior dejó de funcionar." : `No se envió: ${d.detail}`, !d.ok);
+      await openSignDetail(signCurrent.id);
+    } else if (inperson) {
+      inpersonSigner = signCurrent.signers.find((x) => x.id === Number(inperson.dataset.signInperson));
+      openDialog($("#inperson-dialog"), `Firma en persona · ${inpersonSigner.name}`, { typed_name: inpersonSigner.name, id_number: inpersonSigner.id_number });
+      inpersonPad = window.JuanmaSigPad($("#inperson-pad"));
+      inpersonPad.clear();
+    } else if (out === "cancel") {
+      if (!(await confirmAsk("Cancelar solicitud", "Los enlaces de firma dejarán de funcionar.", "Cancelar solicitud"))) return;
+      await api("POST", `/esign/${signCurrent.id}/cancel`);
+      await openSignDetail(signCurrent.id);
+      await renderFirmas();
+    } else if (out === "cert") {
+      await saveFile(`Certificado de firma - ${safeName(signCurrent.title)}.pdf`, signatureCertificate(signCurrent));
+    } else if (out === "doc") {
+      if (signCurrent.doc_kind === "pdf") {
+        const f = await api("GET", `/esign/${signCurrent.id}/pdf`);
+        await saveFile(signCurrent.doc_name || `${safeName(signCurrent.title)}.pdf`, new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
+        toast("El PDF original va junto con el certificado: la huella SHA-256 del certificado prueba que no cambió.");
+      } else {
+        await saveFile(`${safeName(signCurrent.title)} - firmado.pdf`, signedDocumentPdf(signCurrent));
+      }
+    }
+  });
+});
+$("#inperson-clear").addEventListener("click", () => inpersonPad?.clear());
+wireDialog($("#inperson-dialog"), async (form) => {
+  if (inpersonPad.isEmpty()) throw new Error("Falta la firma.");
+  await api("POST", `/esign/${signCurrent.id}/in-person/${inpersonSigner.id}`, {
+    typed_name: form.elements.typed_name.value, id_number: form.elements.id_number.value, accept: form.elements.accept.checked, signature_png: inpersonPad.toPng(),
+  });
+  toast("Firma registrada.");
+  await openSignDetail(signCurrent.id);
+  await renderFirmas();
+});
+
+const safeName = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").trim().slice(0, 80) || "documento";
+
+// Certificate: document identity + each signature's evidence + audit trail.
+function signatureCertificate(r) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 48;
+  let y = M;
+  const line = (t, { size = 10, bold = false, color = [16, 16, 16], gap = 4 } = {}) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
+    for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > H - M) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.35; }
+    y += gap;
+  };
+  line("CERTIFICADO DE FIRMA ELECTRÓNICA", { size: 16, bold: true, color: [0, 43, 106] });
+  line(`Documento: ${r.title}`, { size: 11, bold: true });
+  line(`Estado: ${SIGN_STATUS[r.status][1]}${r.completed_at ? ` · completado ${r.completed_at} UTC` : ""}`);
+  line(`Huella del documento (SHA-256): ${r.doc_hash}`, { size: 9 });
+  line("La huella identifica el contenido exacto que se firmó: cualquier cambio en el documento produce una huella distinta.", { size: 8, color: [90, 90, 90], gap: 10 });
+  for (const x of r.signers) {
+    if (y > H - 190) { doc.addPage(); y = M; }
+    line(`${x.name} · ${x.id_type} ${x.id_number}`.trim(), { size: 11, bold: true });
+    if (x.status === "firmado") {
+      line(`Firmó: ${x.signed_at} UTC · Método: ${x.method === "presencial" ? "en persona, con testigo" : `enlace privado y código de un solo uso enviado a ${x.email}`}`);
+      line(`Nombre escrito: ${x.typed_name || ""} · IP: ${x.ip || "—"}`);
+      line(`Navegador: ${x.user_agent || "—"}`, { size: 8, color: [90, 90, 90] });
+      try { doc.addImage(x.signature_png, "PNG", M, y, 180, 60); } catch {}
+      doc.setDrawColor(150); doc.line(M, y + 62, M + 200, y + 62);
+      y += 78;
+    } else {
+      line(x.status === "rechazado" ? `No firmó: ${x.reject_reason || ""}` : "Pendiente de firma", { color: [168, 103, 10], gap: 10 });
+    }
+  }
+  if (y > H - 120) { doc.addPage(); y = M; }
+  line("Registro de eventos", { size: 12, bold: true, color: [0, 43, 106] });
+  for (const e of r.events) line(`${e.at} UTC · ${e.event.replace(/_/g, " ")}${e.detail ? " · " + e.detail : ""}${e.ip ? " · IP " + e.ip : ""}`, { size: 8, gap: 1 });
+  y += 8;
+  line("Firma electrónica con verificación de identidad por código de un solo uso, conforme a la Ley 527 de 1999 y el Decreto 2364 de 2012. Generado por JuanMaApp.", { size: 8, color: [90, 90, 90] });
+  return doc.output("blob");
+}
+
+// Text documents: the document followed by a signature page.
+function signedDocumentPdf(r) {
+  const { jsPDF } = window.jspdf;
+  const base = markdownToPdf(r.doc_text, { returnDoc: true });
+  const doc = base || new jsPDF({ unit: "pt", format: "letter" });
+  doc.addPage();
+  let y = 60;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(0, 43, 106);
+  doc.text("FIRMAS", 64, y); y += 24;
+  for (const x of r.signers.filter((s) => s.status === "firmado")) {
+    try { doc.addImage(x.signature_png, "PNG", 64, y, 180, 60); } catch {}
+    doc.setDrawColor(150); doc.line(64, y + 62, 280, y + 62);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(16, 16, 16);
+    doc.text(`${x.typed_name || x.name} · ${x.id_type} ${x.id_number}`.trim(), 64, y + 76);
+    doc.setFontSize(8); doc.setTextColor(90, 90, 90);
+    doc.text(`Firmado electrónicamente el ${x.signed_at} UTC`, 64, y + 88);
+    y += 112;
+  }
+  doc.setFontSize(8);
+  doc.text(doc.splitTextToSize(`Huella del documento (SHA-256): ${r.doc_hash}. Ver el certificado de firma para la evidencia completa.`, 480), 64, y);
+  return doc.output("blob");
+}
+
+// ---------- Correo con trazabilidad ----------
+let mailList = [], mailFiles = [];
+async function renderCorreo() {
+  const [status, list] = await Promise.all([api("GET", "/mail/status"), api("GET", "/mail")]);
+  mailList = list;
+  const note = $("#mail-note");
+  note.hidden = status.configured;
+  note.textContent = status.configured ? "" : status.message || "El servidor aún no tiene configurado el correo (SMTP). Gerencia debe configurarlo para poder enviar.";
+  $("[data-action=new-mail]").disabled = !status.configured;
+  $("#mail-empty").hidden = list.length > 0;
+  $("#mail-rows").innerHTML = list.map((m) => `<tr>
+    <td>${escapeHtml(m.to_addr)}${m.cc ? `<br><span class="muted">cc ${escapeHtml(m.cc)}</span>` : ""}</td>
+    <td><strong>${escapeHtml(m.subject)}</strong>${m.attachments.length ? `<br><span class="muted">${m.attachments.length} adjunto(s)</span>` : ""}</td>
+    <td>${m.status === "enviado" ? `<span class="badge ok">Enviado</span>` : `<span class="badge bad" title="${escapeHtml(m.smtp_response)}">Falló</span>`}<br><span class="muted nowrap">${escapeHtml(m.sent_at.slice(0, 16))} UTC</span></td>
+    <td>${m.opened_at ? `<span class="nowrap">${escapeHtml(m.opened_at.slice(0, 16))} UTC</span>` : '<span class="muted">—</span>'}</td>
+    <td>${m.confirmed_at ? `<span class="badge ok">Confirmado</span><br><span class="muted nowrap">${escapeHtml(m.confirmed_at.slice(0, 16))} UTC</span>` : '<span class="muted">Pendiente</span>'}</td>
+    <td class="row-actions"><button data-action="mail-proof" data-id="${m.id}">Constancia PDF</button></td>
+  </tr>`).join("");
+}
+
+const mailForm = $("#mail-dialog form");
+async function openMailDialog({ caseId = null, subject = "", files = [], to = "" } = {}) {
+  const cases = await api("GET", "/cases");
+  mailForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
+  const k = cases.find((x) => x.id === caseId);
+  openDialog($("#mail-dialog"), "Nuevo correo con trazabilidad", {
+    case_id: caseId ?? "", subject: subject || (k ? `${k.type_name}${k.radicado ? " · Rad. " + formatRadicado(k.radicado) : ""}` : ""),
+    to: to || k?.court_email || "",
+  });
+  const hint = $("#mail-court-hint");
+  hint.hidden = !k?.court_email;
+  hint.textContent = k?.court_email ? `Correo del despacho del expediente: ${k.court_email}` : "";
+  mailFiles = files;
+  renderMailFiles();
+}
+function renderMailFiles() {
+  $("#mail-pending-atts").innerHTML = mailFiles.map((f, i) => `<li>${escapeHtml(f.name)} · ${Math.ceil(f.size / 1024)} KB <button type="button" class="mini" data-rm-att="${i}">Quitar</button></li>`).join("");
+}
+mailForm.elements.files.addEventListener("change", (e) => { mailFiles.push(...e.target.files); e.target.value = ""; renderMailFiles(); });
+$("#mail-pending-atts").addEventListener("click", (e) => { const b = e.target.closest("[data-rm-att]"); if (b) { mailFiles.splice(Number(b.dataset.rmAtt), 1); renderMailFiles(); } });
+mailForm.elements.case_id.addEventListener("change", async (e) => {
+  const k = (await api("GET", "/cases")).find((x) => x.id === Number(e.target.value));
+  if (k?.court_email && !mailForm.elements.to.value) mailForm.elements.to.value = k.court_email;
+});
+
+wireDialog($("#mail-dialog"), async (form) => {
+  const attachments = [];
+  for (const f of mailFiles) attachments.push({ filename: f.name, mime: f.type || "application/octet-stream", base64: await fileToBase64(f) });
+  const d = formData(form);
+  const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments });
+  toast(`Correo enviado a ${m.to_addr}.`);
+  location.hash === "#correo" ? await renderCorreo() : (location.hash = "#correo");
+});
+
+function mailProof(m) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = doc.internal.pageSize.getWidth(), M = 48;
+  let y = M;
+  const line = (t, { size = 10, bold = false, color = [16, 16, 16], gap = 4 } = {}) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
+    for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > 740) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.35; }
+    y += gap;
+  };
+  line("CONSTANCIA DE ENVÍO DE CORREO ELECTRÓNICO", { size: 15, bold: true, color: [0, 43, 106] });
+  line(`Para: ${m.to_addr}${m.cc ? ` · Copia: ${m.cc}` : ""}`);
+  line(`Asunto: ${m.subject}`, { bold: true });
+  line(`Envío: ${m.sent_at} UTC · Resultado: ${m.status === "enviado" ? "aceptado por el servidor de correo" : "fallido"}`);
+  line(`Respuesta del servidor: ${m.smtp_response || "—"} · Message-ID: ${m.smtp_message_id || "—"}`, { size: 8, color: [90, 90, 90] });
+  line(`Primera apertura: ${m.opened_at ? `${m.opened_at} UTC · IP ${m.open_ip}` : "sin registro (muchos correos bloquean las imágenes)"}`);
+  line(`Acuse de recibo: ${m.confirmed_at ? `${m.confirmed_at} UTC · ${m.confirm_name || ""} · IP ${m.confirm_ip}` : "pendiente"}`, { bold: !!m.confirmed_at });
+  line(`Huella del contenido (SHA-256): ${m.content_hash}`, { size: 9, gap: 10 });
+  line("Adjuntos", { size: 11, bold: true });
+  for (const a of m.attachments) line(`${a.filename} · ${a.size.toLocaleString("es-CO")} bytes · SHA-256 ${a.sha256}`, { size: 8, gap: 2 });
+  if (!m.attachments.length) line("Sin adjuntos.");
+  y += 6;
+  line("Mensaje", { size: 11, bold: true });
+  line(m.body, { size: 10 });
+  y += 6;
+  line("Constancia generada por JuanMaApp a partir de los registros del sistema. No reemplaza la certificación de un proveedor de correo electrónico certificado acreditado.", { size: 8, color: [90, 90, 90] });
+  return doc.output("blob");
 }
 
 // ---------- Agenda (tareas, audiencias, términos) ----------
@@ -2111,7 +2456,7 @@ async function searchCourts() {
   $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
     <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
     <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml(c.department)}</span></td>
-    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>` : ""}</td>
+    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}">Escribir</button>` : ""}` : ""}</td>
     <td>${escapeHtml(c.phone)}</td></tr>`).join("");
 }
 for (const sel of ["#courts-dep", "#courts-city", "#courts-area"]) $(sel).addEventListener("change", () => guarded(searchCourts));
@@ -2155,7 +2500,378 @@ $("#courts-file").addEventListener("change", (e) => guarded(async () => {
   await renderDespachos();
 }));
 
+// ---------- Pagos y cartera ----------
+const L = window.JuanmaLedger;
+const cop = (n) => L.fmtCOP(n);
+const parseMoney = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+const localToday = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+let payMeta = null, paySettings = null, payClients = [], payTab = "cartera";
+
+// Money inputs: thousands separators as the user types.
+document.addEventListener("input", (e) => {
+  if (!e.target.matches?.("input.money")) return;
+  const n = parseMoney(e.target.value);
+  e.target.value = n ? cop(n) : "";
+});
+
+async function renderPagos() {
+  payMeta ||= await api("GET", "/payments/meta");
+  const clientId = $("#pay-client").value;
+  const [sum, clients] = await Promise.all([api("GET", "/payments/summary"), api("GET", "/clients")]);
+  payClients = clients;
+  const sel = $("#pay-client");
+  sel.innerHTML = '<option value="">Todos los clientes</option>' + clients.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}</option>`).join("");
+  sel.value = clientId;
+  $("#pay-balance").textContent = cop(sum.totals.balance);
+  $("#pay-overdue").textContent = cop(sum.totals.overdue);
+  $("#pay-due7").textContent = cop(sum.due_7d);
+  $("#pay-month").textContent = cop(sum.collected_month);
+  const max = Math.max(1, ...Object.values(sum.totals.aging));
+  $("#pay-aging").innerHTML = L.AGING.map(([k, label], i) => `<div class="hbar" role="listitem"><span class="hbar-label">${label}</span>
+    <span class="hbar-track"><span class="hbar-fill ${i >= 3 ? "bad" : i >= 1 ? "late" : ""}" style="width:${(sum.totals.aging[k] / max) * 100}%"></span></span>
+    <span class="hbar-value">${cop(sum.totals.aging[k])}</span></div>`).join("");
+  const rows = sum.clients.filter((r) => !clientId || r.client_id === Number(clientId));
+  $("#pay-cartera-empty").hidden = rows.length > 0;
+  $("#pay-cartera").innerHTML = rows.map((r) => `<tr>
+    <td><strong>${escapeHtml(r.client_name)}</strong><br><span class="muted">${escapeHtml(r.id_number)}${r.phone ? " · " + escapeHtml(r.phone) : ""}</span></td>
+    <td class="num">${cop(r.balance)}${r.credit ? `<br><span class="muted">a favor ${cop(r.credit)}</span>` : ""}</td>
+    <td class="num">${r.overdue ? `<strong>${cop(r.overdue)}</strong>` : "—"}</td>
+    <td>${r.max_days ? `<span class="pay-state vencido">${r.max_days} días</span>` : '<span class="muted">Al día</span>'}</td>
+    <td>${escapeHtml(r.next_due || "—")}</td><td>${escapeHtml(r.last_payment || "—")}</td>
+    <td class="row-actions">
+      <button class="mini" data-action="pay-client-charges" data-id="${r.client_id}">Ver cobros</button>
+      <button class="mini" data-action="pay-statement" data-id="${r.client_id}">Estado de cuenta</button>
+      <button class="mini primary" data-action="new-receipt" data-client="${r.client_id}">Registrar pago</button>
+    </td></tr>`).join("");
+  await renderPayTab();
+}
+
+async function renderPayTab() {
+  $$("[data-ptab]").forEach((b) => b.classList.toggle("active", b.dataset.ptab === payTab));
+  $$("[data-ppanel]").forEach((p) => (p.hidden = p.dataset.ppanel !== payTab));
+  const clientId = $("#pay-client").value;
+  const q = clientId ? `clientId=${clientId}` : "";
+  if (payTab === "cobros") {
+    const list = await api("GET", `/payments/charges?${q}&state=${$("#pay-state").value}`);
+    $("#pay-charges-empty").hidden = list.length > 0;
+    $("#pay-charges").innerHTML = list.map((c) => `<tr class="${c.state === "anulado" ? "voided" : ""}">
+      <td>${escapeHtml(c.client_name)}</td>
+      <td>${escapeHtml(c.concept)}${c.plan_label ? `<br><span class="muted">${escapeHtml(c.plan_label)}</span>` : ""}${c.case_label ? `<br><span class="muted">${escapeHtml(c.case_label)}</span>` : ""}</td>
+      <td>${escapeHtml(c.due_date)}</td>
+      <td class="num">${cop(c.amount)}</td><td class="num">${c.state === "anulado" ? "—" : cop(c.balance)}</td>
+      <td><span class="pay-state ${c.state}">${escapeHtml(c.state_label)}${c.days_overdue ? ` · ${c.days_overdue} d` : ""}</span>${c.last_reminder_at ? `<br><span class="muted">Recordado ${escapeHtml(c.last_reminder_at.slice(0, 10))}</span>` : ""}</td>
+      <td class="row-actions">${c.balance > 0 ? `
+        <button class="mini primary" data-action="new-receipt" data-client="${c.client_id}" data-charge="${c.id}">Registrar pago</button>
+        <button class="mini" data-action="pay-remind" data-id="${c.id}">Recordar</button>` : ""}
+        ${c.state !== "anulado" ? `<button class="mini" data-action="edit-charge" data-id="${c.id}">Editar</button>
+        <button class="mini danger" data-action="void-charge" data-id="${c.id}">Anular</button>` : `<span class="muted">${escapeHtml(c.void_reason)}</span>`}
+      </td></tr>`).join("");
+    payChargesCache = list;
+  } else if (payTab === "recibos") {
+    const list = await api("GET", `/payments/receipts?${q}`);
+    $("#pay-receipts-empty").hidden = list.length > 0;
+    $("#pay-receipts").innerHTML = list.map((r) => `<tr class="${r.voided_at ? "voided" : ""}">
+      <td class="mono">${receiptNo(r.number)}</td><td>${escapeHtml(r.paid_on)}</td><td>${escapeHtml(r.client_name)}</td>
+      <td>${escapeHtml(r.concept)}${r.voided_at ? `<br><span class="muted">Anulado: ${escapeHtml(r.void_reason)}</span>` : ""}</td>
+      <td>${escapeHtml(r.method)}${r.reference ? `<br><span class="muted">${escapeHtml(r.reference)}</span>` : ""}</td>
+      <td class="num">${cop(r.amount)}</td>
+      <td class="row-actions"><button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button>
+        ${r.voided_at ? "" : `<button class="mini danger" data-action="void-receipt" data-id="${r.id}">Anular</button>`}</td></tr>`).join("");
+    payReceiptsCache = list;
+  } else if (payTab === "recordatorios") {
+    const list = await api("GET", `/payments/reminders?${q}`);
+    $("#pay-reminders-empty").hidden = list.length > 0;
+    const CH = { email: "Correo", whatsapp: "WhatsApp", manual: "Enviado por el usuario" };
+    $("#pay-reminders").innerHTML = list.map((x) => `<tr><td class="nowrap">${escapeHtml(x.sent_at.slice(0, 16))} UTC</td><td>${escapeHtml(x.client_name)}</td>
+      <td>${escapeHtml(x.concept)}${x.plan_label ? ` · ${escapeHtml(x.plan_label)}` : ""}</td>
+      <td>${CH[x.channel] || escapeHtml(x.channel)}${x.trigger === "auto" ? ' <span class="muted">(automático)</span>' : x.created_by_name ? `<br><span class="muted">${escapeHtml(x.created_by_name)}</span>` : ""}</td>
+      <td>${x.ok ? '<span class="badge ok">Enviado</span>' : `<span class="badge bad">No enviado</span><br><span class="muted">${escapeHtml(x.detail)}</span>`}</td></tr>`).join("");
+  }
+}
+let payChargesCache = [], payReceiptsCache = [];
+const receiptNo = (n) => `RC-${String(n).padStart(6, "0")}`;
+
+$("#pay-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-ptab]");
+  if (b) { payTab = b.dataset.ptab; guarded(renderPayTab); }
+});
+$("#pay-client").addEventListener("change", () => guarded(renderPagos));
+$("#pay-state").addEventListener("change", () => guarded(renderPayTab));
+
+// ----- Charge dialog -----
+const chargeForm = $("#charge-dialog form");
+async function fillClientSelect(select, selected) {
+  if (!payClients.length) payClients = await api("GET", "/clients");
+  if (!payClients.length) throw new Error("Primero cree un cliente.");
+  select.innerHTML = payClients.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}${c.id_number ? " · " + escapeHtml(c.id_number) : ""}</option>`).join("");
+  if (selected) select.value = selected;
+}
+async function fillChargeCases(selected) {
+  const cases = await api("GET", `/cases?clientId=${chargeForm.elements.client_id.value}`);
+  chargeForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml(k.type_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  chargeForm.elements.case_id.value = selected || "";
+}
+function chargePreview() {
+  const f = chargeForm.elements;
+  if (f.id.value) return ($("#charge-preview").textContent = "");
+  const total = parseMoney(f.amount.value), n = Math.max(1, Number(f.installments.value) || 1);
+  if (!total || !f.due_date.value) return ($("#charge-preview").textContent = "");
+  const parts = L.splitAmount(total, n);
+  const step = f.every.value === "quincenal" ? (i) => L.addDays(f.due_date.value, 15 * i) : f.every.value === "semanal" ? (i) => L.addDays(f.due_date.value, 7 * i) : (i) => L.addMonths(f.due_date.value, i);
+  $("#charge-preview").textContent = n === 1 ? `Un pago de ${cop(total)} con vencimiento ${f.due_date.value}.`
+    : `${n} cuotas: ${parts.slice(0, 4).map((p, i) => `${cop(p)} el ${step(i)}`).join("; ")}${n > 4 ? `; … última el ${step(n - 1)}` : ""}.`;
+}
+chargeForm.addEventListener("input", chargePreview);
+chargeForm.elements.client_id.addEventListener("change", () => guarded(() => fillChargeCases()));
+
+async function openChargeDialog(c = null, clientId = null) {
+  const dlg = $("#charge-dialog");
+  await fillClientSelect(chargeForm.elements.client_id, c?.client_id ?? clientId ?? $("#pay-client").value);
+  openDialog(dlg, c ? "Editar cobro" : "Nuevo cobro o plan de cuotas", c ? { id: c.id, concept: c.concept, amount: cop(c.amount), due_date: c.due_date, pay_link: c.pay_link, notes: c.notes }
+    : { due_date: localToday(), installments: 1 });
+  chargeForm.elements.client_id.disabled = !!c;
+  $("[data-plan]", dlg).hidden = !!c;
+  $("[data-amount-label]", dlg).textContent = c ? "Valor *" : "Valor total *";
+  $("[data-due-label]", dlg).textContent = c ? "Vencimiento *" : "Primer vencimiento *";
+  await fillChargeCases(c?.case_id);
+  chargeForm.elements.case_id.disabled = !!c;
+  chargePreview();
+}
+wireDialog($("#charge-dialog"), async (form) => {
+  const d = formData(form);
+  if (d.id) await api("PUT", `/payments/charges/${d.id}`, { concept: d.concept, amount: parseMoney(d.amount), due_date: d.due_date, pay_link: d.pay_link, notes: d.notes });
+  else {
+    const out = await api("POST", "/payments/charges", { client_id: Number(form.elements.client_id.value), case_id: Number(d.case_id) || null, concept: d.concept,
+      amount: parseMoney(d.amount), due_date: d.due_date, installments: Number(d.installments) || 1, every: d.every, pay_link: d.pay_link, notes: d.notes });
+    toast(out.ids.length > 1 ? `Plan creado: ${out.ids.length} cuotas.` : "Cobro creado.");
+  }
+  payTab = "cobros";
+  location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
+});
+
+// ----- Receipt dialog -----
+const receiptForm = $("#receipt-dialog form");
+let receiptCharges = [];
+async function fillReceiptCharges(selected) {
+  receiptCharges = await api("GET", `/payments/charges?clientId=${receiptForm.elements.client_id.value}&state=abiertos`);
+  receiptForm.elements.charge_id.innerHTML = '<option value="">Abono a cuenta (se aplica a las cuotas más antiguas)</option>' + receiptCharges.map((c) =>
+    `<option value="${c.id}">${escapeHtml(c.concept)}${c.plan_label ? " · " + escapeHtml(c.plan_label) : ""} — saldo ${cop(c.balance)} — vence ${c.due_date}</option>`).join("");
+  receiptForm.elements.charge_id.value = selected || "";
+  const c = receiptCharges.find((x) => x.id === Number(receiptForm.elements.charge_id.value));
+  receiptForm.elements.amount.value = c ? cop(c.balance) : "";
+}
+receiptForm.elements.client_id.addEventListener("change", () => guarded(() => fillReceiptCharges()));
+receiptForm.elements.charge_id.addEventListener("change", () => {
+  const c = receiptCharges.find((x) => x.id === Number(receiptForm.elements.charge_id.value));
+  if (c) receiptForm.elements.amount.value = cop(c.balance);
+});
+async function openReceiptDialog(clientId, chargeId) {
+  payMeta ||= await api("GET", "/payments/meta");
+  await fillClientSelect(receiptForm.elements.client_id, clientId || $("#pay-client").value);
+  receiptForm.elements.method.innerHTML = payMeta.methods.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+  openDialog($("#receipt-dialog"), "Recibo de caja", { paid_on: localToday(), method: "Transferencia" });
+  await fillReceiptCharges(chargeId);
+}
+wireDialog($("#receipt-dialog"), async (form) => {
+  const d = formData(form);
+  const r = await api("POST", "/payments/receipts", { client_id: Number(d.client_id), charge_id: Number(d.charge_id) || null, amount: parseMoney(d.amount),
+    method: d.method, reference: d.reference, paid_on: d.paid_on, concept: d.concept, notes: d.notes });
+  toast(`Recibo ${receiptNo(r.number)} registrado.`);
+  payTab = "recibos";
+  location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
+  if (await ask({ title: `Recibo ${receiptNo(r.number)}`, message: "¿Descargar el recibo en PDF para entregarlo al cliente?", okLabel: "Descargar PDF" })) {
+    const full = (await api("GET", `/payments/receipts?clientId=${r.client_id}`)).find((x) => x.id === r.id);
+    await downloadReceipt(full);
+  }
+});
+
+// ----- Reminder dialog -----
+const remindForm = $("#remind-dialog form");
+async function openRemindDialog(id) {
+  const c = payChargesCache.find((x) => x.id === id) || (await api("GET", "/payments/charges?state=abiertos")).find((x) => x.id === id);
+  paySettings = await api("GET", "/payments/settings");
+  const msg = L.reminderMessage({ clientName: c.client_name, charge: c, firmName: paySettings.firm_name, payInfo: paySettings.pay_info, today: localToday() });
+  openDialog($("#remind-dialog"), `Recordatorio · ${c.client_name}`, { charge_id: c.id, text: msg.text });
+  const digits = String(c.client_phone || "").replace(/\D/g, "");
+  const wa = $("#remind-wa");
+  wa.hidden = !digits;
+  wa.href = digits ? `https://wa.me/${digits.length === 10 ? "57" + digits : digits}?text=${encodeURIComponent(msg.text)}` : "#";
+  $("[data-remind-email]").textContent = c.client_email || "(el cliente no tiene correo)";
+  $("[data-remind-phone]").textContent = c.client_phone || "(sin teléfono)";
+  remindForm.elements.email.checked = !!c.client_email;
+  const ch = payMeta?.channels || {};
+  const web = !!window.JuanmaBackend?.web;
+  $$("#remind-dialog fieldset label").forEach((l) => (l.hidden = web));
+  $('#remind-dialog button[value="save"]').hidden = web;
+  $("#remind-note").textContent = web
+    ? "Desde este enlace use “Abrir en WhatsApp” o “Copiar texto” y luego “Marcar como enviado”. El envío automático por correo y WhatsApp funciona con la app instalada."
+    : [!ch.email && "El correo del servidor no está configurado.", !ch.whatsapp && "WhatsApp automático no está configurado; use “Abrir en WhatsApp”."].filter(Boolean).join(" ");
+}
+$("[data-remind-copy]").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(remindForm.elements.text.value); toast("Texto copiado."); }
+  catch { remindForm.elements.text.select(); toast("Seleccione y copie el texto."); }
+});
+$("[data-remind-manual]").addEventListener("click", () => guarded(async () => {
+  await api("POST", `/payments/charges/${remindForm.elements.charge_id.value}/remind`, { channels: ["manual"] });
+  $("#remind-dialog").close();
+  toast("Recordatorio registrado.");
+  await renderPagos();
+}));
+wireDialog($("#remind-dialog"), async (form) => {
+  const channels = ["email", "whatsapp"].filter((c) => form.elements[c].checked);
+  if (!channels.length) throw new Error("Elija correo o WhatsApp, o use “Marcar como enviado”.");
+  const out = await api("POST", `/payments/charges/${form.elements.charge_id.value}/remind`, { channels });
+  const bad = out.results.filter((r) => !r.ok);
+  toast(bad.length ? `No enviado: ${bad.map((r) => r.detail).join(" ")}` : "Recordatorio enviado.", !!bad.length);
+  await renderPagos();
+});
+
+// ----- Settings -----
+const paySetForm = $("#pay-settings-dialog form");
+async function openPaySettings() {
+  paySettings = await api("GET", "/payments/settings");
+  openDialog($("#pay-settings-dialog"), "Ajustes de cobro", { firm_name: paySettings.firm_name, firm_nit: paySettings.firm_nit, pay_info: paySettings.pay_info,
+    days_before: paySettings.days_before, repeat_days: paySettings.repeat_days });
+  paySetForm.elements.auto.checked = paySettings.auto;
+  paySetForm.elements.ch_email.checked = paySettings.channels.includes("email");
+  paySetForm.elements.ch_whatsapp.checked = paySettings.channels.includes("whatsapp");
+  $("#pay-settings-note").textContent = window.JuanmaBackend?.web ? "Los recordatorios automáticos se envían con la app instalada en el servidor; aquí quedan guardados los ajustes." : "";
+}
+wireDialog($("#pay-settings-dialog"), async (form) => {
+  const d = formData(form);
+  await api("PUT", "/payments/settings", { firm_name: d.firm_name, firm_nit: d.firm_nit, pay_info: d.pay_info, auto: form.elements.auto.checked,
+    days_before: Number(d.days_before), repeat_days: Number(d.repeat_days),
+    channels: ["email", "whatsapp"].filter((c) => form.elements["ch_" + c].checked) });
+  toast("Ajustes guardados.");
+});
+
+// ----- PDFs: receipt and account statement -----
+function pesosEnLetras(n) {
+  const U = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince",
+    "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco",
+    "veintiséis", "veintisiete", "veintiocho", "veintinueve"];
+  const D = ["", "", "", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
+  const C = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"];
+  const under1000 = (x) => {
+    if (x === 100) return "cien";
+    const c = Math.floor(x / 100), r = x % 100;
+    const dec = r < 30 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? " y " + U[r % 10] : "");
+    return [C[c], dec].filter(Boolean).join(" ");
+  };
+  const apocope = (s) => s.replace(/veintiuno$/, "veintiún").replace(/uno$/, "un");
+  const words = (x) => {
+    if (x === 0) return "cero";
+    const millions = Math.floor(x / 1e6), thousands = Math.floor((x % 1e6) / 1000), rest = x % 1000;
+    const out = [];
+    if (millions) out.push(millions === 1 ? "un millón" : apocope(words(millions)) + " millones");
+    if (thousands) out.push(thousands === 1 ? "mil" : apocope(under1000(thousands)) + " mil");
+    if (rest) out.push(under1000(rest));
+    return out.join(" ");
+  };
+  const n0 = Math.round(n);
+  const w = apocope(words(n0));
+  const de = n0 >= 1e6 && n0 % 1e6 === 0 ? " de" : "";
+  return (w.charAt(0).toUpperCase() + w.slice(1) + de + (n0 === 1 ? " peso" : " pesos") + " m/cte.");
+}
+
+function pdfBase(title) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = doc.internal.pageSize.getWidth(), M = 48;
+  const s = paySettings || {};
+  doc.setFillColor(0, 43, 106); doc.rect(0, 0, W, 6, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(0, 43, 106);
+  doc.text(s.firm_name || "TEC Jurídicos", M, 46);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(90, 90, 90);
+  doc.text([s.firm_nit ? `NIT ${s.firm_nit}` : "", "Ibagué, Tolima"].filter(Boolean).join(" · "), M, 60);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(16, 16, 16);
+  doc.text(title, W - M, 46, { align: "right" });
+  return { doc, W, M };
+}
+
+async function downloadReceipt(r) {
+  paySettings ||= await api("GET", "/payments/settings");
+  const { doc, W, M } = pdfBase(`RECIBO DE CAJA ${receiptNo(r.number)}`);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+  doc.text(`Fecha de pago: ${r.paid_on}`, W - M, 62, { align: "right" });
+  const rows = [["Recibimos de", `${r.client_name}${r.client_doc ? " · " + r.client_doc : ""}`], ["La suma de", `${cop(r.amount)}`],
+    ["En letras", pesosEnLetras(r.amount)], ["Por concepto de", r.concept], ["Medio de pago", r.method + (r.reference ? ` · Ref. ${r.reference}` : "")]];
+  if (r.notes) rows.push(["Notas", r.notes]);
+  doc.autoTable({ startY: 90, body: rows, theme: "grid", styles: { fontSize: 10.5, cellPadding: 7 },
+    columnStyles: { 0: { fontStyle: "bold", cellWidth: 130, fillColor: [238, 242, 247] } }, margin: { left: M, right: M } });
+  let y = doc.lastAutoTable.finalY + 18;
+  const charges = await api("GET", `/payments/charges?clientId=${r.client_id}&state=abiertos`);
+  const balance = charges.reduce((a, c) => a + c.balance, 0);
+  doc.setFontSize(10);
+  doc.text(`Saldo pendiente del cliente a la fecha de emisión: ${cop(balance)}`, M, y);
+  y += 70;
+  doc.line(M, y, M + 220, y);
+  doc.text(`Recibido por: ${r.created_by_name || me.name}`, M, y + 14);
+  doc.setFontSize(8); doc.setTextColor(110, 110, 110);
+  doc.text(`Emitido con JuanMaApp el ${new Date().toLocaleString("es-CO")}`, M, y + 40);
+  if (r.voided_at) {
+    doc.setTextColor(179, 38, 30); doc.setFontSize(54); doc.setFont("helvetica", "bold");
+    doc.text("ANULADO", W / 2, 330, { align: "center", angle: 20 });
+    doc.setFontSize(10); doc.text(`Motivo: ${r.void_reason}`, W / 2, 360, { align: "center" });
+  }
+  await saveFile(`${receiptNo(r.number)} ${safeName(r.client_name)}.pdf`, doc.output("blob"));
+}
+
+async function downloadStatement(clientId) {
+  paySettings ||= await api("GET", "/payments/settings");
+  const [charges, receipts] = await Promise.all([api("GET", `/payments/charges?clientId=${clientId}&state=`), api("GET", `/payments/receipts?clientId=${clientId}`)]);
+  const cl = payClients.find((c) => c.id === clientId) || {};
+  const { doc, M } = pdfBase("ESTADO DE CUENTA");
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(16, 16, 16);
+  doc.text([`Cliente: ${cl.full_name || ""}${cl.id_number ? " · " + (cl.id_type || "") + " " + cl.id_number : ""}`, `Fecha de corte: ${localToday()}`], M, 92);
+  const live = charges.filter((c) => c.state !== "anulado");
+  doc.autoTable({ startY: 120, head: [["Concepto", "Vence", "Valor", "Pagado", "Saldo", "Estado"]],
+    body: live.map((c) => [c.concept + (c.plan_label ? ` · ${c.plan_label}` : ""), c.due_date, cop(c.amount), cop(c.paid), cop(c.balance), c.state_label + (c.days_overdue ? ` (${c.days_overdue} d)` : "")]),
+    foot: [["Total", "", cop(live.reduce((a, c) => a + c.amount, 0)), cop(live.reduce((a, c) => a + c.paid, 0)), cop(live.reduce((a, c) => a + c.balance, 0)), ""]],
+    styles: { fontSize: 9 }, headStyles: { fillColor: [0, 43, 106] }, footStyles: { fillColor: [238, 242, 247], textColor: 16 },
+    columnStyles: { 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } }, margin: { left: M, right: M } });
+  doc.autoTable({ startY: doc.lastAutoTable.finalY + 24, head: [["Recibo", "Fecha", "Concepto", "Medio", "Valor"]],
+    body: receipts.filter((r) => !r.voided_at).map((r) => [receiptNo(r.number), r.paid_on, r.concept, r.method, cop(r.amount)]),
+    styles: { fontSize: 9 }, headStyles: { fillColor: [2, 124, 198] }, columnStyles: { 4: { halign: "right" } }, margin: { left: M, right: M } });
+  if (paySettings.pay_info) {
+    const y = doc.lastAutoTable.finalY + 24;
+    doc.setFontSize(9.5); doc.text(["Datos para el pago:", ...doc.splitTextToSize(paySettings.pay_info, 500)], M, y);
+  }
+  await saveFile(`Estado de cuenta ${safeName(cl.full_name || "cliente")}.pdf`, doc.output("blob"));
+}
+
+const PAY_ACTIONS = {
+  "new-charge": (b) => openChargeDialog(null, Number(b.dataset.client) || null),
+  "new-receipt": (b) => openReceiptDialog(Number(b.dataset.client) || null, Number(b.dataset.charge) || null),
+  "pay-settings": () => openPaySettings(),
+  "edit-charge": async (b) => openChargeDialog(payChargesCache.find((c) => c.id === Number(b.dataset.id))),
+  "pay-remind": (b) => openRemindDialog(Number(b.dataset.id)),
+  "pay-client-charges": async (b) => { $("#pay-client").value = b.dataset.id; payTab = "cobros"; await renderPagos(); },
+  "pay-statement": (b) => downloadStatement(Number(b.dataset.id)),
+  "receipt-pdf": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id))),
+  "void-charge": async (b) => {
+    const reason = await ask({ title: "Anular cobro", message: "El cobro deja de contar en la cartera. Escriba el motivo.", input: "", okLabel: "Anular", danger: true });
+    if (!reason) return;
+    await api("POST", `/payments/charges/${b.dataset.id}/void`, { reason });
+    await renderPagos();
+  },
+  "void-receipt": async (b) => {
+    const reason = await ask({ title: "Anular recibo", message: "El número del recibo se conserva y queda marcado como anulado. Escriba el motivo.", input: "", okLabel: "Anular", danger: true });
+    if (!reason) return;
+    await api("POST", `/payments/receipts/${b.dataset.id}/void`, { reason });
+    await renderPagos();
+  },
+};
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-action]");
+  if (b && PAY_ACTIONS[b.dataset.action]) guarded(() => PAY_ACTIONS[b.dataset.action](b));
+});
+
 const RENDER = {
+  pagos: renderPagos,
+  firmas: renderFirmas,
+  correo: renderCorreo,
   agenda: renderAgenda,
   consulta: renderConsulta,
   despachos: renderDespachos,

@@ -3,9 +3,11 @@
 import { findByRadicado, actuaciones } from "./ramajudicial.js";
 import { sendEmail, sendWhatsapp } from "./notify.js";
 import { loadUser, scopeOf } from "./auth.js";
+import { LIVE_STATUSES } from "./case-meta.js";
+import { paymentReminders } from "./payments.js";
 
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
-const OPEN = ["Abierto", "En trámite", "En espera de respuesta", "Suspendido"];
+const OPEN = LIVE_STATUSES;
 
 /** 'YYYY-MM-DD HH:MM' in Bogotá for a Date (default now). */
 export function bogota(date = new Date()) {
@@ -210,6 +212,8 @@ export function startScheduler(db, { intervalMs = 60000 } = {}) {
       taskReminders(db, at);
       const now = bogota(at);
       const hhmm = now.slice(11, 16);
+      // Payment reminders once a day at 8:00 (Colombia).
+      if (hhmm === "08:00" && !done.has("pay " + now)) { done.add("pay " + now); await paymentReminders(db, at); }
       if (!REPORT_HOURS.includes(hhmm) || done.has(now)) return;
       done.add(now);
       const users = db.prepare("SELECT user_id, hours FROM report_prefs").all()

@@ -3,6 +3,7 @@
 import express from "express";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
+import { normStatus, normPartyRole } from "./case-meta.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
@@ -307,7 +308,12 @@ export function recordsRouter(db) {
     LEFT JOIN offices o ON o.id = k.office_id
     LEFT JOIN users u ON u.id = k.assigned_user_id`;
 
-  const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values) });
+  const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated });
+  const partyRole = (x) => {
+    const r = normPartyRole(x);
+    if (r === null) throw new HttpError(400, `Calidad del cliente no válida: ${x}`);
+    return r;
+  };
 
   const getCase = (req, id) => {
     const row = db.prepare(`${CASE_SELECT} WHERE k.id = ?`).get(id);
@@ -388,11 +394,11 @@ export function recordsRouter(db) {
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);
     const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
-        department, city, area, court_id, court_name, court_email, radicado, monitor)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(clientId, typeId, str(b.title), str(b.status) || "Abierto", str(b.counterparty), str(b.facts),
+        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(clientId, typeId, str(b.title), normStatus(b.status), str(b.counterparty), str(b.facts),
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
-        loc.court_email, loc.radicado, loc.monitor).lastInsertRowid;
+        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0).lastInsertRowid;
     res.status(201);
     return getCase(req, id);
   }));
@@ -411,11 +417,12 @@ export function recordsRouter(db) {
     const loc = caseLocation(b, cur);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
       field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
-      court_name = ?, court_email = ?, radicado = ?, monitor = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) || cur.status,
+      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) ? normStatus(b.status) : cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
-        loc.court_email, loc.radicado, loc.monitor, id);
+        loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
+        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, id);
     return getCase(req, id);
   }));
 

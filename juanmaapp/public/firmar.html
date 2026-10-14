@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Firma electrónica · JuanMaApp</title>
+  <link rel="icon" type="image/png" href="logo-t.png" />
+  <link rel="stylesheet" href="brand.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .public-wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; display: grid; gap: 16px; }
+    .sig-canvas { width: 100%; height: 180px; border: 1px dashed var(--border); border-radius: 10px; background: #fff; }
+    .pdf-frame { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 10px; }
+    .hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .76rem; word-break: break-all; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <header class="topbar"><div class="brand"><img class="logo" src="logo-t.png" alt="" width="44" height="44" /><div><h1>Firma electrónica</h1><p class="tagline">JuanMaApp</p></div></div></header>
+  <main class="public-wrap">
+    <div id="msg" class="status" hidden></div>
+    <section id="doc" class="panel" hidden>
+      <h2 id="title"></h2>
+      <p id="intro" class="hint"></p>
+      <article id="doc-text" class="document"></article>
+      <iframe id="doc-pdf" class="pdf-frame" title="Documento" hidden></iframe>
+      <p class="hash">Huella del documento (SHA-256): <span id="hash"></span></p>
+    </section>
+    <section id="sign" class="panel" hidden>
+      <h3 class="panel-title">Firmar</h3>
+      <ol class="hint">
+        <li>Pida el código: lo enviamos a <strong id="email"></strong>.</li>
+        <li>Escriba el código, su nombre y dibuje su firma.</li>
+      </ol>
+      <button id="otp-btn" type="button">Enviarme el código</button>
+      <form id="sign-form">
+        <div class="grid2">
+          <label>Código de 6 dígitos <input name="otp" inputmode="numeric" maxlength="6" required autocomplete="one-time-code" /></label>
+          <label>Nombre completo <input name="typed_name" required /></label>
+        </div>
+        <label>Firma (dibuje con el dedo o el mouse)</label>
+        <canvas class="sig-canvas" id="pad"></canvas>
+        <p><button type="button" id="clear" class="mini">Borrar firma</button></p>
+        <label class="inline"><input type="checkbox" name="accept" required /> Leí el documento y lo firmo electrónicamente. Entiendo que esta firma tiene la misma validez que mi firma manuscrita.</label>
+        <p class="form-error" hidden></p>
+        <div class="toolbar"><button class="primary">Firmar documento</button> <button type="button" id="reject" class="danger">No firmar</button></div>
+      </form>
+    </section>
+  </main>
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="sigpad.js"></script>
+  <script>
+    const token = location.hash.slice(1);
+    const $ = (s) => document.querySelector(s);
+    const call = async (method, path, body) => {
+      const res = await fetch(`/api/public/sign/${encodeURIComponent(token)}${path}`, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      return data;
+    };
+    const show = (text, err = false) => { const m = $("#msg"); m.hidden = !text; m.textContent = text || ""; m.classList.toggle("error", err); };
+    let pad;
+    function render(v) {
+      $("#doc").hidden = false;
+      $("#title").textContent = v.title;
+      $("#intro").textContent = v.message || `Documento para la firma de ${v.signer.name}.`;
+      $("#hash").textContent = v.doc_hash;
+      $("#email").textContent = v.signer.email;
+      if (v.doc_kind === "markdown") $("#doc-text").innerHTML = DOMPurify.sanitize(marked.parse(v.doc_text || ""));
+      const pending = v.signer.status === "pendiente" && v.request_status === "enviada";
+      $("#sign").hidden = !pending;
+      if (!pending) show(v.signer.status === "firmado" ? `Firmado el ${v.signer.signed_at} (UTC). Gracias.` : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
+      if (pending && !pad) pad = JuanmaSigPad($("#pad"));
+    }
+    (async () => {
+      if (!token) return show("El enlace está incompleto. Ábralo de nuevo desde el correo.", true);
+      try {
+        const v = await call("GET", "");
+        render(v);
+        if (v.doc_kind === "pdf") {
+          const f = await call("GET", "/pdf");
+          const bytes = Uint8Array.from(atob(f.base64), (c) => c.charCodeAt(0));
+          const frame = $("#doc-pdf");
+          frame.src = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+          frame.hidden = false;
+        }
+      } catch (e) { show(e.message, true); }
+    })();
+    $("#otp-btn").addEventListener("click", async () => {
+      try { const r = await call("POST", "/otp", {}); show(`Le enviamos el código. Vence en ${r.minutes} minutos.`); } catch (e) { show(e.message, true); }
+    });
+    $("#clear").addEventListener("click", () => pad.clear());
+    $("#sign-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target, err = f.querySelector(".form-error");
+      err.hidden = true;
+      if (pad.isEmpty()) { err.textContent = "Dibuje su firma."; err.hidden = false; return; }
+      try {
+        render(await call("POST", "/sign", { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: pad.toPng() }));
+      } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    });
+    $("#reject").addEventListener("click", async () => {
+      const reason = window.prompt("¿Por qué no firma? (opcional)") ?? null;
+      if (reason === null) return;
+      try { render(await call("POST", "/reject", { reason })); } catch (e) { show(e.message, true); }
+    });
+  </script>
+</body>
+</html>

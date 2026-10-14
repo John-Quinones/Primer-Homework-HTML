@@ -2,7 +2,7 @@ import express from "express";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { scopeOf } from "./auth.js";
-import { searchSentencias, analyzeSentencia, verifyCitation, COURTS, CSJ_SALAS } from "./jurisprudence.js";
+import { searchSentencias, analyzeSentencia, analyzeText, verifyCitation, COURTS, CSJ_SALAS } from "./jurisprudence.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : "");
 
@@ -50,6 +50,7 @@ export function jurisprudenceRouter(db) {
   }));
 
   r.post("/analyze", ai((b) => {
+    if (str(b.text).length >= 400) return analyzeText({ text: str(b.text), reference: str(b.reference) });
     if (!str(b.reference) && !str(b.url)) throw Object.assign(new Error("Indique la sentencia o su enlace."), { status: 400 });
     return analyzeSentencia({ reference: str(b.reference), url: str(b.url), court: str(b.court) }).then(withProof);
   }));

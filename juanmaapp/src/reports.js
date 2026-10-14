@@ -3,8 +3,10 @@
 import express from "express";
 import { typePath } from "./sql.js";
 import { scopeOf } from "./auth.js";
+import { paymentsReport } from "./payments.js";
 
-const OPEN = ["Abierto", "En trámite", "En espera de respuesta"];
+const OPEN = ["Activo"];
+const ARCHIVED = "('Archivo provisional', 'Archivo definitivo')";
 
 export const REPORTS = {
   expedientes: "Expedientes",
@@ -13,6 +15,8 @@ export const REPORTS = {
   responsables: "Carga por responsable",
   procesos: "Expedientes por tipo de proceso",
   jurisprudencia: "Sentencias guardadas",
+  cartera: "Cartera por cliente",
+  recibos: "Recibos de caja",
 };
 
 export function reportsRouter(db) {
@@ -41,7 +45,7 @@ export function reportsRouter(db) {
     const W = () => (where.length ? "WHERE " + where.join(" AND ") : "");
     const statusFilter = (col) => {
       if (q.status === "activos") where.push(`${col} IN (${OPEN.map(() => "?").join(",")})`), params.push(...OPEN);
-      else if (q.status === "cerrados") where.push(`${col} = 'Cerrado'`);
+      else if (q.status === "archivados" || q.status === "cerrados") where.push(`${col} IN ${ARCHIVED}`);
       else if (q.status) where.push(`${col} = ?`), params.push(String(q.status));
     };
     let columns, rows;
@@ -53,11 +57,13 @@ export function reportsRouter(db) {
       if (q.categoryId) { where.push("t.category_id = ?"); params.push(Number(q.categoryId)); }
       if (q.assignedUserId) { where.push("k.assigned_user_id = ?"); params.push(Number(q.assignedUserId)); }
       columns = [["office", "Oficina"], ["client", "Cliente"], ["doc", "Documento"], ["category", "Tipo de proceso"],
-        ["type", "Subproceso"], ["title", "Asunto"], ["status", "Estado"], ["assigned", "Responsable"],
+        ["type", "Subproceso"], ["title", "Asunto"], ["radicado", "Radicado"], ["role", "Calidad del cliente"], ["affiliated", "Afiliado"],
+        ["status", "Estado"], ["assigned", "Responsable"],
         ["counterparty", "Contraparte"], ["created", "Creado"], ["updated", "Actualizado"]];
       rows = db.prepare(`
         SELECT o.name AS office, c.full_name AS client, trim(c.id_type || ' ' || c.id_number) AS doc,
-               g.name AS category, ${typePath("t")} AS type, k.title, k.status, COALESCE(u.name, '') AS assigned,
+               g.name AS category, ${typePath("t")} AS type, k.title, k.radicado, k.client_role AS role,
+               CASE k.affiliated WHEN 1 THEN 'Sí' ELSE 'No' END AS affiliated, k.status, COALESCE(u.name, '') AS assigned,
                k.counterparty, date(k.created_at) AS created, date(k.updated_at) AS updated
         FROM cases k JOIN clients c ON c.id = k.client_id
         JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id
@@ -80,22 +86,22 @@ export function reportsRouter(db) {
     } else if (type === "oficinas") {
       inOffices("o.id");
       columns = [["office", "Oficina"], ["city", "Ciudad"], ["clients", "Clientes"], ["cases", "Expedientes"],
-        ["active", "Activos"], ["closed", "Cerrados"], ["unassigned", "Sin responsable"], ["users", "Usuarios"]];
+        ["active", "Activos"], ["closed", "Archivados"], ["unassigned", "Sin responsable"], ["users", "Usuarios"]];
       rows = db.prepare(`
         SELECT o.name AS office, o.city,
           (SELECT COUNT(*) FROM clients WHERE office_id = o.id) AS clients,
           (SELECT COUNT(*) FROM cases WHERE office_id = o.id) AS cases,
           (SELECT COUNT(*) FROM cases WHERE office_id = o.id AND status IN (${OPEN.map(() => "?").join(",")})) AS active,
-          (SELECT COUNT(*) FROM cases WHERE office_id = o.id AND status = 'Cerrado') AS closed,
+          (SELECT COUNT(*) FROM cases WHERE office_id = o.id AND status IN ${ARCHIVED}) AS closed,
           (SELECT COUNT(*) FROM cases WHERE office_id = o.id AND assigned_user_id IS NULL) AS unassigned,
           (SELECT COUNT(*) FROM user_offices WHERE office_id = o.id) AS users
         FROM offices o ${W()} ORDER BY o.is_main DESC, o.name`).all(...OPEN, ...params);
     } else if (type === "responsables") {
       inOffices("k.office_id");
-      columns = [["user", "Responsable"], ["role", "Rol"], ["cases", "Expedientes"], ["active", "Activos"], ["closed", "Cerrados"]];
+      columns = [["user", "Responsable"], ["role", "Rol"], ["cases", "Expedientes"], ["active", "Activos"], ["closed", "Archivados"]];
       rows = db.prepare(`
         SELECT COALESCE(u.name, 'Sin responsable') AS user, COALESCE(u.role, '') AS role, COUNT(*) AS cases,
-               SUM(k.status IN (${OPEN.map(() => "?").join(",")})) AS active, SUM(k.status = 'Cerrado') AS closed
+               SUM(k.status IN (${OPEN.map(() => "?").join(",")})) AS active, SUM(k.status IN ${ARCHIVED}) AS closed
         FROM cases k LEFT JOIN users u ON u.id = k.assigned_user_id ${W()}
         GROUP BY k.assigned_user_id ORDER BY cases DESC`).all(...OPEN, ...params);
     } else if (type === "procesos") {
@@ -107,6 +113,9 @@ export function reportsRouter(db) {
                SUM(k.status IN (${OPEN.map(() => "?").join(",")})) AS active
         FROM cases k JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id
         ${W()} GROUP BY t.id ORDER BY g.sort, t.sort`).all(...OPEN, ...params);
+    } else if (type === "cartera" || type === "recibos") {
+      if (!req.user.permissions.includes("payments.manage")) return res.status(403).json({ error: "Su rol no tiene permiso para ver la cartera." });
+      ({ columns, rows } = paymentsReport(db, req.user, type, q));
     } else if (type === "jurisprudencia") {
       if (sc !== null) {
         const ph = sc.map(() => "?").join(",") || "NULL";

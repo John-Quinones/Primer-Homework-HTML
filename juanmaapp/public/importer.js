@@ -22,6 +22,9 @@
     { key: "case.type", label: "Expediente · Subproceso", match: ["subproceso", "clase proceso", "clase de proceso", "accion", "tipo accion", "medio de control", "proceso"] },
     { key: "case.title", label: "Expediente · Asunto", match: ["asunto", "referencia", "descripcion", "objeto"] },
     { key: "case.status", label: "Expediente · Estado", match: ["estado", "estado proceso"] },
+    { key: "case.client_role", label: "Expediente · Calidad del cliente (demandante, demandado…)", match: ["calidad", "calidad cliente", "calidad del cliente", "parte", "rol cliente", "posicion"] },
+    { key: "case.affiliated", label: "Expediente · Cliente afiliado (Sí / No)", match: ["afiliado", "afiliacion", "es afiliado"] },
+    { key: "case.radicado", label: "Expediente · Radicado", match: ["radicado", "radicacion", "numero radicado", "no radicado", "numero proceso"] },
     { key: "case.counterparty", label: "Expediente · Contraparte / entidad",
       match: ["contraparte", "demandado", "demandada", "accionado", "entidad", "empleador", "convocado"] },
     { key: "case.facts", label: "Expediente · Hechos", join: "\n", match: ["hechos", "resumen", "detalle"] },
@@ -227,8 +230,11 @@
             }
             await api("POST", "/cases", {
               client_id: client.id, process_type_id: type.id, title: rec.case.title || "",
-              status: rec.case.status || "Abierto", counterparty: rec.case.counterparty || "",
-              facts: rec.case.facts || "", field_values,
+              status: rec.case.status || "Activo", counterparty: rec.case.counterparty || "",
+              facts: rec.case.facts || "", field_values, radicado: rec.case.radicado || "",
+              // Unknown roles are kept as a note instead of failing the row.
+              client_role: window.JuanmaCaseMeta?.normPartyRole(rec.case.client_role) || "",
+              affiliated: /^(s|si|sí|x|1|true|afiliado)$/i.test(String(rec.case.affiliated || "").trim()),
             });
             caseKeys.add(key);
             summary.casesCreated++;

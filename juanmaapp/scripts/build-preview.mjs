@@ -9,6 +9,7 @@ import { ROLES, PERMISSIONS, DEFAULT_MATRIX } from "../src/auth.js";
 import { REPORTS } from "../src/reports.js";
 import { AREAS } from "../src/places.js";
 import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES } from "../src/templates-seed.js";
+import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(path.join(root, p), "utf8");
@@ -31,8 +32,10 @@ html = html
   .replace('<script src="vendor/pizzip.min.js"></script>', () => `<script>${safe(read("node_modules/pizzip/dist/pizzip.min.js"))}</script>`)
   .replace('<script src="vendor/docxtemplater.min.js"></script>', () => `<script>${safe(read("node_modules/docxtemplater/build/docxtemplater.min.js"))}</script>`)
   .replace('<script src="docx.js"></script>', () => `<script>${safe(read("public/docx.js"))}</script>`)
+  .replace('<script src="sigpad.js"></script>', () => `<script>${safe(read("public/sigpad.js"))}</script>`)
   .replace('<script src="vendor/jspdf.umd.min.js"></script>', () => `<script>${safe(read("node_modules/jspdf/dist/jspdf.umd.min.js"))}</script>`)
   .replace('<script src="vendor/jspdf.plugin.autotable.min.js"></script>', () => `<script>${safe(read("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js"))}</script>`)
+  .replace('<script src="shared.js"></script>', () => `<script>${safe(SHARED_MODULES.map(([f, n]) => asGlobal(path.join(root, f), n)).join("\n"))}</script>`)
   .replace('<script src="citations.js"></script>', () => `<script>${safe(read("public/citations.js"))}</script>`)
   .replace('<script src="app.js"></script>', () => [
     `<script>window.JUANMA_SEED_CATALOG = ${JSON.stringify(SEED_CATALOG)};
@@ -40,6 +43,8 @@ window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, 
 window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
 window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
 window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES })};</script>`,
+    `<script>window.JUANMA_PROMPT = ${JSON.stringify(read("prompts/nomosai-system-prompt.md"))};</script>`,
+    `<script>${safe(read("public/web-store.js"))}</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,
     `<script>${safe(read("public/app.js"))}</script>`,
   ].join("\n"));

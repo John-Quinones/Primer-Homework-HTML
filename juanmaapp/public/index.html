@@ -20,7 +20,7 @@
 
       <form id="login-form" autocomplete="on">
         <label>Correo <input id="login-email" name="email" type="email" required autocomplete="username" /></label>
-        <label>Contraseña <input id="login-password" name="password" type="password" required autocomplete="current-password" /></label>
+        <label class="pw-field">Contraseña <input id="login-password" name="password" type="password" required autocomplete="current-password" /></label>
         <p class="form-error" hidden></p>
         <button class="primary wide">Ingresar</button>
       </form>
@@ -29,13 +29,13 @@
         <p class="auth-note">Primer ingreso: cree la cuenta de <strong>Gerencia</strong>. Desde ella creará los demás usuarios y oficinas.</p>
         <label>Nombre completo <input id="setup-name" name="name" required /></label>
         <label>Correo <input id="setup-email" name="email" type="email" required autocomplete="username" /></label>
-        <label>Contraseña (mínimo 10 caracteres) <input id="setup-password" name="password" type="password" minlength="10" required autocomplete="new-password" /></label>
+        <label class="pw-field">Contraseña (mínimo 10 caracteres) <input id="setup-password" name="password" type="password" minlength="10" required autocomplete="new-password" /></label>
         <p class="form-error" hidden></p>
         <button class="primary wide">Crear cuenta e ingresar</button>
       </form>
 
       <div id="demo-logins" class="demo-logins" hidden>
-        <p class="auth-note">Vista previa: entre con un usuario de ejemplo para ver la app según su rol.</p>
+        <p class="auth-note">Elija su usuario para ingresar.</p>
         <div class="demo-grid"></div>
       </div>
     </div>
@@ -51,7 +51,7 @@
       </div>
     </div>
     <div class="topbar-right">
-      <span id="demo-badge" class="demo-badge" hidden>Vista previa · datos de ejemplo</span>
+      <span id="demo-badge" class="demo-badge" hidden>Enlace de prueba · datos guardados</span>
       <details class="bell">
         <summary aria-label="Notificaciones"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span id="bell-count" class="bell-count" hidden></span></summary>
         <div class="bell-pop">
@@ -79,6 +79,9 @@
       <a href="#consulta" data-view="consulta"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5L20 20"/><path d="M8 10h4M10 8v4"/></svg><span>Consulta de procesos</span></a>
       <a href="#despachos" data-view="despachos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V10M19 21V10M9 21v-6h6v6M2 10l10-6 10 6"/></svg><span>Despachos</span></a>
       <a href="#borradores" data-view="borradores"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span>Documentos</span></a>
+      <a href="#firmas" data-view="firmas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17c3-1 4-6 6-6s1 5 3 5 3-3 4-3 1 2 2 2"/><path d="M3 21h18"/><path d="M15 3l4 4-8 8H7v-4z"/></svg><span>Firmas</span></a>
+      <a href="#pagos" data-view="pagos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg><span>Pagos y cartera</span></a>
+      <a href="#correo" data-view="correo"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/><path d="M15 17l2 2 4-4"/></svg><span>Correo certificado</span></a>
       <a href="#jurisprudencia" data-view="jurisprudencia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg><span>Jurisprudencia</span></a>
       <a href="#reportes" data-view="reportes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reportes</span></a>
       <a href="#importar" data-view="importar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><span>Importar</span></a>
@@ -281,6 +284,8 @@
                     <button type="button" data-tpl-out="pdf" data-text-only>Descargar PDF</button>
                     <button type="button" data-tpl-out="copy" data-text-only>Copiar texto</button>
                     <button type="button" data-tpl-out="nomos" data-text-only>Completar con NomosAI</button>
+                    <button type="button" data-tpl-out="sign" data-text-only>Enviar a firma</button>
+                    <button type="button" data-tpl-out="mail">Enviar por correo</button>
                   </div>
                 </div>
                 <label>Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
@@ -364,6 +369,7 @@
                 <button type="button" data-out="pdf" disabled>Descargar PDF</button>
                 <button type="button" data-out="copy-json" disabled>Copiar JSON</button>
                 <button type="button" data-out="verify" disabled>Verificar citas</button>
+                <button type="button" data-out="sign" disabled>Enviar a firma</button>
               </div>
             </div>
             <div id="status" class="status" hidden></div>
@@ -378,6 +384,79 @@
           </section>
         </div>
         </div>
+      </section>
+
+      <!-- ============ FIRMAS ============ -->
+      <section id="view-firmas" class="view" hidden>
+        <div class="view-head">
+          <h2>Firma electrónica</h2>
+          <div class="toolbar"><button class="primary" data-action="new-sign">+ Enviar documento a firma</button></div>
+        </div>
+        <p class="hint" id="sign-note">Cada firmante recibe un enlace por correo, confirma su identidad con un código de un solo uso enviado a su correo y firma en pantalla. Queda registrada la huella SHA-256 del documento, la fecha y hora, la IP y el navegador. También puede firmar en persona en este equipo.</p>
+        <div class="panel"><div class="table-scroll">
+          <table class="data-table"><thead><tr><th>Documento</th><th>Firmantes</th><th>Estado</th><th>Creada</th><th></th></tr></thead><tbody id="sign-rows"></tbody></table>
+        </div><p id="sign-empty" class="empty" hidden>No hay documentos enviados a firma. Use “+ Enviar documento a firma” o el botón “Enviar a firma” en Documentos.</p></div>
+      </section>
+
+      <!-- ============ CORREO ============ -->
+      <section id="view-correo" class="view" hidden>
+        <div class="view-head">
+          <h2>Correo con trazabilidad</h2>
+          <div class="toolbar"><button class="primary" data-action="new-mail">+ Nuevo correo</button></div>
+        </div>
+        <p class="hint">Cada envío queda con la huella SHA-256 del mensaje y de los adjuntos, la respuesta del servidor de correo, la primera apertura y el acuse de recibo que el destinatario confirma con un botón. Para que tenga el valor de correo electrónico certificado ante terceros se requiere un proveedor acreditado; la app queda lista para conectarlo.</p>
+        <div id="mail-note" class="status" hidden></div>
+        <div class="panel"><div class="table-scroll">
+          <table class="data-table"><thead><tr><th>Para</th><th>Asunto</th><th>Envío</th><th>Abierto</th><th>Acuse de recibo</th><th></th></tr></thead><tbody id="mail-rows"></tbody></table>
+        </div><p id="mail-empty" class="empty" hidden>Aún no hay correos enviados.</p></div>
+      </section>
+
+      <!-- ============ PAGOS Y CARTERA ============ -->
+      <section id="view-pagos" class="view" hidden>
+        <div class="view-head">
+          <h2>Pagos y cartera</h2>
+          <div class="toolbar">
+            <button class="primary" data-action="new-receipt">+ Recibo de caja</button>
+            <button data-action="new-charge">+ Cobro o plan de cuotas</button>
+            <button data-action="pay-settings">Ajustes de cobro</button>
+          </div>
+        </div>
+        <div class="kpis pay-kpis">
+          <div class="kpi"><span class="kpi-value" id="pay-balance">–</span><span class="kpi-label">Saldo por cobrar</span></div>
+          <div class="kpi"><span class="kpi-value" id="pay-overdue">–</span><span class="kpi-label">Vencido</span></div>
+          <div class="kpi"><span class="kpi-value" id="pay-due7">–</span><span class="kpi-label">Vence en 7 días</span></div>
+          <div class="kpi"><span class="kpi-value" id="pay-month">–</span><span class="kpi-label">Recaudado este mes</span></div>
+        </div>
+        <div class="panel">
+          <h3 class="panel-title">Edades de la cartera</h3>
+          <div id="pay-aging" class="hbars" role="list"></div>
+        </div>
+        <div class="toolbar pay-filter">
+          <label>Cliente <select id="pay-client"><option value="">Todos los clientes</option></select></label>
+        </div>
+        <div class="tabs" role="tablist" id="pay-tabs">
+          <button role="tab" data-ptab="cartera" class="active">Cartera por cliente</button>
+          <button role="tab" data-ptab="cobros">Cobros y cuotas</button>
+          <button role="tab" data-ptab="recibos">Recibos</button>
+          <button role="tab" data-ptab="recordatorios">Recordatorios enviados</button>
+        </div>
+        <div class="panel" data-ppanel="cartera"><div class="table-scroll">
+          <table class="data-table"><thead><tr><th>Cliente</th><th class="num">Saldo</th><th class="num">Vencido</th><th>Mora</th><th>Próximo vencimiento</th><th>Último pago</th><th></th></tr></thead><tbody id="pay-cartera"></tbody></table>
+        </div><p id="pay-cartera-empty" class="empty" hidden>No hay saldos. Cree un cobro para empezar a llevar la cartera.</p></div>
+        <div class="panel" data-ppanel="cobros" hidden>
+          <div class="toolbar"><label>Ver <select id="pay-state">
+            <option value="abiertos">Con saldo</option><option value="vencido">Vencidos</option><option value="pendiente">Pendientes</option>
+            <option value="parcial">Abono parcial</option><option value="pagado">Pagados</option><option value="anulado">Anulados</option><option value="">Todos</option>
+          </select></label></div>
+          <div class="table-scroll"><table class="data-table"><thead><tr><th>Cliente</th><th>Concepto</th><th>Vence</th><th class="num">Valor</th><th class="num">Saldo</th><th>Estado</th><th></th></tr></thead><tbody id="pay-charges"></tbody></table></div>
+          <p id="pay-charges-empty" class="empty" hidden>No hay cobros con este filtro.</p>
+        </div>
+        <div class="panel" data-ppanel="recibos" hidden><div class="table-scroll">
+          <table class="data-table"><thead><tr><th>Recibo</th><th>Fecha</th><th>Cliente</th><th>Concepto</th><th>Medio</th><th class="num">Valor</th><th></th></tr></thead><tbody id="pay-receipts"></tbody></table>
+        </div><p id="pay-receipts-empty" class="empty" hidden>Aún no hay recibos.</p></div>
+        <div class="panel" data-ppanel="recordatorios" hidden><div class="table-scroll">
+          <table class="data-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Cobro</th><th>Canal</th><th>Resultado</th></tr></thead><tbody id="pay-reminders"></tbody></table>
+        </div><p id="pay-reminders-empty" class="empty" hidden>Aún no se han enviado recordatorios.</p></div>
       </section>
 
       <!-- ============ JURISPRUDENCIA ============ -->
@@ -429,6 +508,8 @@
               </label>
             </div>
             <label>…o enlace oficial <input name="url" type="url" placeholder="https://www.corteconstitucional.gov.co/relatoria/…" /></label>
+            <label>…o pegue el texto de la sentencia <span class="muted">(copiado de la relatoría oficial)</span>
+              <textarea name="text" rows="6" placeholder="Pegue aquí el texto completo. NomosAI lo analiza y solo conserva citas que aparecen textualmente."></textarea></label>
             <button class="primary">Analizar</button>
           </form>
           <div id="j-analyze-status" class="status" hidden></div>
@@ -513,8 +594,8 @@
             <label data-rf="expedientes">Tipo de proceso <select id="report-category" name="categoryId"><option value="">Todos</option></select></label>
             <label data-rf="expedientes">Estado
               <select id="report-status" name="status">
-                <option value="">Todos</option><option value="activos">Activos</option><option value="cerrados">Cerrados</option>
-                <option>Abierto</option><option>En trámite</option><option>En espera de respuesta</option><option>Suspendido</option>
+                <option value="">Todos</option><option>Activo</option><option>Archivo provisional</option><option>Archivo definitivo</option>
+                <option value="archivados">Archivados (provisional y definitivo)</option>
               </select>
             </label>
             <label data-rf="expedientes">Responsable <select id="report-user" name="assignedUserId"><option value="">Todos</option></select></label>
@@ -624,9 +705,14 @@
         <label>Asunto <input name="title" placeholder="Ej. Cobro de prestaciones sociales" /></label>
         <label>Estado
           <select name="status">
-            <option>Abierto</option><option>En trámite</option><option>En espera de respuesta</option>
-            <option>Suspendido</option><option>Cerrado</option>
+            <option>Activo</option><option>Archivo provisional</option><option>Archivo definitivo</option>
           </select>
+        </label>
+      </div>
+      <div class="grid2">
+        <label>Calidad del cliente <select name="client_role"></select></label>
+        <label>Cliente afiliado
+          <select name="affiliated"><option value="0">No</option><option value="1">Sí</option></select>
         </label>
       </div>
       <fieldset class="court-fields"><legend>Despacho judicial</legend>
@@ -701,6 +787,97 @@
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Enviar a firma -->
+  <dialog id="sign-dialog" class="wide-dialog">
+    <form method="dialog" data-form="sign">
+      <h3 data-title>Enviar documento a firma</h3>
+      <div class="grid2">
+        <label>Nombre del documento * <input name="title" required /></label>
+        <label>Expediente <select name="case_id"><option value="">— Ninguno —</option></select></label>
+      </div>
+      <fieldset><legend>Documento</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="source" value="text" checked /> Texto (de Documentos o pegado aquí)</label>
+          <label class="inline"><input type="radio" name="source" value="pdf" /> Archivo PDF</label>
+        </div>
+        <textarea name="doc_text" rows="8" placeholder="Pegue o revise aquí el texto del documento"></textarea>
+        <input type="file" name="pdf" accept="application/pdf" hidden />
+      </fieldset>
+      <fieldset><legend>Firmantes</legend>
+        <div id="signer-rows"></div>
+        <button type="button" class="mini" id="add-signer">+ Firmante</button>
+      </fieldset>
+      <div class="grid2">
+        <label>Forma de firma
+          <select name="mode"><option value="remote">Enlace por correo con código OTP</option><option value="presencial">En persona, en este equipo</option></select>
+        </label>
+        <label>Mensaje para los firmantes <input name="message" placeholder="Por favor revise y firme el documento." /></label>
+      </div>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Enviar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Detalle de firma -->
+  <dialog id="sign-detail" class="wide-dialog">
+    <form method="dialog">
+      <h3 data-title></h3>
+      <p class="hint" data-sub></p>
+      <div id="sign-detail-body"></div>
+      <div class="dialog-actions">
+        <button type="button" data-sign-out="cert" class="primary">Descargar certificado (PDF)</button>
+        <button type="button" data-sign-out="doc">Descargar documento firmado</button>
+        <button type="button" data-sign-out="cancel" class="danger">Cancelar solicitud</button>
+        <button value="cancel">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Firma presencial -->
+  <dialog id="inperson-dialog">
+    <form method="dialog" data-form="inperson">
+      <h3 data-title>Firma en persona</h3>
+      <p class="hint">Entregue el equipo al firmante. Usted queda registrado como testigo.</p>
+      <div class="grid2">
+        <label>Nombre completo del firmante * <input name="typed_name" required /></label>
+        <label>Documento de identidad <input name="id_number" /></label>
+      </div>
+      <canvas class="sig-canvas" id="inperson-pad"></canvas>
+      <p><button type="button" class="mini" id="inperson-clear">Borrar firma</button></p>
+      <label class="inline"><input type="checkbox" name="accept" required /> El firmante leyó el documento y lo firma electrónicamente.</label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Firmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Nuevo correo -->
+  <dialog id="mail-dialog" class="wide-dialog">
+    <form method="dialog" data-form="mail">
+      <h3 data-title>Nuevo correo con trazabilidad</h3>
+      <div class="grid2">
+        <label>Para * <input name="to" required placeholder="correo@despacho.gov.co (varios separados por coma)" /></label>
+        <label>Copia <input name="cc" /></label>
+        <label>Expediente <select name="case_id"><option value="">— Ninguno —</option></select></label>
+        <label>Asunto * <input name="subject" required /></label>
+      </div>
+      <p class="hint" id="mail-court-hint" hidden></p>
+      <label>Mensaje * <textarea name="body" rows="8" required></textarea></label>
+      <label>Adjuntos <input type="file" name="files" multiple /></label>
+      <ul id="mail-pending-atts" class="muted"></ul>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Enviar</button>
       </div>
     </form>
   </dialog>
@@ -791,6 +968,93 @@
   </dialog>
 
   <!-- Contraseña -->
+
+  <dialog id="charge-dialog">
+    <form method="dialog" data-form="charge">
+      <h3 data-title>Nuevo cobro</h3>
+      <input type="hidden" name="id" />
+      <label>Cliente * <select name="client_id" required></select></label>
+      <label>Expediente <select name="case_id"><option value="">— Ninguno —</option></select></label>
+      <label>Concepto * <input name="concept" required placeholder="Ej. Honorarios proceso ordinario laboral" /></label>
+      <div class="grid2">
+        <label><span data-amount-label>Valor total *</span> <input name="amount" required inputmode="numeric" class="money" placeholder="$ 0" /></label>
+        <label><span data-due-label>Primer vencimiento *</span> <input name="due_date" type="date" required /></label>
+      </div>
+      <div class="grid2" data-plan>
+        <label>Número de cuotas <input name="installments" type="number" min="1" max="60" value="1" /></label>
+        <label>Periodicidad <select name="every"><option value="mensual">Mensual</option><option value="quincenal">Quincenal</option><option value="semanal">Semanal</option></select></label>
+      </div>
+      <p class="hint" id="charge-preview"></p>
+      <label>Enlace de pago (Bold u otro) <input name="pay_link" type="url" placeholder="https://checkout.bold.co/…" /></label>
+      <label>Notas <textarea name="notes" rows="2"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="receipt-dialog">
+    <form method="dialog" data-form="receipt">
+      <h3 data-title>Recibo de caja</h3>
+      <label>Cliente * <select name="client_id" required></select></label>
+      <label>Aplica a <select name="charge_id"></select></label>
+      <div class="grid2">
+        <label>Valor recibido * <input name="amount" required inputmode="numeric" class="money" placeholder="$ 0" /></label>
+        <label>Fecha de pago * <input name="paid_on" type="date" required /></label>
+        <label>Medio de pago * <select name="method" required></select></label>
+        <label>Referencia o comprobante <input name="reference" placeholder="N.º de transferencia, consignación…" /></label>
+      </div>
+      <label>Concepto <input name="concept" placeholder="Se toma del cobro si lo deja vacío" /></label>
+      <label>Notas <textarea name="notes" rows="2"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar recibo</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="remind-dialog">
+    <form method="dialog" data-form="remind">
+      <h3 data-title>Recordatorio de pago</h3>
+      <input type="hidden" name="charge_id" />
+      <label>Mensaje para el cliente <textarea name="text" rows="9" readonly></textarea></label>
+      <div class="toolbar">
+        <button type="button" data-remind-copy>Copiar texto</button>
+        <a class="button" id="remind-wa" target="_blank" rel="noopener">Abrir en WhatsApp</a>
+      </div>
+      <fieldset><legend>Enviar desde JuanMaApp</legend>
+        <label class="inline"><input type="checkbox" name="email" checked /> Correo <span class="muted" data-remind-email></span></label>
+        <label class="inline"><input type="checkbox" name="whatsapp" /> WhatsApp automático <span class="muted" data-remind-phone></span></label>
+        <p class="hint" id="remind-note"></p>
+      </fieldset>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cerrar</button>
+        <button type="button" data-remind-manual>Marcar como enviado</button>
+        <button class="primary" value="save">Enviar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pay-settings-dialog">
+    <form method="dialog" data-form="pay-settings">
+      <h3 data-title>Ajustes de cobro</h3>
+      <div class="grid2">
+        <label>Nombre de la firma (recibos) <input name="firm_name" /></label>
+        <label>NIT <input name="firm_nit" /></label>
+      </div>
+      <label>Datos para el pago (van en recordatorios) <textarea name="pay_info" rows="3" placeholder="Ej. Bancolombia, cuenta de ahorros 000-000000-00 a nombre de TEC Jurídicos S.A.S."></textarea></label>
+      <fieldset><legend>Recordatorios automáticos (8:00 a. m., hora Colombia)</legend>
+        <label class="inline"><input type="checkbox" name="auto" /> Enviar recordatorios automáticos</label>
+        <div class="grid2">
+          <label>Días antes del vencimiento <input name="days_before" type="number" min="0" max="30" /></label>
+          <label>Si está vencido, repetir cada (días) <input name="repeat_days" type="number" min="1" max="60" /></label>
+        </div>
+        <label class="inline"><input type="checkbox" name="ch_email" /> Por correo</label>
+        <label class="inline"><input type="checkbox" name="ch_whatsapp" /> Por WhatsApp</label>
+        <p class="hint" id="pay-settings-note"></p>
+      </fieldset>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
+    </form>
+  </dialog>
   <dialog id="password-dialog">
     <form method="dialog" data-form="password">
       <h3>Cambiar contraseña</h3>
@@ -843,8 +1107,10 @@
   <script src="vendor/pizzip.min.js"></script>
   <script src="vendor/docxtemplater.min.js"></script>
   <script src="docx.js"></script>
+  <script src="sigpad.js"></script>
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="shared.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
