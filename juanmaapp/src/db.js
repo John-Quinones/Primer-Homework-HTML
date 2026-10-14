@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
+import { seedTemplates } from "./templates.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -151,6 +152,22 @@ CREATE TABLE IF NOT EXISTS report_log (
   summary   TEXT NOT NULL DEFAULT ''
 );
 
+-- Document templates: markdown text with {{variables}} or an uploaded .docx.
+CREATE TABLE IF NOT EXISTS document_templates (
+  id           INTEGER PRIMARY KEY,
+  name         TEXT NOT NULL,
+  category     TEXT NOT NULL,
+  description  TEXT NOT NULL DEFAULT '',
+  format       TEXT NOT NULL CHECK (format IN ('markdown','docx')),
+  body         TEXT,
+  filename     TEXT,
+  file         BLOB,
+  builtin      INTEGER NOT NULL DEFAULT 0,
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS role_permissions (
   role        TEXT NOT NULL,
   permission  TEXT NOT NULL,
@@ -179,12 +196,13 @@ CREATE TABLE IF NOT EXISTS process_categories (
 );
 
 -- Sub-process that depends on a category: Reparación Directa, Ejecutivo Laboral, ...
+-- parent_id makes a second-order sub-process (Ordinario Laboral › Primera instancia).
 CREATE TABLE IF NOT EXISTS process_types (
   id           INTEGER PRIMARY KEY,
   category_id  INTEGER NOT NULL REFERENCES process_categories(id) ON DELETE CASCADE,
+  parent_id    INTEGER REFERENCES process_types(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
-  sort         INTEGER NOT NULL DEFAULT 0,
-  UNIQUE (category_id, name)
+  sort         INTEGER NOT NULL DEFAULT 0
 );
 
 -- User-defined fields shown on every case of a category.
@@ -256,6 +274,7 @@ export function openDb(file = process.env.DB_PATH || "data/juanmaapp.db") {
   db.exec(SCHEMA);
 
   migrate(db);
+  seedTemplates(db);
 
   const count = db.prepare("SELECT COUNT(*) AS n FROM process_categories").get().n;
   if (count === 0) seed(db);
@@ -265,6 +284,24 @@ export function openDb(file = process.env.DB_PATH || "data/juanmaapp.db") {
 // Bring databases created by earlier versions up to the current schema.
 function migrate(db) {
   const cols = (t) => new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
+  // Second-order sub-processes: rebuild process_types to add parent_id and
+  // replace UNIQUE(category_id, name) with uniqueness per parent.
+  if (!cols("process_types").has("parent_id")) {
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec("BEGIN");
+    db.exec(`CREATE TABLE process_types_new (
+      id INTEGER PRIMARY KEY,
+      category_id INTEGER NOT NULL REFERENCES process_categories(id) ON DELETE CASCADE,
+      parent_id INTEGER REFERENCES process_types(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      sort INTEGER NOT NULL DEFAULT 0)`);
+    db.exec("INSERT INTO process_types_new (id, category_id, name, sort) SELECT id, category_id, name, sort FROM process_types");
+    db.exec("DROP TABLE process_types");
+    db.exec("ALTER TABLE process_types_new RENAME TO process_types");
+    db.exec("COMMIT");
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");
   add("cases", "office_id", "INTEGER REFERENCES offices(id)");
@@ -274,6 +311,7 @@ function migrate(db) {
   add("offices", "department", "TEXT NOT NULL DEFAULT ''");
   add("users", "custom_permissions", "INTEGER NOT NULL DEFAULT 0");
   add("users", "phone", "TEXT NOT NULL DEFAULT ''");
+  add("users", "professional_card", "TEXT NOT NULL DEFAULT ''");
   for (const [col, def] of [["department", "TEXT NOT NULL DEFAULT ''"], ["city", "TEXT NOT NULL DEFAULT ''"], ["area", "TEXT NOT NULL DEFAULT ''"],
     ["court_id", "INTEGER REFERENCES courts(id) ON DELETE SET NULL"], ["court_name", "TEXT NOT NULL DEFAULT ''"],
     ["court_email", "TEXT NOT NULL DEFAULT ''"], ["radicado", "TEXT NOT NULL DEFAULT ''"],
@@ -300,7 +338,7 @@ function migrate(db) {
   const known = new Set(db.prepare("SELECT permission FROM known_permissions").all().map((r) => r.permission));
   if (!known.size && db.prepare("SELECT COUNT(*) AS n FROM role_permissions").get().n) {
     // Databases from before this table existed already hold their matrix.
-    for (const p of Object.keys(PERMISSIONS)) if (p !== "processes.consult") known.add(p);
+    for (const p of Object.keys(PERMISSIONS)) if (!["processes.consult", "templates.manage"].includes(p)) known.add(p);
     const insK = db.prepare("INSERT OR IGNORE INTO known_permissions (permission) VALUES (?)");
     for (const p of known) insK.run(p);
   }

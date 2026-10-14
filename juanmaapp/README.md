@@ -12,12 +12,12 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 | **Despachos** | Court directory loaded from the Rama Judicial's official directory file (.xlsx/.csv): filter by department, city/municipality and area (Laboral, Civil, Familia…) with e-mail and phone. The case form uses it to pick the court and show its e-mail. |
 | **Clientes** | Create, search, edit and delete clients (name, ID type and number, email, phone, address, city, notes). Each client shows their cases. |
 | **Expedientes** | A case links a client to a sub-process (e.g. Laboral › Ejecutivo Laboral) and stores subject, status, counterparty, facts and the category's custom fields. Filter by process type. |
-| **Borradores** | Pick a case (or fill the form by hand) and generate a draft. The case's client data, process and custom fields are sent to NomosAI. |
+| **Documentos** | **Plantillas:** a library of document templates by category (Contrato, Poder, Derecho de petición, Demanda, Tutela, Recurso, Memorial, Otro). Four starter templates ship with the app; the firm uploads its own Word (.docx) or text (.md/.txt) files or writes them in the editor, inserting `{{variables}}` (client, case, court, lawyer, office, date and the category's custom fields). Choose a case and the document fills itself; missing data is listed first and stays marked `[FILL: …]`. Download as Word (Word uploads keep their original formatting) or PDF, or hand the filled text to NomosAI. **Redactar con NomosAI:** contracts, powers of attorney, petitions and lawsuits (demandas) drafted by the model, optionally on top of a firm template. |
 | **Jurisprudencia** | Search judgments of the Corte Constitucional, Corte Suprema de Justicia (every chamber), Consejo de Estado and tribunals; analyze one (legal problem, facts, ratio decidendi, decision, dissents, norms, verbatim quotes, summary); check every citation in a draft (does it exist, is the reference right, does it support what the draft says); save judgments to a case. Claude may only search and read the official court sites, and a result is marked verified only when its URL is one the tools actually returned from those sites. |
 | **Reportes** | Expedientes (filter by office, process type, status, responsible, dates), clients, summary per office, workload per responsible, cases per process type, saved judgments. Each exports to Excel (.xlsx) and PDF, limited to the user's offices. |
 | **Usuarios** | Gerencia creates users (name, email, role, offices, initial password, active), offices (Ibagué is the main one; any number can be added) and edits the role × permission matrix. |
 | **Importar** | Load existing data exported from Access (or any spreadsheet) as `.xlsx` or `.csv`. Columns are matched automatically (Nombres + Apellidos are joined, IdCliente/Código are skipped) and can be reassigned. A file can hold clients only, or one case per row with the client's data on the same row. Existing clients are matched by document number or name and only their blank fields are filled; identical cases are not created twice; missing process types, sub-processes and custom fields can be created on the fly. Rows that fail are listed by row number. |
-| **Configuración** | Manage process types (Administrativo, Laboral, Penal, Familia, Derecho de Petición, Datacrédito, or new ones), their sub-processes, and custom fields per type: text, long text, number, date, or a drop-down list, optionally required. |
+| **Configuración** | Reorder process types, sub-processes (drag or arrows, or "Ordenar por más usados" by number of cases) and custom fields; add second-order sub-processes under any sub-process (e.g. Ordinario Laboral › Con medidas cautelares). Manage process types (Administrativo, Laboral, Penal, Familia, Derecho de Petición, Datacrédito, or new ones), their sub-processes, and custom fields per type: text, long text, number, date, or a drop-down list, optionally required. |
 
 Deleting a client or sub-process that still has cases is refused.
 
@@ -39,6 +39,7 @@ Roles: Gerencia, Director Jurídico, Director Contable, Gerente Regional, Abogad
 | Generar borradores | ✓ | ✓ | | ✓ | ✓ | | ✓ |
 | Jurisprudencia | ✓ | ✓ | | ✓ | ✓ | ✓ | |
 | Importar | ✓ | ✓ | | ✓ | | | |
+| Plantillas (crear/cargar/editar) | ✓ | ✓ | | | | | |
 | Reportes | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Consulta de procesos | ✓ | ✓ | | ✓ | ✓ | ✓ | |
 
@@ -90,6 +91,8 @@ Notifications and reports:
 | UI (Spanish) | `public/` |
 | Case-law search, analysis and citation check (official domains only) | `src/jurisprudence.js`, `src/jurisprudence-routes.js` |
 | Citation detection in drafts | `public/citations.js` |
+| Document templates, starter set, case → variables | `src/templates.js`, `src/templates-seed.js` |
+| Word: fill .docx templates, Markdown → .docx | `public/docx.js` (pizzip, docxtemplater) |
 | Excel / CSV import (runs in the browser through the regular API) | `public/importer.js` |
 | In-browser backend for the preview | `public/demo-backend.js`, `scripts/build-preview.mjs` |
 

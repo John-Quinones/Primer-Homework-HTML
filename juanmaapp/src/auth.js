@@ -30,12 +30,13 @@ export const PERMISSIONS = {
   "import.run": "Importa datos desde Excel",
   "reports.view": "Ve y exporta reportes",
   "processes.consult": "Consulta procesos en la Rama Judicial y recibe reportes",
+  "templates.manage": "Crea, carga y edita plantillas de documentos",
 };
 
 // Starting matrix; Gerencia edits it in Usuarios › Roles.
 export const DEFAULT_MATRIX = {
   "Gerencia": Object.keys(PERMISSIONS),
-  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult"],
+  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage"],
   "Director Contable": ["scope.all", "reports.view"],
   "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult"],
   "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view", "processes.consult"],
@@ -81,7 +82,7 @@ export function rolePermissions(db, role) {
 }
 
 export function loadUser(db, id) {
-  const u = db.prepare("SELECT id, name, email, phone, role, active, custom_permissions, created_at FROM users WHERE id = ?").get(id);
+  const u = db.prepare("SELECT id, name, email, phone, professional_card, role, active, custom_permissions, created_at FROM users WHERE id = ?").get(id);
   if (!u) return null;
   const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
     WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
@@ -290,8 +291,8 @@ export function adminRouter(db) {
     if (!validPassword(b.password)) return res.status(400).json({ error: "La contraseña inicial debe tener al menos 10 caracteres." });
     if (!Array.isArray(b.office_ids) || !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     try {
-      const id = db.prepare("INSERT INTO users (name, email, phone, password_hash, role) VALUES (?, ?, ?, ?, ?)")
-        .run(name, email, str(b.phone), hashPassword(b.password), b.role).lastInsertRowid;
+      const id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(name, email, str(b.phone), str(b.professional_card), hashPassword(b.password), b.role).lastInsertRowid;
       setOffices(id, b.office_ids);
       setUserPermissions(id, b.custom_permissions, b.permissions);
       res.status(201).json(loadUser(db, id));
@@ -317,8 +318,9 @@ export function adminRouter(db) {
     if (Array.isArray(b.office_ids) && !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     const email = b.email ? str(b.email).toLowerCase() : cur.email;
     try {
-      db.prepare("UPDATE users SET name = ?, email = ?, phone = ?, role = ?, active = ? WHERE id = ?")
-        .run(str(b.name) || cur.name, email, "phone" in b ? str(b.phone) : cur.phone, role, active ? 1 : 0, id);
+      db.prepare("UPDATE users SET name = ?, email = ?, phone = ?, professional_card = ?, role = ?, active = ? WHERE id = ?")
+        .run(str(b.name) || cur.name, email, "phone" in b ? str(b.phone) : cur.phone,
+          "professional_card" in b ? str(b.professional_card) : cur.professional_card, role, active ? 1 : 0, id);
     } catch {
       return res.status(409).json({ error: "Ya existe un usuario con ese correo." });
     }

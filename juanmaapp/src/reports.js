@@ -1,6 +1,7 @@
 // Report data for the Reportes section. Each report returns columns + rows
 // limited to the user's offices; the page turns them into Excel or PDF.
 import express from "express";
+import { typePath } from "./sql.js";
 import { scopeOf } from "./auth.js";
 
 const OPEN = ["Abierto", "En trámite", "En espera de respuesta"];
@@ -56,7 +57,7 @@ export function reportsRouter(db) {
         ["counterparty", "Contraparte"], ["created", "Creado"], ["updated", "Actualizado"]];
       rows = db.prepare(`
         SELECT o.name AS office, c.full_name AS client, trim(c.id_type || ' ' || c.id_number) AS doc,
-               g.name AS category, t.name AS type, k.title, k.status, COALESCE(u.name, '') AS assigned,
+               g.name AS category, ${typePath("t")} AS type, k.title, k.status, COALESCE(u.name, '') AS assigned,
                k.counterparty, date(k.created_at) AS created, date(k.updated_at) AS updated
         FROM cases k JOIN clients c ON c.id = k.client_id
         JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id
@@ -102,7 +103,7 @@ export function reportsRouter(db) {
       dateRange("k.created_at");
       columns = [["category", "Tipo de proceso"], ["type", "Subproceso"], ["cases", "Expedientes"], ["active", "Activos"]];
       rows = db.prepare(`
-        SELECT g.name AS category, t.name AS type, COUNT(k.id) AS cases,
+        SELECT g.name AS category, ${typePath("t")} AS type, COUNT(k.id) AS cases,
                SUM(k.status IN (${OPEN.map(() => "?").join(",")})) AS active
         FROM cases k JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id
         ${W()} GROUP BY t.id ORDER BY g.sort, t.sort`).all(...OPEN, ...params);
@@ -117,7 +118,7 @@ export function reportsRouter(db) {
         ["case", "Expediente"], ["url", "Enlace"], ["saved", "Guardada"]];
       rows = db.prepare(`
         SELECT s.reference, s.court, CASE s.verified WHEN 1 THEN 'Sí' ELSE 'No' END AS verified,
-               COALESCE(c.full_name || ' · ' || t.name, '') AS "case", s.url, date(s.created_at) AS saved
+               COALESCE(c.full_name || ' · ' || ${typePath("t")}, '') AS "case", s.url, date(s.created_at) AS saved
         FROM saved_rulings s LEFT JOIN cases k ON k.id = s.case_id LEFT JOIN clients c ON c.id = k.client_id
         LEFT JOIN process_types t ON t.id = k.process_type_id ${W()} ORDER BY s.id DESC`).all(...params);
     }

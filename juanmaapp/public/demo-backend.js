@@ -7,7 +7,8 @@
   const SEED = window.JUANMA_SEED_CATALOG || [];
   const AUTH = window.JUANMA_AUTH || { roles: [], permissions: {}, matrix: {} };
   const REPORTS = window.JUANMA_REPORTS || {};
-  const KEY = "juanmaapp-preview-v4";
+  const KEY = "juanmaapp-preview-v5";
+  const TPL = window.JUANMA_TEMPLATES || { seed: [], categories: [], variables: [] };
   const AREAS = window.JUANMA_AREAS || [];
   const DIV = window.JUANMA_DIVIPOLA || { departamentos: [], municipios: [] };
   const OPEN = ["Abierto", "En trámite", "En espera de respuesta"];
@@ -16,7 +17,7 @@
     const s = { seq: 1, offices: [], users: [], matrix: JSON.parse(JSON.stringify(AUTH.matrix)), current: null,
       roles: AUTH.roles.map((name) => ({ name, builtin: true })),
       clients: [], categories: [], types: [], fields: [], cases: [], saved: [],
-      courts: [], tasks: [], notes: [], acts: [], checks: [], prefs: {}, log: [] };
+      courts: [], tasks: [], notes: [], acts: [], checks: [], prefs: {}, log: [], templates: [] };
     const id = () => s.seq++;
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
     const office = (name, department, city, is_main = false) => { const o = { id: id(), name, department, city, address: "", phone: "", email: "", is_main }; s.offices.push(o); return o; };
@@ -27,18 +28,20 @@
       s.users.push(u);
       return u;
     };
-    user("María Fernanda Ruiz", "Gerencia", [ibague]);
+    user("María Fernanda Ruiz", "Gerencia", [ibague]).professional_card = "000.001 (ejemplo)";
     user("Carlos Arango", "Director Jurídico", [ibague]);
     user("Patricia Lozano", "Director Contable", [ibague]);
     user("Jorge Méndez", "Gerente Regional", [bogota, neiva]);
     const laura = user("Laura Gómez", "Abogado", [ibague]);
+    laura.professional_card = "000.002 (ejemplo)";
+    laura.phone = "300 000 0002";
     const andres = user("Andrés Torres", "Dependiente Judicial", [bogota]);
     user("Camila Rojas", "Asistente", [ibague]);
 
     SEED.forEach(([name, types], i) => {
       const cat = { id: id(), name, sort: i };
       s.categories.push(cat);
-      types.forEach((t, j) => s.types.push({ id: id(), category_id: cat.id, name: t, sort: j }));
+      types.forEach((t, j) => s.types.push({ id: id(), category_id: cat.id, parent_id: null, name: t, sort: j }));
     });
     const lab = s.categories.find((c) => c.name === "Laboral");
     const adm = s.categories.find((c) => c.name === "Administrativo");
@@ -94,6 +97,12 @@
     task(k1, "termino", "Vence término para presentar alegatos (ejemplo)", at(5, "17:00"), "", [3, 1], laura);
     task(k1, "tarea", "Llamar a la clienta para pedir certificados laborales (ejemplo)", at(-1, "10:00"), "", [1], laura);
     task(k2, "audiencia", "Audiencia de conciliación prejudicial (ejemplo)", at(9, "14:30"), "Procuraduría · sede Bogotá", [7, 1], andres);
+    // A second-order sub-process example.
+    const ord = s.types.find((t) => t.name === "Ordinario Laboral de Primera Instancia");
+    s.types.push({ id: id(), category_id: ord.category_id, parent_id: ord.id, name: "Con solicitud de medidas cautelares", sort: 0 });
+    s.types.push({ id: id(), category_id: ord.category_id, parent_id: ord.id, name: "Contrato realidad", sort: 1 });
+    for (const t of TPL.seed) s.templates.push({ id: id(), name: t.name, category: t.category, description: t.description, format: "markdown", body: t.body,
+      filename: null, file_b64: null, builtin: true, created_at: now, updated_at: now });
     return s;
   }
 
@@ -149,7 +158,7 @@
   const userOut = (u) => ({
     id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at,
     offices: s.offices.filter((o) => u.office_ids.includes(o.id)).map((o) => ({ id: o.id, name: o.name })),
-    permissions: userPerms(u), phone: u.phone || "", custom_permissions: !!u.custom_permissions,
+    permissions: userPerms(u), phone: u.phone || "", professional_card: u.professional_card || "", custom_permissions: !!u.custom_permissions,
   });
   const me = () => {
     const u = s.users.find((x) => x.id === s.current && x.active);
@@ -179,9 +188,11 @@
     const c = s.categories.find((c) => c.id === t.category_id);
     const cl = s.clients.find((x) => x.id === k.client_id);
     const u = s.users.find((x) => x.id === k.assigned_user_id);
-    return clone({ ...k, client_name: cl.full_name, type_name: t.name, category_id: c.id, category_name: c.name,
+    return clone({ ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
       office_name: officeName(k.office_id), assigned_name: u?.name ?? null });
   };
+  const typePath = (t) => { const p = t.parent_id && s.types.find((x) => x.id === t.parent_id); return p ? `${p.name} › ${t.name}` : t.name; };
+  const typeUses = (t) => s.cases.filter((k) => k.process_type_id === t.id || s.types.some((x) => x.parent_id === t.id && x.id === k.process_type_id)).length;
   const visibleCase = (id) => {
     const k = s.cases.find((k) => k.id === id);
     if (!k || !inScope(k.office_id)) fail("El expediente no existe.");
@@ -226,6 +237,41 @@
   };
   const savedVisible = (r) => scope() === null || r.created_by === me().id || (r.case_id && s.cases.some((k) => k.id === r.case_id && inScope(k.office_id)));
   const qs = (url) => Object.fromEntries(new URLSearchParams(url.split("?")[1] || ""));
+  const tplMetaOut = (t) => ({ id: t.id, name: t.name, category: t.category, description: t.description, format: t.format, filename: t.filename,
+    builtin: !!t.builtin, created_at: t.created_at, updated_at: t.updated_at, file_size: t.file_b64 ? Math.round(t.file_b64.length * 0.75) : null });
+  const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  // Same mapping as the server's templateData().
+  function templateData(caseId) {
+    const u = me();
+    const b = new Date(Date.now() - 5 * 3600 * 1000);
+    const today = `${b.getUTCDate()} de ${MONTHS[b.getUTCMonth()]} de ${b.getUTCFullYear()}`;
+    const v = {};
+    let lawyer = s.users.find((x) => x.id === u.id), office = null;
+    if (caseId) {
+      const k = visibleCase(caseId);
+      const o = caseOut(k);
+      const c = s.clients.find((x) => x.id === k.client_id);
+      Object.assign(v, {
+        "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number, "cliente.correo": c.email,
+        "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
+        "expediente.radicado": /^\d{23}$/.test(k.radicado || "") ? k.radicado.replace(/^(\d{5})(\d{2})(\d{2})(\d{3})(\d{4})(\d{5})(\d{2})$/, "$1-$2-$3-$4-$5-$6-$7") : k.radicado,
+        "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
+        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.correo_despacho": k.court_email,
+        "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
+      });
+      for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
+      if (k.assigned_user_id) lawyer = s.users.find((x) => x.id === k.assigned_user_id) || lawyer;
+      office = s.offices.find((x) => x.id === k.office_id);
+    }
+    office ||= s.offices.find((x) => x.id === lawyer.office_ids[0]) || s.offices.find((x) => x.is_main);
+    Object.assign(v, {
+      "abogado.nombre": lawyer.name, "abogado.tarjeta_profesional": lawyer.professional_card || "", "abogado.correo": lawyer.email, "abogado.telefono": lawyer.phone || "",
+      "oficina.nombre": office?.name, "oficina.ciudad": office?.city, "oficina.direccion": office?.address, "oficina.telefono": office?.phone, "oficina.correo": office?.email,
+      "fecha.hoy": today, "fecha.ciudad_y_fecha": `${office?.city || v["expediente.ciudad"] || ""}, ${today}`.replace(/^, /, ""),
+    });
+    for (const key of Object.keys(v)) if (v[key] === null || v[key] === undefined || String(v[key]).trim() === "") delete v[key];
+    return v;
+  }
   const taskOut = (t) => {
     const k = s.cases.find((x) => x.id === t.case_id);
     const o = caseOut(k);
@@ -347,7 +393,7 @@
       (typeof b.password === "string" && b.password.length >= 10) || fail("La contraseña inicial debe tener al menos 10 caracteres.");
       (b.office_ids || []).length || fail("Asigne al menos una oficina.");
       s.users.some((u) => u.email === email) && fail("Ya existe un usuario con ese correo.");
-      const u = { id: nextId(), name, email, phone: str(b.phone), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
+      const u = { id: nextId(), name, email, phone: str(b.phone), professional_card: str(b.professional_card), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
         custom_permissions: !!b.custom_permissions, permissions: (b.permissions || []).filter((p) => p in AUTH.permissions) };
       s.users.push(u);
       return userOut(u);
@@ -365,7 +411,8 @@
       Array.isArray(b.office_ids) && !b.office_ids.length && fail("Asigne al menos una oficina.");
       const email = b.email ? str(b.email).toLowerCase() : u.email;
       s.users.some((x) => x.email === email && x.id !== u.id) && fail("Ya existe un usuario con ese correo.");
-      Object.assign(u, { name: str(b.name) || u.name, email, role, active, phone: "phone" in b ? str(b.phone) : u.phone });
+      Object.assign(u, { name: str(b.name) || u.name, email, role, active, phone: "phone" in b ? str(b.phone) : u.phone,
+        professional_card: "professional_card" in b ? str(b.professional_card) : u.professional_card });
       if (b.custom_permissions !== undefined) {
         u.custom_permissions = !!b.custom_permissions;
         u.permissions = u.custom_permissions ? (b.permissions || []).filter((p) => p in AUTH.permissions) : [];
@@ -567,7 +614,7 @@
     // ----- catalog -----
     ["GET", /^\/catalog$/, () => s.categories.slice().sort((a, b) => a.sort - b.sort).map((c) => ({
       ...clone(c),
-      types: clone(s.types.filter((t) => t.category_id === c.id).sort((a, b) => a.sort - b.sort)),
+      types: s.types.filter((t) => t.category_id === c.id).sort((a, b) => a.sort - b.sort).map((t) => ({ ...clone(t), parent_id: t.parent_id ?? null, path: typePath(t), uses: typeUses(t) })),
       fields: clone(s.fields.filter((f) => f.category_id === c.id).sort((a, b) => a.sort - b.sort)),
     }))],
     ["POST", /^\/categories$/, (m, b) => {
@@ -598,9 +645,14 @@
     ["POST", /^\/categories\/(\d+)\/types$/, (m, b) => {
       need("catalog.manage");
       const name = str(b.name) || fail("El nombre del subproceso es obligatorio.");
-      const siblings = s.types.filter((t) => t.category_id === +m[1]);
+      const parentId = +b.parent_id || null;
+      if (parentId) {
+        const parent = s.types.find((t) => t.id === parentId) || fail("El subproceso padre no existe.");
+        (parent.category_id !== +m[1] || parent.parent_id) && fail("Solo se admiten subprocesos de segundo orden bajo un subproceso principal.");
+      }
+      const siblings = s.types.filter((t) => t.category_id === +m[1] && (t.parent_id || null) === parentId);
       uniq(siblings, name);
-      const t = { id: nextId(), category_id: +m[1], name, sort: siblings.length };
+      const t = { id: nextId(), category_id: +m[1], parent_id: parentId, name, sort: siblings.length };
       s.types.push(t);
       return clone(t);
     }],
@@ -608,16 +660,63 @@
       need("catalog.manage");
       const t = s.types.find((t) => t.id === +m[1]) || fail("El subproceso no existe.");
       const name = str(b.name) || fail("El nombre es obligatorio.");
-      uniq(s.types.filter((x) => x.category_id === t.category_id), name, t.id);
+      uniq(s.types.filter((x) => x.category_id === t.category_id && (x.parent_id || null) === (t.parent_id || null)), name, t.id);
       t.name = name;
       return clone(t);
     }],
     ["DELETE", /^\/types\/(\d+)$/, (m) => {
       need("catalog.manage");
-      s.cases.some((k) => k.process_type_id === +m[1]) && fail("No se puede eliminar: tiene expedientes asociados.");
-      s.types = s.types.filter((t) => t.id !== +m[1]);
+      const ids = [+m[1], ...s.types.filter((t) => t.parent_id === +m[1]).map((t) => t.id)];
+      s.cases.some((k) => ids.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      s.types = s.types.filter((t) => !ids.includes(t.id));
       return null;
     }],
+    ["PUT", /^\/categories\/(\d+)\/order$/, (m, b) => {
+      need("catalog.manage");
+      const ids = (b.type_ids || []).map(Number);
+      const rows = ids.map((id) => s.types.find((t) => t.id === id && t.category_id === +m[1]));
+      (rows.some((r) => !r) || new Set(rows.map((r) => r.parent_id || 0)).size > 1) && fail("Solo se pueden ordenar subprocesos del mismo nivel.");
+      rows.forEach((r, i) => (r.sort = i));
+      return { ok: true };
+    }],
+    ["POST", /^\/categories\/(\d+)\/sort-by-usage$/, (m) => {
+      need("catalog.manage");
+      const groups = new Map();
+      for (const t of s.types.filter((t) => t.category_id === +m[1])) { const k = t.parent_id || 0; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+      for (const list of groups.values()) list.sort((a, b) => typeUses(b) - typeUses(a) || a.sort - b.sort).forEach((t, i) => (t.sort = i));
+      return { ok: true };
+    }],
+    ["PUT", /^\/category-order$/, (m, b) => { need("catalog.manage"); (b.ids || []).map(Number).forEach((id, i) => { const c = s.categories.find((x) => x.id === id); if (c) c.sort = i; }); return { ok: true }; }],
+    ["PUT", /^\/categories\/(\d+)\/fields\/order$/, (m, b) => { need("catalog.manage"); (b.field_ids || []).map(Number).forEach((id, i) => { const f = s.fields.find((x) => x.id === id && x.category_id === +m[1]); if (f) f.sort = i; }); return { ok: true }; }],
+
+    // ----- document templates -----
+    ["GET", /^\/templates\/meta$/, () => { need("drafts.generate"); return { categories: TPL.categories, variables: TPL.variables }; }],
+    ["GET", /^\/templates$/, () => { need("drafts.generate"); return s.templates.slice().sort((a, b) => (a.category + a.name).localeCompare(b.category + b.name, "es")).map(tplMetaOut); }],
+    ["GET", /^\/templates\/data(?:\?caseId=(\d+))?$/, (m) => { need("drafts.generate"); return templateData(m[1] ? +m[1] : null); }],
+    ["GET", /^\/templates\/(\d+)$/, (m) => { need("drafts.generate"); const t = s.templates.find((x) => x.id === +m[1]) || fail("La plantilla no existe."); return { ...tplMetaOut(t), body: t.body }; }],
+    ["GET", /^\/templates\/(\d+)\/file$/, (m) => { need("drafts.generate"); const t = s.templates.find((x) => x.id === +m[1] && x.file_b64) || fail("La plantilla no tiene archivo."); return { filename: t.filename, base64: t.file_b64 }; }],
+    ["POST", /^\/templates$/, (m, b) => {
+      need("templates.manage");
+      const name = str(b.name) || fail("Escriba el nombre de la plantilla.");
+      TPL.categories.includes(b.category) || fail("Categoría no válida.");
+      const t = { id: nextId(), name, category: b.category, description: str(b.description), builtin: false, created_at: stamp(), updated_at: stamp(),
+        format: b.file_base64 ? "docx" : "markdown", body: b.file_base64 ? null : String(b.body || ""), filename: b.file_base64 ? str(b.filename) : null, file_b64: b.file_base64 || null };
+      t.format === "markdown" && !t.body.trim() && fail("La plantilla está vacía.");
+      t.format === "docx" && atob(t.file_b64).slice(0, 2) !== "PK" && fail("El archivo no es un documento de Word (.docx) válido.");
+      s.templates.push(t);
+      return { ...tplMetaOut(t), body: t.body };
+    }],
+    ["PUT", /^\/templates\/(\d+)$/, (m, b) => {
+      need("templates.manage");
+      const t = s.templates.find((x) => x.id === +m[1]) || fail("La plantilla no existe.");
+      if ("name" in b) t.name = str(b.name) || fail("Escriba el nombre de la plantilla.");
+      if ("category" in b) { TPL.categories.includes(b.category) || fail("Categoría no válida."); t.category = b.category; }
+      if ("description" in b) t.description = str(b.description);
+      if ("body" in b && t.format === "markdown") t.body = String(b.body).trim() ? String(b.body) : fail("La plantilla está vacía.");
+      t.updated_at = stamp();
+      return { ...tplMetaOut(t), body: t.body };
+    }],
+    ["DELETE", /^\/templates\/(\d+)$/, (m) => { need("templates.manage"); s.templates = s.templates.filter((x) => x.id !== +m[1]); return null; }],
     ["POST", /^\/categories\/(\d+)\/fields$/, (m, b) => {
       need("catalog.manage");
       const label = str(b.label) || fail("El nombre del campo es obligatorio.");
@@ -791,7 +890,13 @@
     const idn = cl ? `${cl.id_type} ${cl.id_number}` : p.client?.idNumber || "**[FILL: Documento de identidad]**";
     const to = p.counterparty || k?.counterparty || "**[FILL: Entidad destinataria]**";
     const facts = (p.facts || k?.facts || "**[FILL: Hechos]**").split(/(?<=\.)\s+/).filter(Boolean);
-    const title = { PETITION: "DERECHO DE PETICIÓN", CONTRACT: "CONTRATO DE PRESTACIÓN DE SERVICIOS", POWER_OF_ATTORNEY: "PODER ESPECIAL" }[p.documentType];
+    const title = { PETITION: "DERECHO DE PETICIÓN", CONTRACT: "CONTRATO DE PRESTACIÓN DE SERVICIOS", POWER_OF_ATTORNEY: "PODER ESPECIAL", LAWSUIT: "DEMANDA" }[p.documentType];
+    if (p.template) {
+      const doc = p.template + "\n\n> Vista previa: en la app real NomosAI completa esta plantilla con los datos del caso y redacta lo que falte.\n\n" + FOOTER;
+      const fills = [...new Set([...doc.matchAll(/\[FILL:\s*([^\]]+)\]/g)].map((m) => m[1].trim()))];
+      return { doc, done: { type: "done", ok: true, document: doc, issues: [], fillFields: fills, transactionId: null, boldLink: null,
+        payload: { document_type: p.documentType, client_data: {}, payment_required: false, bold_transaction_id: null, missing_fields: fills } } };
+    }
     const txId = p.payment?.required ? "JMA_PREVIEW_" + Math.random().toString(36).slice(2, 7).toUpperCase() : null;
     const doc = [
       `# ${title}`, "", `**Señores:** ${to}`, "",

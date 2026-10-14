@@ -1,5 +1,6 @@
 // Process consultation: monitored cases, manual checks, report preferences.
 import express from "express";
+import { typePath } from "./sql.js";
 import { scopeOf } from "./auth.js";
 import { checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS } from "./monitor.js";
 import { channelsStatus } from "./notify.js";
@@ -16,7 +17,7 @@ export function monitorRouter(db) {
   r.get("/cases", (req, res) => {
     const rows = db.prepare(`
       SELECT k.id, k.radicado, k.monitor, k.court_name, k.court_email, k.department, k.city, k.area, k.title, k.status,
-             k.last_checked_at, k.last_action_date, k.office_id, k.assigned_user_id, c.full_name AS client_name, pt.name AS type_name,
+             k.last_checked_at, k.last_action_date, k.office_id, k.assigned_user_id, c.full_name AS client_name, ${typePath("pt")} AS type_name,
              u.name AS assigned_name,
              (SELECT COUNT(*) FROM actuaciones a WHERE a.case_id = k.id AND a.found_at > datetime('now', '-7 days')
                 AND EXISTS (SELECT 1 FROM process_checks pc WHERE pc.case_id = k.id AND pc.ok = 1 AND pc.checked_at < a.found_at)) AS new_7d,

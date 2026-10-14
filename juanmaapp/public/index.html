@@ -78,7 +78,7 @@
       <a href="#agenda" data-view="agenda"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3v3H8z"/></svg><span>Agenda</span></a>
       <a href="#consulta" data-view="consulta"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5L20 20"/><path d="M8 10h4M10 8v4"/></svg><span>Consulta de procesos</span></a>
       <a href="#despachos" data-view="despachos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V10M19 21V10M9 21v-6h6v6M2 10l10-6 10 6"/></svg><span>Despachos</span></a>
-      <a href="#borradores" data-view="borradores"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span>Borradores</span></a>
+      <a href="#borradores" data-view="borradores"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span>Documentos</span></a>
       <a href="#jurisprudencia" data-view="jurisprudencia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg><span>Jurisprudencia</span></a>
       <a href="#reportes" data-view="reportes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reportes</span></a>
       <a href="#importar" data-view="importar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><span>Importar</span></a>
@@ -249,6 +249,58 @@
 
       <!-- ============ BORRADORES ============ -->
       <section id="view-borradores" class="view" hidden>
+        <div class="view-head">
+          <h2>Documentos</h2>
+          <div class="toolbar" id="tpl-manage-bar">
+            <button data-action="new-template">+ Nueva plantilla</button>
+            <label class="file-btn">Cargar mi plantilla (.docx, .md, .txt)<input type="file" id="tpl-file" accept=".docx,.md,.txt" hidden /></label>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" id="doc-tabs">
+          <button role="tab" data-dtab="plantillas" class="active">Plantillas</button>
+          <button role="tab" data-dtab="nomos">Redactar con NomosAI</button>
+        </div>
+
+        <div data-dpanel="plantillas">
+          <div class="tpl-layout">
+            <aside class="panel tpl-lib">
+              <input id="tpl-search" type="search" placeholder="Buscar plantilla" aria-label="Buscar plantilla" />
+              <div id="tpl-cats" class="chip-row"></div>
+              <div id="tpl-list"></div>
+            </aside>
+            <section class="panel tpl-work min0" aria-live="polite">
+              <div id="tpl-empty" class="empty">
+                <h3>Elija una plantilla</h3>
+                <p>Contratos, poderes, derechos de petición, demandas y las plantillas que cargue la firma. Al elegir un expediente, los datos del cliente, el despacho y el abogado se llenan solos; lo que falte queda marcado como <mark class="fill">[FILL: …]</mark>.</p>
+              </div>
+              <div id="tpl-active" hidden>
+                <div class="output-head">
+                  <div><span class="pill" id="tpl-cat"></span> <span class="badge" id="tpl-format"></span><h3 id="tpl-name"></h3></div>
+                  <div class="actions">
+                    <button type="button" data-tpl-out="docx" class="primary">Descargar Word</button>
+                    <button type="button" data-tpl-out="pdf" data-text-only>Descargar PDF</button>
+                    <button type="button" data-tpl-out="copy" data-text-only>Copiar texto</button>
+                    <button type="button" data-tpl-out="nomos" data-text-only>Completar con NomosAI</button>
+                  </div>
+                </div>
+                <label>Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
+                <details id="tpl-vars-box">
+                  <summary>Datos del documento <span id="tpl-missing" class="badge warn"></span></summary>
+                  <p class="hint">Corrija o complete cualquier dato; el documento se actualiza al instante.</p>
+                  <div id="tpl-vars" class="grid2"></div>
+                </details>
+                <div data-text-only class="tpl-edit-row">
+                  <label class="inline"><input type="checkbox" id="tpl-edit-mode" /> Editar el texto antes de descargar</label>
+                </div>
+                <textarea id="tpl-text" rows="22" hidden aria-label="Texto del documento"></textarea>
+                <article id="tpl-preview" class="document"></article>
+                <p id="tpl-docx-note" class="hint" hidden>Plantilla de Word: se conserva su formato original. Al descargar, cada <code>{{variable}}</code> se reemplaza por el dato del expediente.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div data-dpanel="nomos" hidden>
         <div class="layout">
           <form id="draft-form" class="panel" autocomplete="off">
             <h2>Nuevo borrador</h2>
@@ -257,12 +309,14 @@
               <select name="caseId"><option value="">— Sin expediente: llenar a mano —</option></select>
             </label>
             <p id="case-summary" class="hint" hidden></p>
+            <p id="base-template-note" class="hint base-note" hidden></p>
 
             <fieldset class="doc-types">
               <legend>Tipo de documento</legend>
               <label><input type="radio" name="documentType" value="PETITION" checked /> Derecho de petición</label>
               <label><input type="radio" name="documentType" value="CONTRACT" /> Contrato</label>
               <label><input type="radio" name="documentType" value="POWER_OF_ATTORNEY" /> Poder</label>
+              <label><input type="radio" name="documentType" value="LAWSUIT" /> Demanda</label>
             </fieldset>
 
             <div class="grid2">
@@ -322,6 +376,7 @@
               <pre id="payload"></pre>
             </details>
           </section>
+        </div>
         </div>
       </section>
 
@@ -612,6 +667,7 @@
         <label>Rol * <select name="role" required></select></label>
         <label><span data-pw-label>Contraseña inicial *</span> <input name="password" type="password" minlength="10" autocomplete="new-password" /></label>
         <label>Celular / WhatsApp <input name="phone" inputmode="tel" /></label>
+        <label>Tarjeta profesional (abogados) <input name="professional_card" /></label>
       </div>
       <fieldset><legend>Oficinas *</legend><div id="user-office-checks" class="check-grid"></div></fieldset>
       <fieldset><legend>Permisos</legend>
@@ -641,6 +697,34 @@
         <label class="span2">Correo <input name="email" type="email" /></label>
       </div>
       <label class="inline"><input type="checkbox" name="is_main" /> Oficina principal</label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Plantilla -->
+  <dialog id="tpl-dialog" class="wide-dialog">
+    <form method="dialog" data-form="template">
+      <h3 data-title>Nueva plantilla</h3>
+      <input type="hidden" name="id" />
+      <div class="grid2">
+        <label>Nombre * <input name="name" required /></label>
+        <label>Categoría * <select name="category" required></select></label>
+        <label class="span2">Descripción <input name="description" /></label>
+      </div>
+      <div class="tpl-editor">
+        <label class="min0">Texto de la plantilla <span class="muted">(Markdown: # título, ## sección, **negrita**)</span>
+          <textarea name="body" rows="18"></textarea>
+        </label>
+        <div class="var-picker">
+          <strong>Insertar dato</strong>
+          <p class="muted">Clic para insertarlo donde está el cursor.</p>
+          <div id="var-picker"></div>
+        </div>
+      </div>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -756,6 +840,9 @@
   <script src="importer.js"></script>
   <script src="citations.js"></script>
   <script src="vendor/write-excel-file.min.js"></script>
+  <script src="vendor/pizzip.min.js"></script>
+  <script src="vendor/docxtemplater.min.js"></script>
+  <script src="docx.js"></script>
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="app.js"></script>

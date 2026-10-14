@@ -1,4 +1,5 @@
 import express from "express";
+import { typePath } from "./sql.js";
 import Anthropic from "@anthropic-ai/sdk";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,13 +12,14 @@ import { reportsRouter } from "./reports.js";
 import { courtsRouter } from "./courts.js";
 import { agendaRouter } from "./agenda-routes.js";
 import { monitorRouter } from "./monitor-routes.js";
+import { templatesRouter } from "./templates.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Fill a draft request from a stored case: client data, process and custom fields. */
 function caseContext(db, caseId, user) {
   const k = db.prepare(`
-    SELECT k.*, t.name AS type_name, t.category_id, g.name AS category_name
+    SELECT k.*, ${typePath("t")} AS type_name, t.category_id, g.name AS category_name
     FROM cases k
     JOIN process_types t ON t.id = k.process_type_id
     JOIN process_categories g ON g.id = t.category_id
@@ -51,7 +53,7 @@ export function createApp(db) {
     res.setHeader("Referrer-Policy", "same-origin");
     next();
   });
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "12mb" }));
   app.use(sessionMiddleware(db));
   app.use(express.static(path.join(root, "public")));
   app.get("/vendor/marked.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/marked/marked.min.js")));
@@ -60,6 +62,8 @@ export function createApp(db) {
   app.get("/vendor/write-excel-file.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/write-excel-file/bundle/write-excel-file.min.js")));
   app.get("/vendor/jspdf.umd.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf/dist/jspdf.umd.min.js")));
   app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js")));
+  app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
+  app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
   app.get("/vendor/purify.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/dompurify/dist/purify.min.js")));
 
   app.use("/api/auth", authRouter(db));
@@ -71,11 +75,12 @@ export function createApp(db) {
   app.use("/api/courts", courtsRouter(db));
   app.use("/api", agendaRouter(db));
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
+  app.use("/api/templates", requirePerm("drafts.generate"), templatesRouter(db));
 
   app.post("/api/generate", requirePerm("drafts.generate"), async (req, res) => {
     let body = req.body ?? {};
     if (!DOCUMENT_TYPES[body.documentType]) {
-      return res.status(400).json({ error: "documentType must be PETITION, CONTRACT or POWER_OF_ATTORNEY" });
+      return res.status(400).json({ error: "documentType must be PETITION, CONTRACT, POWER_OF_ATTORNEY or LAWSUIT" });
     }
     if (body.caseId) {
       const ctx = caseContext(db, Number(body.caseId), req.user);

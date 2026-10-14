@@ -1,0 +1,148 @@
+// Document templates: the firm's own Word (.docx) or text files plus the
+// starter ones, and the values a case provides to fill {{variables}}.
+import express from "express";
+import { can, scopeOf, loadUser } from "./auth.js";
+import { typePath } from "./sql.js";
+import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
+
+const MAX_FILE = 8 * 1024 * 1024;
+const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
+const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+export function seedTemplates(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS app_flags (key TEXT PRIMARY KEY)");
+  if (db.prepare("SELECT 1 FROM app_flags WHERE key = 'templates_seeded'").get()) return;
+  const ins = db.prepare("INSERT INTO document_templates (name, category, description, format, body, builtin) VALUES (?, ?, ?, 'markdown', ?, 1)");
+  for (const t of SEED_TEMPLATES) ins.run(t.name, t.category, t.description, t.body);
+  db.prepare("INSERT INTO app_flags (key) VALUES ('templates_seeded')").run();
+}
+
+const formatRadicado = (r) => (/^\d{23}$/.test(r || "")
+  ? `${r.slice(0, 5)}-${r.slice(5, 7)}-${r.slice(7, 9)}-${r.slice(9, 12)}-${r.slice(12, 16)}-${r.slice(16, 21)}-${r.slice(21)}` : r);
+
+/** Today in Colombia as "14 de octubre de 2026". */
+export function longDate(d = new Date()) {
+  const b = new Date(d.getTime() - 5 * 3600 * 1000);
+  return `${b.getUTCDate()} de ${MONTHS[b.getUTCMonth()]} de ${b.getUTCFullYear()}`;
+}
+
+/** Values for every variable from a case (or only the user and date without one). */
+export function templateData(db, user, caseId) {
+  const v = {};
+  const today = longDate();
+  let lawyer = user, office = null;
+  if (caseId) {
+    const k = db.prepare(`SELECT k.*, ${typePath("t")} AS type_name, g.name AS category_name FROM cases k
+      JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id WHERE k.id = ?`).get(caseId);
+    const sc = scopeOf(user);
+    if (!k || (sc !== null && !sc.includes(k.office_id))) return null;
+    const c = db.prepare("SELECT * FROM clients WHERE id = ?").get(k.client_id);
+    Object.assign(v, {
+      "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number,
+      "cliente.correo": c.email, "cliente.telefono": c.phone, "cliente.direccion": c.address,
+      "cliente.ciudad": c.city, "cliente.departamento": c.department,
+      "expediente.radicado": formatRadicado(k.radicado), "expediente.tipo_proceso": k.category_name, "expediente.subproceso": k.type_name,
+      "expediente.asunto": k.title, "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts,
+      "expediente.despacho": k.court_name, "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
+      "expediente.ciudad": k.city, "expediente.departamento": k.department,
+    });
+    const fields = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);
+    const values = JSON.parse(k.field_values);
+    for (const f of fields) v[`campo.${f.label}`] = values[f.id] ?? "";
+    if (k.assigned_user_id) lawyer = loadUser(db, k.assigned_user_id) || user;
+    office = db.prepare("SELECT * FROM offices WHERE id = ?").get(k.office_id);
+  }
+  office ||= db.prepare("SELECT * FROM offices WHERE id = ?").get(user.offices[0]?.id) || db.prepare("SELECT * FROM offices WHERE is_main = 1").get();
+  const card = db.prepare("SELECT professional_card FROM users WHERE id = ?").get(lawyer.id)?.professional_card || "";
+  Object.assign(v, {
+    "abogado.nombre": lawyer.name, "abogado.tarjeta_profesional": card, "abogado.correo": lawyer.email, "abogado.telefono": lawyer.phone || "",
+    "oficina.nombre": office?.name || "", "oficina.ciudad": office?.city || "", "oficina.direccion": office?.address || "",
+    "oficina.telefono": office?.phone || "", "oficina.correo": office?.email || "",
+    "fecha.hoy": today, "fecha.ciudad_y_fecha": `${office?.city || v["expediente.ciudad"] || ""}, ${today}`.replace(/^, /, ""),
+  });
+  // Empty strings count as missing so the document shows [FILL: …].
+  for (const k of Object.keys(v)) if (v[k] === null || v[k] === undefined || String(v[k]).trim() === "") delete v[k];
+  return v;
+}
+
+export function templatesRouter(db) {
+  const r = express.Router();
+  const manage = (req, res, next) => (can(req, "templates.manage") ? next() : res.status(403).json({ error: "Su rol no tiene permiso para gestionar plantillas." }));
+  const META = "id, name, category, description, format, filename, builtin, created_at, updated_at, length(file) AS file_size";
+  const out = (t) => ({ ...t, builtin: !!t.builtin });
+
+  r.get("/meta", (req, res) => res.json({ categories: DOC_CATEGORIES, variables: VARIABLES }));
+
+  r.get("/", (req, res) => {
+    res.json(db.prepare(`SELECT ${META} FROM document_templates ORDER BY category, name`).all().map(out));
+  });
+
+  r.get("/data", (req, res) => {
+    const data = templateData(db, req.user, Number(req.query.caseId) || null);
+    if (!data) return res.status(404).json({ error: "El expediente no existe." });
+    res.json(data);
+  });
+
+  r.get("/:id", (req, res) => {
+    const t = db.prepare(`SELECT ${META}, body FROM document_templates WHERE id = ?`).get(Number(req.params.id));
+    if (!t) return res.status(404).json({ error: "La plantilla no existe." });
+    res.json(out(t));
+  });
+
+  r.get("/:id/file", (req, res) => {
+    const t = db.prepare("SELECT filename, file FROM document_templates WHERE id = ? AND format = 'docx'").get(Number(req.params.id));
+    if (!t?.file) return res.status(404).json({ error: "La plantilla no tiene archivo." });
+    res.json({ filename: t.filename, base64: Buffer.from(t.file).toString("base64") });
+  });
+
+  function values(b, cur = {}) {
+    const v = {
+      name: "name" in b ? str(b.name) : cur.name,
+      category: "category" in b ? str(b.category) : cur.category,
+      description: "description" in b ? str(b.description) : cur.description || "",
+    };
+    if (!v.name) return "Escriba el nombre de la plantilla.";
+    if (!DOC_CATEGORIES.includes(v.category)) return "Categoría no válida.";
+    return v;
+  }
+
+  r.post("/", manage, (req, res) => {
+    const b = req.body ?? {};
+    const v = values(b);
+    if (typeof v === "string") return res.status(400).json({ error: v });
+    if (b.file_base64) {
+      const file = Buffer.from(String(b.file_base64), "base64");
+      if (!file.length || file.length > MAX_FILE) return res.status(400).json({ error: "El archivo debe pesar menos de 8 MB." });
+      if (file.subarray(0, 2).toString("latin1") !== "PK") return res.status(400).json({ error: "El archivo no es un documento de Word (.docx) válido." });
+      const id = db.prepare(`INSERT INTO document_templates (name, category, description, format, filename, file, created_by)
+        VALUES (?, ?, ?, 'docx', ?, ?, ?)`).run(v.name, v.category, v.description, str(b.filename) || "plantilla.docx", file, req.user.id).lastInsertRowid;
+      return res.status(201).json(out(db.prepare(`SELECT ${META} FROM document_templates WHERE id = ?`).get(id)));
+    }
+    const body = String(b.body ?? "");
+    if (!body.trim()) return res.status(400).json({ error: "La plantilla está vacía." });
+    if (body.length > 400000) return res.status(400).json({ error: "La plantilla es demasiado larga." });
+    const id = db.prepare(`INSERT INTO document_templates (name, category, description, format, body, created_by)
+      VALUES (?, ?, ?, 'markdown', ?, ?)`).run(v.name, v.category, v.description, body, req.user.id).lastInsertRowid;
+    res.status(201).json(out(db.prepare(`SELECT ${META}, body FROM document_templates WHERE id = ?`).get(id)));
+  });
+
+  r.put("/:id", manage, (req, res) => {
+    const cur = db.prepare("SELECT * FROM document_templates WHERE id = ?").get(Number(req.params.id));
+    if (!cur) return res.status(404).json({ error: "La plantilla no existe." });
+    const v = values(req.body ?? {}, cur);
+    if (typeof v === "string") return res.status(400).json({ error: v });
+    const body = cur.format === "markdown" && "body" in (req.body ?? {}) ? String(req.body.body) : cur.body;
+    if (cur.format === "markdown" && !String(body || "").trim()) return res.status(400).json({ error: "La plantilla está vacía." });
+    db.prepare("UPDATE document_templates SET name = ?, category = ?, description = ?, body = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(v.name, v.category, v.description, body, cur.id);
+    res.json(out(db.prepare(`SELECT ${META}, body FROM document_templates WHERE id = ?`).get(cur.id)));
+  });
+
+  r.delete("/:id", manage, (req, res) => {
+    const { changes } = db.prepare("DELETE FROM document_templates WHERE id = ?").run(Number(req.params.id));
+    if (!changes) return res.status(404).json({ error: "La plantilla no existe." });
+    res.status(204).end();
+  });
+
+  return r;
+}

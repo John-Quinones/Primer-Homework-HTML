@@ -1,6 +1,7 @@
 // REST routes for clients, the process catalog (categories → sub-processes →
 // custom fields) and cases. Mounted under /api by app.js.
 import express from "express";
+import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
@@ -153,7 +154,11 @@ export function recordsRouter(db) {
   // ---------- Catalog ----------
   r.get("/catalog", h(() => {
     const cats = db.prepare("SELECT * FROM process_categories ORDER BY sort, name").all().map(plain);
-    const types = db.prepare("SELECT * FROM process_types ORDER BY sort, name").all().map(plain);
+    // Types come flat with parent_id; the page nests second-order ones. "uses" counts cases (own + children).
+    const types = db.prepare(`SELECT t.*, ${typePath("t")} AS path,
+        (SELECT COUNT(*) FROM cases k WHERE k.process_type_id = t.id
+           OR k.process_type_id IN (SELECT id FROM process_types WHERE parent_id = t.id)) AS uses
+      FROM process_types t ORDER BY t.sort, t.name`).all().map(plain);
     const fields = db.prepare("SELECT * FROM custom_fields ORDER BY sort, id").all().map(plain);
     return cats.map((c) => ({
       ...c,
@@ -196,10 +201,59 @@ export function recordsRouter(db) {
     const catId = toInt(req.params.id, "id");
     getOr404("SELECT * FROM process_categories WHERE id = ?", catId, "El tipo de proceso");
     const name = requireText(req.body?.name, "El nombre del subproceso");
-    const id = db.prepare("INSERT INTO process_types (category_id, name, sort) VALUES (?, ?, ?)")
-      .run(catId, name, nextSort("process_types", "WHERE category_id = ?", catId)).lastInsertRowid;
+    // Two levels only: a second-order sub-process hangs from a first-order one of the same category.
+    const parentId = req.body?.parent_id ? toInt(req.body.parent_id, "El subproceso padre") : null;
+    if (parentId) {
+      const parent = getOr404("SELECT * FROM process_types WHERE id = ?", parentId, "El subproceso padre");
+      if (parent.category_id !== catId || parent.parent_id) throw new HttpError(400, "Solo se admiten subprocesos de segundo orden bajo un subproceso principal.");
+    }
+    const id = db.prepare("INSERT INTO process_types (category_id, parent_id, name, sort) VALUES (?, ?, ?, ?)")
+      .run(catId, parentId, name, nextSort("process_types", "WHERE category_id = ? AND COALESCE(parent_id, 0) = ?", catId, parentId || 0)).lastInsertRowid;
     res.status(201);
     return getOr404("SELECT * FROM process_types WHERE id = ?", id, "El subproceso");
+  }));
+
+  // Manual order (drag or arrows): ids of siblings in their new order.
+  r.put("/categories/:id/order", h((req) => {
+    checkPerm(req, "catalog.manage");
+    const catId = toInt(req.params.id, "id");
+    const ids = (req.body?.type_ids || []).map(Number);
+    const rows = db.prepare(`SELECT id, parent_id FROM process_types WHERE category_id = ? AND id IN (${ids.map(() => "?").join(",") || "NULL"})`).all(catId, ...ids);
+    if (rows.length !== ids.length || new Set(rows.map((x) => x.parent_id ?? 0)).size > 1) {
+      throw new HttpError(400, "Solo se pueden ordenar subprocesos del mismo nivel.");
+    }
+    const upd = db.prepare("UPDATE process_types SET sort = ? WHERE id = ?");
+    ids.forEach((id, i) => upd.run(i, id));
+    return { ok: true };
+  }));
+
+  // Most-used first, at every level of the category.
+  r.post("/categories/:id/sort-by-usage", h((req) => {
+    checkPerm(req, "catalog.manage");
+    const catId = toInt(req.params.id, "id");
+    const rows = db.prepare(`SELECT t.id, COALESCE(t.parent_id, 0) AS parent,
+        (SELECT COUNT(*) FROM cases k WHERE k.process_type_id = t.id
+           OR k.process_type_id IN (SELECT id FROM process_types WHERE parent_id = t.id)) AS uses
+      FROM process_types t WHERE t.category_id = ? ORDER BY parent, uses DESC, t.sort`).all(catId);
+    const upd = db.prepare("UPDATE process_types SET sort = ? WHERE id = ?");
+    const pos = new Map();
+    for (const r of rows) { const i = pos.get(r.parent) ?? 0; upd.run(i, r.id); pos.set(r.parent, i + 1); }
+    return { ok: true };
+  }));
+
+  r.put("/category-order", h((req) => {
+    checkPerm(req, "catalog.manage");
+    const upd = db.prepare("UPDATE process_categories SET sort = ? WHERE id = ?");
+    (req.body?.ids || []).map(Number).forEach((id, i) => upd.run(i, id));
+    return { ok: true };
+  }));
+
+  r.put("/categories/:id/fields/order", h((req) => {
+    checkPerm(req, "catalog.manage");
+    const upd = db.prepare("UPDATE custom_fields SET sort = ? WHERE id = ? AND category_id = ?");
+    const catId = toInt(req.params.id, "id");
+    (req.body?.field_ids || []).map(Number).forEach((id, i) => upd.run(i, id, catId));
+    return { ok: true };
   }));
 
   r.put("/types/:id", h((req) => {
@@ -244,7 +298,7 @@ export function recordsRouter(db) {
 
   // ---------- Cases ----------
   const CASE_SELECT = `
-    SELECT k.*, c.full_name AS client_name, t.name AS type_name, t.category_id,
+    SELECT k.*, c.full_name AS client_name, ${typePath("t")} AS type_name, t.category_id,
            g.name AS category_name, o.name AS office_name, u.name AS assigned_name
     FROM cases k
     JOIN clients c ON c.id = k.client_id

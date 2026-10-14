@@ -1,5 +1,6 @@
 // Tasks, hearings and deadlines on cases, plus each user's notifications.
 import express from "express";
+import { typePath } from "./sql.js";
 import { can, scopeOf } from "./auth.js";
 
 const KINDS = ["tarea", "audiencia", "termino"];
@@ -15,7 +16,7 @@ export function agendaRouter(db) {
     return sc === null ? "1 = 1" : sc.length ? `k.office_id IN (${sc.map(Number).join(",")})` : "0 = 1";
   };
   const SELECT = `SELECT t.*, k.radicado, k.title AS case_title, k.office_id, c.full_name AS client_name,
-      pt.name AS type_name, u.name AS assigned_name
+      ${typePath("pt")} AS type_name, u.name AS assigned_name
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id
     JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users u ON u.id = t.assigned_user_id`;
   const out = (t) => ({ ...t, remind_days: JSON.parse(t.remind_days) });

@@ -14,6 +14,7 @@ export const DOCUMENT_TYPES = {
   PETITION: "Right of Petition (administrative / constitutional)",
   CONTRACT: "Contract / Agreement",
   POWER_OF_ATTORNEY: "Power of Attorney (special or general)",
+  LAWSUIT: "Lawsuit (Demanda)",
 };
 
 /** Reference sent to Bold. Generated server-side so the model never invents one. */
@@ -48,6 +49,15 @@ function buildUserMessage(req, transactionId) {
     req.facts || "[not provided]",
     "",
   );
+  if (typeof req.template === "string" && req.template.trim()) {
+    lines.push(
+      "Base template from the firm (keep its structure and wording):",
+      "<<<TEMPLATE",
+      req.template.slice(0, 60000),
+      "TEMPLATE>>>",
+      "",
+    );
+  }
   if (req.payment?.required) {
     lines.push(
       "Fees: payment IS required.",

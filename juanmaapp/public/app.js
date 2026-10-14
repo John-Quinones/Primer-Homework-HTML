@@ -104,6 +104,7 @@ function applyPermissions() {
   $("#user-role").textContent = me.role;
   $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   $("#courts-import-btn").hidden = !can("catalog.manage");
+  $("#tpl-manage-bar").hidden = !can("templates.manage");
   $("#user-offices").textContent = can("scope.all") ? "Todas las oficinas" : `Oficina: ${me.offices.map((o) => o.name).join(", ")}`;
 }
 
@@ -430,8 +431,11 @@ const caseForm = $("#case-dialog form");
 
 function fillTypeSelect(catId, selectedTypeId) {
   const cat = categoryOf(catId);
-  caseForm.elements.process_type_id.innerHTML = (cat?.types ?? [])
-    .map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
+  // First-order sub-processes with their second-order ones indented below.
+  const types = cat?.types ?? [];
+  caseForm.elements.process_type_id.innerHTML = types.filter((t) => !t.parent_id).map((t) =>
+    `<option value="${t.id}">${escapeHtml(t.name)}</option>` +
+    types.filter((x) => x.parent_id === t.id).map((x) => `<option value="${x.id}">&nbsp;&nbsp;&nbsp;› ${escapeHtml(x.name)}</option>`).join("")).join("");
   if (selectedTypeId) caseForm.elements.process_type_id.value = selectedTypeId;
   renderCustomFields(cat, {});
 }
@@ -559,24 +563,42 @@ const FIELD_TYPE_LABELS = { text: "Texto", textarea: "Texto largo", number: "Nú
 async function renderConfiguracion() {
   await loadCatalog();
   const open = new Set($$("#catalog details[open]").map((d) => d.dataset.cat));
-  $("#catalog").innerHTML = state.catalog.map((c) => `
+  const arrows = (kind, id, first, last) => `<span class="order-btns">
+    <button type="button" class="mini" data-move="${kind}" data-id="${id}" data-dir="-1" ${first ? "disabled" : ""} aria-label="Subir">↑</button>
+    <button type="button" class="mini" data-move="${kind}" data-id="${id}" data-dir="1" ${last ? "disabled" : ""} aria-label="Bajar">↓</button></span>`;
+  const typeRow = (t, i, list, child) => `
+    <li class="type-row ${child ? "child" : ""}" draggable="true" data-type="${t.id}" data-parent="${t.parent_id || 0}">
+      <span class="drag" aria-hidden="true" title="Arrastre para ordenar">⋮⋮</span>
+      <span class="type-name">${escapeHtml(t.name)}</span>
+      <span class="uses" title="Expedientes que lo usan">${t.uses} exp.</span>
+      <span class="toolbar">
+        ${arrows("type", t.id, i === 0, i === list.length - 1)}
+        ${child ? "" : `<button class="mini" data-action="add-subtype" data-id="${t.id}">+ Segundo orden</button>`}
+        <button class="mini" data-action="rename-type" data-id="${t.id}">Renombrar</button>
+        <button class="mini danger" data-action="delete-type" data-id="${t.id}" aria-label="Eliminar">✕</button>
+      </span>
+    </li>`;
+  $("#catalog").innerHTML = state.catalog.map((c, ci) => {
+    const top = c.types.filter((t) => !t.parent_id);
+    return `
     <details class="panel cat" data-cat="${c.id}" ${open.has(String(c.id)) ? "open" : ""}>
       <summary>
         <span class="cat-name">${escapeHtml(c.name)}</span>
-        <span class="muted">${c.types.length} subprocesos · ${c.fields.length} campos</span>
+        <span class="muted">${top.length} subprocesos · ${c.types.length - top.length} de segundo orden · ${c.fields.length} campos</span>
+        ${arrows("cat", c.id, ci === 0, ci === state.catalog.length - 1)}
       </summary>
       <div class="cat-body">
         <div class="toolbar">
+          <button data-action="sort-usage" data-id="${c.id}">Ordenar por más usados</button>
           <button data-action="rename-category" data-id="${c.id}">Renombrar</button>
           <button class="danger" data-action="delete-category" data-id="${c.id}">Eliminar tipo</button>
         </div>
-        <h4>Subprocesos</h4>
-        <ul class="config-list">
-          ${c.types.map((t) => `<li><span>${escapeHtml(t.name)}</span>
-            <span class="toolbar">
-              <button data-action="rename-type" data-id="${t.id}">Renombrar</button>
-              <button class="danger" data-action="delete-type" data-id="${t.id}" aria-label="Eliminar">✕</button>
-            </span></li>`).join("")}
+        <h4>Subprocesos <span class="muted">· arrastre o use las flechas para ponerlos en el orden que más le sirva</span></h4>
+        <ul class="config-list type-list" data-cat="${c.id}">
+          ${top.map((t, i) => {
+            const kids = c.types.filter((x) => x.parent_id === t.id);
+            return typeRow(t, i, top, false) + (kids.length ? `<li class="kids"><ul class="config-list type-list" data-cat="${c.id}">${kids.map((k, j) => typeRow(k, j, kids, true)).join("")}</ul></li>` : "");
+          }).join("")}
         </ul>
         <form class="toolbar" data-form="new-type" data-cat="${c.id}">
           <input name="name" placeholder="Nuevo subproceso" required />
@@ -584,11 +606,12 @@ async function renderConfiguracion() {
         </form>
         <h4>Campos propios de ${escapeHtml(c.name)}</h4>
         <ul class="config-list">
-          ${c.fields.map((f) => `<li><span>${escapeHtml(f.label)} <span class="muted">· ${FIELD_TYPE_LABELS[f.field_type]}${f.required ? " · obligatorio" : ""}${f.options.length ? ` · ${escapeHtml(f.options.join(", "))}` : ""}</span></span>
-            <button class="danger" data-action="delete-field" data-id="${f.id}" aria-label="Eliminar">✕</button></li>`).join("") || '<li class="muted">Sin campos propios todavía.</li>'}
+          ${c.fields.map((f, i) => `<li><span>${escapeHtml(f.label)} <span class="muted">· ${FIELD_TYPE_LABELS[f.field_type]}${f.required ? " · obligatorio" : ""}${f.options.length ? ` · ${escapeHtml(f.options.join(", "))}` : ""}</span></span>
+            <span class="toolbar">${arrows("field", f.id, i === 0, i === c.fields.length - 1)}
+            <button class="mini danger" data-action="delete-field" data-id="${f.id}" aria-label="Eliminar">✕</button></span></li>`).join("") || '<li class="muted">Sin campos propios todavía.</li>'}
         </ul>
         <form class="field-form" data-form="new-field" data-cat="${c.id}">
-          <input name="label" placeholder="Nombre del campo (ej. Radicado, Juzgado)" required />
+          <input name="label" placeholder="Nombre del campo (ej. Etapa, Cuantía)" required />
           <select name="field_type">
             ${Object.entries(FIELD_TYPE_LABELS).map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}
           </select>
@@ -597,8 +620,63 @@ async function renderConfiguracion() {
           <button class="primary">+ Campo</button>
         </form>
       </div>
-    </details>`).join("");
+    </details>`;
+  }).join("");
 }
+
+// Save a new sibling order for types (same parent), categories or fields.
+async function saveOrder(kind, ids, catId) {
+  if (kind === "type") await api("PUT", `/categories/${catId}/order`, { type_ids: ids });
+  else if (kind === "cat") await api("PUT", "/category-order", { ids });
+  else await api("PUT", `/categories/${catId}/fields/order`, { field_ids: ids });
+  await renderConfiguracion();
+}
+$("#catalog").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-move]");
+  if (!b) return;
+  e.preventDefault(); // arrows in <summary> must not toggle the panel
+  const id = Number(b.dataset.id), dir = Number(b.dataset.dir), kind = b.dataset.move;
+  let ids, catId;
+  if (kind === "cat") ids = state.catalog.map((c) => c.id);
+  else {
+    const cat = state.catalog.find((c) => (kind === "type" ? c.types : c.fields).some((x) => x.id === id));
+    catId = cat.id;
+    if (kind === "type") {
+      const parent = cat.types.find((t) => t.id === id).parent_id || 0;
+      ids = cat.types.filter((t) => (t.parent_id || 0) === parent).map((t) => t.id);
+    } else ids = cat.fields.map((f) => f.id);
+  }
+  const i = ids.indexOf(id);
+  [ids[i], ids[i + dir]] = [ids[i + dir], ids[i]];
+  guarded(() => saveOrder(kind, ids, catId));
+});
+// Drag and drop within the same level.
+let dragId = null;
+$("#catalog").addEventListener("dragstart", (e) => {
+  const li = e.target.closest("[data-type]");
+  if (!li) return;
+  dragId = li.dataset.type;
+  li.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+});
+$("#catalog").addEventListener("dragend", (e) => e.target.closest?.("[data-type]")?.classList.remove("dragging"));
+$("#catalog").addEventListener("dragover", (e) => {
+  const over = e.target.closest("[data-type]");
+  const src = dragId && $(`#catalog [data-type="${dragId}"]`);
+  if (!over || !src || over === src || over.dataset.parent !== src.dataset.parent) return;
+  e.preventDefault();
+  const rect = over.getBoundingClientRect();
+  over.parentElement.insertBefore(src, e.clientY > rect.top + rect.height / 2 ? over.nextSibling : over);
+});
+$("#catalog").addEventListener("drop", (e) => {
+  const src = dragId && $(`#catalog [data-type="${dragId}"]`);
+  dragId = null;
+  if (!src) return;
+  e.preventDefault();
+  const list = src.parentElement;
+  const ids = [...list.children].filter((li) => li.dataset.type && li.dataset.parent === src.dataset.parent).map((li) => Number(li.dataset.type));
+  guarded(() => saveOrder("type", ids, Number(list.dataset.cat)));
+});
 
 document.addEventListener("submit", (e) => {
   const form = e.target.closest("[data-form]");
@@ -686,7 +764,31 @@ document.addEventListener("click", (e) => {
     },
     "draft-case": () => {
       pendingDraftCase = id;
+      $("#tpl-case").value = String(id);
       location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
+    },
+    "new-template": () => openTemplateDialog(null),
+    "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
+    "delete-template": async () => {
+      if (!(await confirmAsk("Eliminar plantilla", "La plantilla dejará de estar disponible para todos los usuarios."))) return;
+      await api("DELETE", `/templates/${id}`);
+      if (tplActive?.id === id) { tplActive = null; $("#tpl-active").hidden = true; $("#tpl-empty").hidden = false; }
+      await renderBorradores();
+    },
+    "add-subtype": async () => {
+      const parent = typeById(id);
+      const name = await ask({ title: `Subproceso de segundo orden en “${parent.name}”`, input: "", okLabel: "Agregar" });
+      if (!name) return;
+      await api("POST", `/categories/${parent.category_id}/types`, { name, parent_id: id });
+      toast("Subproceso agregado.");
+      await renderConfiguracion();
+      $(`#catalog details[data-cat="${parent.category_id}"]`).open = true;
+    },
+    "sort-usage": async () => {
+      await api("POST", `/categories/${id}/sort-by-usage`);
+      toast("Ordenado por número de expedientes.");
+      await renderConfiguracion();
+      $(`#catalog details[data-cat="${id}"]`).open = true;
     },
     "rename-category": async () => {
       const name = await ask({ title: "Renombrar tipo de proceso", input: categoryOf(id).name, okLabel: "Guardar" });
@@ -722,7 +824,7 @@ let lastResult = null;
 
 draftForm.paymentRequired.addEventListener("change", (e) => (draftForm.paymentItems.disabled = !e.target.checked));
 
-async function renderBorradores() {
+async function renderNomos() {
   await loadCases();
   const sel = draftForm.caseId;
   const cur = pendingDraftCase ?? sel.value;
@@ -784,10 +886,20 @@ function renderAudit(result) {
   $("#audit").hidden = false;
 }
 
+let baseTemplate = null; // { name, text } when NomosAI completes a firm template
+function setBaseTemplate(t) {
+  baseTemplate = t;
+  const note = $("#base-template-note");
+  note.hidden = !t;
+  note.innerHTML = t ? `NomosAI usará como base la plantilla <strong>${escapeHtml(t.name)}</strong>. <button type="button" class="mini" id="drop-base">Quitar</button>` : "";
+}
+document.addEventListener("click", (e) => { if (e.target.id === "drop-base") setBaseTemplate(null); });
+
 function collectDraft() {
   const f = draftForm.elements;
   const caseId = Number(f.caseId.value) || null;
   return {
+    template: baseTemplate?.text,
     caseId,
     documentType: f.documentType.value,
     language: f.language.value,
@@ -1465,7 +1577,7 @@ function openUserDialog(u) {
   form.elements.role.innerHTML = roleInfo.roles.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
   $("#user-office-checks").innerHTML = offices.map((o) => `<label class="inline"><input type="checkbox" name="office" value="${o.id}"
     ${u ? (u.offices.some((x) => x.id === o.id) ? "checked" : "") : (o.is_main ? "checked" : "")}> ${escapeHtml(o.name)}</label>`).join("");
-  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone } : { role: "Abogado" });
+  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, professional_card: u.professional_card } : { role: "Abogado" });
   form.elements.custom_permissions.checked = !!u?.custom_permissions;
   renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
@@ -1493,7 +1605,7 @@ $("#user-dialog [name=role]").addEventListener("change", (e) => {
 wireDialog($("#user-dialog"), async (form) => {
   const d = formData(form);
   const body = {
-    name: d.name, email: d.email, phone: d.phone, role: d.role, active: form.elements.active.checked,
+    name: d.name, email: d.email, phone: d.phone, professional_card: d.professional_card, role: d.role, active: form.elements.active.checked,
     office_ids: $$("#user-office-checks input:checked").map((i) => Number(i.value)),
     custom_permissions: form.elements.custom_permissions.checked,
     permissions: $$("#user-perm-checks input:checked").map((i) => i.value),
@@ -1552,6 +1664,238 @@ wireDialog($("#password-dialog"), async (form) => {
   await api("POST", "/auth/password", formData(form));
   toast("Contraseña actualizada.");
 });
+
+// ---------- Documentos: plantillas ----------
+const D = window.JuanmaDocx;
+let tplMeta = null, tplList = [], tplCat = "", tplActive = null, tplData = {}, tplOverrides = {};
+
+function showDTab(name) {
+  $$("[data-dtab]").forEach((b) => b.classList.toggle("active", b.dataset.dtab === name));
+  $$("[data-dpanel]").forEach((p) => (p.hidden = p.dataset.dpanel !== name));
+}
+$("#doc-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dtab]");
+  if (!b) return;
+  showDTab(b.dataset.dtab);
+  if (b.dataset.dtab === "nomos") guarded(renderNomos);
+});
+
+async function renderBorradores() {
+  if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
+  tplList = await api("GET", "/templates");
+  const counts = Object.fromEntries(tplMeta.categories.map((c) => [c, tplList.filter((t) => t.category === c).length]));
+  $("#tpl-cats").innerHTML = [["", `Todas (${tplList.length})`], ...tplMeta.categories.filter((c) => counts[c]).map((c) => [c, `${c} (${counts[c]})`])]
+    .map(([v, l]) => `<button type="button" class="chip ${v === tplCat ? "active" : ""}" data-tcat="${escapeHtml(v)}">${escapeHtml(l)}</button>`).join("");
+  renderTplList();
+  const cases = await api("GET", "/cases");
+  const sel = $("#tpl-case");
+  const cur = pendingDraftCase ?? sel.value;
+  sel.innerHTML = '<option value="">— Sin expediente: llenar a mano —</option>' + cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  sel.value = cur ? String(cur) : "";
+  if (pendingDraftCase && !tplActive) showDTab("nomos");
+  if (!$("[data-dpanel=nomos]").hidden) await renderNomos();
+  else if (tplActive) await loadTplData();
+}
+
+function renderTplList() {
+  const q = window.JuanmaCombo.norm($("#tpl-search").value);
+  const items = tplList.filter((t) => (!tplCat || t.category === tplCat) && (!q || window.JuanmaCombo.norm(t.name + " " + t.description).includes(q)));
+  const groups = new Map();
+  for (const t of items) { if (!groups.has(t.category)) groups.set(t.category, []); groups.get(t.category).push(t); }
+  $("#tpl-list").innerHTML = [...groups].map(([cat, ts]) => `
+    <h4>${escapeHtml(cat)}</h4>
+    <ul class="tpl-items">${ts.map((t) => `<li><button type="button" class="tpl-item ${tplActive?.id === t.id ? "selected" : ""}" data-tpl="${t.id}">
+      <strong>${escapeHtml(t.name)}</strong>
+      <span>${t.format === "docx" ? "Word" : "Texto"}${t.builtin ? " · ejemplo JuanMaApp" : ""}${t.description ? " · " + escapeHtml(t.description) : ""}</span></button>
+      ${can("templates.manage") ? `<span class="tpl-tools">${t.format === "markdown" ? `<button class="mini" data-action="edit-template" data-id="${t.id}">Editar</button>` : ""}
+        <button class="mini danger" data-action="delete-template" data-id="${t.id}" aria-label="Eliminar plantilla">✕</button></span>` : ""}</li>`).join("")}</ul>`).join("")
+    || '<p class="empty">No hay plantillas con ese filtro.</p>';
+}
+$("#tpl-search").addEventListener("input", renderTplList);
+$("#tpl-cats").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tcat]");
+  if (!b) return;
+  tplCat = b.dataset.tcat;
+  $$("#tpl-cats .chip").forEach((c) => c.classList.toggle("active", c === b));
+  renderTplList();
+});
+$("#tpl-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tpl]");
+  if (b) guarded(() => openTemplate(Number(b.dataset.tpl)));
+});
+
+async function openTemplate(id) {
+  const t = await api("GET", `/templates/${id}`);
+  if (t.format === "docx") {
+    const f = await api("GET", `/templates/${id}/file`);
+    t.bytes = D.b64ToBytes(f.base64);
+    t.vars = D.docxVariables(t.bytes);
+  } else {
+    t.vars = D.textVariables(t.body);
+  }
+  tplActive = t;
+  tplOverrides = {};
+  $("#tpl-empty").hidden = true;
+  $("#tpl-active").hidden = false;
+  $("#tpl-name").textContent = t.name;
+  $("#tpl-cat").textContent = t.category;
+  $("#tpl-format").textContent = t.format === "docx" ? "Word" : "Texto";
+  $$("[data-text-only]").forEach((el) => (el.hidden = t.format === "docx"));
+  $("#tpl-docx-note").hidden = t.format !== "docx";
+  $("#tpl-edit-mode").checked = false;
+  $("#tpl-text").hidden = true;
+  renderTplList();
+  await loadTplData();
+}
+
+async function loadTplData() {
+  const caseId = $("#tpl-case").value;
+  tplData = await api("GET", `/templates/data${caseId ? `?caseId=${caseId}` : ""}`);
+  renderTplVars();
+  renderTplDoc();
+}
+$("#tpl-case").addEventListener("change", () => guarded(async () => { tplOverrides = {}; await loadTplData(); }));
+
+const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
+const tplValues = () => ({ ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, v]) => v !== "")) });
+
+function renderTplVars() {
+  const vals = tplValues();
+  const missing = tplActive.vars.filter((k) => !vals[k]);
+  $("#tpl-missing").textContent = missing.length ? `${missing.length} por completar` : "Completo";
+  $("#tpl-missing").className = `badge ${missing.length ? "warn" : "ok"}`;
+  $("#tpl-vars-box").open = missing.length > 0;
+  // Missing data first, so what needs attention is at the top.
+  const ordered = [...tplActive.vars].sort((a, b) => Number(!!vals[a]) - Number(!!vals[b]));
+  $("#tpl-vars").innerHTML = ordered.map((k) => `<label>${escapeHtml(varLabel(k))}
+    <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="Falta" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
+    || '<p class="muted">Esta plantilla no tiene variables.</p>';
+}
+$("#tpl-vars").addEventListener("input", (e) => {
+  const i = e.target.closest("[data-var]");
+  if (!i) return;
+  tplOverrides[i.dataset.var] = i.value.trim();
+  i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var]);
+  if (!$("#tpl-edit-mode").checked) renderTplDoc();
+});
+
+function filledText() {
+  const labels = Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)]));
+  return D.fillText(tplActive.body, tplValues(), labels);
+}
+function renderTplDoc() {
+  if (tplActive.format === "docx") {
+    const vals = tplValues();
+    $("#tpl-preview").innerHTML = `<table class="data-table"><thead><tr><th>Variable</th><th>Valor en el documento</th></tr></thead><tbody>${
+      tplActive.vars.map((k) => `<tr><td><code>{{${escapeHtml(k)}}}</code></td><td>${vals[k] ? escapeHtml(vals[k]) : `<mark class="fill">[FILL: ${escapeHtml(k)}]</mark>`}</td></tr>`).join("")
+    }</tbody></table>`;
+    return;
+  }
+  const text = $("#tpl-edit-mode").checked ? $("#tpl-text").value : filledText();
+  $("#tpl-preview").innerHTML = renderMarkdown(text);
+}
+$("#tpl-edit-mode").addEventListener("change", (e) => {
+  const ta = $("#tpl-text");
+  if (e.target.checked) ta.value = filledText();
+  ta.hidden = !e.target.checked;
+  renderTplDoc();
+});
+$("#tpl-text").addEventListener("input", renderTplDoc);
+
+const tplFileBase = () => (tplActive.name + (tplData["cliente.nombre"] ? " - " + tplData["cliente.nombre"] : ""))
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 90) || "documento";
+const currentText = () => ($("#tpl-edit-mode").checked ? $("#tpl-text").value : filledText());
+
+$("#tpl-active .actions").addEventListener("click", (e) => {
+  const action = e.target.closest("[data-tpl-out]")?.dataset.tplOut;
+  if (!action) return;
+  guarded(async () => {
+    if (action === "docx") {
+      const blob = tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name);
+      await saveFile(`${tplFileBase()}.docx`, blob);
+    } else if (action === "pdf") {
+      await saveFile(`${tplFileBase()}.pdf`, markdownToPdf(currentText()));
+    } else if (action === "copy") {
+      try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
+      catch { toast("No se pudo copiar; active “Editar el texto” y cópielo desde allí.", true); }
+    } else if (action === "nomos") {
+      setBaseTemplate({ name: tplActive.name, text: currentText() });
+      const map = { Contrato: "CONTRACT", Poder: "POWER_OF_ATTORNEY", "Derecho de petición": "PETITION", Demanda: "LAWSUIT" };
+      if (map[tplActive.category]) draftForm.documentType.value = map[tplActive.category];
+      pendingDraftCase = Number($("#tpl-case").value) || null;
+      showDTab("nomos");
+      await renderNomos();
+      toast("Revise los datos y pulse “Generar borrador”.");
+    }
+  });
+});
+
+// ----- Template editor and uploads -----
+const tplForm = $("#tpl-dialog form");
+function openTemplateDialog(t = null) {
+  tplForm.elements.category.innerHTML = tplMeta.categories.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
+  openDialog($("#tpl-dialog"), t ? "Editar plantilla" : "Nueva plantilla", t ? { id: t.id, name: t.name, category: t.category, description: t.description, body: t.body }
+    : { category: tplCat || "Contrato", body: "# TÍTULO DEL DOCUMENTO\n\n{{fecha.ciudad_y_fecha}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}…\n" });
+  const groups = {};
+  for (const v of tplMeta.variables) (groups[v.group] ||= []).push(v);
+  $("#var-picker").innerHTML = Object.entries(groups).map(([g, vs]) => `<h5>${escapeHtml(g)}</h5>${vs.map((v) =>
+    `<button type="button" class="chip" data-insert="${escapeHtml(v.key)}" title="{{${escapeHtml(v.key)}}}">${escapeHtml(v.label)}</button>`).join("")}`).join("");
+}
+$("#var-picker").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-insert]");
+  if (!b) return;
+  const ta = tplForm.elements.body;
+  const ins = `{{${b.dataset.insert}}}`;
+  const { selectionStart: a, selectionEnd: z } = ta;
+  ta.setRangeText(ins, a, z, "end");
+  ta.focus();
+});
+wireDialog($("#tpl-dialog"), async (form) => {
+  const { id, ...d } = formData(form);
+  if (id) await api("PUT", `/templates/${id}`, d); else await api("POST", "/templates", d);
+  toast(id ? "Plantilla actualizada." : "Plantilla creada.");
+  await renderBorradores();
+  if (tplActive && Number(id) === tplActive.id) await openTemplate(tplActive.id);
+});
+
+$("#tpl-file").addEventListener("change", (e) => guarded(async () => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const name = file.name.replace(/\.[^.]+$/, "");
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".doc")) throw new Error("Guarde el archivo como .docx (Word 2007 o posterior) y vuelva a cargarlo.");
+  const category = guessCategory(name);
+  let created;
+  if (lower.endsWith(".docx")) {
+    if (file.size > 8 * 1024 * 1024) throw new Error("El archivo debe pesar menos de 8 MB.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const vars = D.docxVariables(bytes);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    created = await api("POST", "/templates", { name, category, filename: file.name, file_base64: btoa(bin),
+      description: vars.length ? `${vars.length} variable(s)` : "Sin variables {{…}}: se descargará tal cual" });
+  } else if (/\.(md|txt)$/.test(lower)) {
+    created = await api("POST", "/templates", { name, category, body: await file.text() });
+  } else {
+    throw new Error("Use un archivo .docx, .md o .txt.");
+  }
+  toast(`Plantilla “${name}” cargada en ${category}. Puede cambiar la categoría con Editar.`);
+  await renderBorradores();
+  await openTemplate(created.id);
+}));
+function guessCategory(name) {
+  const n = window.JuanmaCombo.norm(name);
+  if (/contrato/.test(n)) return "Contrato";
+  if (/poder/.test(n)) return "Poder";
+  if (/peticion/.test(n)) return "Derecho de petición";
+  if (/demanda/.test(n)) return "Demanda";
+  if (/tutela/.test(n)) return "Tutela";
+  if (/recurso|apelacion|reposicion/.test(n)) return "Recurso";
+  if (/memorial/.test(n)) return "Memorial";
+  return "Otro";
+}
 
 // ---------- Agenda (tareas, audiencias, términos) ----------
 const KIND_LABEL = { audiencia: "Audiencia", tarea: "Tarea", termino: "Término" };
