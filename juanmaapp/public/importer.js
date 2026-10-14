@@ -21,7 +21,14 @@
     { key: "case.category", label: "Expediente · Tipo de proceso", match: ["tipo proceso", "tipo de proceso", "area", "especialidad", "categoria", "materia"] },
     { key: "case.type", label: "Expediente · Subproceso", match: ["subproceso", "clase proceso", "clase de proceso", "accion", "tipo accion", "medio de control", "proceso"] },
     { key: "case.title", label: "Expediente · Asunto", match: ["asunto", "referencia", "descripcion", "objeto"] },
-    { key: "case.status", label: "Expediente · Estado", match: ["estado", "estado proceso"] },
+    { key: "case.status", label: "Expediente · Estado (1 = Activo, 2 = Archivado)", match: ["estado", "estado proceso", "estado del proceso"] },
+    { key: "case.created_at", label: "Expediente · Fecha de creación", match: ["fecha de creacion", "fecha creacion", "fecha apertura", "fecha de apertura", "fecha inicio", "fecha de inicio"] },
+    { key: "case.actuaciones", label: "Expediente · Actuaciones (historial)", join: "\n", match: ["actuaciones", "actuacion", "ultima actuacion", "ultimas actuaciones"] },
+    { key: "case.city", label: "Expediente · Ciudad del proceso", match: ["ciudad proceso", "ciudad del proceso", "ciudad despacho", "ciudad del despacho"] },
+    { key: "case.court_name", label: "Expediente · Despacho judicial", match: ["despacho judicial", "despacho", "juzgado", "juzgado de conocimiento", "despacho de conocimiento"] },
+    { key: "case.folder", label: "Expediente · No. de carpeta", match: ["no carpeta", "numero carpeta", "numero de carpeta", "carpeta", "n carpeta", "no de carpeta"] },
+    { key: "pay.fees", label: "Pagos · Honorarios (valor pactado)", match: ["honorarios", "valor honorarios", "honorarios pactados", "total honorarios"] },
+    { key: "pay.paid", label: "Pagos · Pagado (abonos recibidos)", match: ["pagos", "pagado", "abonos", "abono", "valor pagado", "total pagado", "total pagos"] },
     { key: "case.client_role", label: "Expediente · Calidad del cliente (demandante, demandado…)", match: ["calidad", "calidad cliente", "calidad del cliente", "parte", "rol cliente", "posicion"] },
     { key: "case.affiliated", label: "Expediente · Cliente afiliado (Sí / No)", match: ["afiliado", "afiliacion", "es afiliado"] },
     { key: "case.radicado", label: "Expediente · Radicado", match: ["radicado", "radicacion", "numero radicado", "no radicado", "numero proceso"] },
@@ -29,7 +36,7 @@
       match: ["contraparte", "demandado", "demandada", "accionado", "entidad", "empleador", "convocado"] },
     { key: "case.facts", label: "Expediente · Hechos", join: "\n", match: ["hechos", "resumen", "detalle"] },
     { key: "case.custom", label: "Expediente · Campo propio (usa el nombre de la columna)",
-      match: ["radicado", "numero radicado", "juzgado", "despacho", "fecha", "fecha radicacion", "etapa", "cuantia", "abogado", "responsable"] },
+      match: ["fecha", "fecha radicacion", "etapa", "cuantia", "abogado", "responsable"] },
     { key: "", label: "— No importar —", match: [] },
   ];
 
@@ -52,6 +59,22 @@
       }
     }
     return best;
+  }
+
+  /**
+   * Guess every column at once, so one column can settle another:
+   * - with an AREA column for the process type, "Tipo de proceso" is the sub-process;
+   * - in a file with radicado or despacho, a plain "Ciudad" is where the process runs.
+   */
+  function guessAll(headers) {
+    const m = headers.map(guessTarget);
+    const hs = headers.map(norm);
+    const areaCol = hs.findIndex((h) => h === "area" || h === "area del proceso" || h === "especialidad");
+    if (areaCol >= 0) hs.forEach((h, i) => { if (i !== areaCol && m[i] === "case.category" && /tipo (de )?proceso/.test(h)) m[i] = "case.type"; });
+    if (m.includes("case.radicado") || m.includes("case.court_name")) {
+      hs.forEach((h, i) => { if (m[i] === "client.city" && (h === "ciudad" || h === "municipio")) m[i] = "case.city"; });
+    }
+    return m;
   }
 
   function cellText(v) {
@@ -133,7 +156,7 @@
       if (key === "case.custom") { custom[h] = v; return; }
       (parts[key] ||= []).push(v);
     });
-    const out = { client: {}, case: {}, custom };
+    const out = { client: {}, case: {}, pay: {}, custom };
     for (const t of TARGETS) {
       if (!t.key || t.key === "case.custom" || !parts[t.key]) continue;
       const [obj, field] = t.key.split(".");
@@ -141,6 +164,33 @@
     }
     return out;
   }
+
+  // "$ 1.500.000", "1500000", "1.500.000,00" or an Excel number → whole pesos.
+  function parsePesos(v) {
+    const s = String(v ?? "").trim();
+    if (!s) return 0;
+    if (/^\d+(\.\d+)?$/.test(s)) return Math.round(Number(s));
+    return Number(s.replace(/[,.]\d{1,2}$/, "").replace(/[^\d]/g, "")) || 0;
+  }
+  // dd/mm/aaaa (how Excel dates arrive), aaaa-mm-dd or dd-mm-aaaa → aaaa-mm-dd.
+  function parseDate(v) {
+    const s = String(v ?? "").trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
+    if (!m) return "";
+    const y = m[3].length === 2 ? "20" + m[3] : m[3];
+    const d = `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    return Number.isNaN(Date.parse(d)) ? "" : d;
+  }
+  // "NULIDAD Y RESTABLECIMIENTO" → "Nulidad y Restablecimiento"; mixed-case text stays as typed.
+  const SMALL = new Set(["de", "del", "la", "las", "el", "los", "y", "e", "o", "en", "a", "por", "para", "con"]);
+  function titleCase(s) {
+    s = String(s || "").trim().replace(/\s+/g, " ");
+    if (s !== s.toUpperCase() || !/[A-ZÁÉÍÓÚÑ]/.test(s)) return s;
+    return s.toLowerCase().split(" ").map((w, i) => (i && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(" ");
+  }
+  const radDigits = (s) => String(s || "").replace(/\D/g, "");
 
   const ID_TYPES = { "cedula de ciudadania": "CC", cedula: "CC", cc: "CC", nit: "NIT", "cedula de extranjeria": "CE", ce: "CE", pasaporte: "PA", pa: "PA", "tarjeta de identidad": "TI", ti: "TI" };
   const docKey = (s) => String(s || "").replace(/[^0-9a-zA-Z]/g, "").toUpperCase();
@@ -156,9 +206,20 @@
     const byName = new Map(clients.map((c) => [norm(c.full_name), c]));
     let catalog = await api("GET", "/catalog");
     const cases = opts.withCases ? await api("GET", "/cases") : [];
-    const caseKeys = new Set(cases.map((k) => `${k.client_id}|${k.process_type_id}|${norm(k.title)}`));
+    // A case already in JuanMaApp: same radicado, or same client + sub-process + folder number, or + subject.
+    const folderFieldIds = () => new Set(catalog.flatMap((c) => c.fields).filter((f) => norm(f.label) === "no carpeta").map((f) => String(f.id)));
+    const caseKeys = new Set();
+    const addKeys = (k) => {
+      if (k.radicado) caseKeys.add(`r:${radDigits(k.radicado)}`);
+      for (const fid of folderFieldIds()) if (k.field_values?.[fid]) caseKeys.add(`${k.client_id}|${k.process_type_id}|c:${norm(k.field_values[fid])}`);
+      caseKeys.add(`${k.client_id}|${k.process_type_id}|${norm(k.title)}`);
+    };
+    cases.forEach(addKeys);
+    let courts = null;
+    const canPay = opts.canPay !== false;
 
     async function ensureCategory(name) {
+      name = titleCase(name);
       let cat = catalog.find((c) => norm(c.name) === norm(name));
       if (!cat) {
         if (!opts.createCatalog) throw new Error(`El tipo de proceso "${name}" no existe en Configuración.`);
@@ -170,7 +231,13 @@
       return cat;
     }
     async function ensureType(cat, name) {
+      name = titleCase(name);
       let t = cat.types.find((t) => norm(t.name) === norm(name));
+      // "Nulidad y Restablecimiento del Derecho" finds "Medio de Control de Nulidad y Restablecimiento del Derecho".
+      if (!t && norm(name).length > 5) {
+        const near = cat.types.filter((x) => norm(x.name).includes(norm(name)) || norm(name).includes(norm(x.name)));
+        if (near.length === 1) t = near[0];
+      }
       if (!t) {
         if (!opts.createCatalog) throw new Error(`El subproceso "${name}" no existe en ${cat.name}.`);
         t = await api("POST", `/categories/${cat.id}/types`, { name });
@@ -179,11 +246,11 @@
       }
       return t;
     }
-    async function ensureField(cat, label) {
+    async function ensureField(cat, label, fieldType = "text") {
       const fresh = catalog.find((c) => c.id === cat.id);
       let f = fresh.fields.find((f) => norm(f.label) === norm(label));
       if (!f) {
-        f = await api("POST", `/categories/${cat.id}/fields`, { label, field_type: "text" });
+        f = await api("POST", `/categories/${cat.id}/fields`, { label, field_type: fieldType });
         summary.catalogCreated.push(`${cat.name} · campo ${label}`);
         catalog = await api("GET", "/catalog");
       }
@@ -200,6 +267,7 @@
         let client = (docKey(c.id_number) && byDoc.get(docKey(c.id_number))) || (c.full_name && byName.get(norm(c.full_name)));
         if (!client) {
           if (!c.full_name) throw new Error("Sin nombre de cliente.");
+          c.full_name = titleCase(c.full_name);
           client = await api("POST", "/clients", c);
           summary.clientsCreated++;
         } else {
@@ -220,24 +288,68 @@
           if (!catName || !typeName) throw new Error("Falta el tipo de proceso o el subproceso.");
           const cat = await ensureCategory(catName);
           const type = await ensureType(cat, typeName);
-          const key = `${client.id}|${type.id}|${norm(rec.case.title)}`;
-          if (caseKeys.has(key)) {
+          const rc = rec.case;
+          const rad = radDigits(rc.radicado);
+          const radOk = rad.length === 23;
+          const keys = [radOk && `r:${rad}`, rc.folder && `${client.id}|${type.id}|c:${norm(rc.folder)}`,
+            !radOk && !rc.folder && `${client.id}|${type.id}|${norm(rc.title)}`].filter(Boolean);
+          if (keys.some((k) => caseKeys.has(k))) {
             summary.casesSkipped++;
           } else {
             const field_values = {};
-            for (const [label, value] of Object.entries(rec.custom)) {
-              field_values[(await ensureField(cat, label)).id] = value;
+            for (const [label, value] of Object.entries(rec.custom)) field_values[(await ensureField(cat, label)).id] = value;
+            if (rc.folder) field_values[(await ensureField(cat, "No. Carpeta")).id] = rc.folder;
+            if (rc.actuaciones) field_values[(await ensureField(cat, "Actuaciones", "textarea")).id] = rc.actuaciones;
+            // A radicado that is not 23 digits is kept as written in its own field.
+            if (rc.radicado && !radOk) field_values[(await ensureField(cat, "Radicado (como venía)")).id] = rc.radicado;
+            const body = {
+              client_id: client.id, process_type_id: type.id, title: rc.title || "",
+              status: rc.status || "Activo", counterparty: rc.counterparty || "",
+              facts: rc.facts || "", field_values, radicado: radOk ? rad : "",
+              client_role: window.JuanmaCaseMeta?.normPartyRole(rc.client_role) || "",
+              affiliated: /^(s|si|sí|x|1|true|afiliado)$/i.test(String(rc.affiliated || "").trim()),
+              created_at: parseDate(rc.created_at) || undefined,
+              city: rc.city ? titleCase(rc.city) : undefined,
+            };
+            if (rc.court_name) {
+              // Link to the court directory when the name matches one entry exactly.
+              courts ||= await api("GET", "/courts?limit=2000").catch(() => []);
+              const hit = courts.filter((c) => norm(c.name) === norm(rc.court_name));
+              if (hit.length === 1) body.court_id = hit[0].id;
+              else body.court_name = titleCase(rc.court_name);
             }
-            await api("POST", "/cases", {
-              client_id: client.id, process_type_id: type.id, title: rec.case.title || "",
-              status: rec.case.status || "Activo", counterparty: rec.case.counterparty || "",
-              facts: rec.case.facts || "", field_values, radicado: rec.case.radicado || "",
-              // Unknown roles are kept as a note instead of failing the row.
-              client_role: window.JuanmaCaseMeta?.normPartyRole(rec.case.client_role) || "",
-              affiliated: /^(s|si|sí|x|1|true|afiliado)$/i.test(String(rec.case.affiliated || "").trim()),
-            });
-            caseKeys.add(key);
+            let kase;
+            try {
+              kase = await api("POST", "/cases", body);
+            } catch (err) {
+              // An unknown city should not lose the case: keep it in a field.
+              if (!body.city || !/ciudad|municipio|departamento/i.test(err.message)) throw err;
+              field_values[(await ensureField(cat, "Ciudad (como venía)")).id] = rc.city;
+              delete body.city;
+              kase = await api("POST", "/cases", body);
+            }
+            addKeys(kase);
+            keys.forEach((k) => caseKeys.add(k));
             summary.casesCreated++;
+
+            // ----- fees and payments -----
+            const fees = parsePesos(rec.pay.fees), paid = parsePesos(rec.pay.paid);
+            if ((fees || paid) && !canPay) summary.errors.push({ row: rowNo, message: "Honorarios y pagos no importados: su rol no maneja Pagos." });
+            else if (fees || paid) {
+              const today = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+              let chargeId = null;
+              if (fees) {
+                const ch = await api("POST", "/payments/charges", { client_id: client.id, case_id: kase.id, concept: "Honorarios",
+                  amount: fees, due_date: today, notes: "Importado del sistema anterior. Ajuste la fecha de vencimiento si corresponde." });
+                chargeId = ch.ids[0];
+                summary.charges = (summary.charges || 0) + 1;
+              }
+              if (paid) {
+                await api("POST", "/payments/receipts", { client_id: client.id, charge_id: chargeId, case_id: kase.id, amount: paid, method: "Otro",
+                  reference: "Saldo importado", paid_on: today, concept: "Pagos registrados en el sistema anterior" });
+                summary.receipts = (summary.receipts || 0) + 1;
+              }
+            }
           }
         }
       } catch (err) {
@@ -248,5 +360,5 @@
     return summary;
   }
 
-  window.JuanmaImport = { TARGETS, guessTarget, readFile, splitHeader, buildRecord, run, norm };
+  window.JuanmaImport = { TARGETS, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, norm, parsePesos, parseDate, titleCase };
 })();

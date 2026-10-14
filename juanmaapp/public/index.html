@@ -542,7 +542,7 @@
 
         <div class="panel step">
           <h3><span class="step-no">1</span> Archivo</h3>
-          <p class="hint">En Access: <strong>Datos externos → Exportar → Excel</strong> (formato .xlsx), o exporte a <strong>archivo de texto (.csv)</strong>. Una fila por cliente, o una fila por expediente con los datos del cliente en la misma fila.</p>
+          <p class="hint">En Access: <strong>Datos externos → Exportar → Excel</strong> (formato .xlsx), o exporte a <strong>archivo de texto (.csv)</strong>. Una fila por cliente, o una fila por expediente con los datos del cliente en la misma fila. El archivo del servidor de la firma (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) se reconoce solo; debe traer también la columna con el nombre del cliente.</p>
           <input id="import-file" type="file" accept=".xlsx,.csv,.txt" />
           <label id="import-sheet-wrap" hidden>Hoja <select id="import-sheet"></select></label>
           <p id="import-file-info" class="hint" hidden></p>

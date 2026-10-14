@@ -750,7 +750,8 @@
         status: CM.normStatus(b.status), counterparty: str(b.counterparty), facts: str(b.facts),
         client_role: partyRole(b.client_role), affiliated: !!b.affiliated,
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
-        assigned_user_id: checkAssignee(b.assigned_user_id, officeId), created_at: stamp(), updated_at: stamp(),
+        assigned_user_id: checkAssignee(b.assigned_user_id, officeId), updated_at: stamp(),
+        created_at: /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : stamp(),
         last_checked_at: null, last_action_date: null, ...caseLocation(b),
       };
       s.cases.push(k);

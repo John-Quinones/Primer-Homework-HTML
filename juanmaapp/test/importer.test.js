@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 
 globalThis.window = {};
 createRequire(import.meta.url)("../public/importer.js");
-const { guessTarget, splitHeader, buildRecord } = window.JuanmaImport;
+const { guessTarget, guessAll, splitHeader, buildRecord, parsePesos, parseDate, titleCase } = window.JuanmaImport;
 
 test("guesses columns from typical Access export headers", () => {
   const cases = {
@@ -36,4 +36,20 @@ test("joins several columns into one field and keeps custom columns", () => {
   assert.equal(rec.client.full_name, "María José Torres");
   assert.equal(rec.client.phone, "601 / 311");
   assert.deepEqual(rec.custom, { Radicado: "110013105" });
+});
+
+test("reads the firm's server export: area, type, city, status codes, folder, court, fees and payments", () => {
+  const headers = ["No.", "AREA", "FECHA DE CREACIÓN", "TIPO DE PROCESO", "CLIENTE", "ACTUACIONES", "CIUDAD", "ESTADO", "RADICADO",
+    "No. CARPETA", "DESPACHO JUDICIAL", "HONORARIOS", "PAGOS"];
+  assert.deepEqual(guessAll(headers), ["", "case.category", "case.created_at", "case.type", "client.full_name", "case.actuaciones", "case.city",
+    "case.status", "case.radicado", "case.folder", "case.court_name", "pay.fees", "pay.paid"]);
+  // Without an AREA column, "Tipo de proceso" is still the process type, and "Ciudad" the client's city.
+  assert.deepEqual(guessAll(["Tipo de proceso", "Ciudad", "Cliente"]), ["case.category", "client.city", "client.full_name"]);
+  assert.equal(parsePesos("$ 3.500.000"), 3500000);
+  assert.equal(parsePesos("1.500.000,50"), 1500000);
+  assert.equal(parsePesos("2000000"), 2000000);
+  assert.equal(parseDate("15/03/2023"), "2023-03-15");
+  assert.equal(parseDate("2022-8-1"), "2022-08-01");
+  assert.equal(titleCase("NULIDAD Y RESTABLECIMIENTO DEL DERECHO"), "Nulidad y Restablecimiento del Derecho");
+  assert.equal(titleCase("Juzgado 2 de Ibagué"), "Juzgado 2 de Ibagué");
 });

@@ -11,6 +11,9 @@ const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 export function normStatus(x) {
   const n = nrm(x);
   if (!n) return "Activo";
+  // Codes from the previous system: 1 = activo, 2 = archivado.
+  if (n === "1") return "Activo";
+  if (n === "2") return "Archivo definitivo";
   if (n.includes("provisional")) return "Archivo provisional";
   if (/definitiv|cerrad|terminad|archivad|finalizad|archivo/.test(n)) return "Archivo definitivo";
   return "Activo";

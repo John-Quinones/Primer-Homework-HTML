@@ -1052,7 +1052,7 @@ function loadSheet(i) {
   const { headers, body } = IMP.splitHeader(imp.sheets[i].rows);
   imp.headers = headers;
   imp.body = body;
-  imp.mapping = headers.map(IMP.guessTarget);
+  imp.mapping = IMP.guessAll(headers);
   const info = $("#import-file-info");
   info.hidden = false;
   if (!headers.length) {
@@ -1103,11 +1103,16 @@ function renderImportPreview() {
   const casesMode = importMode() === "cases";
   const recs = importRecords();
   const cols = [["client.full_name", "Cliente"], ["client.id_number", "Documento"], ["client.email", "Correo"], ["client.phone", "Teléfono"]];
-  if (casesMode) cols.push(["case.category", "Tipo de proceso"], ["case.type", "Subproceso"], ["case.title", "Asunto"]);
+  if (casesMode) {
+    cols.push(["case.category", "Tipo de proceso"], ["case.type", "Subproceso"]);
+    for (const [k, l] of [["case.radicado", "Radicado"], ["case.status", "Estado"], ["case.court_name", "Despacho"], ["case.folder", "Carpeta"], ["pay.fees", "Honorarios"], ["pay.paid", "Pagos"], ["case.title", "Asunto"]])
+      if (imp.mapping.includes(k)) cols.push([k, l]);
+  }
   const head = `<thead><tr>${cols.map(([, l]) => `<th>${l}</th>`).join("")}${casesMode ? "<th>Campos propios</th>" : ""}</tr></thead>`;
   const rows = recs.slice(0, 5).map((r) => `<tr>${cols.map(([k]) => {
     const [o, f] = k.split(".");
-    return `<td>${escapeHtml(r[o][f] ?? "")}</td>`;
+    const v = r[o][f] ?? "";
+    return `<td>${escapeHtml(k === "case.status" && v ? window.JuanmaCaseMeta.normStatus(v) : o === "pay" && v ? cop(IMP.parsePesos(v)) : v)}</td>`;
   }).join("")}${casesMode ? `<td>${escapeHtml(Object.entries(r.custom).map(([k, v]) => `${k}: ${v}`).join("\n"))}</td>` : ""}</tr>`).join("");
   $("#import-preview").innerHTML = head + `<tbody>${rows}</tbody>`;
   const noName = !imp.mapping.includes("client.full_name");
@@ -1130,6 +1135,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       createCatalog: $("#import-create-catalog").checked,
       defaultCategory: $("#import-default-cat").value,
       defaultType: $("#import-default-type").value,
+      canPay: can("payments.manage"),
       onProgress: (done, total) => (bar.value = done / total),
     });
     const res = $("#import-result");
@@ -1141,6 +1147,8 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
         <li>Clientes existentes completados: <strong>${sum.clientsCompleted}</strong></li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
+        ${sum.charges ? `<li>Honorarios registrados en Pagos: <strong>${sum.charges}</strong></li>` : ""}
+        ${sum.receipts ? `<li>Pagos anteriores registrados como recibos: <strong>${sum.receipts}</strong></li>` : ""}
         ${sum.catalogCreated.length ? `<li>Agregado a Configuración: ${escapeHtml(sum.catalogCreated.join("; "))}</li>` : ""}
         <li>Filas con error: <strong>${sum.errors.length}</strong></li>
       </ul>
