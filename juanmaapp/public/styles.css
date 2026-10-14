@@ -12,18 +12,13 @@ h1, h2, h3 { font-family: var(--font-heading); }
   background: var(--brand-header-bg);
   color: var(--brand-primary-ink);
   padding: 14px 24px;
-  border-bottom: 3px solid var(--brand-accent);
+  border-bottom: 3px solid transparent;
+  border-image: var(--brand-silver-gradient) 1;
 }
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand h1 { margin: 0; font-size: 1.35rem; letter-spacing: .08em; text-transform: uppercase; }
 .tagline { margin: 0; opacity: .8; font-size: .9rem; }
-.logo {
-  display: grid; place-items: center;
-  width: 42px; height: 42px; border-radius: 50%;
-  background: linear-gradient(135deg, #ffffff 0%, var(--brand-silver) 100%);
-  color: var(--brand-accent-ink);
-  font-family: var(--font-heading); font-size: .8rem;
-}
+.logo { width: 44px; height: 44px; display: block; }
 
 .layout {
   display: grid;

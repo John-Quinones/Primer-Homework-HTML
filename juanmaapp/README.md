@@ -51,7 +51,7 @@ The response is newline-delimited JSON. It sends `{"type":"text","text":…}` de
 
 ## Pending before production
 
-- **Brand.** `public/brand.css` uses colors sampled from the brand image (`image.png` at the repo root): navy `#002E6E`, blue `#017BC5`, mid blue `#01569B`, silver `#ADAEB2`, black `#101010`. The wordmark font is approximated with Michroma. Swap in the exact values and font from the PDF manual if they differ; no other file hard-codes a color or font.
+- **Brand.** `public/brand.css` uses the official TEC Jurídicos swatches from the brand manual: navy `#002b6a`, blue `#027cc6`, silver `#989795`, light silver `#c4c8cb`. The header logo and favicon (`public/logo-t.png`) are the manual's "T" column icon. The wordmark font is approximated with Michroma until the manual's typeface name is confirmed; no other file hard-codes a color or font.
 - **Bold.** The server generates the transaction reference (`JMA_…`) and builds the link in the format the prompt specifies: `https://checkout.bold.co/payment/link/<id>`. It does **not** yet create the payment link through Bold's API. Wire that in with the merchant's Bold credentials so the link resolves.
 - **E-signature.** `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]` and `[IP_ADDRESS]` stay as placeholders for your e-signature provider to fill at signing time.
 - **Legal review.** Every draft carries the audit footer and must be reviewed by the attorney of record. Legal citations the model isn't sure of come back as `[FILL: …]` markers. They are never invented.

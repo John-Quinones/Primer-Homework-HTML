@@ -1,10 +1,10 @@
 /*
  * JuanMaApp brand tokens — the only file to edit for brand changes.
  *
- * Colors were sampled from the brand image (image.png at the repo root:
- * AA Centauri / TEC Jurídicos). Exact HEX values from the PDF manual should
- * replace these if they differ. The wordmark typeface is approximated with
- * the Google Font "Michroma" until the manual's font name is confirmed.
+ * Palette: official TEC Jurídicos manual swatches #002b6a, #027cc6,
+ * #989795, #c4c8cb. Gradients follow the manual (navy → blue → navy,
+ * silver → light silver). The wordmark typeface is approximated with the
+ * Google Font "Michroma" until the manual's font name is confirmed.
  */
 :root {
   /* Typography */
@@ -12,26 +12,26 @@
   --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-document: Georgia, "Times New Roman", serif;   /* legal draft body */
 
-  /* Core palette (sampled) */
-  --brand-navy: #002e6e;
-  --brand-blue: #017bc5;
-  --brand-blue-mid: #01569b;
-  --brand-silver: #adaeb2;
-  --brand-silver-light: #c1c5c8;
+  /* Core palette (official manual swatches) */
+  --brand-navy: #002b6a;
+  --brand-blue: #027cc6;
+  --brand-silver: #989795;
+  --brand-silver-light: #c4c8cb;
   --brand-black: #101010;
 
   --brand-primary: var(--brand-navy);
   --brand-primary-ink: #ffffff;
   --brand-accent: var(--brand-silver);
   --brand-accent-ink: var(--brand-navy);
-  --brand-header-bg: linear-gradient(90deg, #002d6c 0%, #017bc5 50%, #002e6e 100%);
+  --brand-header-bg: linear-gradient(90deg, var(--brand-navy) 0%, var(--brand-blue) 50%, var(--brand-navy) 100%);
+  --brand-silver-gradient: linear-gradient(90deg, var(--brand-silver) 0%, var(--brand-silver-light) 50%, var(--brand-silver) 100%);
   --heading: var(--brand-navy);
 
   /* Surfaces & text */
   --bg: #f3f5f8;
   --surface: #ffffff;
   --surface-muted: #eceef1;
-  --border: #c1c5c8;
+  --border: var(--brand-silver-light);
   --text: #101010;
   --text-muted: #555a63;
 
@@ -40,7 +40,7 @@
   --warn: #a8670a;
   --error: #b3261e;
   --fill-highlight: #fff1b8;     /* [FILL: …] markers */
-  --link: #01569b;
+  --link: var(--brand-navy);
 
   --radius: 10px;
 }
@@ -52,9 +52,9 @@
     --surface-muted: #1e2025;
     --border: #3a3d44;
     --text: #e9eaec;
-    --text-muted: #adaeb2;
-    --brand-primary: #01569b;
-    --heading: #c1c5c8;
+    --text-muted: var(--brand-silver-light);
+    --brand-primary: var(--brand-blue);
+    --heading: var(--brand-silver-light);
     --fill-highlight: #5a4a12;
     --link: #4fb0ee;
   }
@@ -65,9 +65,9 @@
   --surface-muted: #1e2025;
   --border: #3a3d44;
   --text: #e9eaec;
-  --text-muted: #adaeb2;
-  --brand-primary: #01569b;
-  --heading: #c1c5c8;
+  --text-muted: var(--brand-silver-light);
+  --brand-primary: var(--brand-blue);
+  --heading: var(--brand-silver-light);
   --fill-highlight: #5a4a12;
   --link: #4fb0ee;
 }
