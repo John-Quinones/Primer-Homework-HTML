@@ -24,14 +24,37 @@
 
   <div class="shell">
     <nav class="sidenav" aria-label="Secciones">
-      <a href="#clientes" data-view="clientes">Clientes</a>
-      <a href="#expedientes" data-view="expedientes">Expedientes</a>
-      <a href="#borradores" data-view="borradores">Borradores</a>
-      <a href="#importar" data-view="importar">Importar</a>
-      <a href="#configuracion" data-view="configuracion">Configuración</a>
+      <a href="#inicio" data-view="inicio"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Inicio</span></a>
+      <a href="#clientes" data-view="clientes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.3 2.5 3.5 5.2"/></svg><span>Clientes</span></a>
+      <a href="#expedientes" data-view="expedientes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Expedientes</span></a>
+      <a href="#borradores" data-view="borradores"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span>Borradores</span></a>
+      <a href="#jurisprudencia" data-view="jurisprudencia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg><span>Jurisprudencia</span></a>
+      <a href="#importar" data-view="importar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><span>Importar</span></a>
+      <a href="#configuracion" data-view="configuracion"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Configuración</span></a>
     </nav>
 
     <main>
+      <!-- ============ INICIO ============ -->
+      <section id="view-inicio" class="view" hidden>
+        <div class="view-head"><h2>Panel general</h2></div>
+        <div class="kpis">
+          <a class="kpi" href="#clientes"><span class="kpi-label">Clientes</span><span class="kpi-value" id="kpi-clients">–</span></a>
+          <a class="kpi" href="#expedientes"><span class="kpi-label">Expedientes activos</span><span class="kpi-value" id="kpi-open">–</span><span class="kpi-sub" id="kpi-total"></span></a>
+          <a class="kpi" href="#jurisprudencia"><span class="kpi-label">Sentencias guardadas</span><span class="kpi-value" id="kpi-rulings">–</span></a>
+          <a class="kpi" href="#configuracion"><span class="kpi-label">Tipos de proceso</span><span class="kpi-value" id="kpi-cats">–</span></a>
+        </div>
+        <div class="dash-grid">
+          <div class="panel">
+            <h3 class="panel-title">Expedientes por tipo de proceso</h3>
+            <div id="chart-by-type" class="hbars" role="list"></div>
+          </div>
+          <div class="panel">
+            <h3 class="panel-title">Movimiento reciente</h3>
+            <ul id="recent-cases" class="recent"></ul>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ CLIENTES ============ -->
       <section id="view-clientes" class="view" hidden>
         <div class="view-head">
@@ -131,6 +154,7 @@
                 <button type="button" data-out="download-md" disabled>Descargar .md</button>
                 <button type="button" data-out="print" disabled>Imprimir / PDF</button>
                 <button type="button" data-out="copy-json" disabled>Copiar JSON</button>
+                <button type="button" data-out="verify" disabled>Verificar citas</button>
               </div>
             </div>
             <div id="status" class="status" hidden></div>
@@ -143,6 +167,81 @@
               <pre id="payload"></pre>
             </details>
           </section>
+        </div>
+      </section>
+
+      <!-- ============ JURISPRUDENCIA ============ -->
+      <section id="view-jurisprudencia" class="view" hidden>
+        <div class="view-head"><h2>Jurisprudencia</h2></div>
+        <p class="hint">Consulta solo los sitios oficiales de la Corte Constitucional, la Corte Suprema de Justicia, el Consejo de Estado y la Rama Judicial (tribunales). Una sentencia se marca <span class="badge ok">Fuente oficial verificada</span> únicamente si se encontró en esos sitios durante la consulta.</p>
+        <div class="tabs" role="tablist">
+          <button role="tab" data-jtab="buscar" class="active">Buscar</button>
+          <button role="tab" data-jtab="analizar">Analizar sentencia</button>
+          <button role="tab" data-jtab="verificar">Verificar citas</button>
+          <button role="tab" data-jtab="guardadas">Guardadas</button>
+        </div>
+
+        <div class="jtab" data-jpanel="buscar">
+          <form id="j-search" class="panel">
+            <label>¿Qué busca? <input name="query" required placeholder="Ej. estabilidad laboral reforzada de trabajadores en debilidad manifiesta" /></label>
+            <div class="grid4">
+              <label>Corte
+                <select name="court">
+                  <option value="">Todas</option>
+                  <option value="CC">Corte Constitucional</option>
+                  <option value="CSJ">Corte Suprema de Justicia</option>
+                  <option value="CE">Consejo de Estado</option>
+                  <option value="TRIB">Tribunales</option>
+                </select>
+              </label>
+              <label>Sala <select name="sala" disabled><option value="">Todas las salas</option></select></label>
+              <label>Desde (año) <input name="yearFrom" type="number" min="1991" max="2100" /></label>
+              <label>Hasta (año) <input name="yearTo" type="number" min="1991" max="2100" /></label>
+            </div>
+            <button class="primary">Buscar sentencias</button>
+          </form>
+          <div id="j-search-status" class="status" hidden></div>
+          <div id="j-results" class="results"></div>
+        </div>
+
+        <div class="jtab" data-jpanel="analizar" hidden>
+          <form id="j-analyze" class="panel">
+            <div class="grid2">
+              <label>Sentencia <input name="reference" placeholder="Ej. T-760 de 2008, SL1234-2021 o radicado" /></label>
+              <label>Corte
+                <select name="court">
+                  <option value="">No sé / cualquiera</option>
+                  <option value="CC">Corte Constitucional</option>
+                  <option value="CSJ">Corte Suprema de Justicia</option>
+                  <option value="CE">Consejo de Estado</option>
+                  <option value="TRIB">Tribunales</option>
+                </select>
+              </label>
+            </div>
+            <label>…o enlace oficial <input name="url" type="url" placeholder="https://www.corteconstitucional.gov.co/relatoria/…" /></label>
+            <button class="primary">Analizar</button>
+          </form>
+          <div id="j-analyze-status" class="status" hidden></div>
+          <article id="j-analysis" class="panel analysis" hidden></article>
+        </div>
+
+        <div class="jtab" data-jpanel="verificar" hidden>
+          <div class="panel">
+            <label>Texto del documento
+              <textarea id="j-verify-text" rows="8" placeholder="Pegue aquí el texto del documento que está elaborando, o genere un borrador y use “Verificar citas” desde Borradores."></textarea>
+            </label>
+            <div class="toolbar">
+              <button id="j-detect" class="primary">Detectar y verificar citas</button>
+              <span id="j-detect-info" class="muted"></span>
+            </div>
+          </div>
+          <ul id="j-verify-list" class="verify-list"></ul>
+        </div>
+
+        <div class="jtab" data-jpanel="guardadas" hidden>
+          <div class="panel">
+            <ul id="j-saved" class="saved-list"></ul>
+          </div>
         </div>
       </section>
 
@@ -268,12 +367,27 @@
     </form>
   </dialog>
 
+  <!-- Guardar sentencia -->
+  <dialog id="save-ruling-dialog">
+    <form method="dialog" data-form="save-ruling">
+      <h3>Guardar sentencia</h3>
+      <p class="hint" data-ref></p>
+      <label>Vincular a expediente <select name="case_id"><option value="">— Sin expediente —</option></select></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" hidden></div>
 
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
   <script src="vendor/read-excel-file.min.js"></script>
   <script src="importer.js"></script>
+  <script src="citations.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

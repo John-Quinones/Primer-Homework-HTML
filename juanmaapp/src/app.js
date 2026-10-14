@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { generateDraft, DOCUMENT_TYPES } from "./engine.js";
 import { auditDraft } from "./validate.js";
 import { recordsRouter } from "./records.js";
+import { jurisprudenceRouter } from "./jurisprudence-routes.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -45,6 +46,7 @@ export function createApp(db) {
   app.get("/vendor/purify.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/dompurify/dist/purify.min.js")));
 
   app.use("/api", recordsRouter(db));
+  app.use("/api/jurisprudencia", jurisprudenceRouter(db));
 
   app.post("/api/generate", async (req, res) => {
     let body = req.body ?? {};
@@ -91,7 +93,8 @@ export function createApp(db) {
       });
     } catch (err) {
       let message = "Unexpected error.";
-      if (err instanceof Anthropic.AuthenticationError) message = "Invalid or missing Anthropic API key.";
+      if (/authentication method/i.test(err.message || "")) message = "El servidor no tiene configurada la clave de Anthropic (ANTHROPIC_API_KEY).";
+      else if (err instanceof Anthropic.AuthenticationError) message = "Invalid or missing Anthropic API key.";
       else if (err instanceof Anthropic.RateLimitError) message = "Rate limited. Try again in a moment.";
       else if (err instanceof Anthropic.BadRequestError) message = `Bad request: ${err.message}`;
       else if (err instanceof Anthropic.APIError) message = `API error ${err.status}: ${err.message}`;

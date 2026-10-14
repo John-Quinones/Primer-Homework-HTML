@@ -6,9 +6,11 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 
 | Section | What it does |
 |---|---|
+| **Inicio** | Dashboard: clients, active cases, saved judgments, process types; cases per process type; recent activity. |
 | **Clientes** | Create, search, edit and delete clients (name, ID type and number, email, phone, address, city, notes). Each client shows their cases. |
 | **Expedientes** | A case links a client to a sub-process (e.g. Laboral › Ejecutivo Laboral) and stores subject, status, counterparty, facts and the category's custom fields. Filter by process type. |
 | **Borradores** | Pick a case (or fill the form by hand) and generate a draft. The case's client data, process and custom fields are sent to NomosAI. |
+| **Jurisprudencia** | Search judgments of the Corte Constitucional, Corte Suprema de Justicia (every chamber), Consejo de Estado and tribunals; analyze one (legal problem, facts, ratio decidendi, decision, dissents, norms, verbatim quotes, summary); check every citation in a draft (does it exist, is the reference right, does it support what the draft says); save judgments to a case. Claude may only search and read the official court sites, and a result is marked verified only when its URL is one the tools actually returned from those sites. |
 | **Importar** | Load existing data exported from Access (or any spreadsheet) as `.xlsx` or `.csv`. Columns are matched automatically (Nombres + Apellidos are joined, IdCliente/Código are skipped) and can be reassigned. A file can hold clients only, or one case per row with the client's data on the same row. Existing clients are matched by document number or name and only their blank fields are filled; identical cases are not created twice; missing process types, sub-processes and custom fields can be created on the fly. Rows that fail are listed by row number. |
 | **Configuración** | Manage process types (Administrativo, Laboral, Penal, Familia, Derecho de Petición, Datacrédito, or new ones), their sub-processes, and custom fields per type: text, long text, number, date, or a drop-down list, optionally required. |
 
@@ -43,6 +45,8 @@ Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-opus-5-5`), `DB_
 | Claude call (streaming, effort `high`, server-side refusal fallback) | `src/engine.js` |
 | Rule checks on every draft | `src/validate.js` |
 | UI (Spanish) | `public/` |
+| Case-law search, analysis and citation check (official domains only) | `src/jurisprudence.js`, `src/jurisprudence-routes.js` |
+| Citation detection in drafts | `public/citations.js` |
 | Excel / CSV import (runs in the browser through the regular API) | `public/importer.js` |
 | In-browser backend for the preview | `public/demo-backend.js`, `scripts/build-preview.mjs` |
 
@@ -77,6 +81,7 @@ The response is newline-delimited JSON. It sends `{"type":"text","text":…}` de
 ## Pending before production
 
 - **Access control and personal data.** The app has no login yet and stores client personal data. Add authentication, HTTPS and backups before putting it on a shared server, and handle the data under Colombia's Ley 1581 de 2012 (habeas data).
+- **Case-law search.** Needs the Anthropic API key and outbound access to the court websites (through Anthropic's web search and fetch tools). The preview shows fictitious, clearly labeled examples only. Each search or verification makes several web lookups, so it costs more than a draft; the attorney still reads the official text before relying on it.
 - **Starting catalog.** The Administrativo and Laboral sub-processes come from the firm. Those under Penal, Familia, Derecho de Petición and Datacrédito are suggested starting points; edit them in Configuración.
 
 - **Brand.** `public/brand.css` uses the official TEC Jurídicos swatches from the brand manual: navy `#002b6a`, blue `#027cc6`, silver `#989795`, light silver `#c4c8cb`. The header logo and favicon (`public/logo-t.png`) are the manual's "T" column icon. The wordmark font is approximated with Michroma until the manual's typeface name is confirmed; no other file hard-codes a color or font.

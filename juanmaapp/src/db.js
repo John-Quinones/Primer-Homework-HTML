@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS cases (
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS cases_client ON cases(client_id);
+
+-- Judgments saved from the case-law search, optionally attached to a case.
+CREATE TABLE IF NOT EXISTS saved_rulings (
+  id          INTEGER PRIMARY KEY,
+  case_id     INTEGER REFERENCES cases(id) ON DELETE SET NULL,
+  reference   TEXT NOT NULL,
+  court       TEXT NOT NULL DEFAULT '',
+  url         TEXT NOT NULL DEFAULT '',
+  verified    INTEGER NOT NULL DEFAULT 0,
+  analysis    TEXT NOT NULL DEFAULT '{}',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 // Starting catalog. Administrativo and Laboral come from the firm's request;

@@ -52,7 +52,11 @@
   --fill-highlight: #fff1b8;     /* [FILL: …] markers */
   --link: var(--brand-navy);
 
-  --radius: 10px;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(0, 43, 106, .06), 0 8px 24px rgba(0, 43, 106, .08);
+  --sidebar-bg: linear-gradient(180deg, #001c48 0%, var(--brand-navy) 55%, #013a86 100%);
+  --sidebar-ink: #c4c8cb;
+  --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .08), transparent 60%), var(--bg);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -67,6 +71,9 @@
     --heading: var(--brand-silver-light);
     --fill-highlight: #5a4a12;
     --link: #4fb0ee;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --sidebar-bg: linear-gradient(180deg, #050a14 0%, #001c48 100%);
+    --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .12), transparent 60%), var(--bg);
   }
 }
 :root[data-theme="dark"] {
@@ -80,6 +87,9 @@
   --heading: var(--brand-silver-light);
   --fill-highlight: #5a4a12;
   --link: #4fb0ee;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --sidebar-bg: linear-gradient(180deg, #050a14 0%, #001c48 100%);
+    --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .12), transparent 60%), var(--bg);
 }
 
 </style>
@@ -87,7 +97,8 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--app-bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-body);
   line-height: 1.5;
@@ -116,15 +127,20 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
 /* ---------- Shell & navigation ---------- */
 .shell { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 72px); }
 .sidenav {
-  display: flex; flex-direction: column; gap: 2px; padding: 16px 10px;
-  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px; padding: 18px 12px;
+  background: var(--sidebar-bg);
 }
 .sidenav a {
-  padding: 10px 14px; border-radius: 8px; color: var(--text); text-decoration: none; font-weight: 500;
-  border-left: 3px solid transparent;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 10px; color: var(--sidebar-ink); text-decoration: none; font-weight: 500;
+  transition: background .15s, color .15s;
 }
-.sidenav a:hover { background: var(--surface-muted); }
-.sidenav a.active { background: var(--surface-muted); border-left-color: var(--brand-blue); color: var(--heading); }
+.sidenav a:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.sidenav a.active {
+  background: linear-gradient(90deg, var(--brand-blue), #0a63a8); color: #fff;
+  box-shadow: 0 6px 16px rgba(2, 124, 198, .35);
+}
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 main { padding: 20px 24px; min-width: 0; max-width: 1400px; }
 
 .view-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -143,9 +159,67 @@ main { padding: 20px 24px; min-width: 0; max-width: 1400px; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 18px;
   min-width: 0;
 }
+.panel-title { margin: 0 0 14px; font-size: .9rem; color: var(--heading); letter-spacing: .03em; }
+
+/* ---------- Dashboard ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.kpi {
+  display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; text-decoration: none; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  border-top: 3px solid var(--brand-blue); transition: transform .15s;
+}
+.kpi:hover { transform: translateY(-2px); }
+.kpi-label { font-size: .78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.kpi-value { font-family: var(--font-heading); font-size: 2rem; color: var(--heading); line-height: 1.2; }
+.kpi-sub { font-size: .8rem; color: var(--text-muted); }
+.dash-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+.hbars { display: grid; gap: 10px; }
+.hbar { display: grid; grid-template-columns: minmax(110px, 160px) 1fr 32px; align-items: center; gap: 10px; font-size: .88rem; }
+.hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 14px; border-radius: 4px; background: var(--surface-muted); overflow: hidden; }
+.hbar-fill { display: block; height: 100%; background: var(--brand-blue); border-radius: 0 4px 4px 0; }
+.hbar-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+.recent { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.recent li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-muted); }
+.recent li div { display: flex; flex-direction: column; min-width: 0; }
+.recent li div span { color: var(--text-muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent li.empty { display: block; background: none; }
+
+/* ---------- Jurisprudencia ---------- */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.tabs button { border-radius: 999px; padding: 8px 16px; background: var(--surface); box-shadow: var(--shadow); }
+.tabs button.active { background: var(--brand-navy); color: #fff; border-color: var(--brand-navy); }
+.grid4 { display: grid; grid-template-columns: 1.4fr 1.6fr 1fr 1fr; gap: 0 12px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; font-size: .74rem; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px; background: var(--surface-muted); color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.badge.bad { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, transparent); background: color-mix(in srgb, var(--error) 10%, transparent); }
+.results { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 14px; }
+.result-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.result-card h4 { margin: 6px 0 0; font-family: var(--font-body); font-weight: 700; font-size: 1.05rem; color: var(--heading); }
+.result-card p { margin: 2px 0; }
+.result-card .toolbar { margin-top: auto; padding-top: 8px; }
+.result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.toolbar a, .saved-list a, .verify-item a { color: var(--link); font-size: .88rem; }
+.analysis { margin-top: 14px; }
+.analysis h3 { margin: 8px 0 2px; font-family: var(--font-body); font-weight: 700; color: var(--heading); }
+.analysis h4 { margin: 16px 0 4px; font-size: .82rem; color: var(--heading); letter-spacing: .03em; }
+.analysis p, .analysis li { font-family: var(--font-document); line-height: 1.6; }
+blockquote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(--brand-blue); background: var(--surface-muted); border-radius: 0 8px 8px 0; font-family: var(--font-document); }
+blockquote cite { display: block; font-size: .8rem; color: var(--text-muted); font-style: normal; margin-top: 4px; }
+.verify-list { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 10px; }
+.verify-item p { margin: 6px 0; }
+.saved-list { list-style: none; padding: 0; margin: 0; }
+.saved-list li { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.saved-list p { margin: 6px 0 0; font-size: .9rem; }
 .panel h2 { margin: 0 0 12px; font-size: 1rem; letter-spacing: .04em; color: var(--heading); }
 
 .split { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
@@ -289,19 +363,21 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
 
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {
-  .layout, .split { grid-template-columns: 1fr; }
+  .layout, .split, .dash-grid { grid-template-columns: 1fr; }
+  .grid4 { grid-template-columns: 1fr 1fr; }
   .field-form { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .sidenav {
     flex-direction: row; overflow-x: auto; padding: 8px 12px; gap: 4px;
-    border-right: 0; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5;
+    position: sticky; top: 0; z-index: 5;
   }
-  .sidenav a { white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; }
-  .sidenav a.active { border-bottom-color: var(--brand-blue); }
+  .sidenav a { white-space: nowrap; padding: 8px 12px; gap: 8px; }
+  .ico { width: 18px; height: 18px; }
   main { padding: 16px; }
-  .grid2, .field-form { grid-template-columns: 1fr; }
+  .grid2, .grid4, .field-form { grid-template-columns: 1fr; }
+  .hbar { grid-template-columns: 100px 1fr 28px; }
   .toolbar input, .toolbar select, #client-search { min-width: 0; flex: 1; }
   .view-head .toolbar { flex-wrap: wrap; width: 100%; }
   .topbar { padding: 12px 16px; }
@@ -335,14 +411,37 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
 
   <div class="shell">
     <nav class="sidenav" aria-label="Secciones">
-      <a href="#clientes" data-view="clientes">Clientes</a>
-      <a href="#expedientes" data-view="expedientes">Expedientes</a>
-      <a href="#borradores" data-view="borradores">Borradores</a>
-      <a href="#importar" data-view="importar">Importar</a>
-      <a href="#configuracion" data-view="configuracion">Configuración</a>
+      <a href="#inicio" data-view="inicio"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Inicio</span></a>
+      <a href="#clientes" data-view="clientes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.3 2.5 3.5 5.2"/></svg><span>Clientes</span></a>
+      <a href="#expedientes" data-view="expedientes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Expedientes</span></a>
+      <a href="#borradores" data-view="borradores"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span>Borradores</span></a>
+      <a href="#jurisprudencia" data-view="jurisprudencia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg><span>Jurisprudencia</span></a>
+      <a href="#importar" data-view="importar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><span>Importar</span></a>
+      <a href="#configuracion" data-view="configuracion"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Configuración</span></a>
     </nav>
 
     <main>
+      <!-- ============ INICIO ============ -->
+      <section id="view-inicio" class="view" hidden>
+        <div class="view-head"><h2>Panel general</h2></div>
+        <div class="kpis">
+          <a class="kpi" href="#clientes"><span class="kpi-label">Clientes</span><span class="kpi-value" id="kpi-clients">–</span></a>
+          <a class="kpi" href="#expedientes"><span class="kpi-label">Expedientes activos</span><span class="kpi-value" id="kpi-open">–</span><span class="kpi-sub" id="kpi-total"></span></a>
+          <a class="kpi" href="#jurisprudencia"><span class="kpi-label">Sentencias guardadas</span><span class="kpi-value" id="kpi-rulings">–</span></a>
+          <a class="kpi" href="#configuracion"><span class="kpi-label">Tipos de proceso</span><span class="kpi-value" id="kpi-cats">–</span></a>
+        </div>
+        <div class="dash-grid">
+          <div class="panel">
+            <h3 class="panel-title">Expedientes por tipo de proceso</h3>
+            <div id="chart-by-type" class="hbars" role="list"></div>
+          </div>
+          <div class="panel">
+            <h3 class="panel-title">Movimiento reciente</h3>
+            <ul id="recent-cases" class="recent"></ul>
+          </div>
+        </div>
+      </section>
+
       <!-- ============ CLIENTES ============ -->
       <section id="view-clientes" class="view" hidden>
         <div class="view-head">
@@ -442,6 +541,7 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
                 <button type="button" data-out="download-md" disabled>Descargar .md</button>
                 <button type="button" data-out="print" disabled>Imprimir / PDF</button>
                 <button type="button" data-out="copy-json" disabled>Copiar JSON</button>
+                <button type="button" data-out="verify" disabled>Verificar citas</button>
               </div>
             </div>
             <div id="status" class="status" hidden></div>
@@ -454,6 +554,81 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
               <pre id="payload"></pre>
             </details>
           </section>
+        </div>
+      </section>
+
+      <!-- ============ JURISPRUDENCIA ============ -->
+      <section id="view-jurisprudencia" class="view" hidden>
+        <div class="view-head"><h2>Jurisprudencia</h2></div>
+        <p class="hint">Consulta solo los sitios oficiales de la Corte Constitucional, la Corte Suprema de Justicia, el Consejo de Estado y la Rama Judicial (tribunales). Una sentencia se marca <span class="badge ok">Fuente oficial verificada</span> únicamente si se encontró en esos sitios durante la consulta.</p>
+        <div class="tabs" role="tablist">
+          <button role="tab" data-jtab="buscar" class="active">Buscar</button>
+          <button role="tab" data-jtab="analizar">Analizar sentencia</button>
+          <button role="tab" data-jtab="verificar">Verificar citas</button>
+          <button role="tab" data-jtab="guardadas">Guardadas</button>
+        </div>
+
+        <div class="jtab" data-jpanel="buscar">
+          <form id="j-search" class="panel">
+            <label>¿Qué busca? <input name="query" required placeholder="Ej. estabilidad laboral reforzada de trabajadores en debilidad manifiesta" /></label>
+            <div class="grid4">
+              <label>Corte
+                <select name="court">
+                  <option value="">Todas</option>
+                  <option value="CC">Corte Constitucional</option>
+                  <option value="CSJ">Corte Suprema de Justicia</option>
+                  <option value="CE">Consejo de Estado</option>
+                  <option value="TRIB">Tribunales</option>
+                </select>
+              </label>
+              <label>Sala <select name="sala" disabled><option value="">Todas las salas</option></select></label>
+              <label>Desde (año) <input name="yearFrom" type="number" min="1991" max="2100" /></label>
+              <label>Hasta (año) <input name="yearTo" type="number" min="1991" max="2100" /></label>
+            </div>
+            <button class="primary">Buscar sentencias</button>
+          </form>
+          <div id="j-search-status" class="status" hidden></div>
+          <div id="j-results" class="results"></div>
+        </div>
+
+        <div class="jtab" data-jpanel="analizar" hidden>
+          <form id="j-analyze" class="panel">
+            <div class="grid2">
+              <label>Sentencia <input name="reference" placeholder="Ej. T-760 de 2008, SL1234-2021 o radicado" /></label>
+              <label>Corte
+                <select name="court">
+                  <option value="">No sé / cualquiera</option>
+                  <option value="CC">Corte Constitucional</option>
+                  <option value="CSJ">Corte Suprema de Justicia</option>
+                  <option value="CE">Consejo de Estado</option>
+                  <option value="TRIB">Tribunales</option>
+                </select>
+              </label>
+            </div>
+            <label>…o enlace oficial <input name="url" type="url" placeholder="https://www.corteconstitucional.gov.co/relatoria/…" /></label>
+            <button class="primary">Analizar</button>
+          </form>
+          <div id="j-analyze-status" class="status" hidden></div>
+          <article id="j-analysis" class="panel analysis" hidden></article>
+        </div>
+
+        <div class="jtab" data-jpanel="verificar" hidden>
+          <div class="panel">
+            <label>Texto del documento
+              <textarea id="j-verify-text" rows="8" placeholder="Pegue aquí el texto del documento que está elaborando, o genere un borrador y use “Verificar citas” desde Borradores."></textarea>
+            </label>
+            <div class="toolbar">
+              <button id="j-detect" class="primary">Detectar y verificar citas</button>
+              <span id="j-detect-info" class="muted"></span>
+            </div>
+          </div>
+          <ul id="j-verify-list" class="verify-list"></ul>
+        </div>
+
+        <div class="jtab" data-jpanel="guardadas" hidden>
+          <div class="panel">
+            <ul id="j-saved" class="saved-list"></ul>
+          </div>
         </div>
       </section>
 
@@ -571,6 +746,20 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
       <label>Contraparte / entidad <input name="counterparty" /></label>
       <div id="custom-fields" class="grid2"></div>
       <label>Hechos <textarea name="facts" rows="5"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Guardar sentencia -->
+  <dialog id="save-ruling-dialog">
+    <form method="dialog" data-form="save-ruling">
+      <h3>Guardar sentencia</h3>
+      <p class="hint" data-ref></p>
+      <label>Vincular a expediente <select name="case_id"><option value="">— Sin expediente —</option></select></label>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -842,6 +1031,50 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
   window.JuanmaImport = { TARGETS, guessTarget, readFile, splitHeader, buildRecord, run, norm };
 })();
 </script>
+  <script>// Finds Colombian case-law citations in a draft (Corte Constitucional T/C/SU
+// and autos, Corte Suprema SL/SC/SP/STC..., Consejo de Estado and tribunal
+// radicados), each with the sentence that relies on it. Exposes
+// window.JuanmaCitations; also loaded by the Node tests.
+(function () {
+  const CITATION_PATTERNS = [
+    // Corte Constitucional: T-760 de 2008, C-355/06, SU-214 de 2016, Auto 092 de 2008
+    /\b(?:sentencia\s+)?(?:T|C|SU)\s?[-–]\s?\d{1,4}[A-Z]?\s*(?:de|del|\/)\s*(?:19|20)?\d{2}\b/gi,
+    /\bauto\s+(?:A\s?[-–]\s?)?\d{1,4}\s+de\s+(?:19|20)\d{2}\b/gi,
+    // Corte Suprema: SL1234-2021, SC5678-2019, STC123-2022, SP456-2020, AL789-2023, ATP..., STL...
+    /\b(?:SL|SC|SP|STC|STL|STP|AL|AC|AP|ATP|SU)\d{2,6}\s?[-–]\s?(?:19|20)\d{2}\b/g,
+    // Radicados (Consejo de Estado / tribunales): 25000-23-26-000-2012-00123-01, radicado 11001-03-...
+    /\b(?:rad(?:icado|\.)?\s*(?:n[oº°.]*\s*)?)?\d{5}[-–]\d{2}[-–]\d{2}[-–]\d{3}[-–]\d{4}[-–]\d{5}[-–]\d{2}(?:\s*\(\d+\))?/gi,
+  ];
+
+  // Same judgment, same key: "Sentencia T-760 de 2008" = "T-760/08"; "rad. 2500..." = "2500...".
+  function citationKey(ref) {
+    let k = ref.toLowerCase()
+      .replace(/^(sentencia|radicado|rad\.?|auto)\s+(n[oº°.]*\s*)?/, "")
+      .replace(/\s*(de|del|\/)\s*/g, "-");
+    k = k.replace(/-(\d{2})$/, (_, yy) => "-" + (Number(yy) >= 90 ? "19" : "20") + yy);
+    return (ref.toLowerCase().startsWith("auto") ? "auto" : "") + k.replace(/[^a-z0-9]/g, "");
+  }
+
+  /** Find case-law citations in a draft, each with the sentence that relies on it. */
+  function extractCitations(text) {
+    const found = new Map();
+    for (const re of CITATION_PATTERNS) {
+      for (const m of text.matchAll(re)) {
+        const ref = m[0].replace(/\s+/g, " ").trim();
+        const key = citationKey(ref);
+        if (found.has(key)) continue;
+        const start = Math.max(text.lastIndexOf(".", m.index) + 1, text.lastIndexOf("\n", m.index) + 1, m.index - 400);
+        const endDot = text.indexOf(".", m.index + ref.length);
+        const end = endDot < 0 ? Math.min(text.length, m.index + 300) : Math.min(endDot + 1, m.index + 400);
+        found.set(key, { citation: ref, claim: text.slice(start, end).replace(/\s+/g, " ").trim() });
+      }
+    }
+    return [...found.values()];
+  }
+
+  window.JuanmaCitations = { extractCitations };
+})();
+</script>
   <script>window.JUANMA_SEED_CATALOG = [["Administrativo",["Medio de Control de Nulidad y Restablecimiento del Derecho","Medio de Control de Reparación Directa","Acción Contractual","Petición"]],["Laboral",["Ordinario Laboral de Primera Instancia","Ejecutivo Laboral","Requerimiento Empleador","Requerimiento Oficina de Trabajo"]],["Penal",["Denuncia Penal","Querella","Representación de Víctima","Defensa Técnica"]],["Familia",["Divorcio","Custodia y Cuidado Personal","Fijación de Cuota Alimentaria","Regulación de Visitas"]],["Derecho de Petición",["Petición de Interés General","Petición de Interés Particular","Solicitud de Información","Consulta"]],["Datacrédito",["Reclamo ante la Fuente","Reclamo ante el Operador","Queja ante la SIC"]]];</script>
 <script>// In-browser stand-in for the Express API, used only by the preview build
 // (scripts/build-preview.mjs). Mirrors the routes in src/records.js closely
@@ -849,10 +1082,10 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
 // when available). Draft generation returns a canned sample.
 (function () {
   const SEED = window.JUANMA_SEED_CATALOG || [];
-  const KEY = "juanmaapp-preview-v1";
+  const KEY = "juanmaapp-preview-v2";
 
   function fresh() {
-    const s = { seq: 1, clients: [], categories: [], types: [], fields: [], cases: [] };
+    const s = { seq: 1, clients: [], categories: [], types: [], fields: [], cases: [], saved: [] };
     const id = () => s.seq++;
     SEED.forEach(([name, types], i) => {
       const cat = { id: id(), name, sort: i };
@@ -1018,6 +1251,47 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
       return caseOut(k);
     }],
     ["DELETE", /^\/cases\/(\d+)$/, (m) => { s.cases = s.cases.filter((k) => k.id !== +m[1]); return null; }],
+
+    // Case-law search: the preview cannot reach the courts, so it returns
+    // clearly fictitious examples that are never marked as verified.
+    ["POST", /^\/jurisprudencia\/search$/, (m, b) => {
+      str(b.query) || fail("Escriba qué busca.");
+      const court = { CC: "Corte Constitucional", CSJ: "Corte Suprema de Justicia", CE: "Consejo de Estado", TRIB: "Tribunal Superior" }[b.court];
+      return {
+        notes: "Vista previa: estos resultados son EJEMPLOS FICTICIOS para mostrar la pantalla. En la app real la búsqueda consulta las relatorías oficiales.",
+        results: [
+          { court: court || "Corte Constitucional", sala: b.sala || "", reference: "T-000 de 2026 (ejemplo ficticio)", date: null, reporting_judge: null,
+            topic: `Ejemplo de resultado para: «${str(b.query)}».`, url: "", verified: false },
+          { court: court || "Consejo de Estado", sala: b.sala || "", reference: "Radicado 00000-00-00-000-2026-00000-00 (ejemplo ficticio)", date: null, reporting_judge: null,
+            topic: "Segundo ejemplo de resultado. Así se ve una sentencia sin fuente oficial verificada.", url: "", verified: false },
+        ],
+      };
+    }],
+    ["POST", /^\/jurisprudencia\/analyze$/, (m, b) => ({
+      found: true, verified: false, court: "Ejemplo", sala: "", reference: (str(b.reference) || "Sentencia") + " (análisis de ejemplo)",
+      date: null, reporting_judge: null, url: "",
+      summary: "Vista previa: este análisis es un ejemplo de formato. En la app real NomosAI lee la sentencia en la relatoría oficial y redacta aquí el resumen.",
+      legal_problem: "Aquí aparece el problema jurídico que resolvió la Corte.",
+      facts: "Aquí aparecen los hechos relevantes.",
+      ratio_decidendi: "Aquí aparece la regla de decisión.",
+      decision: "Aquí aparece lo que resolvió (parte resolutiva).",
+      dissents: null, cited_norms: ["Normas citadas por la sentencia"],
+      key_quotes: [{ text: "Las citas textuales se copian literalmente de la sentencia.", section: "Consideraciones" }],
+      notes: "",
+    })],
+    ["POST", /^\/jurisprudencia\/verify$/, (m, b) => ({
+      citation: str(b.citation), exists: "unknown", supports_claim: "unknown", verified: false,
+      correct_reference: "", url: "", supporting_quote: null,
+      explanation: "Vista previa: la verificación real consulta la relatoría oficial y confirma si la sentencia existe y respalda lo que se afirma.",
+    })],
+    ["GET", /^\/jurisprudencia\/saved(?:\?caseId=(\d+))?$/, (m) => clone(s.saved.filter((r) => !m[1] || r.case_id === +m[1]).slice().reverse())],
+    ["POST", /^\/jurisprudencia\/saved$/, (m, b) => {
+      const r = { id: nextId(), case_id: +b.case_id || null, reference: str(b.reference) || fail("Falta la referencia."),
+        court: str(b.court), url: str(b.url), verified: !!b.verified, analysis: b.analysis || {}, created_at: stamp() };
+      s.saved.push(r);
+      return clone(r);
+    }],
+    ["DELETE", /^\/jurisprudencia\/saved\/(\d+)$/, (m) => { s.saved = s.saved.filter((r) => r.id !== +m[1]); return null; }],
   ];
 
   const FOOTER = "Draft generated by NomosAI for final review, verification, and execution by the attorney of record.";
@@ -1078,6 +1352,9 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
 
   window.JuanmaBackend = {
     async request(method, url, body) {
+      if (url.startsWith("/jurisprudencia/") && method === "POST" && !url.endsWith("/saved")) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
       for (const [m, re, fn] of routes) {
         const match = m === method && url.match(re);
         if (match) {
@@ -1183,9 +1460,9 @@ async function guarded(fn) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["clientes", "expedientes", "borradores", "importar", "configuracion"];
+const VIEWS = ["inicio", "clientes", "expedientes", "borradores", "jurisprudencia", "importar", "configuracion"];
 function showView() {
-  const name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "clientes";
+  const name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
   for (const v of VIEWS) $(`#view-${v}`).hidden = v !== name;
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
   RENDER[name]();
@@ -1402,7 +1679,7 @@ wireDialog($("#case-dialog"), async (form) => {
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
   toast(d.id ? "Expediente actualizado." : "Expediente creado.");
-  await RENDER[location.hash.slice(1) || "clientes"]?.();
+  await RENDER[location.hash.slice(1) || "inicio"]?.();
 });
 
 // ---------- Configuración ----------
@@ -1668,6 +1945,11 @@ $(".actions").addEventListener("click", async (e) => {
     URL.revokeObjectURL(a.href);
   } else if (action === "print") {
     window.print();
+  } else if (action === "verify") {
+    $("#j-verify-text").value = lastResult.document;
+    location.hash = "#jurisprudencia";
+    showJTab("verificar");
+    detectAndVerify();
   }
 });
 
@@ -1811,7 +2093,272 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
   }
 }));
 
+// ---------- Inicio ----------
+const OPEN_STATUSES = new Set(["Abierto", "En trámite", "En espera de respuesta"]);
+
+async function renderInicio() {
+  const [clients, cases, catalog, saved] = await Promise.all([
+    api("GET", "/clients"), api("GET", "/cases"), api("GET", "/catalog"), api("GET", "/jurisprudencia/saved"),
+  ]);
+  $("#kpi-clients").textContent = clients.length;
+  $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
+  $("#kpi-total").textContent = `de ${cases.length} en total`;
+  $("#kpi-rulings").textContent = saved.length;
+  $("#kpi-cats").textContent = catalog.length;
+
+  // Horizontal bars: one series, so the label names it and each bar carries its value.
+  const counts = catalog.map((c) => ({ name: c.name, n: cases.filter((k) => k.category_id === c.id).length }))
+    .sort((a, b) => b.n - a.n);
+  const max = Math.max(1, ...counts.map((c) => c.n));
+  $("#chart-by-type").innerHTML = counts.map((c) => `
+    <div class="hbar" role="listitem" title="${escapeHtml(c.name)}: ${c.n} expediente(s)">
+      <span class="hbar-label">${escapeHtml(c.name)}</span>
+      <span class="hbar-track"><span class="hbar-fill" style="width:${(c.n / max) * 100}%"></span></span>
+      <span class="hbar-value">${c.n}</span>
+    </div>`).join("") || '<p class="empty">Sin datos.</p>';
+
+  $("#recent-cases").innerHTML = cases.slice(0, 6).map((k) => `
+    <li>
+      <span class="pill">${escapeHtml(k.category_name)}</span>
+      <div><strong>${escapeHtml(k.client_name)}</strong><span>${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</span></div>
+      <span class="status-tag">${escapeHtml(k.status)}</span>
+    </li>`).join("") || '<li class="empty">Aún no hay expedientes.</li>';
+}
+
+// ---------- Jurisprudencia ----------
+const CSJ_SALAS = ["Sala Plena", "Sala de Casación Civil, Agraria y Rural", "Sala de Casación Laboral", "Sala de Casación Penal", "Sala de Instrucción", "Sala de Primera Instancia"];
+const COURT_NAMES = { CC: "Corte Constitucional", CSJ: "Corte Suprema de Justicia", CE: "Consejo de Estado", TRIB: "Tribunales" };
+let jResults = [];
+let jAnalysis = null;
+let pendingSave = null;
+
+function showJTab(name) {
+  $$("[data-jtab]").forEach((b) => b.classList.toggle("active", b.dataset.jtab === name));
+  $$("[data-jpanel]").forEach((p) => (p.hidden = p.dataset.jpanel !== name));
+  if (name === "guardadas") guarded(renderSaved);
+}
+$(".tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-jtab]");
+  if (b) showJTab(b.dataset.jtab);
+});
+
+async function renderJurisprudencia() {}
+
+const verifiedBadge = (v) => v
+  ? '<span class="badge ok">✓ Fuente oficial verificada</span>'
+  : '<span class="badge warn">Sin verificar en fuente oficial</span>';
+const safeLink = (url) => /^https:\/\//.test(url || "")
+  ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir fuente</a>` : "";
+
+const jSearch = $("#j-search");
+jSearch.court.addEventListener("change", () => {
+  const csj = jSearch.court.value === "CSJ";
+  jSearch.sala.disabled = !csj;
+  jSearch.sala.innerHTML = '<option value="">Todas las salas</option>' +
+    (csj ? CSJ_SALAS.map((s) => `<option>${escapeHtml(s)}</option>`).join("") : "");
+});
+
+function setBox(sel, text, isError = false) {
+  const el = $(sel);
+  el.hidden = !text;
+  el.textContent = text || "";
+  el.classList.toggle("error", isError);
+}
+
+jSearch.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("button", jSearch);
+  btn.disabled = true;
+  $("#j-results").innerHTML = "";
+  setBox("#j-search-status", "Buscando en las relatorías oficiales… puede tardar un minuto.");
+  try {
+    const out = await api("POST", "/jurisprudencia/search", formData(jSearch));
+    jResults = out.results || [];
+    setBox("#j-search-status", jResults.length ? (out.notes || "") : `Sin resultados. ${out.notes || ""}`);
+    $("#j-results").innerHTML = jResults.map((r, i) => `
+      <article class="result-card">
+        <div class="result-head">
+          <span class="pill">${escapeHtml(r.court || "")}</span>
+          ${verifiedBadge(r.verified)}
+        </div>
+        <h4>${escapeHtml(r.reference || "")}</h4>
+        <p class="muted">${escapeHtml([r.sala, r.date, r.reporting_judge && "M.P. " + r.reporting_judge].filter(Boolean).join(" · "))}</p>
+        <p>${escapeHtml(r.topic || "")}</p>
+        <div class="toolbar">
+          <button class="primary" data-jact="analyze" data-i="${i}">Analizar</button>
+          <button data-jact="save-result" data-i="${i}">Guardar</button>
+          ${safeLink(r.url)}
+        </div>
+      </article>`).join("");
+  } catch (err) {
+    setBox("#j-search-status", `Error: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+const jAnalyze = $("#j-analyze");
+async function runAnalysis(body) {
+  showJTab("analizar");
+  const box = $("#j-analysis");
+  box.hidden = true;
+  setBox("#j-analyze-status", "Leyendo la sentencia en la fuente oficial…");
+  $("button", jAnalyze).disabled = true;
+  try {
+    jAnalysis = await api("POST", "/jurisprudencia/analyze", body);
+    setBox("#j-analyze-status", "");
+    renderAnalysis(jAnalysis);
+  } catch (err) {
+    setBox("#j-analyze-status", `Error: ${err.message}`, true);
+  } finally {
+    $("button", jAnalyze).disabled = false;
+  }
+}
+
+function renderAnalysis(a) {
+  const box = $("#j-analysis");
+  box.hidden = false;
+  if (!a.found) {
+    box.innerHTML = `<h3>No se encontró en las fuentes oficiales</h3><p>${escapeHtml(a.notes || "")}</p>`;
+    return;
+  }
+  const sec = (title, body) => body ? `<section><h4>${title}</h4>${body}</section>` : "";
+  const p = (t) => t ? `<p>${escapeHtml(t)}</p>` : "";
+  box.innerHTML = `
+    <div class="result-head">
+      <span class="pill">${escapeHtml(a.court || "")}</span>${verifiedBadge(a.verified)}
+    </div>
+    <h3>${escapeHtml(a.reference || "")}</h3>
+    <p class="muted">${escapeHtml([a.sala, a.date, a.reporting_judge && "M.P. " + a.reporting_judge].filter(Boolean).join(" · "))}</p>
+    ${sec("Resumen", p(a.summary))}
+    ${sec("Problema jurídico", p(a.legal_problem))}
+    ${sec("Hechos", p(a.facts))}
+    ${sec("Regla de decisión (ratio decidendi)", p(a.ratio_decidendi))}
+    ${sec("Decisión", p(a.decision))}
+    ${sec("Salvamentos y aclaraciones", p(a.dissents))}
+    ${sec("Normas aplicadas", (a.cited_norms || []).length ? `<ul>${a.cited_norms.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : "")}
+    ${sec("Citas textuales", (a.key_quotes || []).map((q) => `<blockquote>“${escapeHtml(q.text)}”<cite>${escapeHtml(q.section || "")}</cite></blockquote>`).join(""))}
+    ${a.notes ? `<p class="muted">${escapeHtml(a.notes)}</p>` : ""}
+    <div class="toolbar">
+      <button class="primary" data-jact="save-analysis">Guardar en expediente</button>
+      ${safeLink(a.url)}
+    </div>`;
+}
+
+jAnalyze.addEventListener("submit", (e) => {
+  e.preventDefault();
+  runAnalysis(formData(jAnalyze));
+});
+
+// ----- Citation check -----
+const VERDICT = {
+  exists: { yes: ["ok", "Existe"], no: ["bad", "No encontrada"], unknown: ["warn", "Sin confirmar"] },
+  supports: { yes: ["ok", "Respalda lo afirmado"], partially: ["warn", "Respalda en parte"], no: ["bad", "No respalda lo afirmado"], unknown: ["warn", "Respaldo sin confirmar"], not_applicable: ["", ""] },
+};
+const chip = ([cls, label]) => (label ? `<span class="badge ${cls}">${label}</span>` : "");
+
+async function detectAndVerify() {
+  const text = $("#j-verify-text").value;
+  const cites = window.JuanmaCitations.extractCitations(text);
+  $("#j-detect-info").textContent = cites.length ? `${cites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";
+  const list = $("#j-verify-list");
+  list.innerHTML = cites.map((c, i) => `
+    <li class="panel verify-item" data-v="${i}">
+      <div class="result-head"><strong>${escapeHtml(c.citation)}</strong><span class="badge">Verificando…</span></div>
+      <p class="muted">“${escapeHtml(c.claim)}”</p>
+    </li>`).join("");
+  $("#j-detect").disabled = true;
+  try {
+    for (let i = 0; i < cites.length; i++) {
+      const li = $(`[data-v="${i}"]`, list);
+      try {
+        const r = await api("POST", "/jurisprudencia/verify", cites[i]);
+        li.innerHTML = `
+          <div class="result-head"><strong>${escapeHtml(r.citation)}</strong>
+            ${chip(VERDICT.exists[r.exists] || VERDICT.exists.unknown)}
+            ${chip(VERDICT.supports[r.supports_claim] || ["", ""])}
+            ${verifiedBadge(r.verified)}
+          </div>
+          <p class="muted">“${escapeHtml(cites[i].claim)}”</p>
+          ${r.correct_reference && r.correct_reference !== r.citation ? `<p><strong>Referencia correcta:</strong> ${escapeHtml(r.correct_reference)}</p>` : ""}
+          <p>${escapeHtml(r.explanation || "")}</p>
+          ${r.supporting_quote ? `<blockquote>“${escapeHtml(r.supporting_quote)}”</blockquote>` : ""}
+          ${safeLink(r.url)}`;
+      } catch (err) {
+        li.querySelector(".badge").textContent = `Error: ${err.message}`;
+        li.querySelector(".badge").className = "badge bad";
+      }
+    }
+  } finally {
+    $("#j-detect").disabled = false;
+  }
+}
+$("#j-detect").addEventListener("click", () => guarded(detectAndVerify));
+
+// ----- Saved -----
+async function renderSaved() {
+  const [saved, cases] = await Promise.all([api("GET", "/jurisprudencia/saved"), api("GET", "/cases")]);
+  const caseName = (id) => {
+    const k = cases.find((k) => k.id === id);
+    return k ? `${k.client_name} · ${k.type_name}` : "";
+  };
+  $("#j-saved").innerHTML = saved.map((r) => `
+    <li>
+      <div>
+        <div class="result-head"><strong>${escapeHtml(r.reference)}</strong>${verifiedBadge(r.verified)}</div>
+        <span class="muted">${escapeHtml([r.court, caseName(r.case_id) && "Expediente: " + caseName(r.case_id)].filter(Boolean).join(" · "))}</span>
+        ${r.analysis?.summary ? `<p>${escapeHtml(r.analysis.summary)}</p>` : ""}
+      </div>
+      <span class="toolbar">${safeLink(r.url)}
+        <button class="danger" data-jact="delete-saved" data-id="${r.id}" aria-label="Eliminar">✕</button></span>
+    </li>`).join("") || '<li class="empty">No hay sentencias guardadas.</li>';
+}
+
+async function openSaveDialog(item) {
+  pendingSave = item;
+  const cases = await api("GET", "/cases");
+  const dlg = $("#save-ruling-dialog");
+  $("[data-ref]", dlg).textContent = `${item.reference} — ${item.court || ""}`;
+  $("select[name=case_id]", dlg).innerHTML = '<option value="">— Sin expediente —</option>' +
+    cases.map((k) => `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  $(".form-error", dlg).hidden = true;
+  dlg.showModal();
+}
+
+wireDialog($("#save-ruling-dialog"), async (form) => {
+  const it = pendingSave;
+  await api("POST", "/jurisprudencia/saved", {
+    case_id: Number(form.elements.case_id.value) || null,
+    reference: it.reference, court: it.court, url: it.url, verified: it.verified, analysis: it.analysis || {},
+  });
+  toast("Sentencia guardada.");
+});
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-jact]");
+  if (!b) return;
+  const r = jResults[Number(b.dataset.i)];
+  guarded(async () => {
+    if (b.dataset.jact === "analyze") {
+      jAnalyze.reference.value = r.reference || "";
+      jAnalyze.url.value = r.url || "";
+      await runAnalysis({ reference: r.reference, url: r.verified ? r.url : "", court: "" });
+    } else if (b.dataset.jact === "save-result") {
+      await openSaveDialog({ reference: r.reference, court: r.court, url: r.url, verified: r.verified, analysis: { topic: r.topic, date: r.date } });
+    } else if (b.dataset.jact === "save-analysis") {
+      const a = jAnalysis;
+      await openSaveDialog({ reference: a.reference, court: a.court, url: a.url, verified: a.verified, analysis: a });
+    } else if (b.dataset.jact === "delete-saved") {
+      if (!confirm("¿Eliminar esta sentencia guardada?")) return;
+      await api("DELETE", `/jurisprudencia/saved/${b.dataset.id}`);
+      await renderSaved();
+    }
+  });
+});
+
 const RENDER = {
+  inicio: renderInicio,
+  jurisprudencia: renderJurisprudencia,
   clientes: renderClientes,
   expedientes: renderExpedientes,
   borradores: renderBorradores,

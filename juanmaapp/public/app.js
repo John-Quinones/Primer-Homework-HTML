@@ -81,9 +81,9 @@ async function guarded(fn) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["clientes", "expedientes", "borradores", "importar", "configuracion"];
+const VIEWS = ["inicio", "clientes", "expedientes", "borradores", "jurisprudencia", "importar", "configuracion"];
 function showView() {
-  const name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "clientes";
+  const name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
   for (const v of VIEWS) $(`#view-${v}`).hidden = v !== name;
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
   RENDER[name]();
@@ -300,7 +300,7 @@ wireDialog($("#case-dialog"), async (form) => {
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
   toast(d.id ? "Expediente actualizado." : "Expediente creado.");
-  await RENDER[location.hash.slice(1) || "clientes"]?.();
+  await RENDER[location.hash.slice(1) || "inicio"]?.();
 });
 
 // ---------- Configuración ----------
@@ -566,6 +566,11 @@ $(".actions").addEventListener("click", async (e) => {
     URL.revokeObjectURL(a.href);
   } else if (action === "print") {
     window.print();
+  } else if (action === "verify") {
+    $("#j-verify-text").value = lastResult.document;
+    location.hash = "#jurisprudencia";
+    showJTab("verificar");
+    detectAndVerify();
   }
 });
 
@@ -709,7 +714,272 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
   }
 }));
 
+// ---------- Inicio ----------
+const OPEN_STATUSES = new Set(["Abierto", "En trámite", "En espera de respuesta"]);
+
+async function renderInicio() {
+  const [clients, cases, catalog, saved] = await Promise.all([
+    api("GET", "/clients"), api("GET", "/cases"), api("GET", "/catalog"), api("GET", "/jurisprudencia/saved"),
+  ]);
+  $("#kpi-clients").textContent = clients.length;
+  $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
+  $("#kpi-total").textContent = `de ${cases.length} en total`;
+  $("#kpi-rulings").textContent = saved.length;
+  $("#kpi-cats").textContent = catalog.length;
+
+  // Horizontal bars: one series, so the label names it and each bar carries its value.
+  const counts = catalog.map((c) => ({ name: c.name, n: cases.filter((k) => k.category_id === c.id).length }))
+    .sort((a, b) => b.n - a.n);
+  const max = Math.max(1, ...counts.map((c) => c.n));
+  $("#chart-by-type").innerHTML = counts.map((c) => `
+    <div class="hbar" role="listitem" title="${escapeHtml(c.name)}: ${c.n} expediente(s)">
+      <span class="hbar-label">${escapeHtml(c.name)}</span>
+      <span class="hbar-track"><span class="hbar-fill" style="width:${(c.n / max) * 100}%"></span></span>
+      <span class="hbar-value">${c.n}</span>
+    </div>`).join("") || '<p class="empty">Sin datos.</p>';
+
+  $("#recent-cases").innerHTML = cases.slice(0, 6).map((k) => `
+    <li>
+      <span class="pill">${escapeHtml(k.category_name)}</span>
+      <div><strong>${escapeHtml(k.client_name)}</strong><span>${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</span></div>
+      <span class="status-tag">${escapeHtml(k.status)}</span>
+    </li>`).join("") || '<li class="empty">Aún no hay expedientes.</li>';
+}
+
+// ---------- Jurisprudencia ----------
+const CSJ_SALAS = ["Sala Plena", "Sala de Casación Civil, Agraria y Rural", "Sala de Casación Laboral", "Sala de Casación Penal", "Sala de Instrucción", "Sala de Primera Instancia"];
+const COURT_NAMES = { CC: "Corte Constitucional", CSJ: "Corte Suprema de Justicia", CE: "Consejo de Estado", TRIB: "Tribunales" };
+let jResults = [];
+let jAnalysis = null;
+let pendingSave = null;
+
+function showJTab(name) {
+  $$("[data-jtab]").forEach((b) => b.classList.toggle("active", b.dataset.jtab === name));
+  $$("[data-jpanel]").forEach((p) => (p.hidden = p.dataset.jpanel !== name));
+  if (name === "guardadas") guarded(renderSaved);
+}
+$(".tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-jtab]");
+  if (b) showJTab(b.dataset.jtab);
+});
+
+async function renderJurisprudencia() {}
+
+const verifiedBadge = (v) => v
+  ? '<span class="badge ok">✓ Fuente oficial verificada</span>'
+  : '<span class="badge warn">Sin verificar en fuente oficial</span>';
+const safeLink = (url) => /^https:\/\//.test(url || "")
+  ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir fuente</a>` : "";
+
+const jSearch = $("#j-search");
+jSearch.court.addEventListener("change", () => {
+  const csj = jSearch.court.value === "CSJ";
+  jSearch.sala.disabled = !csj;
+  jSearch.sala.innerHTML = '<option value="">Todas las salas</option>' +
+    (csj ? CSJ_SALAS.map((s) => `<option>${escapeHtml(s)}</option>`).join("") : "");
+});
+
+function setBox(sel, text, isError = false) {
+  const el = $(sel);
+  el.hidden = !text;
+  el.textContent = text || "";
+  el.classList.toggle("error", isError);
+}
+
+jSearch.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("button", jSearch);
+  btn.disabled = true;
+  $("#j-results").innerHTML = "";
+  setBox("#j-search-status", "Buscando en las relatorías oficiales… puede tardar un minuto.");
+  try {
+    const out = await api("POST", "/jurisprudencia/search", formData(jSearch));
+    jResults = out.results || [];
+    setBox("#j-search-status", jResults.length ? (out.notes || "") : `Sin resultados. ${out.notes || ""}`);
+    $("#j-results").innerHTML = jResults.map((r, i) => `
+      <article class="result-card">
+        <div class="result-head">
+          <span class="pill">${escapeHtml(r.court || "")}</span>
+          ${verifiedBadge(r.verified)}
+        </div>
+        <h4>${escapeHtml(r.reference || "")}</h4>
+        <p class="muted">${escapeHtml([r.sala, r.date, r.reporting_judge && "M.P. " + r.reporting_judge].filter(Boolean).join(" · "))}</p>
+        <p>${escapeHtml(r.topic || "")}</p>
+        <div class="toolbar">
+          <button class="primary" data-jact="analyze" data-i="${i}">Analizar</button>
+          <button data-jact="save-result" data-i="${i}">Guardar</button>
+          ${safeLink(r.url)}
+        </div>
+      </article>`).join("");
+  } catch (err) {
+    setBox("#j-search-status", `Error: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+const jAnalyze = $("#j-analyze");
+async function runAnalysis(body) {
+  showJTab("analizar");
+  const box = $("#j-analysis");
+  box.hidden = true;
+  setBox("#j-analyze-status", "Leyendo la sentencia en la fuente oficial…");
+  $("button", jAnalyze).disabled = true;
+  try {
+    jAnalysis = await api("POST", "/jurisprudencia/analyze", body);
+    setBox("#j-analyze-status", "");
+    renderAnalysis(jAnalysis);
+  } catch (err) {
+    setBox("#j-analyze-status", `Error: ${err.message}`, true);
+  } finally {
+    $("button", jAnalyze).disabled = false;
+  }
+}
+
+function renderAnalysis(a) {
+  const box = $("#j-analysis");
+  box.hidden = false;
+  if (!a.found) {
+    box.innerHTML = `<h3>No se encontró en las fuentes oficiales</h3><p>${escapeHtml(a.notes || "")}</p>`;
+    return;
+  }
+  const sec = (title, body) => body ? `<section><h4>${title}</h4>${body}</section>` : "";
+  const p = (t) => t ? `<p>${escapeHtml(t)}</p>` : "";
+  box.innerHTML = `
+    <div class="result-head">
+      <span class="pill">${escapeHtml(a.court || "")}</span>${verifiedBadge(a.verified)}
+    </div>
+    <h3>${escapeHtml(a.reference || "")}</h3>
+    <p class="muted">${escapeHtml([a.sala, a.date, a.reporting_judge && "M.P. " + a.reporting_judge].filter(Boolean).join(" · "))}</p>
+    ${sec("Resumen", p(a.summary))}
+    ${sec("Problema jurídico", p(a.legal_problem))}
+    ${sec("Hechos", p(a.facts))}
+    ${sec("Regla de decisión (ratio decidendi)", p(a.ratio_decidendi))}
+    ${sec("Decisión", p(a.decision))}
+    ${sec("Salvamentos y aclaraciones", p(a.dissents))}
+    ${sec("Normas aplicadas", (a.cited_norms || []).length ? `<ul>${a.cited_norms.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : "")}
+    ${sec("Citas textuales", (a.key_quotes || []).map((q) => `<blockquote>“${escapeHtml(q.text)}”<cite>${escapeHtml(q.section || "")}</cite></blockquote>`).join(""))}
+    ${a.notes ? `<p class="muted">${escapeHtml(a.notes)}</p>` : ""}
+    <div class="toolbar">
+      <button class="primary" data-jact="save-analysis">Guardar en expediente</button>
+      ${safeLink(a.url)}
+    </div>`;
+}
+
+jAnalyze.addEventListener("submit", (e) => {
+  e.preventDefault();
+  runAnalysis(formData(jAnalyze));
+});
+
+// ----- Citation check -----
+const VERDICT = {
+  exists: { yes: ["ok", "Existe"], no: ["bad", "No encontrada"], unknown: ["warn", "Sin confirmar"] },
+  supports: { yes: ["ok", "Respalda lo afirmado"], partially: ["warn", "Respalda en parte"], no: ["bad", "No respalda lo afirmado"], unknown: ["warn", "Respaldo sin confirmar"], not_applicable: ["", ""] },
+};
+const chip = ([cls, label]) => (label ? `<span class="badge ${cls}">${label}</span>` : "");
+
+async function detectAndVerify() {
+  const text = $("#j-verify-text").value;
+  const cites = window.JuanmaCitations.extractCitations(text);
+  $("#j-detect-info").textContent = cites.length ? `${cites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";
+  const list = $("#j-verify-list");
+  list.innerHTML = cites.map((c, i) => `
+    <li class="panel verify-item" data-v="${i}">
+      <div class="result-head"><strong>${escapeHtml(c.citation)}</strong><span class="badge">Verificando…</span></div>
+      <p class="muted">“${escapeHtml(c.claim)}”</p>
+    </li>`).join("");
+  $("#j-detect").disabled = true;
+  try {
+    for (let i = 0; i < cites.length; i++) {
+      const li = $(`[data-v="${i}"]`, list);
+      try {
+        const r = await api("POST", "/jurisprudencia/verify", cites[i]);
+        li.innerHTML = `
+          <div class="result-head"><strong>${escapeHtml(r.citation)}</strong>
+            ${chip(VERDICT.exists[r.exists] || VERDICT.exists.unknown)}
+            ${chip(VERDICT.supports[r.supports_claim] || ["", ""])}
+            ${verifiedBadge(r.verified)}
+          </div>
+          <p class="muted">“${escapeHtml(cites[i].claim)}”</p>
+          ${r.correct_reference && r.correct_reference !== r.citation ? `<p><strong>Referencia correcta:</strong> ${escapeHtml(r.correct_reference)}</p>` : ""}
+          <p>${escapeHtml(r.explanation || "")}</p>
+          ${r.supporting_quote ? `<blockquote>“${escapeHtml(r.supporting_quote)}”</blockquote>` : ""}
+          ${safeLink(r.url)}`;
+      } catch (err) {
+        li.querySelector(".badge").textContent = `Error: ${err.message}`;
+        li.querySelector(".badge").className = "badge bad";
+      }
+    }
+  } finally {
+    $("#j-detect").disabled = false;
+  }
+}
+$("#j-detect").addEventListener("click", () => guarded(detectAndVerify));
+
+// ----- Saved -----
+async function renderSaved() {
+  const [saved, cases] = await Promise.all([api("GET", "/jurisprudencia/saved"), api("GET", "/cases")]);
+  const caseName = (id) => {
+    const k = cases.find((k) => k.id === id);
+    return k ? `${k.client_name} · ${k.type_name}` : "";
+  };
+  $("#j-saved").innerHTML = saved.map((r) => `
+    <li>
+      <div>
+        <div class="result-head"><strong>${escapeHtml(r.reference)}</strong>${verifiedBadge(r.verified)}</div>
+        <span class="muted">${escapeHtml([r.court, caseName(r.case_id) && "Expediente: " + caseName(r.case_id)].filter(Boolean).join(" · "))}</span>
+        ${r.analysis?.summary ? `<p>${escapeHtml(r.analysis.summary)}</p>` : ""}
+      </div>
+      <span class="toolbar">${safeLink(r.url)}
+        <button class="danger" data-jact="delete-saved" data-id="${r.id}" aria-label="Eliminar">✕</button></span>
+    </li>`).join("") || '<li class="empty">No hay sentencias guardadas.</li>';
+}
+
+async function openSaveDialog(item) {
+  pendingSave = item;
+  const cases = await api("GET", "/cases");
+  const dlg = $("#save-ruling-dialog");
+  $("[data-ref]", dlg).textContent = `${item.reference} — ${item.court || ""}`;
+  $("select[name=case_id]", dlg).innerHTML = '<option value="">— Sin expediente —</option>' +
+    cases.map((k) => `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  $(".form-error", dlg).hidden = true;
+  dlg.showModal();
+}
+
+wireDialog($("#save-ruling-dialog"), async (form) => {
+  const it = pendingSave;
+  await api("POST", "/jurisprudencia/saved", {
+    case_id: Number(form.elements.case_id.value) || null,
+    reference: it.reference, court: it.court, url: it.url, verified: it.verified, analysis: it.analysis || {},
+  });
+  toast("Sentencia guardada.");
+});
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-jact]");
+  if (!b) return;
+  const r = jResults[Number(b.dataset.i)];
+  guarded(async () => {
+    if (b.dataset.jact === "analyze") {
+      jAnalyze.reference.value = r.reference || "";
+      jAnalyze.url.value = r.url || "";
+      await runAnalysis({ reference: r.reference, url: r.verified ? r.url : "", court: "" });
+    } else if (b.dataset.jact === "save-result") {
+      await openSaveDialog({ reference: r.reference, court: r.court, url: r.url, verified: r.verified, analysis: { topic: r.topic, date: r.date } });
+    } else if (b.dataset.jact === "save-analysis") {
+      const a = jAnalysis;
+      await openSaveDialog({ reference: a.reference, court: a.court, url: a.url, verified: a.verified, analysis: a });
+    } else if (b.dataset.jact === "delete-saved") {
+      if (!confirm("¿Eliminar esta sentencia guardada?")) return;
+      await api("DELETE", `/jurisprudencia/saved/${b.dataset.id}`);
+      await renderSaved();
+    }
+  });
+});
+
 const RENDER = {
+  inicio: renderInicio,
+  jurisprudencia: renderJurisprudencia,
   clientes: renderClientes,
   expedientes: renderExpedientes,
   borradores: renderBorradores,
