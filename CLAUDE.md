@@ -15,7 +15,8 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 ## Shape
 - Server: Node 22, Express 5, `node:sqlite`, tests with `npm test` (node --test). Every feature exists twice: server routes in `src/` and the same routes in `public/demo-backend.js` for the published link. Shared pure logic is in `src/case-meta.js`, `src/ledger.js`, `src/validate.js`, served to the page as `/shared.js` (`src/browser-module.js`).
 - Published link: `npm run preview` → `preview/juanmaapp-web.html`, published as a claude.ai artifact with capabilities `{downloads: true, db: {}, sample: {}}` (data in the artifact database, NomosAI through the viewer's Claude account). Republish to the same artifact so the link and its data stay.
-- Deployment: `render.yaml` at the repo root + `juanmaapp/Dockerfile`; guide in `juanmaapp/DESPLIEGUE.md`.
+- Deployment: chosen for testing = Azure App Service free F1 (`juanmaapp/AZURE.md`, `.github/workflows/azure-juanmaapp.yml`, DB in `/home/data`). Alternative: Render (`render.yaml`, `Dockerfile`, `DESPLIEGUE.md`). Sign-in with Microsoft 365 via `src/microsoft.js` (MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET).
+- Firm's server Excel export (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO 1/2, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) is recognized by `public/importer.js` `guessAll`. Open questions to the user: which column holds the client name; whether ESTADO 2 is archivo definitivo or provisional.
 - Permissions: `src/auth.js` (`PERMISSIONS`, `DEFAULT_MATRIX`); new permissions reach built-in roles once via `known_permissions`.
 
 ## Modules done

@@ -3,6 +3,7 @@
 // Mutating requests must carry the X-JuanMa header, which a cross-site form
 // cannot send, so the cookie alone cannot be used for CSRF.
 import express from "express";
+import { microsoftEnabled } from "./microsoft.js";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { canonicalDepartment, canonicalCity } from "./places.js";
 
@@ -128,13 +129,13 @@ export function requirePerm(perm) {
   return (req, res, next) => (can(req, perm) ? next() : res.status(403).json({ error: "Su rol no tiene permiso para esta acción." }));
 }
 
-function setSession(db, req, res, userId) {
+export function setSession(db, req, res, userId) {
   const token = randomBytes(32).toString("base64url");
   db.prepare(`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+${SESSION_HOURS} hours'))`)
     .run(sha(token), userId);
   db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
   const secure = req.secure || process.env.COOKIE_SECURE === "1" ? "; Secure" : "";
-  res.setHeader("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure}`);
+  res.append("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure}`);
 }
 
 export function authRouter(db) {
@@ -143,7 +144,7 @@ export function authRouter(db) {
 
   r.get("/status", (req, res) => {
     const hasUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0;
-    res.json({ setupNeeded: !hasUsers, user: req.user || null });
+    res.json({ setupNeeded: !hasUsers, user: req.user || null, microsoft: microsoftEnabled() });
   });
 
   // First run only: create the Gerencia account.
@@ -291,11 +292,15 @@ export function adminRouter(db) {
     const name = str(b.name), email = str(b.email).toLowerCase();
     if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
     if (!roleExists(db, b.role)) return res.status(400).json({ error: "Rol no válido." });
-    if (!validPassword(b.password)) return res.status(400).json({ error: "La contraseña inicial debe tener al menos 10 caracteres." });
+    // With Microsoft sign-in the password is optional: the user then enters only with their Microsoft account.
+    const noPassword = !b.password && microsoftEnabled();
+    if (!noPassword && !validPassword(b.password)) return res.status(400).json({ error: microsoftEnabled()
+      ? "La contraseña inicial debe tener al menos 10 caracteres, o déjela vacía para que ingrese solo con su cuenta de Microsoft."
+      : "La contraseña inicial debe tener al menos 10 caracteres." });
     if (!Array.isArray(b.office_ids) || !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     try {
       const id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(name, email, str(b.phone), str(b.professional_card), hashPassword(b.password), b.role).lastInsertRowid;
+        .run(name, email, str(b.phone), str(b.professional_card), noPassword ? "!" : hashPassword(b.password), b.role).lastInsertRowid;
       setOffices(id, b.office_ids);
       setUserPermissions(id, b.custom_permissions, b.permissions);
       res.status(201).json(loadUser(db, id));

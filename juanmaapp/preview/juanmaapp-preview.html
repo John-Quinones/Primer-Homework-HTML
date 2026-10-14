@@ -674,6 +674,13 @@ a.button {
 tr.voided td { color: var(--text-muted); }
 tr.voided td:not(:last-child) { text-decoration: line-through; }
 
+/* ---------- Microsoft sign-in ---------- */
+.ms-login { display: grid; gap: 10px; margin-top: 6px; }
+.auth-or { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: .8rem; margin: 4px 0; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.ms-button { justify-content: center; gap: 10px; padding: 11px 12px; font-size: .95rem; font-weight: 600; background: var(--surface); }
+.ms-button:hover { border-color: var(--brand-blue); }
+
 </style>
 </head>
 <body>
@@ -699,6 +706,15 @@ tr.voided td:not(:last-child) { text-decoration: line-through; }
         <p class="form-error" hidden></p>
         <button class="primary wide">Crear cuenta e ingresar</button>
       </form>
+
+      <div id="ms-login" class="ms-login" hidden>
+        <p class="auth-or"><span>o</span></p>
+        <a class="button ms-button" href="/api/auth/microsoft/start">
+          <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><path fill="#f25022" d="M1 1h9v9H1z"/><path fill="#7fba00" d="M11 1h9v9h-9z"/><path fill="#00a4ef" d="M1 11h9v9H1z"/><path fill="#ffb900" d="M11 11h9v9h-9z"/></svg>
+          <span data-ms-label>Ingresar con la cuenta de Microsoft</span>
+        </a>
+        <p class="form-error" id="ms-error" hidden></p>
+      </div>
 
       <div id="demo-logins" class="demo-logins" hidden>
         <p class="auth-note">Elija su usuario para ingresar.</p>
@@ -4668,6 +4684,13 @@ function showAuth(status = {}) {
   $("#auth-screen").hidden = false;
   if ($("#login-form")) $("#login-form").hidden = !!status.setupNeeded;
   $("#setup-form").hidden = !status.setupNeeded;
+  // Microsoft 365 sign-in (installed app with MS_* settings).
+  $("#ms-login").hidden = !(status.microsoft ?? authInfo.microsoft);
+  $("[data-ms-label]").textContent = status.setupNeeded ? "Crear la cuenta de Gerencia con Microsoft" : "Ingresar con la cuenta de Microsoft";
+  const msError = new URLSearchParams(location.search).get("ms_error");
+  $("#ms-error").hidden = !msError;
+  $("#ms-error").textContent = msError || "";
+  if (msError) history.replaceState(null, "", location.pathname + location.hash);
   const demo = backend.demoUsers?.();
   $("#demo-logins").hidden = !demo?.length || !!status.setupNeeded;
   if (demo) {
@@ -4690,8 +4713,10 @@ async function enterApp(user, { fresh = true } = {}) {
   await showView();
 }
 
+let authInfo = {};
 async function boot() {
   const st = await api("GET", "/auth/status");
+  authInfo = st;
   if (st.user) await enterApp(st.user, { fresh: false });
   else showAuth(st);
 }
@@ -6171,8 +6196,9 @@ function openUserDialog(u) {
   form.elements.custom_permissions.checked = !!u?.custom_permissions;
   renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
-  if (form.elements.password) form.elements.password.required = !u;
-  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)" : "Contraseña inicial *";
+  if (form.elements.password) form.elements.password.required = !u && !authInfo.microsoft;
+  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)"
+    : authInfo.microsoft ? "Contraseña inicial (opcional: sin contraseña ingresa solo con su cuenta de Microsoft)" : "Contraseña inicial *";
 }
 
 // Per-user checklist: shows the role's permissions until "específicos" is on.

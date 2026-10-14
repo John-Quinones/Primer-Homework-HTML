@@ -34,6 +34,15 @@
         <button class="primary wide">Crear cuenta e ingresar</button>
       </form>
 
+      <div id="ms-login" class="ms-login" hidden>
+        <p class="auth-or"><span>o</span></p>
+        <a class="button ms-button" href="/api/auth/microsoft/start">
+          <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><path fill="#f25022" d="M1 1h9v9H1z"/><path fill="#7fba00" d="M11 1h9v9h-9z"/><path fill="#00a4ef" d="M1 11h9v9H1z"/><path fill="#ffb900" d="M11 11h9v9h-9z"/></svg>
+          <span data-ms-label>Ingresar con la cuenta de Microsoft</span>
+        </a>
+        <p class="form-error" id="ms-error" hidden></p>
+      </div>
+
       <div id="demo-logins" class="demo-logins" hidden>
         <p class="auth-note">Elija su usuario para ingresar.</p>
         <div class="demo-grid"></div>

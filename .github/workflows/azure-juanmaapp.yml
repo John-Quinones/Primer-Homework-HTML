@@ -1,0 +1,45 @@
+# Publishes JuanMaApp to Azure App Service (Linux, Node 22).
+# Setup (see juanmaapp/AZURE.md):
+#   - Repository variable AZURE_WEBAPP_NAME: the App Service name (e.g. juanmaapp-tec).
+#   - Repository secret AZURE_WEBAPP_PUBLISH_PROFILE: the app's publish profile (.PublishSettings file contents).
+# Until the variable exists, the job is skipped.
+name: Azure · JuanMaApp
+
+on:
+  push:
+    branches: [main, claude/nomosai-engine-prompt-v6sj6k]
+    paths: ["juanmaapp/**", ".github/workflows/azure-juanmaapp.yml"]
+  workflow_dispatch:
+
+concurrency: azure-juanmaapp
+
+jobs:
+  deploy:
+    if: ${{ vars.AZURE_WEBAPP_NAME != '' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: juanmaapp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install and test
+        run: |
+          npm ci
+          npm test
+
+      - name: Package (production dependencies only; the database lives in /home/data, not in the package)
+        run: |
+          npm prune --omit=dev
+          zip -qr ../juanmaapp.zip . -x "preview/*" "test/*" "data/*" "scripts/*" "README.md" "DESPLIEGUE.md" "AZURE.md"
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: juanmaapp.zip

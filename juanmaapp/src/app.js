@@ -16,6 +16,7 @@ import { templatesRouter } from "./templates.js";
 import { esignRouter, esignPublicRouter } from "./esign.js";
 import { mailRouter, mailPublicRouter } from "./mailtrace.js";
 import { paymentsRouter } from "./payments.js";
+import { microsoftRouter } from "./microsoft.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -75,6 +76,7 @@ export function createApp(db) {
 
   // Behind Render/Nginx set TRUST_PROXY=1 so signature evidence records the real client IP.
   app.set("trust proxy", process.env.TRUST_PROXY === "1" ? 1 : false);
+  app.use("/api/auth/microsoft", microsoftRouter(db));
   app.use("/api/auth", authRouter(db));
   // Signer and recipient pages: the link token is the credential, no session.
   app.use("/api/public/sign", esignPublicRouter(db));

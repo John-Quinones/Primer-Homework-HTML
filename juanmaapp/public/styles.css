@@ -565,3 +565,10 @@ a.button {
 .pay-state.anulado { text-decoration: line-through; color: var(--text-muted); }
 tr.voided td { color: var(--text-muted); }
 tr.voided td:not(:last-child) { text-decoration: line-through; }
+
+/* ---------- Microsoft sign-in ---------- */
+.ms-login { display: grid; gap: 10px; margin-top: 6px; }
+.auth-or { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: .8rem; margin: 4px 0; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.ms-button { justify-content: center; gap: 10px; padding: 11px 12px; font-size: .95rem; font-weight: 600; background: var(--surface); }
+.ms-button:hover { border-color: var(--brand-blue); }

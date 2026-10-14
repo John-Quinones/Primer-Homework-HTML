@@ -131,6 +131,13 @@ function showAuth(status = {}) {
   $("#auth-screen").hidden = false;
   if ($("#login-form")) $("#login-form").hidden = !!status.setupNeeded;
   $("#setup-form").hidden = !status.setupNeeded;
+  // Microsoft 365 sign-in (installed app with MS_* settings).
+  $("#ms-login").hidden = !(status.microsoft ?? authInfo.microsoft);
+  $("[data-ms-label]").textContent = status.setupNeeded ? "Crear la cuenta de Gerencia con Microsoft" : "Ingresar con la cuenta de Microsoft";
+  const msError = new URLSearchParams(location.search).get("ms_error");
+  $("#ms-error").hidden = !msError;
+  $("#ms-error").textContent = msError || "";
+  if (msError) history.replaceState(null, "", location.pathname + location.hash);
   const demo = backend.demoUsers?.();
   $("#demo-logins").hidden = !demo?.length || !!status.setupNeeded;
   if (demo) {
@@ -153,8 +160,10 @@ async function enterApp(user, { fresh = true } = {}) {
   await showView();
 }
 
+let authInfo = {};
 async function boot() {
   const st = await api("GET", "/auth/status");
+  authInfo = st;
   if (st.user) await enterApp(st.user, { fresh: false });
   else showAuth(st);
 }
@@ -1634,8 +1643,9 @@ function openUserDialog(u) {
   form.elements.custom_permissions.checked = !!u?.custom_permissions;
   renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
-  if (form.elements.password) form.elements.password.required = !u;
-  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)" : "Contraseña inicial *";
+  if (form.elements.password) form.elements.password.required = !u && !authInfo.microsoft;
+  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)"
+    : authInfo.microsoft ? "Contraseña inicial (opcional: sin contraseña ingresa solo con su cuenta de Microsoft)" : "Contraseña inicial *";
 }
 
 // Per-user checklist: shows the role's permissions until "específicos" is on.
