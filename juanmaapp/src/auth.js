@@ -1,0 +1,334 @@
+// Users, roles, offices and sessions. Passwords are hashed with scrypt; a
+// session is a random token in an HttpOnly cookie whose SHA-256 is stored.
+// Mutating requests must carry the X-JuanMa header, which a cross-site form
+// cannot send, so the cookie alone cannot be used for CSRF.
+import express from "express";
+import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
+
+export const ROLES = [
+  "Gerencia",
+  "Director Jurídico",
+  "Director Contable",
+  "Gerente Regional",
+  "Abogado",
+  "Dependiente Judicial",
+  "Asistente",
+];
+
+export const PERMISSIONS = {
+  "scope.all": "Ve todas las oficinas",
+  "users.manage": "Gestiona usuarios, roles y oficinas",
+  "catalog.manage": "Configura tipos de proceso, subprocesos y campos",
+  "clients.write": "Crea y edita clientes",
+  "clients.delete": "Elimina clientes",
+  "cases.write": "Crea y edita expedientes",
+  "cases.delete": "Elimina expedientes",
+  "drafts.generate": "Genera borradores",
+  "jurisprudence.use": "Usa el buscador de jurisprudencia",
+  "import.run": "Importa datos desde Excel",
+  "reports.view": "Ve y exporta reportes",
+};
+
+// Starting matrix; Gerencia edits it in Usuarios › Roles.
+export const DEFAULT_MATRIX = {
+  "Gerencia": Object.keys(PERMISSIONS),
+  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view"],
+  "Director Contable": ["scope.all", "reports.view"],
+  "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view"],
+  "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view"],
+  "Dependiente Judicial": ["cases.write", "jurisprudence.use"],
+  "Asistente": ["clients.write", "cases.write", "drafts.generate"],
+};
+
+const SESSION_HOURS = 12;
+const COOKIE = "jm_session";
+
+export function hashPassword(pw) {
+  const salt = randomBytes(16);
+  return `scrypt$${salt.toString("hex")}$${scryptSync(pw, salt, 64).toString("hex")}`;
+}
+
+export function checkPassword(pw, stored) {
+  const [alg, saltHex, hashHex] = String(stored).split("$");
+  if (alg !== "scrypt" || !saltHex || !hashHex) return false;
+  const want = Buffer.from(hashHex, "hex");
+  const got = scryptSync(String(pw), Buffer.from(saltHex, "hex"), want.length);
+  return timingSafeEqual(want, got);
+}
+
+const sha = (t) => createHash("sha256").update(t).digest("hex");
+const str = (v) => (typeof v === "string" ? v.trim() : "");
+
+function validPassword(pw) {
+  return typeof pw === "string" && pw.length >= 10;
+}
+
+function parseCookies(header = "") {
+  return Object.fromEntries(header.split(";").map((p) => p.trim().split("=")).filter(([k]) => k).map(([k, ...v]) => [k, decodeURIComponent(v.join("="))]));
+}
+
+/** Permissions for a role from the stored matrix (Gerencia always keeps users.manage). */
+export function rolePermissions(db, role) {
+  const perms = db.prepare("SELECT permission FROM role_permissions WHERE role = ?").all(role).map((r) => r.permission);
+  if (role === "Gerencia" && !perms.includes("users.manage")) perms.push("users.manage");
+  return perms;
+}
+
+export function loadUser(db, id) {
+  const u = db.prepare("SELECT id, name, email, role, active, created_at FROM users WHERE id = ?").get(id);
+  if (!u) return null;
+  const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
+    WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
+  const permissions = rolePermissions(db, u.role);
+  return { ...u, active: !!u.active, offices, permissions };
+}
+
+/** Office ids a user may see, or null for every office. */
+export function scopeOf(user) {
+  return user.permissions.includes("scope.all") ? null : user.offices.map((o) => o.id);
+}
+
+export function sessionMiddleware(db) {
+  return (req, res, next) => {
+    const token = parseCookies(req.headers.cookie)[COOKIE];
+    if (token) {
+      const s = db.prepare("SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > datetime('now')").get(sha(token));
+      const u = s && loadUser(db, s.user_id);
+      if (u?.active) req.user = u;
+    }
+    next();
+  };
+}
+
+export function requireAuth(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: "Inicie sesión para continuar." });
+  if (req.method !== "GET" && req.get("X-JuanMa") !== "1") {
+    return res.status(403).json({ error: "Solicitud no permitida." });
+  }
+  next();
+}
+
+export const can = (req, perm) => !!req.user?.permissions.includes(perm);
+
+export function requirePerm(perm) {
+  return (req, res, next) => (can(req, perm) ? next() : res.status(403).json({ error: "Su rol no tiene permiso para esta acción." }));
+}
+
+function setSession(db, req, res, userId) {
+  const token = randomBytes(32).toString("base64url");
+  db.prepare(`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+${SESSION_HOURS} hours'))`)
+    .run(sha(token), userId);
+  db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
+  const secure = req.secure || process.env.COOKIE_SECURE === "1" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_HOURS * 3600}${secure}`);
+}
+
+export function authRouter(db) {
+  const r = express.Router();
+  const failures = new Map(); // email -> { n, until }
+
+  r.get("/status", (req, res) => {
+    const hasUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0;
+    res.json({ setupNeeded: !hasUsers, user: req.user || null });
+  });
+
+  // First run only: create the Gerencia account.
+  r.post("/setup", (req, res) => {
+    if (db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0) return res.status(409).json({ error: "La app ya está configurada." });
+    const b = req.body ?? {};
+    const name = str(b.name), email = str(b.email).toLowerCase();
+    if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
+    if (!validPassword(b.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
+    const id = db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'Gerencia')")
+      .run(name, email, hashPassword(b.password)).lastInsertRowid;
+    const main = db.prepare("SELECT id FROM offices WHERE is_main = 1").get();
+    if (main) db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)").run(id, main.id);
+    setSession(db, req, res, id);
+    res.status(201).json({ user: loadUser(db, id) });
+  });
+
+  r.post("/login", (req, res) => {
+    const email = str(req.body?.email).toLowerCase();
+    const f = failures.get(email);
+    if (f && f.n >= 5 && f.until > Date.now()) {
+      return res.status(429).json({ error: "Demasiados intentos. Espere 10 minutos." });
+    }
+    const u = db.prepare("SELECT id, password_hash, active FROM users WHERE email = ?").get(email);
+    if (!u || !u.active || !checkPassword(req.body?.password ?? "", u.password_hash)) {
+      const n = (f && f.until > Date.now() ? f.n : 0) + 1;
+      failures.set(email, { n, until: Date.now() + 10 * 60 * 1000 });
+      return res.status(401).json({ error: "Correo o contraseña incorrectos." });
+    }
+    failures.delete(email);
+    setSession(db, req, res, u.id);
+    res.json({ user: loadUser(db, u.id) });
+  });
+
+  r.post("/logout", (req, res) => {
+    const token = parseCookies(req.headers.cookie)[COOKIE];
+    if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha(token));
+    res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+    res.status(204).end();
+  });
+
+  r.post("/password", requireAuth, (req, res) => {
+    const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(req.user.id);
+    if (!checkPassword(req.body?.current ?? "", row.password_hash)) return res.status(400).json({ error: "La contraseña actual no es correcta." });
+    if (!validPassword(req.body?.next)) return res.status(400).json({ error: "La nueva contraseña debe tener al menos 10 caracteres." });
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(req.body.next), req.user.id);
+    res.status(204).end();
+  });
+
+  return r;
+}
+
+/** Gerencia-only administration: users, role matrix, offices. Offices are readable by everyone signed in. */
+export function adminRouter(db) {
+  const r = express.Router();
+  const manage = requirePerm("users.manage");
+
+  // ----- Offices -----
+  const officeOut = (o) => ({ ...o, is_main: !!o.is_main });
+  r.get("/offices", (req, res) => {
+    res.json(db.prepare(`SELECT o.*, (SELECT COUNT(*) FROM cases WHERE office_id = o.id) AS case_count,
+      (SELECT COUNT(*) FROM user_offices WHERE office_id = o.id) AS user_count
+      FROM offices o ORDER BY o.is_main DESC, o.name`).all().map(officeOut));
+  });
+
+  const officeFields = (b) => ({ name: str(b.name), city: str(b.city), address: str(b.address), phone: str(b.phone), email: str(b.email) });
+
+  r.post("/offices", manage, (req, res) => {
+    const o = officeFields(req.body ?? {});
+    if (!o.name) return res.status(400).json({ error: "El nombre de la oficina es obligatorio." });
+    try {
+      const id = db.prepare("INSERT INTO offices (name, city, address, phone, email) VALUES (:name, :city, :address, :phone, :email)").run(o).lastInsertRowid;
+      res.status(201).json(officeOut(db.prepare("SELECT * FROM offices WHERE id = ?").get(id)));
+    } catch {
+      res.status(409).json({ error: "Ya existe una oficina con ese nombre." });
+    }
+  });
+
+  r.put("/offices/:id", manage, (req, res) => {
+    const id = Number(req.params.id);
+    const cur = db.prepare("SELECT * FROM offices WHERE id = ?").get(id);
+    if (!cur) return res.status(404).json({ error: "La oficina no existe." });
+    const o = { ...officeFields({ ...cur, ...req.body }), id };
+    if (!o.name) return res.status(400).json({ error: "El nombre de la oficina es obligatorio." });
+    try {
+      db.prepare("UPDATE offices SET name = :name, city = :city, address = :address, phone = :phone, email = :email WHERE id = :id").run(o);
+      if (req.body?.is_main === true) {
+        db.exec("BEGIN");
+        db.prepare("UPDATE offices SET is_main = 0").run();
+        db.prepare("UPDATE offices SET is_main = 1 WHERE id = ?").run(id);
+        db.exec("COMMIT");
+      }
+      res.json(officeOut(db.prepare("SELECT * FROM offices WHERE id = ?").get(id)));
+    } catch {
+      res.status(409).json({ error: "Ya existe una oficina con ese nombre." });
+    }
+  });
+
+  r.delete("/offices/:id", manage, (req, res) => {
+    const id = Number(req.params.id);
+    const o = db.prepare("SELECT * FROM offices WHERE id = ?").get(id);
+    if (!o) return res.status(404).json({ error: "La oficina no existe." });
+    if (o.is_main) return res.status(409).json({ error: "No se puede eliminar la oficina principal." });
+    const used = db.prepare("SELECT (SELECT COUNT(*) FROM cases WHERE office_id = ?) + (SELECT COUNT(*) FROM clients WHERE office_id = ?) AS n").get(id, id).n;
+    if (used) return res.status(409).json({ error: "La oficina tiene clientes o expedientes. Reasígnelos antes de eliminarla." });
+    db.prepare("DELETE FROM offices WHERE id = ?").run(id);
+    res.status(204).end();
+  });
+
+  // ----- Users -----
+  // Directory (id, name, role, offices) for assignment pickers: any signed-in user.
+  r.get("/users/directory", (req, res) => {
+    const ids = db.prepare("SELECT id FROM users WHERE active = 1 ORDER BY name").all().map((u) => u.id);
+    res.json(ids.map((id) => {
+      const u = loadUser(db, id);
+      return { id: u.id, name: u.name, role: u.role, offices: u.offices, scopeAll: u.permissions.includes("scope.all") };
+    }));
+  });
+
+  r.get("/users", manage, (req, res) => {
+    res.json(db.prepare("SELECT id FROM users ORDER BY active DESC, name").all().map((u) => loadUser(db, u.id)));
+  });
+
+  const setOffices = (userId, officeIds) => {
+    const valid = new Set(db.prepare("SELECT id FROM offices").all().map((o) => o.id));
+    db.prepare("DELETE FROM user_offices WHERE user_id = ?").run(userId);
+    const ins = db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)");
+    for (const oid of new Set((officeIds || []).map(Number))) if (valid.has(oid)) ins.run(userId, oid);
+  };
+
+  r.post("/users", manage, (req, res) => {
+    const b = req.body ?? {};
+    const name = str(b.name), email = str(b.email).toLowerCase();
+    if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
+    if (!ROLES.includes(b.role)) return res.status(400).json({ error: "Rol no válido." });
+    if (!validPassword(b.password)) return res.status(400).json({ error: "La contraseña inicial debe tener al menos 10 caracteres." });
+    if (!Array.isArray(b.office_ids) || !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
+    try {
+      const id = db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)")
+        .run(name, email, hashPassword(b.password), b.role).lastInsertRowid;
+      setOffices(id, b.office_ids);
+      res.status(201).json(loadUser(db, id));
+    } catch {
+      res.status(409).json({ error: "Ya existe un usuario con ese correo." });
+    }
+  });
+
+  r.put("/users/:id", manage, (req, res) => {
+    const id = Number(req.params.id);
+    const cur = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+    if (!cur) return res.status(404).json({ error: "El usuario no existe." });
+    const b = req.body ?? {};
+    const role = b.role ?? cur.role;
+    if (!ROLES.includes(role)) return res.status(400).json({ error: "Rol no válido." });
+    const active = b.active === undefined ? !!cur.active : !!b.active;
+    // Never leave the firm without an active Gerencia account.
+    if (cur.role === "Gerencia" && (role !== "Gerencia" || !active)) {
+      const others = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'Gerencia' AND active = 1 AND id != ?").get(id).n;
+      if (!others) return res.status(409).json({ error: "Debe quedar al menos un usuario activo de Gerencia." });
+    }
+    if (b.password && !validPassword(b.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
+    if (Array.isArray(b.office_ids) && !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
+    const email = b.email ? str(b.email).toLowerCase() : cur.email;
+    try {
+      db.prepare("UPDATE users SET name = ?, email = ?, role = ?, active = ? WHERE id = ?")
+        .run(str(b.name) || cur.name, email, role, active ? 1 : 0, id);
+    } catch {
+      return res.status(409).json({ error: "Ya existe un usuario con ese correo." });
+    }
+    if (b.password) {
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(b.password), id);
+      db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+    }
+    if (!active) db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+    if (Array.isArray(b.office_ids)) setOffices(id, b.office_ids);
+    res.json(loadUser(db, id));
+  });
+
+  // ----- Role matrix -----
+  r.get("/roles", (req, res) => {
+    res.json({
+      roles: ROLES,
+      permissions: PERMISSIONS,
+      matrix: Object.fromEntries(ROLES.map((role) => [role, rolePermissions(db, role)])),
+    });
+  });
+
+  r.put("/roles/:role", manage, (req, res) => {
+    const role = req.params.role;
+    if (!ROLES.includes(role)) return res.status(404).json({ error: "Rol no válido." });
+    const perms = (req.body?.permissions || []).filter((p) => p in PERMISSIONS);
+    if (role === "Gerencia" && !perms.includes("users.manage")) perms.push("users.manage");
+    db.exec("BEGIN");
+    db.prepare("DELETE FROM role_permissions WHERE role = ?").run(role);
+    const ins = db.prepare("INSERT INTO role_permissions (role, permission) VALUES (?, ?)");
+    for (const p of new Set(perms)) ins.run(role, p);
+    db.exec("COMMIT");
+    res.json({ role, permissions: rolePermissions(db, role) });
+  });
+
+  return r;
+}

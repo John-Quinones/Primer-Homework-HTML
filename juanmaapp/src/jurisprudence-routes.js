@@ -1,8 +1,21 @@
 import express from "express";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
+import { scopeOf } from "./auth.js";
 import { searchSentencias, analyzeSentencia, verifyCitation, COURTS, CSJ_SALAS } from "./jurisprudence.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : "");
+
+// The server signs the URL of every result it verified; saving a judgment as
+// verified requires that signature, so the page cannot mark one by itself.
+const PROOF_KEY = process.env.PROOF_SECRET || randomBytes(32).toString("hex");
+const proofFor = (url) => createHmac("sha256", PROOF_KEY).update(String(url)).digest("base64url");
+const proofOk = (url, proof) => {
+  const want = Buffer.from(proofFor(url));
+  const got = Buffer.from(String(proof || ""));
+  return want.length === got.length && timingSafeEqual(want, got);
+};
+const withProof = (item) => (item?.verified && item.url ? { ...item, proof: proofFor(item.url) } : item);
 
 function apiError(err) {
   if (/authentication method/i.test(err.message || "")) return [500, "El servidor no tiene configurada la clave de Anthropic (ANTHROPIC_API_KEY)."];
@@ -33,12 +46,12 @@ export function jurisprudenceRouter(db) {
     return searchSentencias({
       query, court: COURTS[b.court] ? b.court : "", sala: str(b.sala),
       yearFrom: Number(b.yearFrom) || null, yearTo: Number(b.yearTo) || null,
-    });
+    }).then((out) => ({ ...out, results: out.results.map(withProof) }));
   }));
 
   r.post("/analyze", ai((b) => {
     if (!str(b.reference) && !str(b.url)) throw Object.assign(new Error("Indique la sentencia o su enlace."), { status: 400 });
-    return analyzeSentencia({ reference: str(b.reference), url: str(b.url), court: str(b.court) });
+    return analyzeSentencia({ reference: str(b.reference), url: str(b.url), court: str(b.court) }).then(withProof);
   }));
 
   r.post("/verify", ai((b) => {
@@ -49,11 +62,25 @@ export function jurisprudenceRouter(db) {
   // ---------- Saved judgments ----------
   const out = (row) => ({ ...row, verified: !!row.verified, analysis: JSON.parse(row.analysis) });
 
+  // Visible: saved by me, or attached to a case in my offices (everything for scope.all).
+  const visibleSql = (req) => {
+    const sc = scopeOf(req.user);
+    if (sc === null) return ["1 = 1", []];
+    const inCase = sc.length ? `case_id IN (SELECT id FROM cases WHERE office_id IN (${sc.map(() => "?").join(",")}))` : "0 = 1";
+    return [`(created_by = ? OR ${inCase})`, [req.user.id, ...sc]];
+  };
+  const caseVisible = (req, caseId) => {
+    const k = db.prepare("SELECT office_id FROM cases WHERE id = ?").get(caseId);
+    const sc = scopeOf(req.user);
+    return !!k && (sc === null || sc.includes(k.office_id));
+  };
+
   r.get("/saved", (req, res) => {
+    const [w, p] = visibleSql(req);
     const caseId = Number(req.query.caseId) || null;
     const rows = caseId
-      ? db.prepare("SELECT * FROM saved_rulings WHERE case_id = ? ORDER BY id DESC").all(caseId)
-      : db.prepare("SELECT * FROM saved_rulings ORDER BY id DESC").all();
+      ? db.prepare(`SELECT * FROM saved_rulings WHERE case_id = ? AND ${w} ORDER BY id DESC`).all(caseId, ...p)
+      : db.prepare(`SELECT * FROM saved_rulings WHERE ${w} ORDER BY id DESC`).all(...p);
     res.json(rows.map(out));
   });
 
@@ -62,17 +89,19 @@ export function jurisprudenceRouter(db) {
     const reference = str(b.reference);
     if (!reference) return res.status(400).json({ error: "Falta la referencia de la sentencia." });
     const caseId = Number(b.case_id) || null;
-    if (caseId && !db.prepare("SELECT id FROM cases WHERE id = ?").get(caseId)) {
+    if (caseId && !caseVisible(req, caseId)) {
       return res.status(404).json({ error: "El expediente no existe." });
     }
-    const id = db.prepare(`INSERT INTO saved_rulings (case_id, reference, court, url, verified, analysis)
-      VALUES (?, ?, ?, ?, ?, ?)`).run(caseId, reference, str(b.court), str(b.url), b.verified ? 1 : 0,
-      JSON.stringify(b.analysis ?? {})).lastInsertRowid;
+    const verified = !!b.verified && proofOk(str(b.url), b.proof);
+    const id = db.prepare(`INSERT INTO saved_rulings (case_id, reference, court, url, verified, analysis, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(caseId, reference, str(b.court), str(b.url), verified ? 1 : 0,
+      JSON.stringify(b.analysis ?? {}), req.user.id).lastInsertRowid;
     res.status(201).json(out(db.prepare("SELECT * FROM saved_rulings WHERE id = ?").get(id)));
   });
 
   r.delete("/saved/:id", (req, res) => {
-    const { changes } = db.prepare("DELETE FROM saved_rulings WHERE id = ?").run(Number(req.params.id));
+    const [w, p] = visibleSql(req);
+    const { changes } = db.prepare(`DELETE FROM saved_rulings WHERE id = ? AND ${w}`).run(Number(req.params.id), ...p);
     if (!changes) return res.status(404).json({ error: "No existe." });
     res.status(204).end();
   });

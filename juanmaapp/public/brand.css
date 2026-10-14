@@ -47,10 +47,18 @@
   --sidebar-bg: linear-gradient(180deg, #001c48 0%, var(--brand-navy) 55%, #013a86 100%);
   --sidebar-ink: #c4c8cb;
   --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .08), transparent 60%), var(--bg);
+  --auth-bg: radial-gradient(900px 600px at 15% 10%, rgba(2, 124, 198, .55), transparent 60%),
+             radial-gradient(800px 600px at 90% 90%, rgba(196, 200, 203, .25), transparent 60%),
+             linear-gradient(135deg, #001233 0%, #002b6a 55%, #014a9a 100%);
+  --glass: rgba(255, 255, 255, .08);
+  --glass-border: rgba(255, 255, 255, .18);
+  --on-dark: #eef2f7;
+  --on-dark-muted: #b9c3d0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #0a0a0b;
     --surface: #141518;
     --surface-muted: #1e2025;
@@ -67,6 +75,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0a0a0b;
   --surface: #141518;
   --surface-muted: #1e2025;

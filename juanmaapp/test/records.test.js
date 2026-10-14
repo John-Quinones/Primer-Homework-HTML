@@ -1,24 +1,14 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { createApp } from "../src/app.js";
-import { openDb, SEED_CATALOG } from "../src/db.js";
+import { SEED_CATALOG } from "../src/db.js";
+import { startServer } from "./helpers.js";
 
-let server, base;
+let srv, call;
 before(async () => {
-  server = createApp(openDb(":memory:")).listen(0);
-  await new Promise((r) => server.once("listening", r));
-  base = `http://127.0.0.1:${server.address().port}/api`;
+  srv = await startServer();
+  call = (await srv.setup()).call;
 });
-after(() => server.close());
-
-const call = async (method, url, body) => {
-  const res = await fetch(base + url, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, body: res.status === 204 ? null : await res.json() };
-};
+after(() => srv.close());
 
 test("catalog is seeded with categories and sub-processes", async () => {
   const { body } = await call("GET", "/catalog");

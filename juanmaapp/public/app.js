@@ -13,11 +13,12 @@ const httpBackend = {
   async request(method, url, body) {
     const res = await fetch("/api" + url, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers: { "X-JuanMa": "1", ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (res.status === 204) return null;
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && !url.startsWith("/auth/")) showAuth();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   },
@@ -25,7 +26,7 @@ const httpBackend = {
   async *generate(payload) {
     const res = await fetch("/api/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-JuanMa": "1" },
       body: JSON.stringify(payload),
     });
     if (!res.ok || !res.body) {
@@ -80,10 +81,136 @@ async function guarded(fn) {
   try { await fn(); } catch (err) { toast(err.message, true); }
 }
 
+// ---------- Session & permissions ----------
+let me = null;
+let offices = [];
+let directory = [];
+const can = (perm) => !!me?.permissions.includes(perm);
+const myOfficeIds = () => (can("scope.all") ? offices.map((o) => o.id) : me.offices.map((o) => o.id));
+const myOffices = () => offices.filter((o) => myOfficeIds().includes(o.id));
+
+const VIEW_PERMS = {
+  borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
+  importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage",
+};
+
+function applyPermissions() {
+  $$(".sidenav a").forEach((a) => (a.hidden = !!VIEW_PERMS[a.dataset.view] && !can(VIEW_PERMS[a.dataset.view])));
+  // Buttons that need a permission carry data-perm (set when rendered) or are matched here.
+  const needs = { "new-client": "clients.write", "new-case": "cases.write" };
+  $$("[data-action]").forEach((b) => { if (needs[b.dataset.action]) b.hidden = !can(needs[b.dataset.action]); });
+  $("#user-name").textContent = me.name;
+  $("#user-role").textContent = me.role;
+  $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  $("#user-offices").textContent = can("scope.all") ? "Todas las oficinas" : `Oficina: ${me.offices.map((o) => o.name).join(", ")}`;
+}
+
+async function loadSessionData() {
+  [offices, directory] = await Promise.all([api("GET", "/admin/offices"), api("GET", "/admin/users/directory")]);
+}
+
+function showAuth(status = {}) {
+  me = null;
+  $("#app-root").hidden = true;
+  $("#auth-screen").hidden = false;
+  $("#login-form").hidden = !!status.setupNeeded;
+  $("#setup-form").hidden = !status.setupNeeded;
+  const demo = backend.demoUsers?.();
+  $("#demo-logins").hidden = !demo;
+  if (demo) {
+    $("#demo-logins .demo-grid").innerHTML = demo.map((u) =>
+      `<button type="button" data-demo-login="${escapeHtml(u.email)}"><strong>${escapeHtml(u.role)}</strong><span>${escapeHtml(u.name)} · ${escapeHtml(u.office)}</span></button>`).join("");
+  }
+}
+
+async function enterApp(user, { fresh = true } = {}) {
+  me = user;
+  // A new sign-in starts on Inicio; a page reload keeps the current section.
+  if (fresh) history.replaceState(null, "", "#inicio");
+  await loadSessionData();
+  $("#auth-screen").hidden = true;
+  $("#app-root").hidden = false;
+  applyPermissions();
+  await loadCatalog();
+  await showView();
+}
+
+async function boot() {
+  const st = await api("GET", "/auth/status");
+  if (st.user) await enterApp(st.user, { fresh: false });
+  else showAuth(st);
+}
+
+for (const [formSel, url] of [["#login-form", "/auth/login"], ["#setup-form", "/auth/setup"]]) {
+  $(formSel).addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $(".form-error", e.target);
+    err.hidden = true;
+    try {
+      const out = await api("POST", url, formData(e.target));
+      e.target.reset();
+      await enterApp(out.user);
+    } catch (ex) {
+      err.textContent = ex.message;
+      err.hidden = false;
+    }
+  });
+}
+$("#demo-logins").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-demo-login]");
+  if (b) guarded(async () => enterApp((await api("POST", "/auth/login", { email: b.dataset.demoLogin, password: "demo" })).user));
+});
+
+// In-page confirm / prompt (the browser's own dialogs are blocked in some viewers).
+function ask({ title, message = "", input = null, okLabel = "Aceptar", danger = false }) {
+  const dlg = $("#ask-dialog");
+  const field = dlg.querySelector("[name=text]");
+  $("[data-title]", dlg).textContent = title;
+  $("[data-msg]", dlg).textContent = message;
+  field.hidden = input === null;
+  field.required = input !== null;
+  field.value = input ?? "";
+  const ok = $("[data-ok]", dlg);
+  ok.textContent = okLabel;
+  ok.classList.toggle("danger-solid", danger);
+  dlg.returnValue = "";
+  dlg.showModal();
+  if (input !== null) field.select();
+  return new Promise((resolve) => {
+    dlg.addEventListener("close", () => {
+      if (dlg.returnValue !== "ok") return resolve(input === null ? false : null);
+      resolve(input === null ? true : field.value.trim() || null);
+    }, { once: true });
+  });
+}
+const confirmAsk = (title, message, okLabel = "Eliminar") => ask({ title, message, okLabel, danger: true });
+
+// Save a generated file: the viewer's download capability when the page runs
+// inside claude.ai, a normal browser download otherwise.
+async function saveFile(filename, blob) {
+  const downloads = await window.claude?.use?.("downloads").catch(() => null);
+  if (downloads) {
+    try {
+      await downloads.save({ filename, data: blob });
+      toast("Archivo listo.");
+    } catch (err) {
+      if (err?.code !== "declined") toast(`No se pudo guardar el archivo (${err?.code || err?.message}).`, true);
+    }
+    return;
+  }
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "borradores", "jurisprudencia", "importar", "configuracion"];
+const VIEWS = ["inicio", "clientes", "expedientes", "borradores", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
 function showView() {
-  const name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
+  if (!me) return;
+  let name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
+  if (VIEW_PERMS[name] && !can(VIEW_PERMS[name])) name = "inicio";
   for (const v of VIEWS) $(`#view-${v}`).hidden = v !== name;
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
   RENDER[name]();
@@ -100,7 +227,7 @@ function renderClientList() {
   ul.innerHTML = state.clients.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
       <strong>${escapeHtml(c.full_name)}</strong>
-      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${c.case_count} expediente(s)</span>
+      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${c.case_count} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
 
@@ -117,19 +244,20 @@ async function renderClientDetail() {
     <div class="detail-head">
       <h3>${escapeHtml(c.full_name)}</h3>
       <div class="toolbar">
-        <button data-action="edit-client" data-id="${c.id}">Editar</button>
-        <button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>
+        ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
+        ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
     </div>
     <dl class="facts">
       ${row("Documento", [c.id_type, c.id_number].filter(Boolean).join(" "))}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
       ${row("Dirección", [c.address, c.city].filter(Boolean).join(", "))}
+      ${row("Oficina", c.office_name)}
       ${row("Notas", c.notes)}
     </dl>
     <div class="detail-head">
       <h4>Expedientes</h4>
-      <button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>
+      ${can("cases.write") ? `<button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>` : ""}
     </div>
     ${cases.length ? `<ul class="case-cards">${cases.map(caseCard).join("")}</ul>` : '<p class="empty">Este cliente no tiene expedientes.</p>'}`;
 }
@@ -139,9 +267,10 @@ function caseCard(k) {
     <div><span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span></div>
     <strong>${escapeHtml(k.type_name)}</strong>
     ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
+    <span>${escapeHtml(k.office_name || "")}${k.assigned_name ? " · " + escapeHtml(k.assigned_name) : " · Sin responsable"}</span>
     <div class="toolbar">
-      <button data-action="edit-case" data-id="${k.id}">Editar</button>
-      <button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>
+      ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+      ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
     </div>
   </li>`;
 }
@@ -194,6 +323,13 @@ function wireDialog(dialog, onSave) {
 
 const formData = (form) => Object.fromEntries(new FormData(form).entries());
 
+function openClientDialog(c) {
+  const sel = $("#client-dialog [name=office_id]");
+  sel.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
+  openDialog($("#client-dialog"), c ? "Editar cliente" : "Nuevo cliente", c || {});
+  sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
+}
+
 wireDialog($("#client-dialog"), async (form) => {
   const { id, ...data } = formData(form);
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
@@ -213,18 +349,22 @@ function fillCaseFilter() {
 
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
-  const rows = state.cases.filter((k) => !catId || k.category_id === catId);
+  const officeId = Number($("#case-office-filter").value) || null;
+  const mine = $("#case-mine").checked;
+  const rows = state.cases.filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
+    && (!mine || k.assigned_user_id === me.id));
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
       <td>${escapeHtml(k.client_name)}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
       <td>${escapeHtml(k.title)}</td>
+      <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
       <td><span class="status-tag">${escapeHtml(k.status)}</span></td>
       <td class="row-actions">
-        <button data-action="edit-case" data-id="${k.id}">Editar</button>
-        <button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>
-        <button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>
+        ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
+        ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
     </tr>`).join("");
 }
@@ -232,9 +372,16 @@ function renderCaseRows() {
 async function renderExpedientes() {
   await Promise.all([loadCatalog(), loadCases()]);
   fillCaseFilter();
+  const of = $("#case-office-filter");
+  const cur = of.value;
+  of.innerHTML = '<option value="">Todas mis oficinas</option>' + myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
+  of.value = cur;
+  of.hidden = myOffices().length < 2;
   renderCaseRows();
 }
 $("#case-filter").addEventListener("change", renderCaseRows);
+$("#case-office-filter").addEventListener("change", renderCaseRows);
+$("#case-mine").addEventListener("change", renderCaseRows);
 
 const caseForm = $("#case-dialog form");
 
@@ -265,6 +412,16 @@ function renderCustomFields(cat, values) {
 
 caseForm.elements.category_id.addEventListener("change", (e) => fillTypeSelect(e.target.value));
 
+// Responsible people: users of the chosen office, plus roles that see every office.
+function fillAssignees(officeId, selected) {
+  const sel = caseForm.elements.assigned_user_id;
+  const people = directory.filter((u) => u.offices.some((o) => o.id === Number(officeId)) || u.scopeAll);
+  sel.innerHTML = '<option value="">— Sin asignar —</option>' +
+    people.map((u) => `<option value="${u.id}">${escapeHtml(u.name)} · ${escapeHtml(u.role)}</option>`).join("");
+  sel.value = selected && people.some((u) => u.id === selected) ? String(selected) : "";
+}
+caseForm.elements.office_id.addEventListener("change", (e) => fillAssignees(e.target.value, Number(caseForm.elements.assigned_user_id.value)));
+
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
   if (!state.clients.length) {
@@ -282,6 +439,11 @@ async function openCaseDialog(k = null, clientId = null) {
   } : {});
   caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
   caseForm.elements.client_id.disabled = !!k;
+  caseForm.elements.office_id.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
+  const clientOffice = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value))?.office_id;
+  const officeId = k?.office_id ?? (myOfficeIds().includes(clientOffice) ? clientOffice : myOffices()[0]?.id);
+  caseForm.elements.office_id.value = officeId;
+  fillAssignees(officeId, k ? k.assigned_user_id : (["Abogado", "Dependiente Judicial"].includes(me.role) ? me.id : null));
   const catId = k?.category_id ?? state.catalog[0]?.id;
   caseForm.elements.category_id.value = catId;
   fillTypeSelect(catId, k?.process_type_id);
@@ -296,6 +458,7 @@ wireDialog($("#case-dialog"), async (form) => {
     client_id: Number(form.elements.client_id.value),
     process_type_id: Number(d.process_type_id),
     title: d.title, status: d.status, counterparty: d.counterparty, facts: d.facts, field_values,
+    office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
@@ -377,10 +540,29 @@ document.addEventListener("click", (e) => {
   if (!btn) return;
   const id = Number(btn.dataset.id);
   const ACTIONS = {
-    "new-client": () => openDialog($("#client-dialog"), "Nuevo cliente"),
-    "edit-client": () => openDialog($("#client-dialog"), "Editar cliente", state.clients.find((c) => c.id === id)),
+    "logout": async () => {
+      await api("POST", "/auth/logout");
+      $(".user-menu").open = false;
+      showAuth({});
+    },
+    "change-password": () => {
+      $(".user-menu").open = false;
+      openDialog($("#password-dialog"), "Cambiar contraseña");
+    },
+    "new-user": () => openUserDialog(null),
+    "edit-user": () => openUserDialog(adminUsers.find((u) => u.id === id)),
+    "new-office": () => openOfficeDialog(null),
+    "edit-office": () => openOfficeDialog(offices.find((o) => o.id === id)),
+    "delete-office": async () => {
+      if (!(await confirmAsk("Eliminar oficina", "Solo se puede eliminar una oficina sin clientes ni expedientes."))) return;
+      await api("DELETE", `/admin/offices/${id}`);
+      toast("Oficina eliminada.");
+      await renderUsuarios();
+    },
+    "new-client": () => openClientDialog(null),
+    "edit-client": () => openClientDialog(state.clients.find((c) => c.id === id)),
     "delete-client": async () => {
-      if (!confirm("¿Eliminar este cliente?")) return;
+      if (!(await confirmAsk("Eliminar cliente", "Se eliminará el cliente. Esta acción no se puede deshacer."))) return;
       await api("DELETE", `/clients/${id}`);
       state.selectedClientId = null;
       toast("Cliente eliminado.");
@@ -389,7 +571,7 @@ document.addEventListener("click", (e) => {
     "new-case": () => openCaseDialog(null, btn.dataset.client ? Number(btn.dataset.client) : state.selectedClientId),
     "edit-case": async () => openCaseDialog(await api("GET", `/cases/${id}`)),
     "delete-case": async () => {
-      if (!confirm("¿Eliminar este expediente?")) return;
+      if (!(await confirmAsk("Eliminar expediente", "Se eliminará el expediente con sus datos. Esta acción no se puede deshacer."))) return;
       await api("DELETE", `/cases/${id}`);
       toast("Expediente eliminado.");
       await renderExpedientes();
@@ -399,25 +581,25 @@ document.addEventListener("click", (e) => {
       location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
     },
     "rename-category": async () => {
-      const name = prompt("Nuevo nombre del tipo de proceso:", categoryOf(id).name);
+      const name = await ask({ title: "Renombrar tipo de proceso", input: categoryOf(id).name, okLabel: "Guardar" });
       if (name) { await api("PUT", `/categories/${id}`, { name }); await renderConfiguracion(); }
     },
     "delete-category": async () => {
-      if (!confirm("¿Eliminar este tipo de proceso con sus subprocesos y campos?")) return;
+      if (!(await confirmAsk("Eliminar tipo de proceso", "Se eliminarán también sus subprocesos y campos propios."))) return;
       await api("DELETE", `/categories/${id}`);
       await renderConfiguracion();
     },
     "rename-type": async () => {
-      const name = prompt("Nuevo nombre del subproceso:", typeById(id).name);
+      const name = await ask({ title: "Renombrar subproceso", input: typeById(id).name, okLabel: "Guardar" });
       if (name) { await api("PUT", `/types/${id}`, { name }); await renderConfiguracion(); }
     },
     "delete-type": async () => {
-      if (!confirm("¿Eliminar este subproceso?")) return;
+      if (!(await confirmAsk("Eliminar subproceso", "Se eliminará este subproceso del catálogo."))) return;
       await api("DELETE", `/types/${id}`);
       await renderConfiguracion();
     },
     "delete-field": async () => {
-      if (!confirm("¿Eliminar este campo? Los valores guardados en expedientes dejarán de mostrarse.")) return;
+      if (!(await confirmAsk("Eliminar campo", "Los valores guardados en los expedientes dejarán de mostrarse."))) return;
       await api("DELETE", `/fields/${id}`);
       await renderConfiguracion();
     },
@@ -557,15 +739,9 @@ $(".actions").addEventListener("click", async (e) => {
     await navigator.clipboard.writeText(JSON.stringify(lastResult.payload, null, 2));
     setStatus("JSON copiado.");
   } else if (action === "download-md") {
-    const blob = new Blob([lastResult.document], { type: "text/markdown" });
-    const a = Object.assign(document.createElement("a"), {
-      href: URL.createObjectURL(blob),
-      download: `${lastResult.payload?.document_type || "borrador"}.md`.toLowerCase(),
-    });
-    a.click();
-    URL.revokeObjectURL(a.href);
-  } else if (action === "print") {
-    window.print();
+    await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.md`, new Blob([lastResult.document], { type: "text/markdown" }));
+  } else if (action === "pdf") {
+    await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.pdf`, markdownToPdf(lastResult.document));
   } else if (action === "verify") {
     $("#j-verify-text").value = lastResult.document;
     location.hash = "#jurisprudencia";
@@ -719,12 +895,15 @@ const OPEN_STATUSES = new Set(["Abierto", "En trámite", "En espera de respuesta
 
 async function renderInicio() {
   const [clients, cases, catalog, saved] = await Promise.all([
-    api("GET", "/clients"), api("GET", "/cases"), api("GET", "/catalog"), api("GET", "/jurisprudencia/saved"),
+    api("GET", "/clients"), api("GET", "/cases"), api("GET", "/catalog"),
+    can("jurisprudence.use") ? api("GET", "/jurisprudencia/saved") : Promise.resolve(null),
   ]);
+  $("#kpi-rulings").closest(".kpi").hidden = !saved;
+  $("#kpi-cats").closest(".kpi").hidden = !can("catalog.manage");
   $("#kpi-clients").textContent = clients.length;
   $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
   $("#kpi-total").textContent = `de ${cases.length} en total`;
-  $("#kpi-rulings").textContent = saved.length;
+  if (saved) $("#kpi-rulings").textContent = saved.length;
   $("#kpi-cats").textContent = catalog.length;
 
   // Horizontal bars: one series, so the label names it and each bar carries its value.
@@ -950,7 +1129,7 @@ wireDialog($("#save-ruling-dialog"), async (form) => {
   const it = pendingSave;
   await api("POST", "/jurisprudencia/saved", {
     case_id: Number(form.elements.case_id.value) || null,
-    reference: it.reference, court: it.court, url: it.url, verified: it.verified, analysis: it.analysis || {},
+    reference: it.reference, court: it.court, url: it.url, verified: it.verified, proof: it.proof, analysis: it.analysis || {},
   });
   toast("Sentencia guardada.");
 });
@@ -965,19 +1144,263 @@ document.addEventListener("click", (e) => {
       jAnalyze.url.value = r.url || "";
       await runAnalysis({ reference: r.reference, url: r.verified ? r.url : "", court: "" });
     } else if (b.dataset.jact === "save-result") {
-      await openSaveDialog({ reference: r.reference, court: r.court, url: r.url, verified: r.verified, analysis: { topic: r.topic, date: r.date } });
+      await openSaveDialog({ reference: r.reference, court: r.court, url: r.url, verified: r.verified, proof: r.proof, analysis: { topic: r.topic, date: r.date } });
     } else if (b.dataset.jact === "save-analysis") {
       const a = jAnalysis;
-      await openSaveDialog({ reference: a.reference, court: a.court, url: a.url, verified: a.verified, analysis: a });
+      await openSaveDialog({ reference: a.reference, court: a.court, url: a.url, verified: a.verified, proof: a.proof, analysis: a });
     } else if (b.dataset.jact === "delete-saved") {
-      if (!confirm("¿Eliminar esta sentencia guardada?")) return;
+      if (!(await confirmAsk("Eliminar sentencia guardada", "Se quitará de la lista de sentencias guardadas."))) return;
       await api("DELETE", `/jurisprudencia/saved/${b.dataset.id}`);
       await renderSaved();
     }
   });
 });
 
+// ---------- PDF from Markdown (drafts) ----------
+function markdownToPdf(md) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const margin = 64, width = doc.internal.pageSize.getWidth() - margin * 2, bottom = doc.internal.pageSize.getHeight() - margin;
+  let y = margin;
+  const write = (text, { size = 11, bold = false, gap = 6, indent = 0 } = {}) => {
+    doc.setFont("times", bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    for (const line of doc.splitTextToSize(text, width - indent)) {
+      if (y > bottom) { doc.addPage(); y = margin; }
+      doc.text(line, margin + indent, y);
+      y += size * 1.35;
+    }
+    y += gap;
+  };
+  const clean = (t) => t.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1").replace(/`([^`]+)`/g, "$1");
+  for (const raw of md.split("\n")) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { y += 4; continue; }
+    let m;
+    if ((m = line.match(/^(#{1,3})\s+(.*)/))) write(clean(m[2]), { size: [16, 13, 12][m[1].length - 1], bold: true, gap: 8 });
+    else if ((m = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/))) write("• " + clean(m[1]), { indent: 14, gap: 2 });
+    else if (/^\|/.test(line)) { if (!/^\|\s*-/.test(line)) write(clean(line.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).join("   ")), { gap: 2 }); }
+    else if (/^---+$/.test(line)) { doc.line(margin, y, margin + width, y); y += 12; }
+    else if (/^>\s?/.test(line)) write(clean(line.replace(/^>\s?/, "")), { indent: 14, gap: 4 });
+    else write(clean(line));
+  }
+  return doc.output("blob");
+}
+
+// ---------- Reportes ----------
+const REPORT_TYPES = {
+  expedientes: "Expedientes", clientes: "Clientes", oficinas: "Resumen por oficina",
+  responsables: "Carga por responsable", procesos: "Expedientes por tipo de proceso", jurisprudencia: "Sentencias guardadas",
+};
+let lastReport = null;
+
+async function renderReportes() {
+  const f = $("#report-form");
+  if (!f.type.options.length) {
+    f.type.innerHTML = Object.entries(REPORT_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+  }
+  const curOffice = f.officeId.value;
+  f.officeId.innerHTML = '<option value="">Todas mis oficinas</option>' + myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
+  f.officeId.value = curOffice;
+  const curCat = f.categoryId.value;
+  f.categoryId.innerHTML = '<option value="">Todos</option>' + state.catalog.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+  f.categoryId.value = curCat;
+  const curUser = f.assignedUserId.value;
+  f.assignedUserId.innerHTML = '<option value="">Todos</option>' + directory.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+  f.assignedUserId.value = curUser;
+  toggleReportFilters();
+  if (!lastReport) await runReport();
+}
+
+function toggleReportFilters() {
+  const t = $("#report-type").value;
+  $$("[data-rf]").forEach((el) => (el.hidden = el.dataset.rf !== t));
+}
+$("#report-type").addEventListener("change", () => { toggleReportFilters(); guarded(runReport); });
+
+async function runReport() {
+  const f = $("#report-form");
+  const params = new URLSearchParams();
+  for (const [k, v] of new FormData(f).entries()) if (v && k !== "type") {
+    if (["categoryId", "status", "assignedUserId"].includes(k) && f.type.value !== "expedientes") continue;
+    params.set(k, v);
+  }
+  lastReport = await api("GET", `/reports/${f.type.value}?${params}`);
+  lastReport.filters = describeFilters(f);
+  const t = $("#report-table");
+  t.innerHTML = `<thead><tr>${lastReport.columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
+    <tbody>${lastReport.rows.map((r) => `<tr>${lastReport.columns.map((c) => `<td>${escapeHtml(r[c.key] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  $("#report-info").textContent = `${lastReport.rows.length} fila(s)`;
+  $("#report-xlsx").disabled = $("#report-pdf").disabled = false;
+}
+
+function describeFilters(f) {
+  const parts = [];
+  const opt = (sel) => sel.selectedOptions[0]?.textContent;
+  parts.push(f.officeId.value ? `Oficina: ${opt(f.officeId)}` : (can("scope.all") ? "Todas las oficinas" : `Oficinas: ${me.offices.map((o) => o.name).join(", ")}`));
+  if (f.from.value || f.to.value) parts.push(`Fechas: ${f.from.value || "…"} a ${f.to.value || "…"}`);
+  if (f.type.value === "expedientes") {
+    if (f.categoryId.value) parts.push(`Tipo: ${opt(f.categoryId)}`);
+    if (f.status.value) parts.push(`Estado: ${opt(f.status)}`);
+    if (f.assignedUserId.value) parts.push(`Responsable: ${opt(f.assignedUserId)}`);
+  }
+  return parts.join(" · ");
+}
+
+$("#report-form").addEventListener("submit", (e) => { e.preventDefault(); guarded(runReport); });
+
+const reportFileName = (ext) => `reporte-${lastReport.type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+
+$("#report-xlsx").addEventListener("click", () => guarded(async () => {
+  const r = lastReport;
+  const header = r.columns.map((c) => ({ value: c.label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
+  const body = r.rows.map((row) => r.columns.map((c) => {
+    const v = row[c.key];
+    return { value: v === null || v === undefined ? null : v, type: typeof v === "number" ? Number : String };
+  }));
+  const title = [[{ value: `${r.title} — JuanMaApp`, fontWeight: "bold" }], [{ value: r.filters }],
+    [{ value: `Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy}` }], []];
+  const widths = r.columns.map((c) => ({ width: Math.min(45, Math.max(c.label.length, ...r.rows.map((x) => String(x[c.key] ?? "").length)) + 2) }));
+  const blob = await window.writeXlsxFile([...title, header, ...body], { columns: widths, sheet: r.title.slice(0, 31) }).toBlob();
+  await saveFile(reportFileName("xlsx"), blob);
+}));
+
+$("#report-pdf").addEventListener("click", () => guarded(async () => {
+  const r = lastReport;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: r.columns.length > 6 ? "landscape" : "portrait", unit: "pt", format: "letter" });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(0, 43, 106);
+  doc.text(`${r.title}`, 40, 46);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(80);
+  doc.text(`${r.filters}  ·  ${r.rows.length} fila(s)`, 40, 62);
+  doc.text(`Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy} · JuanMaApp`, 40, 74);
+  doc.autoTable({
+    startY: 88,
+    head: [r.columns.map((c) => c.label)],
+    body: r.rows.map((row) => r.columns.map((c) => String(row[c.key] ?? ""))),
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [0, 43, 106], textColor: 255 },
+    alternateRowStyles: { fillColor: [240, 243, 247] },
+    margin: { left: 40, right: 40 },
+    didDrawPage: (d) => {
+      doc.setFontSize(8);
+      doc.setTextColor(120);
+      doc.text(`Página ${d.pageNumber}`, doc.internal.pageSize.getWidth() - 80, doc.internal.pageSize.getHeight() - 20);
+    },
+  });
+  await saveFile(reportFileName("pdf"), doc.output("blob"));
+}));
+
+// ---------- Usuarios y oficinas ----------
+let adminUsers = [];
+let roleInfo = null;
+
+function showATab(name) {
+  $$("[data-atab]").forEach((b) => b.classList.toggle("active", b.dataset.atab === name));
+  $$("[data-apanel]").forEach((p) => (p.hidden = p.dataset.apanel !== name));
+}
+$("#admin-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-atab]");
+  if (b) showATab(b.dataset.atab);
+});
+
+async function renderUsuarios() {
+  [adminUsers, offices, roleInfo] = await Promise.all([api("GET", "/admin/users"), api("GET", "/admin/offices"), api("GET", "/admin/roles")]);
+  directory = await api("GET", "/admin/users/directory");
+  $("#user-rows").innerHTML = adminUsers.map((u) => `
+    <tr class="${u.active ? "" : "inactive"}">
+      <td><strong>${escapeHtml(u.name)}</strong><br><span class="muted">${escapeHtml(u.email)}</span></td>
+      <td>${escapeHtml(u.role)}</td>
+      <td>${u.permissions.includes("scope.all") ? "Todas" : escapeHtml(u.offices.map((o) => o.name).join(", "))}</td>
+      <td>${u.active ? '<span class="badge ok">Activo</span>' : '<span class="badge">Inactivo</span>'}</td>
+      <td class="row-actions"><button data-action="edit-user" data-id="${u.id}">Editar</button></td>
+    </tr>`).join("");
+  $("#office-cards").innerHTML = offices.map((o) => `
+    <article class="result-card">
+      <div class="result-head"><h4>${escapeHtml(o.name)}</h4>${o.is_main ? '<span class="badge ok">Principal</span>' : ""}</div>
+      <p class="muted">${escapeHtml([o.city, o.address, o.phone, o.email].filter(Boolean).join(" · ") || "Sin datos de contacto")}</p>
+      <p>${o.case_count} expediente(s) · ${o.user_count} usuario(s)</p>
+      <div class="toolbar">
+        <button data-action="edit-office" data-id="${o.id}">Editar</button>
+        ${o.is_main ? "" : `<button class="danger" data-action="delete-office" data-id="${o.id}">Eliminar</button>`}
+      </div>
+    </article>`).join("");
+  const perms = Object.entries(roleInfo.permissions);
+  $("#role-matrix").innerHTML = `<thead><tr><th>Permiso</th>${roleInfo.roles.map((r) => `<th>${escapeHtml(r)}</th>`).join("")}</tr></thead>
+    <tbody>${perms.map(([p, label]) => `<tr><td>${escapeHtml(label)}</td>${roleInfo.roles.map((r) => {
+      const locked = r === "Gerencia" && p === "users.manage";
+      return `<td class="center"><input type="checkbox" data-role="${escapeHtml(r)}" data-perm="${p}" aria-label="${escapeHtml(r)}: ${escapeHtml(label)}"
+        ${roleInfo.matrix[r].includes(p) ? "checked" : ""} ${locked ? "disabled" : ""}></td>`;
+    }).join("")}</tr>`).join("")}</tbody>`;
+}
+
+function openUserDialog(u) {
+  const dlg = $("#user-dialog");
+  const form = $("form", dlg);
+  form.elements.role.innerHTML = roleInfo.roles.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
+  $("#user-office-checks").innerHTML = offices.map((o) => `<label class="inline"><input type="checkbox" name="office" value="${o.id}"
+    ${u ? (u.offices.some((x) => x.id === o.id) ? "checked" : "") : (o.is_main ? "checked" : "")}> ${escapeHtml(o.name)}</label>`).join("");
+  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role } : { role: "Abogado" });
+  form.elements.active.checked = u ? u.active : true;
+  form.elements.password.required = !u;
+  $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)" : "Contraseña inicial *";
+}
+
+wireDialog($("#user-dialog"), async (form) => {
+  const d = formData(form);
+  const body = {
+    name: d.name, email: d.email, role: d.role, active: form.elements.active.checked,
+    office_ids: $$("#user-office-checks input:checked").map((i) => Number(i.value)),
+  };
+  if (d.password) body.password = d.password;
+  if (d.id) await api("PUT", `/admin/users/${d.id}`, body);
+  else await api("POST", "/admin/users", body);
+  toast(d.id ? "Usuario actualizado." : "Usuario creado.");
+  await renderUsuarios();
+});
+
+function openOfficeDialog(o) {
+  openDialog($("#office-dialog"), o ? "Editar oficina" : "Nueva oficina", o || {});
+  const main = $("#office-dialog [name=is_main]");
+  main.checked = !!o?.is_main;
+  main.disabled = !!o?.is_main;
+}
+
+wireDialog($("#office-dialog"), async (form) => {
+  const { id, ...d } = formData(form);
+  const body = { ...d, is_main: form.elements.is_main.checked || undefined };
+  if (id) await api("PUT", `/admin/offices/${id}`, body);
+  else {
+    const o = await api("POST", "/admin/offices", body);
+    if (body.is_main) await api("PUT", `/admin/offices/${o.id}`, { is_main: true });
+  }
+  toast(id ? "Oficina actualizada." : "Oficina creada.");
+  await renderUsuarios();
+});
+
+$("#save-roles").addEventListener("click", () => guarded(async () => {
+  for (const role of roleInfo.roles) {
+    const permissions = $$(`#role-matrix input[data-role="${CSS.escape(role)}"]:checked`).map((i) => i.dataset.perm);
+    await api("PUT", `/admin/roles/${encodeURIComponent(role)}`, { permissions });
+  }
+  toast("Permisos guardados.");
+  me = (await api("GET", "/auth/status")).user;
+  applyPermissions();
+  await renderUsuarios();
+}));
+
+wireDialog($("#password-dialog"), async (form) => {
+  await api("POST", "/auth/password", formData(form));
+  toast("Contraseña actualizada.");
+});
+
 const RENDER = {
+  reportes: renderReportes,
+  usuarios: renderUsuarios,
   inicio: renderInicio,
   jurisprudencia: renderJurisprudencia,
   clientes: renderClientes,
@@ -987,7 +1410,4 @@ const RENDER = {
   configuracion: renderConfiguracion,
 };
 
-guarded(async () => {
-  await loadCatalog();
-  await showView();
-});
+guarded(boot);

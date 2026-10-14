@@ -1,9 +1,10 @@
 // REST routes for clients, the process catalog (categories → sub-processes →
 // custom fields) and cases. Mounted under /api by app.js.
 import express from "express";
+import { can, scopeOf } from "./auth.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
-const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "city", "notes"];
+const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "city", "notes", "office_id"];
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -39,6 +40,39 @@ export function recordsRouter(db) {
     return plain(row);
   };
 
+  // ----- Office scope -----
+  const mainOffice = () => db.prepare("SELECT id FROM offices WHERE is_main = 1").get().id;
+  const inScope = (req, officeId) => {
+    const sc = scopeOf(req.user);
+    return sc === null || sc.includes(Number(officeId));
+  };
+  // SQL fragment + params limiting rows to the user's offices.
+  const scopeSql = (req, col) => {
+    const sc = scopeOf(req.user);
+    if (sc === null) return ["1 = 1", []];
+    if (!sc.length) return ["0 = 1", []];
+    return [`${col} IN (${sc.map(() => "?").join(",")})`, sc];
+  };
+  const checkPerm = (req, perm) => {
+    if (!can(req, perm)) throw new HttpError(403, "Su rol no tiene permiso para esta acción.");
+  };
+  // A client is visible if it belongs to one of the user's offices or has a case there.
+  const clientVisible = (req, clientId) => {
+    const [w, p] = scopeSql(req, "office_id");
+    return !!db.prepare(`SELECT id FROM clients WHERE id = ? AND (${w} OR id IN (SELECT client_id FROM cases WHERE ${w}))`)
+      .get(clientId, ...p, ...p);
+  };
+  const officeFor = (req, requested, fallback) => {
+    let id = requested ? Number(requested) : fallback;
+    if (!id) {
+      const sc = scopeOf(req.user);
+      id = sc === null ? mainOffice() : sc[0];
+    }
+    if (!db.prepare("SELECT id FROM offices WHERE id = ?").get(id)) throw new HttpError(400, "La oficina no existe.");
+    if (!inScope(req, id)) throw new HttpError(403, "No tiene acceso a esa oficina.");
+    return id;
+  };
+
   // Wrap handlers so thrown HttpErrors and SQLite constraint errors become JSON.
   const h = (fn) => (req, res) => {
     try {
@@ -56,43 +90,58 @@ export function recordsRouter(db) {
   };
 
   // ---------- Clients ----------
-  const clientValues = (body, existing = {}) => {
+  const clientValues = (req, body, existing = {}) => {
     const v = {};
-    for (const f of CLIENT_FIELDS) v[f] = f in body ? str(body[f]) : existing[f] ?? "";
+    for (const f of CLIENT_FIELDS) if (f !== "office_id") v[f] = f in body ? str(body[f]) : existing[f] ?? "";
     v.full_name = requireText(v.full_name, "El nombre del cliente");
     v.id_type ||= "CC";
+    v.office_id = officeFor(req, body.office_id, existing.office_id);
     return v;
+  };
+  const getClient = (req, id) => {
+    const c = getOr404(`SELECT c.*, o.name AS office_name FROM clients c LEFT JOIN offices o ON o.id = c.office_id WHERE c.id = ?`, id, "El cliente");
+    if (!clientVisible(req, id)) throw new HttpError(404, "El cliente no existe.");
+    return c;
   };
 
   r.get("/clients", h((req) => {
     const q = `%${str(req.query.q)}%`;
+    const [kw, kp] = scopeSql(req, "k.office_id");
+    const [cw, cp] = scopeSql(req, "c.office_id");
+    const [sw, sp] = scopeSql(req, "office_id");
     return db.prepare(`
-      SELECT c.*, (SELECT COUNT(*) FROM cases WHERE client_id = c.id) AS case_count
-      FROM clients c
-      WHERE c.full_name LIKE ? OR c.id_number LIKE ?
-      ORDER BY c.full_name COLLATE NOCASE`).all(q, q).map(plain);
+      SELECT c.*, o.name AS office_name,
+        (SELECT COUNT(*) FROM cases k WHERE k.client_id = c.id AND ${kw}) AS case_count
+      FROM clients c LEFT JOIN offices o ON o.id = c.office_id
+      WHERE (c.full_name LIKE ? OR c.id_number LIKE ?)
+        AND (${cw} OR c.id IN (SELECT client_id FROM cases WHERE ${sw}))
+      ORDER BY c.full_name COLLATE NOCASE`).all(...kp, q, q, ...cp, ...sp).map(plain);
   }));
 
-  r.get("/clients/:id", h((req) => getOr404("SELECT * FROM clients WHERE id = ?", toInt(req.params.id, "id"), "El cliente")));
+  r.get("/clients/:id", h((req) => getClient(req, toInt(req.params.id, "id"))));
 
   r.post("/clients", h((req, res) => {
-    const v = clientValues(req.body ?? {});
+    checkPerm(req, "clients.write");
+    const v = clientValues(req, req.body ?? {});
     const id = db.prepare(`INSERT INTO clients (${CLIENT_FIELDS.join(",")})
       VALUES (${CLIENT_FIELDS.map((f) => ":" + f).join(",")})`).run(v).lastInsertRowid;
     res.status(201);
-    return getOr404("SELECT * FROM clients WHERE id = ?", id, "El cliente");
+    return getClient(req, id);
   }));
 
   r.put("/clients/:id", h((req) => {
+    checkPerm(req, "clients.write");
     const id = toInt(req.params.id, "id");
-    const v = clientValues(req.body ?? {}, getOr404("SELECT * FROM clients WHERE id = ?", id, "El cliente"));
+    const v = clientValues(req, req.body ?? {}, getClient(req, id));
     db.prepare(`UPDATE clients SET ${CLIENT_FIELDS.map((f) => `${f} = :${f}`).join(", ")} WHERE id = :id`).run({ ...v, id });
-    return getOr404("SELECT * FROM clients WHERE id = ?", id, "El cliente");
+    return getClient(req, id);
   }));
 
   r.delete("/clients/:id", h((req, res) => {
-    const { changes } = db.prepare("DELETE FROM clients WHERE id = ?").run(toInt(req.params.id, "id"));
-    if (!changes) throw new HttpError(404, "El cliente no existe.");
+    checkPerm(req, "clients.delete");
+    const id = toInt(req.params.id, "id");
+    getClient(req, id);
+    db.prepare("DELETE FROM clients WHERE id = ?").run(id);
     res.status(204).end();
   }));
 
@@ -114,6 +163,7 @@ export function recordsRouter(db) {
     db.prepare(`SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM ${table} ${where}`).get(...args).n;
 
   r.post("/categories", h((req, res) => {
+    checkPerm(req, "catalog.manage");
     const name = requireText(req.body?.name, "El nombre del tipo de proceso");
     const id = db.prepare("INSERT INTO process_categories (name, sort) VALUES (?, ?)")
       .run(name, nextSort("process_categories")).lastInsertRowid;
@@ -122,6 +172,7 @@ export function recordsRouter(db) {
   }));
 
   r.put("/categories/:id", h((req) => {
+    checkPerm(req, "catalog.manage");
     const id = toInt(req.params.id, "id");
     getOr404("SELECT * FROM process_categories WHERE id = ?", id, "El tipo de proceso");
     db.prepare("UPDATE process_categories SET name = ? WHERE id = ?").run(requireText(req.body?.name, "El nombre"), id);
@@ -129,12 +180,14 @@ export function recordsRouter(db) {
   }));
 
   r.delete("/categories/:id", h((req, res) => {
+    checkPerm(req, "catalog.manage");
     const { changes } = db.prepare("DELETE FROM process_categories WHERE id = ?").run(toInt(req.params.id, "id"));
     if (!changes) throw new HttpError(404, "El tipo de proceso no existe.");
     res.status(204).end();
   }));
 
   r.post("/categories/:id/types", h((req, res) => {
+    checkPerm(req, "catalog.manage");
     const catId = toInt(req.params.id, "id");
     getOr404("SELECT * FROM process_categories WHERE id = ?", catId, "El tipo de proceso");
     const name = requireText(req.body?.name, "El nombre del subproceso");
@@ -145,6 +198,7 @@ export function recordsRouter(db) {
   }));
 
   r.put("/types/:id", h((req) => {
+    checkPerm(req, "catalog.manage");
     const id = toInt(req.params.id, "id");
     getOr404("SELECT * FROM process_types WHERE id = ?", id, "El subproceso");
     db.prepare("UPDATE process_types SET name = ? WHERE id = ?").run(requireText(req.body?.name, "El nombre"), id);
@@ -152,12 +206,14 @@ export function recordsRouter(db) {
   }));
 
   r.delete("/types/:id", h((req, res) => {
+    checkPerm(req, "catalog.manage");
     const { changes } = db.prepare("DELETE FROM process_types WHERE id = ?").run(toInt(req.params.id, "id"));
     if (!changes) throw new HttpError(404, "El subproceso no existe.");
     res.status(204).end();
   }));
 
   r.post("/categories/:id/fields", h((req, res) => {
+    checkPerm(req, "catalog.manage");
     const catId = toInt(req.params.id, "id");
     getOr404("SELECT * FROM process_categories WHERE id = ?", catId, "El tipo de proceso");
     const b = req.body ?? {};
@@ -175,6 +231,7 @@ export function recordsRouter(db) {
   }));
 
   r.delete("/fields/:id", h((req, res) => {
+    checkPerm(req, "catalog.manage");
     const { changes } = db.prepare("DELETE FROM custom_fields WHERE id = ?").run(toInt(req.params.id, "id"));
     if (!changes) throw new HttpError(404, "El campo no existe.");
     res.status(204).end();
@@ -183,18 +240,30 @@ export function recordsRouter(db) {
   // ---------- Cases ----------
   const CASE_SELECT = `
     SELECT k.*, c.full_name AS client_name, t.name AS type_name, t.category_id,
-           g.name AS category_name
+           g.name AS category_name, o.name AS office_name, u.name AS assigned_name
     FROM cases k
     JOIN clients c ON c.id = k.client_id
     JOIN process_types t ON t.id = k.process_type_id
-    JOIN process_categories g ON g.id = t.category_id`;
+    JOIN process_categories g ON g.id = t.category_id
+    LEFT JOIN offices o ON o.id = k.office_id
+    LEFT JOIN users u ON u.id = k.assigned_user_id`;
 
   const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values) });
 
-  const getCase = (id) => {
+  const getCase = (req, id) => {
     const row = db.prepare(`${CASE_SELECT} WHERE k.id = ?`).get(id);
-    if (!row) throw new HttpError(404, "El expediente no existe.");
+    if (!row || !inScope(req, row.office_id)) throw new HttpError(404, "El expediente no existe.");
     return caseOut(row);
+  };
+  // The responsible person must be an active user of the case's office (or see all offices).
+  const checkAssignee = (userId, officeId) => {
+    if (!userId) return null;
+    const u = db.prepare("SELECT id, role FROM users WHERE id = ? AND active = 1").get(userId);
+    if (!u) throw new HttpError(400, "El responsable no existe o está inactivo.");
+    const all = db.prepare("SELECT 1 FROM role_permissions WHERE role = ? AND permission = 'scope.all'").get(u.role);
+    const inOffice = db.prepare("SELECT 1 FROM user_offices WHERE user_id = ? AND office_id = ?").get(userId, officeId);
+    if (!all && !inOffice) throw new HttpError(400, "El responsable no pertenece a la oficina del expediente.");
+    return u.id;
   };
 
   // Keep only values for fields defined on the case's category; enforce required ones.
@@ -211,46 +280,59 @@ export function recordsRouter(db) {
   };
 
   r.get("/cases", h((req) => {
-    const clientId = req.query.clientId ? toInt(req.query.clientId, "clientId") : null;
-    const rows = clientId
-      ? db.prepare(`${CASE_SELECT} WHERE k.client_id = ? ORDER BY k.updated_at DESC`).all(clientId)
-      : db.prepare(`${CASE_SELECT} ORDER BY k.updated_at DESC`).all();
-    return rows.map(caseOut);
+    const [w, p] = scopeSql(req, "k.office_id");
+    const where = [w];
+    const params = [...p];
+    if (req.query.clientId) { where.push("k.client_id = ?"); params.push(toInt(req.query.clientId, "clientId")); }
+    if (req.query.officeId) { where.push("k.office_id = ?"); params.push(toInt(req.query.officeId, "officeId")); }
+    if (req.query.mine === "1") { where.push("k.assigned_user_id = ?"); params.push(req.user.id); }
+    return db.prepare(`${CASE_SELECT} WHERE ${where.join(" AND ")} ORDER BY k.updated_at DESC`).all(...params).map(caseOut);
   }));
 
-  r.get("/cases/:id", h((req) => getCase(toInt(req.params.id, "id"))));
+  r.get("/cases/:id", h((req) => getCase(req, toInt(req.params.id, "id"))));
 
   r.post("/cases", h((req, res) => {
+    checkPerm(req, "cases.write");
     const b = req.body ?? {};
     const clientId = toInt(b.client_id, "El cliente");
     getOr404("SELECT id FROM clients WHERE id = ?", clientId, "El cliente");
+    if (!clientVisible(req, clientId)) throw new HttpError(404, "El cliente no existe.");
+    const officeId = officeFor(req, b.office_id, null);
+    const assignee = checkAssignee(b.assigned_user_id ? toInt(b.assigned_user_id, "El responsable") : null, officeId);
     const typeId = toInt(b.process_type_id, "El subproceso");
     const values = cleanFieldValues(typeId, b.field_values);
-    const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(clientId, typeId, str(b.title), str(b.status) || "Abierto", str(b.counterparty), str(b.facts),
-        JSON.stringify(values)).lastInsertRowid;
+        JSON.stringify(values), officeId, assignee).lastInsertRowid;
     res.status(201);
-    return getCase(id);
+    return getCase(req, id);
   }));
 
   r.put("/cases/:id", h((req) => {
+    checkPerm(req, "cases.write");
     const id = toInt(req.params.id, "id");
-    const cur = getCase(id);
+    const cur = getCase(req, id);
     const b = req.body ?? {};
     const typeId = b.process_type_id ? toInt(b.process_type_id, "El subproceso") : cur.process_type_id;
     const values = cleanFieldValues(typeId, b.field_values ?? cur.field_values);
+    const officeId = officeFor(req, b.office_id, cur.office_id);
+    const assignee = "assigned_user_id" in b
+      ? checkAssignee(b.assigned_user_id ? toInt(b.assigned_user_id, "El responsable") : null, officeId)
+      : cur.assigned_user_id && officeId !== cur.office_id ? null : cur.assigned_user_id;
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
-      field_values = ?, updated_at = datetime('now') WHERE id = ?`)
+      field_values = ?, office_id = ?, assigned_user_id = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) || cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
-        JSON.stringify(values), id);
-    return getCase(id);
+        JSON.stringify(values), officeId, assignee, id);
+    return getCase(req, id);
   }));
 
   r.delete("/cases/:id", h((req, res) => {
-    const { changes } = db.prepare("DELETE FROM cases WHERE id = ?").run(toInt(req.params.id, "id"));
-    if (!changes) throw new HttpError(404, "El expediente no existe.");
+    checkPerm(req, "cases.delete");
+    const id = toInt(req.params.id, "id");
+    getCase(req, id);
+    db.prepare("DELETE FROM cases WHERE id = ?").run(id);
     res.status(204).end();
   }));
 

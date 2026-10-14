@@ -6,18 +6,21 @@ import { generateDraft, DOCUMENT_TYPES } from "./engine.js";
 import { auditDraft } from "./validate.js";
 import { recordsRouter } from "./records.js";
 import { jurisprudenceRouter } from "./jurisprudence-routes.js";
+import { sessionMiddleware, authRouter, adminRouter, requireAuth, requirePerm, scopeOf } from "./auth.js";
+import { reportsRouter } from "./reports.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Fill a draft request from a stored case: client data, process and custom fields. */
-function caseContext(db, caseId) {
+function caseContext(db, caseId, user) {
   const k = db.prepare(`
     SELECT k.*, t.name AS type_name, t.category_id, g.name AS category_name
     FROM cases k
     JOIN process_types t ON t.id = k.process_type_id
     JOIN process_categories g ON g.id = t.category_id
     WHERE k.id = ?`).get(caseId);
-  if (!k) return null;
+  const sc = scopeOf(user);
+  if (!k || (sc !== null && !sc.includes(k.office_id))) return null;
   const c = db.prepare("SELECT * FROM clients WHERE id = ?").get(k.client_id);
   const values = JSON.parse(k.field_values);
   const fields = db.prepare("SELECT * FROM custom_fields WHERE category_id = ? ORDER BY sort, id").all(k.category_id)
@@ -38,23 +41,38 @@ function caseContext(db, caseId) {
 
 export function createApp(db) {
   const app = express();
-  app.use(express.json({ limit: "200kb" }));
+  app.disable("x-powered-by");
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "same-origin");
+    next();
+  });
+  app.use(express.json({ limit: "2mb" }));
+  app.use(sessionMiddleware(db));
   app.use(express.static(path.join(root, "public")));
   app.get("/vendor/marked.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/marked/marked.min.js")));
   app.get("/vendor/read-excel-file.min.js", (_req, res) =>
     res.sendFile(path.join(root, "node_modules/read-excel-file/bundle/read-excel-file.min.js")));
+  app.get("/vendor/write-excel-file.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/write-excel-file/bundle/write-excel-file.min.js")));
+  app.get("/vendor/jspdf.umd.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf/dist/jspdf.umd.min.js")));
+  app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js")));
   app.get("/vendor/purify.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/dompurify/dist/purify.min.js")));
 
+  app.use("/api/auth", authRouter(db));
+  app.use("/api", requireAuth);
+  app.use("/api/admin", adminRouter(db));
   app.use("/api", recordsRouter(db));
-  app.use("/api/jurisprudencia", jurisprudenceRouter(db));
+  app.use("/api/jurisprudencia", requirePerm("jurisprudence.use"), jurisprudenceRouter(db));
+  app.use("/api/reports", requirePerm("reports.view"), reportsRouter(db));
 
-  app.post("/api/generate", async (req, res) => {
+  app.post("/api/generate", requirePerm("drafts.generate"), async (req, res) => {
     let body = req.body ?? {};
     if (!DOCUMENT_TYPES[body.documentType]) {
       return res.status(400).json({ error: "documentType must be PETITION, CONTRACT or POWER_OF_ATTORNEY" });
     }
     if (body.caseId) {
-      const ctx = caseContext(db, Number(body.caseId));
+      const ctx = caseContext(db, Number(body.caseId), req.user);
       if (!ctx) return res.status(404).json({ error: "El expediente no existe." });
       // Form values typed by the user win over stored ones.
       body = {

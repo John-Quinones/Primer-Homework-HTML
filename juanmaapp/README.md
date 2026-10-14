@@ -11,14 +11,36 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 | **Expedientes** | A case links a client to a sub-process (e.g. Laboral › Ejecutivo Laboral) and stores subject, status, counterparty, facts and the category's custom fields. Filter by process type. |
 | **Borradores** | Pick a case (or fill the form by hand) and generate a draft. The case's client data, process and custom fields are sent to NomosAI. |
 | **Jurisprudencia** | Search judgments of the Corte Constitucional, Corte Suprema de Justicia (every chamber), Consejo de Estado and tribunals; analyze one (legal problem, facts, ratio decidendi, decision, dissents, norms, verbatim quotes, summary); check every citation in a draft (does it exist, is the reference right, does it support what the draft says); save judgments to a case. Claude may only search and read the official court sites, and a result is marked verified only when its URL is one the tools actually returned from those sites. |
+| **Reportes** | Expedientes (filter by office, process type, status, responsible, dates), clients, summary per office, workload per responsible, cases per process type, saved judgments. Each exports to Excel (.xlsx) and PDF, limited to the user's offices. |
+| **Usuarios** | Gerencia creates users (name, email, role, offices, initial password, active), offices (Ibagué is the main one; any number can be added) and edits the role × permission matrix. |
 | **Importar** | Load existing data exported from Access (or any spreadsheet) as `.xlsx` or `.csv`. Columns are matched automatically (Nombres + Apellidos are joined, IdCliente/Código are skipped) and can be reassigned. A file can hold clients only, or one case per row with the client's data on the same row. Existing clients are matched by document number or name and only their blank fields are filled; identical cases are not created twice; missing process types, sub-processes and custom fields can be created on the fly. Rows that fail are listed by row number. |
 | **Configuración** | Manage process types (Administrativo, Laboral, Penal, Familia, Derecho de Petición, Datacrédito, or new ones), their sub-processes, and custom fields per type: text, long text, number, date, or a drop-down list, optionally required. |
 
 Deleting a client or sub-process that still has cases is refused.
 
+### Users, roles and offices
+
+Roles: Gerencia, Director Jurídico, Director Contable, Gerente Regional, Abogado, Dependiente Judicial, Asistente. Each user belongs to one or more offices; every client and case belongs to an office and a case can have a responsible person from that office. Roles with **"Ve todas las oficinas"** see every office; the rest see only their own offices' clients, cases, saved judgments and reports. The starting permissions (editable in Usuarios › Roles y permisos):
+
+| Permiso | Gerencia | Dir. Jurídico | Dir. Contable | Gerente Regional | Abogado | Dependiente Judicial | Asistente |
+|---|---|---|---|---|---|---|---|
+| Ve todas las oficinas | ✓ | ✓ | ✓ | | | | |
+| Usuarios, roles y oficinas | ✓ | | | | | | |
+| Configuración del catálogo | ✓ | ✓ | | | | | |
+| Crear/editar clientes | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| Eliminar clientes | ✓ | ✓ | | | | | |
+| Crear/editar expedientes | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ |
+| Eliminar expedientes | ✓ | ✓ | | ✓ | | | |
+| Generar borradores | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| Jurisprudencia | ✓ | ✓ | | ✓ | ✓ | ✓ | |
+| Importar | ✓ | ✓ | | ✓ | | | |
+| Reportes | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+
+On first start the app asks for the Gerencia account. Passwords are hashed with scrypt (minimum 10 characters); sessions are HttpOnly cookies that last 12 hours; five failed sign-ins lock an email for 10 minutes; every write must carry the `X-JuanMa` header (CSRF). The last active Gerencia account cannot be demoted or deactivated. Set `COOKIE_SECURE=1` when serving over HTTPS.
+
 ## Preview without installing
 
-`npm run preview` writes `preview/juanmaapp-preview.html`, one self-contained file that runs in any browser with sample data. Nothing is sent to a server, and the draft is a fixed example rather than a NomosAI draft.
+`npm run preview` writes `preview/juanmaapp-preview.html`, one self-contained file that runs in any browser with sample data (three offices and one sample user per role, chosen on the sign-in screen), and `preview/juanmaapp-web.html`, the same app for the published web link. Nothing is sent to a server; drafts and case-law results are fixed, labeled examples.
 
 ## Run
 
@@ -42,6 +64,8 @@ Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-opus-5-5`), `DB_
 | Database schema and starting catalog | `src/db.js` |
 | REST API: clients, catalog, cases | `src/records.js` |
 | Express app, `POST /api/generate` | `src/app.js` |
+| Users, roles, offices, sessions | `src/auth.js` |
+| Report data | `src/reports.js` |
 | Claude call (streaming, effort `high`, server-side refusal fallback) | `src/engine.js` |
 | Rule checks on every draft | `src/validate.js` |
 | UI (Spanish) | `public/` |
@@ -80,7 +104,7 @@ The response is newline-delimited JSON. It sends `{"type":"text","text":…}` de
 
 ## Pending before production
 
-- **Access control and personal data.** The app has no login yet and stores client personal data. Add authentication, HTTPS and backups before putting it on a shared server, and handle the data under Colombia's Ley 1581 de 2012 (habeas data).
+- **Personal data.** The app stores client personal data. Serve it only over HTTPS (`COOKIE_SECURE=1`), back up `data/juanmaapp.db`, and handle the data under Colombia's Ley 1581 de 2012 (habeas data).
 - **Case-law search.** Needs the Anthropic API key and outbound access to the court websites (through Anthropic's web search and fetch tools). The preview shows fictitious, clearly labeled examples only. Each search or verification makes several web lookups, so it costs more than a draft; the attorney still reads the official text before relying on it.
 - **Starting catalog.** The Administrativo and Laboral sub-processes come from the firm. Those under Penal, Familia, Derecho de Petición and Datacrédito are suggested starting points; edit them in Configuración.
 

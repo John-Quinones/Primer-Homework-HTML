@@ -4,8 +4,7 @@ import { createRequire } from "node:module";
 import {
   isOfficialUrl, collectSeenUrls, verifiedUrl, lastJsonBlock, setClient, searchSentencias, verifyCitation,
 } from "../src/jurisprudence.js";
-import { createApp } from "../src/app.js";
-import { openDb } from "../src/db.js";
+import { startServer } from "./helpers.js";
 
 globalThis.window ??= {};
 createRequire(import.meta.url)("../public/citations.js");
@@ -93,23 +92,39 @@ test("verify resumes pause_turn and downgrades 'exists' without an official page
   assert.equal(r.exists, "unknown");
 });
 
-let server, base;
+let srv, call;
 before(async () => {
-  server = createApp(openDb(":memory:")).listen(0);
-  await new Promise((r) => server.once("listening", r));
-  base = `http://127.0.0.1:${server.address().port}/api/jurisprudencia`;
+  srv = await startServer();
+  call = (await srv.setup()).call;
 });
-after(() => server.close());
+after(() => srv.close());
 
-test("saved judgments API validates input and lists by case", async () => {
-  const post = (url, body) => fetch(base + url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  assert.equal((await post("/search", { query: " " })).status, 400);
-  assert.equal((await post("/saved", {})).status, 400);
-  assert.equal((await post("/saved", { reference: "T-1 de 2020", case_id: 999 })).status, 404);
-  const saved = await (await post("/saved", { reference: "T-1 de 2020", verified: true, analysis: { summary: "x" } })).json();
-  assert.equal(saved.verified, true);
-  assert.deepEqual(saved.analysis, { summary: "x" });
-  const list = await (await fetch(base + "/saved")).json();
-  assert.equal(list.length, 1);
-  assert.equal((await fetch(base + `/saved/${saved.id}`, { method: "DELETE" })).status, 204);
+test("saved judgments API validates input and never trusts a page's 'verified' flag", async () => {
+  assert.equal((await call("POST", "/jurisprudencia/search", { query: " " })).status, 400);
+  assert.equal((await call("POST", "/jurisprudencia/saved", {})).status, 400);
+  assert.equal((await call("POST", "/jurisprudencia/saved", { reference: "T-1 de 2020", case_id: 999 })).status, 404);
+  const forged = await call("POST", "/jurisprudencia/saved", {
+    reference: "T-1 de 2020", url: "https://www.corteconstitucional.gov.co/x", verified: true, proof: "made-up", analysis: { summary: "x" },
+  });
+  assert.equal(forged.status, 201);
+  assert.equal(forged.body.verified, false);
+  assert.deepEqual(forged.body.analysis, { summary: "x" });
+  assert.equal((await call("GET", "/jurisprudencia/saved")).body.length, 1);
+  assert.equal((await call("DELETE", `/jurisprudencia/saved/${forged.body.id}`)).status, 204);
+});
+
+test("a result verified by the server keeps its mark when saved", async () => {
+  setClient(stubClient([{
+    stop_reason: "end_turn",
+    content: [
+      { type: "web_search_tool_result", content: [{ type: "web_search_result", url: "https://www.corteconstitucional.gov.co/relatoria/2021/T-100-21.htm" }] },
+      { type: "text", text: '```json\n{"results":[{"court":"Corte Constitucional","reference":"T-100 de 2021","url":"https://www.corteconstitucional.gov.co/relatoria/2021/T-100-21.htm"}]}\n```' },
+    ],
+  }]));
+  const found = await call("POST", "/jurisprudencia/search", { query: "salud" });
+  const r = found.body.results[0];
+  assert.equal(r.verified, true);
+  assert.ok(r.proof);
+  const saved = await call("POST", "/jurisprudencia/saved", { ...r, analysis: {} });
+  assert.equal(saved.body.verified, true);
 });

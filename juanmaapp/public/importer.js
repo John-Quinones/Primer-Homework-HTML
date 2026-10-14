@@ -93,7 +93,7 @@
     if (name.endsWith(".csv") || name.endsWith(".txt") || name.endsWith(".tsv")) {
       let text = await file.text();
       // Access often exports CSV as Windows-1252; re-read if UTF-8 decoding failed.
-      if (text.includes("�")) text = new TextDecoder("windows-1252").decode(await file.arrayBuffer());
+      if (text.includes("\uFFFD")) text = new TextDecoder("windows-1252").decode(await file.arrayBuffer());
       return [{ name: file.name, rows: parseCsv(text) }];
     }
     if (name.endsWith(".xls") || name.endsWith(".mdb") || name.endsWith(".accdb")) {
