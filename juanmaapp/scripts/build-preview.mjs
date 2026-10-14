@@ -20,6 +20,8 @@ html = html
   .replaceAll("logo-t.png", logo)
   .replace('<script src="vendor/marked.min.js"></script>', () => `<script>${safe(read("node_modules/marked/marked.min.js"))}</script>`)
   .replace('<script src="vendor/purify.min.js"></script>', () => `<script>${safe(read("node_modules/dompurify/dist/purify.min.js"))}</script>`)
+  .replace('<script src="vendor/read-excel-file.min.js"></script>', () => `<script>${safe(read("node_modules/read-excel-file/bundle/read-excel-file.min.js"))}</script>`)
+  .replace('<script src="importer.js"></script>', () => `<script>${safe(read("public/importer.js"))}</script>`)
   .replace('<script src="app.js"></script>', () => [
     `<script>window.JUANMA_SEED_CATALOG = ${JSON.stringify(SEED_CATALOG)};</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,

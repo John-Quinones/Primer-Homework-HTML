@@ -9,6 +9,7 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 | **Clientes** | Create, search, edit and delete clients (name, ID type and number, email, phone, address, city, notes). Each client shows their cases. |
 | **Expedientes** | A case links a client to a sub-process (e.g. Laboral › Ejecutivo Laboral) and stores subject, status, counterparty, facts and the category's custom fields. Filter by process type. |
 | **Borradores** | Pick a case (or fill the form by hand) and generate a draft. The case's client data, process and custom fields are sent to NomosAI. |
+| **Importar** | Load existing data exported from Access (or any spreadsheet) as `.xlsx` or `.csv`. Columns are matched automatically (Nombres + Apellidos are joined, IdCliente/Código are skipped) and can be reassigned. A file can hold clients only, or one case per row with the client's data on the same row. Existing clients are matched by document number or name and only their blank fields are filled; identical cases are not created twice; missing process types, sub-processes and custom fields can be created on the fly. Rows that fail are listed by row number. |
 | **Configuración** | Manage process types (Administrativo, Laboral, Penal, Familia, Derecho de Petición, Datacrédito, or new ones), their sub-processes, and custom fields per type: text, long text, number, date, or a drop-down list, optionally required. |
 
 Deleting a client or sub-process that still has cases is refused.
@@ -42,6 +43,7 @@ Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-opus-5-5`), `DB_
 | Claude call (streaming, effort `high`, server-side refusal fallback) | `src/engine.js` |
 | Rule checks on every draft | `src/validate.js` |
 | UI (Spanish) | `public/` |
+| Excel / CSV import (runs in the browser through the regular API) | `public/importer.js` |
 | In-browser backend for the preview | `public/demo-backend.js`, `scripts/build-preview.mjs` |
 
 `src/validate.js` checks each draft instead of trusting the prompt alone. It splits SECTION 1 (Markdown) from SECTION 2 (JSON), parses the payload, and flags:

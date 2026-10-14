@@ -27,6 +27,7 @@
       <a href="#clientes" data-view="clientes">Clientes</a>
       <a href="#expedientes" data-view="expedientes">Expedientes</a>
       <a href="#borradores" data-view="borradores">Borradores</a>
+      <a href="#importar" data-view="importar">Importar</a>
       <a href="#configuracion" data-view="configuracion">Configuración</a>
     </nav>
 
@@ -145,6 +146,52 @@
         </div>
       </section>
 
+      <!-- ============ IMPORTAR ============ -->
+      <section id="view-importar" class="view" hidden>
+        <div class="view-head"><h2>Importar desde Excel</h2></div>
+
+        <div class="panel step">
+          <h3><span class="step-no">1</span> Archivo</h3>
+          <p class="hint">En Access: <strong>Datos externos → Exportar → Excel</strong> (formato .xlsx), o exporte a <strong>archivo de texto (.csv)</strong>. Una fila por cliente, o una fila por expediente con los datos del cliente en la misma fila.</p>
+          <input id="import-file" type="file" accept=".xlsx,.csv,.txt" />
+          <label id="import-sheet-wrap" hidden>Hoja <select id="import-sheet"></select></label>
+          <p id="import-file-info" class="hint" hidden></p>
+        </div>
+
+        <div id="import-step2" class="panel step" hidden>
+          <h3><span class="step-no">2</span> Qué contiene el archivo</h3>
+          <div class="radio-row">
+            <label class="inline"><input type="radio" name="import-mode" value="clients" checked /> Solo clientes</label>
+            <label class="inline"><input type="radio" name="import-mode" value="cases" /> Clientes y expedientes (una fila por expediente)</label>
+          </div>
+          <div id="import-case-opts" class="grid2" hidden>
+            <label>Tipo de proceso si la fila no lo trae <select id="import-default-cat"><option value="">— Ninguno —</option></select></label>
+            <label>Subproceso si la fila no lo trae <select id="import-default-type"><option value="">— Ninguno —</option></select></label>
+            <label class="inline span2"><input type="checkbox" id="import-create-catalog" checked /> Crear los tipos de proceso y subprocesos del archivo que no existan en Configuración</label>
+          </div>
+        </div>
+
+        <div id="import-step3" class="panel step" hidden>
+          <h3><span class="step-no">3</span> Columnas</h3>
+          <p class="hint">Revise a qué campo va cada columna. Si asigna varias columnas al mismo campo (por ejemplo Nombres y Apellidos), se unen en el orden del archivo.</p>
+          <div class="table-scroll">
+            <table class="data-table map-table">
+              <thead><tr><th>Columna del archivo</th><th>Ejemplo</th><th>Importar como</th></tr></thead>
+              <tbody id="import-map"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="import-step4" class="panel step" hidden>
+          <h3><span class="step-no">4</span> Vista previa e importación</h3>
+          <div class="table-scroll"><table class="data-table" id="import-preview"></table></div>
+          <p class="hint">Si el cliente ya existe (mismo número de documento o mismo nombre), no se duplica: solo se completan los datos que tenga vacíos. Un expediente igual (mismo cliente, subproceso y asunto) no se vuelve a crear.</p>
+          <button id="import-run" class="primary">Importar</button>
+          <progress id="import-progress" value="0" max="1" hidden></progress>
+          <div id="import-result" hidden></div>
+        </div>
+      </section>
+
       <!-- ============ CONFIGURACIÓN ============ -->
       <section id="view-configuracion" class="view" hidden>
         <div class="view-head">
@@ -225,6 +272,8 @@
 
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
+  <script src="vendor/read-excel-file.min.js"></script>
+  <script src="importer.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

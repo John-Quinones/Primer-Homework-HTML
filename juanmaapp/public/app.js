@@ -81,7 +81,7 @@ async function guarded(fn) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["clientes", "expedientes", "borradores", "configuracion"];
+const VIEWS = ["clientes", "expedientes", "borradores", "importar", "configuracion"];
 function showView() {
   const name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "clientes";
   for (const v of VIEWS) $(`#view-${v}`).hidden = v !== name;
@@ -569,10 +569,151 @@ $(".actions").addEventListener("click", async (e) => {
   }
 });
 
+// ---------- Importar ----------
+const IMP = window.JuanmaImport;
+const imp = { sheets: [], headers: [], body: [], mapping: [] };
+
+const importMode = () => $("input[name=import-mode]:checked").value;
+
+async function renderImportar() {
+  await loadCatalog();
+  const catSel = $("#import-default-cat");
+  const cur = catSel.value;
+  catSel.innerHTML = '<option value="">— Ninguno —</option>' +
+    state.catalog.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+  catSel.value = cur;
+  fillDefaultTypes();
+}
+
+function fillDefaultTypes() {
+  const cat = state.catalog.find((c) => c.name === $("#import-default-cat").value);
+  $("#import-default-type").innerHTML = '<option value="">— Ninguno —</option>' +
+    (cat?.types ?? []).map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join("");
+}
+$("#import-default-cat").addEventListener("change", fillDefaultTypes);
+
+$("#import-file").addEventListener("change", (e) => guarded(async () => {
+  const file = e.target.files[0];
+  $("#import-result").hidden = true;
+  if (!file) return;
+  imp.sheets = await IMP.readFile(file);
+  const sel = $("#import-sheet");
+  sel.innerHTML = imp.sheets.map((s, i) => `<option value="${i}">${escapeHtml(s.name)} (${s.rows.length} filas)</option>`).join("");
+  $("#import-sheet-wrap").hidden = imp.sheets.length < 2;
+  loadSheet(0);
+}));
+$("#import-sheet").addEventListener("change", (e) => loadSheet(Number(e.target.value)));
+
+function loadSheet(i) {
+  const { headers, body } = IMP.splitHeader(imp.sheets[i].rows);
+  imp.headers = headers;
+  imp.body = body;
+  imp.mapping = headers.map(IMP.guessTarget);
+  const info = $("#import-file-info");
+  info.hidden = false;
+  if (!headers.length) {
+    info.textContent = "No se encontró una fila de encabezados en esta hoja.";
+    ["#import-step2", "#import-step3", "#import-step4"].forEach((s) => ($(s).hidden = true));
+    return;
+  }
+  info.textContent = `${body.length} filas de datos y ${headers.length} columnas.`;
+  // A file with process columns is most likely one row per case.
+  const hasCase = imp.mapping.some((m) => m.startsWith("case."));
+  $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
+  ["#import-step2", "#import-step3", "#import-step4"].forEach((s) => ($(s).hidden = false));
+  renderMapping();
+}
+
+function renderMapping() {
+  const casesMode = importMode() === "cases";
+  $("#import-case-opts").hidden = !casesMode;
+  const targets = IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  $("#import-map").innerHTML = imp.headers.map((h, i) => {
+    const sample = imp.body.find((r) => r[i])?.[i] ?? "";
+    return `<tr>
+      <td><strong>${escapeHtml(h)}</strong></td>
+      <td title="${escapeHtml(sample)}">${escapeHtml(sample)}</td>
+      <td><select data-col="${i}">${targets.map((t) =>
+        `<option value="${t.key}" ${t.key === imp.mapping[i] ? "selected" : ""}>${escapeHtml(t.label)}</option>`).join("")}</select></td>
+    </tr>`;
+  }).join("");
+  // Columns mapped to case fields fall back to "No importar" in clients-only mode.
+  $$("#import-map select").forEach((sel) => (imp.mapping[sel.dataset.col] = sel.value));
+  renderImportPreview();
+}
+
+$$("input[name=import-mode]").forEach((r) => r.addEventListener("change", renderMapping));
+$("#import-map").addEventListener("change", (e) => {
+  const sel = e.target.closest("select[data-col]");
+  if (!sel) return;
+  imp.mapping[sel.dataset.col] = sel.value;
+  renderImportPreview();
+});
+
+function importRecords() {
+  return imp.body.map((row, i) => ({ ...IMP.buildRecord(row, imp.headers, imp.mapping), rowNumber: i + 2 }))
+    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length);
+}
+
+function renderImportPreview() {
+  const casesMode = importMode() === "cases";
+  const recs = importRecords();
+  const cols = [["client.full_name", "Cliente"], ["client.id_number", "Documento"], ["client.email", "Correo"], ["client.phone", "Teléfono"]];
+  if (casesMode) cols.push(["case.category", "Tipo de proceso"], ["case.type", "Subproceso"], ["case.title", "Asunto"]);
+  const head = `<thead><tr>${cols.map(([, l]) => `<th>${l}</th>`).join("")}${casesMode ? "<th>Campos propios</th>" : ""}</tr></thead>`;
+  const rows = recs.slice(0, 5).map((r) => `<tr>${cols.map(([k]) => {
+    const [o, f] = k.split(".");
+    return `<td>${escapeHtml(r[o][f] ?? "")}</td>`;
+  }).join("")}${casesMode ? `<td>${escapeHtml(Object.entries(r.custom).map(([k, v]) => `${k}: ${v}`).join("\n"))}</td>` : ""}</tr>`).join("");
+  $("#import-preview").innerHTML = head + `<tbody>${rows}</tbody>`;
+  const noName = !imp.mapping.includes("client.full_name");
+  const btn = $("#import-run");
+  btn.disabled = noName || !recs.length;
+  btn.textContent = noName ? "Asigne la columna del nombre del cliente" : `Importar ${recs.length} filas`;
+}
+
+$("#import-run").addEventListener("click", () => guarded(async () => {
+  const records = importRecords();
+  const casesMode = importMode() === "cases";
+  const btn = $("#import-run");
+  const bar = $("#import-progress");
+  btn.disabled = true;
+  bar.hidden = false;
+  bar.value = 0;
+  try {
+    const sum = await IMP.run(records, api, {
+      withCases: casesMode,
+      createCatalog: $("#import-create-catalog").checked,
+      defaultCategory: $("#import-default-cat").value,
+      defaultType: $("#import-default-type").value,
+      onProgress: (done, total) => (bar.value = done / total),
+    });
+    const res = $("#import-result");
+    res.hidden = false;
+    res.innerHTML = `
+      <p class="${sum.errors.length ? "" : "ok"}"><strong>Importación terminada.</strong></p>
+      <ul>
+        <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
+        <li>Clientes existentes completados: <strong>${sum.clientsCompleted}</strong></li>
+        ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
+        <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
+        ${sum.catalogCreated.length ? `<li>Agregado a Configuración: ${escapeHtml(sum.catalogCreated.join("; "))}</li>` : ""}
+        <li>Filas con error: <strong>${sum.errors.length}</strong></li>
+      </ul>
+      ${sum.errors.length ? `<div class="errors"><ul>${sum.errors.map((e) =>
+        `<li>Fila ${e.row}: ${escapeHtml(e.message)}</li>`).join("")}</ul></div>` : ""}`;
+    toast("Importación terminada.");
+    await loadCatalog();
+  } finally {
+    btn.disabled = false;
+  }
+}));
+
 const RENDER = {
   clientes: renderClientes,
   expedientes: renderExpedientes,
   borradores: renderBorradores,
+  importar: renderImportar,
   configuracion: renderConfiguracion,
 };
 

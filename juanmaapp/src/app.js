@@ -40,6 +40,8 @@ export function createApp(db) {
   app.use(express.json({ limit: "200kb" }));
   app.use(express.static(path.join(root, "public")));
   app.get("/vendor/marked.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/marked/marked.min.js")));
+  app.get("/vendor/read-excel-file.min.js", (_req, res) =>
+    res.sendFile(path.join(root, "node_modules/read-excel-file/bundle/read-excel-file.min.js")));
   app.get("/vendor/purify.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/dompurify/dist/purify.min.js")));
 
   app.use("/api", recordsRouter(db));
