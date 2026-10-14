@@ -4,7 +4,9 @@
 // cannot send, so the cookie alone cannot be used for CSRF.
 import express from "express";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
+import { canonicalDepartment, canonicalCity } from "./places.js";
 
+// Built-in roles; the firm can add more in Usuarios › Roles y permisos.
 export const ROLES = [
   "Gerencia",
   "Director Jurídico",
@@ -27,16 +29,17 @@ export const PERMISSIONS = {
   "jurisprudence.use": "Usa el buscador de jurisprudencia",
   "import.run": "Importa datos desde Excel",
   "reports.view": "Ve y exporta reportes",
+  "processes.consult": "Consulta procesos en la Rama Judicial y recibe reportes",
 };
 
 // Starting matrix; Gerencia edits it in Usuarios › Roles.
 export const DEFAULT_MATRIX = {
   "Gerencia": Object.keys(PERMISSIONS),
-  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view"],
+  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult"],
   "Director Contable": ["scope.all", "reports.view"],
-  "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view"],
-  "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view"],
-  "Dependiente Judicial": ["cases.write", "jurisprudence.use"],
+  "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult"],
+  "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view", "processes.consult"],
+  "Dependiente Judicial": ["cases.write", "jurisprudence.use", "processes.consult"],
   "Asistente": ["clients.write", "cases.write", "drafts.generate"],
 };
 
@@ -67,6 +70,9 @@ function parseCookies(header = "") {
   return Object.fromEntries(header.split(";").map((p) => p.trim().split("=")).filter(([k]) => k).map(([k, ...v]) => [k, decodeURIComponent(v.join("="))]));
 }
 
+export const listRoles = (db) => db.prepare("SELECT name, builtin FROM roles ORDER BY builtin DESC, rowid").all().map((r) => r.name);
+const roleExists = (db, name) => !!db.prepare("SELECT 1 FROM roles WHERE name = ?").get(name);
+
 /** Permissions for a role from the stored matrix (Gerencia always keeps users.manage). */
 export function rolePermissions(db, role) {
   const perms = db.prepare("SELECT permission FROM role_permissions WHERE role = ?").all(role).map((r) => r.permission);
@@ -75,12 +81,16 @@ export function rolePermissions(db, role) {
 }
 
 export function loadUser(db, id) {
-  const u = db.prepare("SELECT id, name, email, role, active, created_at FROM users WHERE id = ?").get(id);
+  const u = db.prepare("SELECT id, name, email, phone, role, active, custom_permissions, created_at FROM users WHERE id = ?").get(id);
   if (!u) return null;
   const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
     WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
-  const permissions = rolePermissions(db, u.role);
-  return { ...u, active: !!u.active, offices, permissions };
+  // A user's own checklist replaces the role's when it is turned on.
+  const permissions = u.custom_permissions
+    ? db.prepare("SELECT permission FROM user_permissions WHERE user_id = ?").all(id).map((r) => r.permission)
+    : rolePermissions(db, u.role);
+  if (u.role === "Gerencia" && !permissions.includes("users.manage")) permissions.push("users.manage");
+  return { ...u, active: !!u.active, custom_permissions: !!u.custom_permissions, offices, permissions };
 }
 
 /** Office ids a user may see, or null for every office. */
@@ -195,13 +205,16 @@ export function adminRouter(db) {
       FROM offices o ORDER BY o.is_main DESC, o.name`).all().map(officeOut));
   });
 
-  const officeFields = (b) => ({ name: str(b.name), city: str(b.city), address: str(b.address), phone: str(b.phone), email: str(b.email) });
+  const officeFields = (b) => {
+    const department = canonicalDepartment(b.department);
+    return { name: str(b.name), department, city: canonicalCity(b.city, department), address: str(b.address), phone: str(b.phone), email: str(b.email) };
+  };
 
   r.post("/offices", manage, (req, res) => {
     const o = officeFields(req.body ?? {});
     if (!o.name) return res.status(400).json({ error: "El nombre de la oficina es obligatorio." });
     try {
-      const id = db.prepare("INSERT INTO offices (name, city, address, phone, email) VALUES (:name, :city, :address, :phone, :email)").run(o).lastInsertRowid;
+      const id = db.prepare("INSERT INTO offices (name, department, city, address, phone, email) VALUES (:name, :department, :city, :address, :phone, :email)").run(o).lastInsertRowid;
       res.status(201).json(officeOut(db.prepare("SELECT * FROM offices WHERE id = ?").get(id)));
     } catch {
       res.status(409).json({ error: "Ya existe una oficina con ese nombre." });
@@ -215,7 +228,7 @@ export function adminRouter(db) {
     const o = { ...officeFields({ ...cur, ...req.body }), id };
     if (!o.name) return res.status(400).json({ error: "El nombre de la oficina es obligatorio." });
     try {
-      db.prepare("UPDATE offices SET name = :name, city = :city, address = :address, phone = :phone, email = :email WHERE id = :id").run(o);
+      db.prepare("UPDATE offices SET name = :name, department = :department, city = :city, address = :address, phone = :phone, email = :email WHERE id = :id").run(o);
       if (req.body?.is_main === true) {
         db.exec("BEGIN");
         db.prepare("UPDATE offices SET is_main = 0").run();
@@ -253,6 +266,15 @@ export function adminRouter(db) {
     res.json(db.prepare("SELECT id FROM users ORDER BY active DESC, name").all().map((u) => loadUser(db, u.id)));
   });
 
+  const setUserPermissions = (userId, custom, perms) => {
+    if (custom === undefined) return;
+    db.prepare("UPDATE users SET custom_permissions = ? WHERE id = ?").run(custom ? 1 : 0, userId);
+    db.prepare("DELETE FROM user_permissions WHERE user_id = ?").run(userId);
+    if (!custom) return;
+    const ins = db.prepare("INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)");
+    for (const p of new Set((perms || []).filter((p) => p in PERMISSIONS))) ins.run(userId, p);
+  };
+
   const setOffices = (userId, officeIds) => {
     const valid = new Set(db.prepare("SELECT id FROM offices").all().map((o) => o.id));
     db.prepare("DELETE FROM user_offices WHERE user_id = ?").run(userId);
@@ -264,13 +286,14 @@ export function adminRouter(db) {
     const b = req.body ?? {};
     const name = str(b.name), email = str(b.email).toLowerCase();
     if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
-    if (!ROLES.includes(b.role)) return res.status(400).json({ error: "Rol no válido." });
+    if (!roleExists(db, b.role)) return res.status(400).json({ error: "Rol no válido." });
     if (!validPassword(b.password)) return res.status(400).json({ error: "La contraseña inicial debe tener al menos 10 caracteres." });
     if (!Array.isArray(b.office_ids) || !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     try {
-      const id = db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)")
-        .run(name, email, hashPassword(b.password), b.role).lastInsertRowid;
+      const id = db.prepare("INSERT INTO users (name, email, phone, password_hash, role) VALUES (?, ?, ?, ?, ?)")
+        .run(name, email, str(b.phone), hashPassword(b.password), b.role).lastInsertRowid;
       setOffices(id, b.office_ids);
+      setUserPermissions(id, b.custom_permissions, b.permissions);
       res.status(201).json(loadUser(db, id));
     } catch {
       res.status(409).json({ error: "Ya existe un usuario con ese correo." });
@@ -283,7 +306,7 @@ export function adminRouter(db) {
     if (!cur) return res.status(404).json({ error: "El usuario no existe." });
     const b = req.body ?? {};
     const role = b.role ?? cur.role;
-    if (!ROLES.includes(role)) return res.status(400).json({ error: "Rol no válido." });
+    if (!roleExists(db, role)) return res.status(400).json({ error: "Rol no válido." });
     const active = b.active === undefined ? !!cur.active : !!b.active;
     // Never leave the firm without an active Gerencia account.
     if (cur.role === "Gerencia" && (role !== "Gerencia" || !active)) {
@@ -294,8 +317,8 @@ export function adminRouter(db) {
     if (Array.isArray(b.office_ids) && !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     const email = b.email ? str(b.email).toLowerCase() : cur.email;
     try {
-      db.prepare("UPDATE users SET name = ?, email = ?, role = ?, active = ? WHERE id = ?")
-        .run(str(b.name) || cur.name, email, role, active ? 1 : 0, id);
+      db.prepare("UPDATE users SET name = ?, email = ?, phone = ?, role = ?, active = ? WHERE id = ?")
+        .run(str(b.name) || cur.name, email, "phone" in b ? str(b.phone) : cur.phone, role, active ? 1 : 0, id);
     } catch {
       return res.status(409).json({ error: "Ya existe un usuario con ese correo." });
     }
@@ -305,22 +328,52 @@ export function adminRouter(db) {
     }
     if (!active) db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
     if (Array.isArray(b.office_ids)) setOffices(id, b.office_ids);
+    setUserPermissions(id, b.custom_permissions, b.permissions);
     res.json(loadUser(db, id));
   });
 
-  // ----- Role matrix -----
+  // ----- Roles -----
   r.get("/roles", (req, res) => {
+    const roles = db.prepare(`SELECT r.name, r.builtin, (SELECT COUNT(*) FROM users WHERE role = r.name) AS users
+      FROM roles r ORDER BY r.builtin DESC, r.rowid`).all().map((x) => ({ ...x, builtin: !!x.builtin }));
     res.json({
-      roles: ROLES,
+      roles: roles.map((x) => x.name),
+      details: roles,
       permissions: PERMISSIONS,
-      matrix: Object.fromEntries(ROLES.map((role) => [role, rolePermissions(db, role)])),
+      matrix: Object.fromEntries(roles.map((x) => [x.name, rolePermissions(db, x.name)])),
     });
+  });
+
+  r.post("/roles", manage, (req, res) => {
+    const name = str(req.body?.name);
+    if (!name || name.length > 60) return res.status(400).json({ error: "Escriba el nombre del rol (máximo 60 caracteres)." });
+    if (roleExists(db, name)) return res.status(409).json({ error: "Ya existe un rol con ese nombre." });
+    const from = str(req.body?.copy_from);
+    db.prepare("INSERT INTO roles (name, builtin) VALUES (?, 0)").run(name);
+    if (from && roleExists(db, from)) {
+      const ins = db.prepare("INSERT INTO role_permissions (role, permission) VALUES (?, ?)");
+      for (const p of rolePermissions(db, from)) if (p !== "users.manage" || from !== "Gerencia") ins.run(name, p);
+    }
+    res.status(201).json({ role: name, permissions: rolePermissions(db, name) });
   });
 
   r.put("/roles/:role", manage, (req, res) => {
     const role = req.params.role;
-    if (!ROLES.includes(role)) return res.status(404).json({ error: "Rol no válido." });
-    const perms = (req.body?.permissions || []).filter((p) => p in PERMISSIONS);
+    if (!roleExists(db, role)) return res.status(404).json({ error: "Rol no válido." });
+    const newName = str(req.body?.name);
+    if (newName && newName !== role) {
+      const builtin = db.prepare("SELECT builtin FROM roles WHERE name = ?").get(role).builtin;
+      if (builtin) return res.status(409).json({ error: "Los roles incluidos no se pueden renombrar." });
+      if (roleExists(db, newName)) return res.status(409).json({ error: "Ya existe un rol con ese nombre." });
+      db.exec("BEGIN");
+      db.prepare("UPDATE roles SET name = ? WHERE name = ?").run(newName, role);
+      db.prepare("UPDATE role_permissions SET role = ? WHERE role = ?").run(newName, role);
+      db.prepare("UPDATE users SET role = ? WHERE role = ?").run(newName, role);
+      db.exec("COMMIT");
+      return res.json({ role: newName, permissions: rolePermissions(db, newName) });
+    }
+    if (!Array.isArray(req.body?.permissions)) return res.status(400).json({ error: "Faltan los permisos." });
+    const perms = req.body.permissions.filter((p) => p in PERMISSIONS);
     if (role === "Gerencia" && !perms.includes("users.manage")) perms.push("users.manage");
     db.exec("BEGIN");
     db.prepare("DELETE FROM role_permissions WHERE role = ?").run(role);
@@ -328,6 +381,18 @@ export function adminRouter(db) {
     for (const p of new Set(perms)) ins.run(role, p);
     db.exec("COMMIT");
     res.json({ role, permissions: rolePermissions(db, role) });
+  });
+
+  r.delete("/roles/:role", manage, (req, res) => {
+    const row = db.prepare("SELECT builtin FROM roles WHERE name = ?").get(req.params.role);
+    if (!row) return res.status(404).json({ error: "Rol no válido." });
+    if (row.builtin) return res.status(409).json({ error: "Los roles incluidos no se pueden eliminar." });
+    if (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = ?").get(req.params.role).n) {
+      return res.status(409).json({ error: "Hay usuarios con este rol. Cámbielos de rol antes de eliminarlo." });
+    }
+    db.prepare("DELETE FROM role_permissions WHERE role = ?").run(req.params.role);
+    db.prepare("DELETE FROM roles WHERE name = ?").run(req.params.role);
+    res.status(204).end();
   });
 
   return r;

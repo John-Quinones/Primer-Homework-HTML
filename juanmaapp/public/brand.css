@@ -52,6 +52,9 @@
              linear-gradient(135deg, #001233 0%, #002b6a 55%, #014a9a 100%);
   --glass: rgba(255, 255, 255, .08);
   --glass-border: rgba(255, 255, 255, .18);
+  --command-bg: linear-gradient(135deg, #001a42 0%, var(--brand-navy) 60%, #013e86 100%);
+  --command-tile: rgba(255, 255, 255, .06);
+  --k1: #4fb0ee; --k2: #34d1bf; --k3: #f5b84b; --k4: #c4c8cb; --k5: #8fa8ff;
   --on-dark: #eef2f7;
   --on-dark-muted: #b9c3d0;
 }

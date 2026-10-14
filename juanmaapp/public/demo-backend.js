@@ -7,19 +7,23 @@
   const SEED = window.JUANMA_SEED_CATALOG || [];
   const AUTH = window.JUANMA_AUTH || { roles: [], permissions: {}, matrix: {} };
   const REPORTS = window.JUANMA_REPORTS || {};
-  const KEY = "juanmaapp-preview-v3";
+  const KEY = "juanmaapp-preview-v4";
+  const AREAS = window.JUANMA_AREAS || [];
+  const DIV = window.JUANMA_DIVIPOLA || { departamentos: [], municipios: [] };
   const OPEN = ["Abierto", "En trámite", "En espera de respuesta"];
 
   function fresh() {
     const s = { seq: 1, offices: [], users: [], matrix: JSON.parse(JSON.stringify(AUTH.matrix)), current: null,
-      clients: [], categories: [], types: [], fields: [], cases: [], saved: [] };
+      roles: AUTH.roles.map((name) => ({ name, builtin: true })),
+      clients: [], categories: [], types: [], fields: [], cases: [], saved: [],
+      courts: [], tasks: [], notes: [], acts: [], checks: [], prefs: {}, log: [] };
     const id = () => s.seq++;
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-    const office = (name, city, is_main = false) => { const o = { id: id(), name, city, address: "", phone: "", email: "", is_main }; s.offices.push(o); return o; };
-    const ibague = office("Ibagué", "Ibagué", true), bogota = office("Bogotá", "Bogotá"), neiva = office("Neiva", "Neiva");
+    const office = (name, department, city, is_main = false) => { const o = { id: id(), name, department, city, address: "", phone: "", email: "", is_main }; s.offices.push(o); return o; };
+    const ibague = office("Ibagué", "Tolima", "Ibagué", true), bogota = office("Bogotá", "Bogotá, D.C.", "Bogotá, D.C."), neiva = office("Neiva", "Huila", "Neiva");
     const user = (name, role, offs) => {
       const u = { id: id(), name, email: name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, ".") + "@ejemplo.co",
-        role, active: true, office_ids: offs.map((o) => o.id), created_at: now };
+        role, active: true, office_ids: offs.map((o) => o.id), created_at: now, phone: "", custom_permissions: false, permissions: [] };
       s.users.push(u);
       return u;
     };
@@ -38,31 +42,58 @@
     });
     const lab = s.categories.find((c) => c.name === "Laboral");
     const adm = s.categories.find((c) => c.name === "Administrativo");
-    const juzgado = { id: id(), category_id: lab.id, label: "Juzgado", field_type: "text", options: [], required: false, sort: 0 };
-    const radicado = { id: id(), category_id: lab.id, label: "Radicado", field_type: "text", options: [], required: false, sort: 1 };
+    const juzgado = { id: id(), category_id: lab.id, label: "Etapa procesal", field_type: "select", options: ["Demanda", "Contestación", "Audiencia de conciliación", "Juzgamiento", "Ejecución"], required: false, sort: 0 };
     const etapa = { id: id(), category_id: adm.id, label: "Etapa", field_type: "select", options: ["Conciliación prejudicial", "Demanda", "Audiencia inicial", "Fallo"], required: false, sort: 0 };
-    s.fields.push(juzgado, radicado, etapa);
+    s.fields.push(juzgado, etapa);
     const client = (full_name, id_number, email, phone, address, city, o) => {
-      const c = { id: id(), full_name, id_type: "CC", id_number, email, phone, address, city, notes: "Cliente de ejemplo", office_id: o.id, created_at: now };
+      const c = { id: id(), full_name, id_type: "CC", id_number, email, phone, address, city, department: o.department, notes: "Cliente de ejemplo", office_id: o.id, created_at: now };
       s.clients.push(c);
       return c;
     };
     const ana = client("Ana María Pérez Gómez", "52.123.456", "ana.perez@ejemplo.co", "300 123 4567", "Cra 5 # 12-40", "Ibagué", ibague);
-    const luis = client("Luis Fernando Rojas", "79.876.543", "luis.rojas@ejemplo.co", "310 987 6543", "Calle 50 # 12-30", "Bogotá", bogota);
+    const luis = client("Luis Fernando Rojas", "79.876.543", "luis.rojas@ejemplo.co", "310 987 6543", "Calle 50 # 12-30", "Bogotá, D.C.", bogota);
     const rosa = client("Rosa Elena Cárdenas", "36.111.222", "rosa.cardenas@ejemplo.co", "315 222 3344", "Av. La Toma # 8-15", "Neiva", neiva);
+    // Example court directory: names follow the usual pattern, e-mails are fictitious.
+    const court = (name, department, city, area, code) => {
+      const c = { id: id(), code, name, department, city, city_code: "", area, email: `${code}@ejemplo-ficticio.co`, phone: "", address: "", updated_at: now };
+      s.courts.push(c);
+      return c;
+    };
+    for (let n = 1; n <= 6; n++) court(`Juzgado 00${n} Laboral del Circuito de Ibagué (ejemplo)`, "Tolima", "Ibagué", "Laboral", `ej-lab${n}-ibague`);
+    for (let n = 1; n <= 3; n++) court(`Juzgado 00${n} Civil del Circuito de Ibagué (ejemplo)`, "Tolima", "Ibagué", "Civil", `ej-civ${n}-ibague`);
+    for (let n = 1; n <= 2; n++) court(`Juzgado 00${n} de Familia de Ibagué (ejemplo)`, "Tolima", "Ibagué", "Familia", `ej-fam${n}-ibague`);
+    court("Juzgado 001 Administrativo de Ibagué (ejemplo)", "Tolima", "Ibagué", "Administrativo", "ej-adm1-ibague");
+    court("Juzgado 001 Promiscuo Municipal de Espinal (ejemplo)", "Tolima", "Espinal", "Promiscuo", "ej-prom1-espinal");
+    const admBog = court("Juzgado 001 Administrativo de Bogotá (ejemplo)", "Bogotá, D.C.", "Bogotá, D.C.", "Administrativo", "ej-adm1-bogota");
+    const famNeiva = court("Juzgado 001 de Familia de Neiva (ejemplo)", "Huila", "Neiva", "Familia", "ej-fam1-neiva");
+    const lab2 = s.courts[1];
     const typeId = (name) => s.types.find((t) => t.name === name).id;
-    const kase = (c, type, title, status, counterparty, facts, values, o, assignee) => s.cases.push({
-      id: id(), client_id: c.id, process_type_id: typeId(type), title, status, counterparty, facts, field_values: values,
-      office_id: o.id, assigned_user_id: assignee?.id ?? null, created_at: now, updated_at: now });
-    kase(ana, "Ejecutivo Laboral", "Cobro de prestaciones sociales", "En trámite", "Servicios Andinos S.A.S.",
+    const kase = (c, type, title, status, counterparty, facts, values, o, assignee, place = {}) => {
+      const k = { id: id(), client_id: c.id, process_type_id: typeId(type), title, status, counterparty, facts, field_values: values,
+        office_id: o.id, assigned_user_id: assignee?.id ?? null, created_at: now, updated_at: now,
+        department: "", city: "", area: "", court_id: null, court_name: "", court_email: "", radicado: "", monitor: 0,
+        last_checked_at: null, last_action_date: null, ...place };
+      s.cases.push(k);
+      return k;
+    };
+    const fromCourt = (c, radicado) => ({ department: c.department, city: c.city, area: c.area, court_id: c.id, court_name: c.name, court_email: c.email, radicado, monitor: 1 });
+    const k1 = kase(ana, "Ejecutivo Laboral", "Cobro de prestaciones sociales", "En trámite", "Servicios Andinos S.A.S.",
       "La trabajadora laboró del 1 de febrero de 2023 al 30 de junio de 2026. A la terminación no se le pagaron cesantías ni prima del último semestre.",
-      { [juzgado.id]: "Juzgado 2 Laboral del Circuito de Ibagué" }, ibague, laura);
-    kase(luis, "Medio de Control de Reparación Directa", "Daños por obra pública", "Abierto", "Alcaldía de Bogotá",
-      "El 12 de mayo de 2026 una excavación sin señalizar causó la caída del cliente.", { [etapa.id]: "Conciliación prejudicial" }, bogota, andres);
+      { [juzgado.id]: "Juzgamiento" }, ibague, laura, fromCourt(lab2, "73001310500220260000000"));
+    const k2 = kase(luis, "Medio de Control de Reparación Directa", "Daños por obra pública", "Abierto", "Alcaldía de Bogotá",
+      "El 12 de mayo de 2026 una excavación sin señalizar causó la caída del cliente.", { [etapa.id]: "Conciliación prejudicial" }, bogota, andres,
+      fromCourt(admBog, "11001333600120260000000"));
     kase(ana, "Reclamo ante la Fuente", "Reporte negativo sin aviso previo", "Abierto", "Banco de Ejemplo S.A.",
       "La cliente fue reportada en mora sin la comunicación previa de 20 días.", {}, ibague, null);
     kase(rosa, "Fijación de Cuota Alimentaria", "Cuota para dos hijos menores", "En espera de respuesta", "Padre de los menores",
-      "Los menores viven con la madre desde enero de 2026 y el padre no aporta.", {}, neiva, null);
+      "Los menores viven con la madre desde enero de 2026 y el padre no aporta.", {}, neiva, null, fromCourt(famNeiva, "41001311000120260000000"));
+    const at = (days, hhmm) => new Date(Date.now() - 5 * 3600 * 1000 + days * 86400000).toISOString().slice(0, 10) + " " + hhmm;
+    const task = (k, kind, title, due_at, location, remind_days, assignee) => s.tasks.push({ id: id(), case_id: k.id, kind, title, notes: "", due_at, location,
+      assigned_user_id: assignee?.id ?? null, remind_days, status: "pendiente", created_by: laura.id, created_at: now, done_at: null });
+    task(k1, "audiencia", "Audiencia de trámite y juzgamiento (ejemplo)", at(2, "09:00"), "Sala virtual · enlace del juzgado", [3, 1], laura);
+    task(k1, "termino", "Vence término para presentar alegatos (ejemplo)", at(5, "17:00"), "", [3, 1], laura);
+    task(k1, "tarea", "Llamar a la clienta para pedir certificados laborales (ejemplo)", at(-1, "10:00"), "", [1], laura);
+    task(k2, "audiencia", "Audiencia de conciliación prejudicial (ejemplo)", at(9, "14:30"), "Procuraduría · sede Bogotá", [7, 1], andres);
     return s;
   }
 
@@ -82,10 +113,43 @@
     if (role === "Gerencia" && !p.includes("users.manage")) p.push("users.manage");
     return p;
   };
+  const userPerms = (u) => {
+    const p = u.custom_permissions ? [...u.permissions] : permsOf(u.role);
+    if (u.role === "Gerencia" && !p.includes("users.manage")) p.push("users.manage");
+    return p;
+  };
+  const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+  const canonDep = (x) => {
+    const n = nrm(x);
+    if (!n) return "";
+    return DIV.departamentos.find((d) => nrm(d.name) === n)?.name || (n.startsWith("bogota") ? "Bogotá, D.C." : n.startsWith("valle") ? "Valle del Cauca" : "");
+  };
+  const canonCity = (x, dep) => {
+    const n = nrm(x);
+    if (!n) return "";
+    const code = DIV.departamentos.find((d) => d.name === dep)?.code;
+    return DIV.municipios.find((m) => (!code || m.dep === code) && nrm(m.name) === n)?.name || (n.startsWith("bogota") ? "Bogotá, D.C." : String(x).trim());
+  };
+  const AREA_RULES = [[/ejecucion de penas/, "Ejecución de Penas"], [/pequenas causas|competencia multiple/, "Pequeñas Causas y Competencia Múltiple"],
+    [/restitucion de tierras/, "Restitución de Tierras"], [/adolescente/, "Penal para Adolescentes"], [/administrativ|contencioso/, "Administrativo"],
+    [/laboral/, "Laboral"], [/familia/, "Familia"], [/promiscuo/, "Promiscuo"], [/penal|control de garantias|conocimiento/, "Penal"], [/civil/, "Civil"],
+    [/constitucional/, "Constitucional"]];
+  const inferArea = (name, explicit) => {
+    const e = nrm(explicit);
+    if (e) { const d = AREAS.find((a) => nrm(a) === e); if (d) return d; for (const [re, a] of AREA_RULES) if (re.test(e)) return a; }
+    for (const [re, a] of AREA_RULES) if (re.test(nrm(name))) return a;
+    return "Otro";
+  };
+  const placeFromRad = (r) => {
+    const m = DIV.municipios.find((x) => x.code === String(r).slice(0, 5));
+    return m ? { department: DIV.departamentos.find((d) => d.code === m.dep).name, city: m.name } : null;
+  };
+  const bogotaNow = (d = new Date()) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+  const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
   const userOut = (u) => ({
     id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at,
     offices: s.offices.filter((o) => u.office_ids.includes(o.id)).map((o) => ({ id: o.id, name: o.name })),
-    permissions: permsOf(u.role),
+    permissions: userPerms(u), phone: u.phone || "", custom_permissions: !!u.custom_permissions,
   });
   const me = () => {
     const u = s.users.find((x) => x.id === s.current && x.active);
@@ -106,7 +170,7 @@
   const checkAssignee = (uid, officeId) => {
     if (!uid) return null;
     const u = s.users.find((x) => x.id === +uid && x.active) || fail("El responsable no existe o está inactivo.");
-    if (!permsOf(u.role).includes("scope.all") && !u.office_ids.includes(officeId)) fail("El responsable no pertenece a la oficina del expediente.");
+    if (!userPerms(u).includes("scope.all") && !u.office_ids.includes(officeId)) fail("El responsable no pertenece a la oficina del expediente.");
     return u.id;
   };
 
@@ -134,9 +198,96 @@
     return out;
   };
   const uniq = (list, name, ignoreId) => list.some((x) => x.name.toLowerCase() === name.toLowerCase() && x.id !== ignoreId) && fail("Ya existe un registro con ese nombre.");
-  const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "city", "notes"];
+  const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes"];
+  const placeClient = (c) => {
+    const dep = canonDep(c.department);
+    if (c.department && !dep) fail("Departamento no reconocido.");
+    c.department = dep;
+    c.city = canonCity(c.city, dep);
+  };
+  // Same rules as the server's caseLocation().
+  const caseLocation = (b, cur = {}) => {
+    const pick = (k) => (k in b ? str(b[k]) : cur[k] ?? "");
+    const radicado = pick("radicado").replace(/\D/g, "");
+    if (radicado && radicado.length !== 23) fail("El radicado debe tener 23 dígitos.");
+    let department = canonDep(pick("department"));
+    if (pick("department") && !department) fail("Departamento no reconocido.");
+    let city = canonCity(pick("city"), department);
+    const fr = radicado ? placeFromRad(radicado) : null;
+    if (fr && !department) { department = fr.department; city = city || fr.city; }
+    const area = pick("area");
+    if (area && !AREAS.includes(area)) fail("Área no válida.");
+    const courtId = "court_id" in b ? (+b.court_id || null) : cur.court_id ?? null;
+    let court_name = pick("court_name"), court_email = pick("court_email");
+    const c = courtId ? s.courts.find((x) => x.id === courtId) || fail("El despacho no existe en el directorio.") : null;
+    if (c) { court_name = c.name; court_email = c.email; department ||= c.department; city ||= c.city; }
+    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? (radicado ? 1 : 0);
+    return { department, city, area: area || c?.area || "", court_id: courtId, court_name, court_email, radicado, monitor: radicado ? monitor : 0 };
+  };
   const savedVisible = (r) => scope() === null || r.created_by === me().id || (r.case_id && s.cases.some((k) => k.id === r.case_id && inScope(k.office_id)));
   const qs = (url) => Object.fromEntries(new URLSearchParams(url.split("?")[1] || ""));
+  const taskOut = (t) => {
+    const k = s.cases.find((x) => x.id === t.case_id);
+    const o = caseOut(k);
+    return clone({ ...t, radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
+      assigned_name: s.users.find((u) => u.id === t.assigned_user_id)?.name ?? null });
+  };
+  const taskValues = (b, cur = {}) => {
+    const v = {
+      kind: ["tarea", "audiencia", "termino"].includes(b.kind) ? b.kind : cur.kind || "tarea",
+      title: "title" in b ? str(b.title) : cur.title, notes: "notes" in b ? str(b.notes) : cur.notes || "",
+      due_at: "due_at" in b ? str(b.due_at).replace("T", " ").slice(0, 16) : cur.due_at,
+      location: "location" in b ? str(b.location) : cur.location || "",
+      assigned_user_id: "assigned_user_id" in b ? (+b.assigned_user_id || null) : cur.assigned_user_id ?? null,
+      remind_days: "remind_days" in b ? [...new Set(b.remind_days)].sort((a, c) => c - a) : cur.remind_days || [1],
+      status: ["pendiente", "hecha", "cancelada"].includes(b.status) ? b.status : cur.status || "pendiente",
+    };
+    v.title || fail("Escriba el título.");
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v.due_at || "") || fail("Indique fecha y hora.");
+    return v;
+  };
+  // Same windows as the server's taskReminders(): each fires once.
+  function reminders() {
+    const now = Date.now();
+    const KIND = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término" };
+    for (const t of s.tasks.filter((x) => x.status === "pendiente")) {
+      const k = s.cases.find((x) => x.id === t.case_id);
+      const who = t.assigned_user_id || k?.assigned_user_id || t.created_by;
+      if (!who || !k) continue;
+      const due = bogotaMs(t.due_at);
+      const client = s.clients.find((c) => c.id === k.client_id)?.full_name || "";
+      const push = (key, title, body) => {
+        if (s.notes.some((n) => n.key === key)) return;
+        s.notes.push({ id: nextId(), user_id: who, kind: t.kind, title, body, link: "#agenda", key, created_at: stamp(), read_at: null });
+      };
+      for (const d of t.remind_days) {
+        if (now >= due - d * 86400000 && now < due) push(`task:${t.id}:${d}`, `${KIND[t.kind]} ${d === 0 ? "hoy" : d === 1 ? "mañana" : "en " + d + " días"}: ${t.title}`, `${t.due_at} · ${client}`);
+      }
+      if (now >= due) push(`task:${t.id}:overdue`, `${KIND[t.kind]} vencida: ${t.title}`, `${t.due_at} · ${client}`);
+    }
+    save();
+  }
+  const prefsOf = (uid) => {
+    const u = s.users.find((x) => x.id === uid);
+    return s.prefs[uid] ? clone(s.prefs[uid]) : { user_id: uid, hours: ["07:00"], by_email: true, email: u.email, by_whatsapp: false, whatsapp: u.phone || "", scope: "mine", selected: [] };
+  };
+  // The preview cannot reach the Rama Judicial: it fabricates nothing real,
+  // only clearly labeled example actions so the screen can be explored.
+  const EXAMPLE_ACTS = ["Auto admite demanda (ejemplo)", "Fijación estado (ejemplo)", "Auto fija fecha de audiencia (ejemplo)", "Recepción memorial (ejemplo)", "Constancia secretarial (ejemplo)"];
+  function simulateCheck(k) {
+    const first = !s.checks.some((c) => c.case_id === k.id && c.ok);
+    const day = (n) => new Date(Date.now() - 5 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+    const add = (n, i, isNew) => s.acts.push({ id: nextId(), case_id: k.id, ext_key: `ej-${k.id}-${s.seq}`, fecha: day(n), actuacion: EXAMPLE_ACTS[i % EXAMPLE_ACTS.length],
+      anotacion: "Vista previa: actuación de ejemplo, no proviene de la Rama Judicial.", fecha_inicial: "", fecha_final: "", foundMs: Date.now(), isNew });
+    let newCount = 0;
+    if (first) { add(40, 0, false); add(21, 1, false); }
+    else if (Math.random() < 0.6) { add(0, 2 + (s.seq % 3), true); newCount = 1; }
+    k.last_checked_at = stamp();
+    k.last_action_date = s.acts.filter((a) => a.case_id === k.id).map((a) => a.fecha).sort().at(-1) || null;
+    s.checks.push({ case_id: k.id, ok: true, newCount, at: stamp() });
+    if (newCount && k.assigned_user_id) s.notes.push({ id: nextId(), user_id: k.assigned_user_id, kind: "actuacion", title: `${newCount} actuación(es) nueva(s)`, body: `Radicado ${k.radicado}`, link: "#consulta", key: null, created_at: stamp(), read_at: null });
+    return { caseId: k.id, ok: true, newCount, error: "" };
+  }
 
   const routes = [
     // ----- auth -----
@@ -160,14 +311,17 @@
       need("users.manage");
       const name = str(b.name) || fail("El nombre de la oficina es obligatorio.");
       uniq(s.offices, name);
-      const o = { id: nextId(), name, city: str(b.city), address: str(b.address), phone: str(b.phone), email: str(b.email), is_main: false };
+      const department = canonDep(b.department);
+      const o = { id: nextId(), name, department, city: canonCity(b.city, department), address: str(b.address), phone: str(b.phone), email: str(b.email), is_main: false };
       s.offices.push(o);
       return clone(o);
     }],
     ["PUT", /^\/admin\/offices\/(\d+)$/, (m, b) => {
       need("users.manage");
       const o = s.offices.find((x) => x.id === +m[1]) || fail("La oficina no existe.");
-      for (const f of ["name", "city", "address", "phone", "email"]) if (f in b) o[f] = str(b[f]);
+      for (const f of ["name", "department", "city", "address", "phone", "email"]) if (f in b) o[f] = str(b[f]);
+      o.department = canonDep(o.department);
+      o.city = canonCity(o.city, o.department);
       o.name || fail("El nombre de la oficina es obligatorio.");
       uniq(s.offices, o.name, o.id);
       if (b.is_main === true) s.offices.forEach((x) => (x.is_main = x.id === o.id));
@@ -189,11 +343,12 @@
       need("users.manage");
       const name = str(b.name), email = str(b.email).toLowerCase();
       (name && email.includes("@")) || fail("Nombre y correo son obligatorios.");
-      AUTH.roles.includes(b.role) || fail("Rol no válido.");
+      s.roles.some((r) => r.name === b.role) || fail("Rol no válido.");
       (typeof b.password === "string" && b.password.length >= 10) || fail("La contraseña inicial debe tener al menos 10 caracteres.");
       (b.office_ids || []).length || fail("Asigne al menos una oficina.");
       s.users.some((u) => u.email === email) && fail("Ya existe un usuario con ese correo.");
-      const u = { id: nextId(), name, email, role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp() };
+      const u = { id: nextId(), name, email, phone: str(b.phone), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
+        custom_permissions: !!b.custom_permissions, permissions: (b.permissions || []).filter((p) => p in AUTH.permissions) };
       s.users.push(u);
       return userOut(u);
     }],
@@ -201,7 +356,7 @@
       need("users.manage");
       const u = s.users.find((x) => x.id === +m[1]) || fail("El usuario no existe.");
       const role = b.role ?? u.role;
-      AUTH.roles.includes(role) || fail("Rol no válido.");
+      s.roles.some((r) => r.name === role) || fail("Rol no válido.");
       const active = b.active === undefined ? u.active : !!b.active;
       if (u.role === "Gerencia" && (role !== "Gerencia" || !active) && !s.users.some((x) => x.id !== u.id && x.role === "Gerencia" && x.active)) {
         fail("Debe quedar al menos un usuario activo de Gerencia.");
@@ -210,20 +365,170 @@
       Array.isArray(b.office_ids) && !b.office_ids.length && fail("Asigne al menos una oficina.");
       const email = b.email ? str(b.email).toLowerCase() : u.email;
       s.users.some((x) => x.email === email && x.id !== u.id) && fail("Ya existe un usuario con ese correo.");
-      Object.assign(u, { name: str(b.name) || u.name, email, role, active });
+      Object.assign(u, { name: str(b.name) || u.name, email, role, active, phone: "phone" in b ? str(b.phone) : u.phone });
+      if (b.custom_permissions !== undefined) {
+        u.custom_permissions = !!b.custom_permissions;
+        u.permissions = u.custom_permissions ? (b.permissions || []).filter((p) => p in AUTH.permissions) : [];
+      }
       if (Array.isArray(b.office_ids)) u.office_ids = b.office_ids.map(Number);
       return userOut(u);
     }],
-    ["GET", /^\/admin\/roles$/, () => { me(); return { roles: AUTH.roles, permissions: AUTH.permissions, matrix: Object.fromEntries(AUTH.roles.map((r) => [r, permsOf(r)])) }; }],
+    ["GET", /^\/admin\/roles$/, () => {
+      me();
+      return { roles: s.roles.map((r) => r.name), permissions: AUTH.permissions,
+        details: s.roles.map((r) => ({ ...r, users: s.users.filter((u) => u.role === r.name).length })),
+        matrix: Object.fromEntries(s.roles.map((r) => [r.name, permsOf(r.name)])) };
+    }],
+    ["POST", /^\/admin\/roles$/, (m, b) => {
+      need("users.manage");
+      const name = str(b.name) || fail("Escriba el nombre del rol (máximo 60 caracteres).");
+      s.roles.some((r) => r.name.toLowerCase() === name.toLowerCase()) && fail("Ya existe un rol con ese nombre.");
+      s.roles.push({ name, builtin: false });
+      s.matrix[name] = b.copy_from ? permsOf(b.copy_from).filter((p) => p !== "users.manage" || b.copy_from !== "Gerencia") : [];
+      return { role: name, permissions: permsOf(name) };
+    }],
     ["PUT", /^\/admin\/roles\/(.+)$/, (m, b) => {
       need("users.manage");
       const role = decodeURIComponent(m[1]);
-      AUTH.roles.includes(role) || fail("Rol no válido.");
+      const r = s.roles.find((x) => x.name === role) || fail("Rol no válido.");
+      const newName = str(b.name);
+      if (newName && newName !== role) {
+        r.builtin && fail("Los roles incluidos no se pueden renombrar.");
+        s.roles.some((x) => x.name === newName) && fail("Ya existe un rol con ese nombre.");
+        r.name = newName;
+        s.matrix[newName] = s.matrix[role];
+        delete s.matrix[role];
+        s.users.forEach((u) => { if (u.role === role) u.role = newName; });
+        return { role: newName, permissions: permsOf(newName) };
+      }
       s.matrix[role] = (b.permissions || []).filter((p) => p in AUTH.permissions);
       return { role, permissions: permsOf(role) };
     }],
+    ["DELETE", /^\/admin\/roles\/(.+)$/, (m) => {
+      need("users.manage");
+      const role = decodeURIComponent(m[1]);
+      const r = s.roles.find((x) => x.name === role) || fail("Rol no válido.");
+      r.builtin && fail("Los roles incluidos no se pueden eliminar.");
+      s.users.some((u) => u.role === role) && fail("Hay usuarios con este rol. Cámbielos de rol antes de eliminarlo.");
+      s.roles = s.roles.filter((x) => x !== r);
+      delete s.matrix[role];
+      return null;
+    }],
 
-    // ----- clients -----
+    // ----- courts -----
+    ["GET", /^\/courts\/meta$/, () => ({ areas: AREAS, total: s.courts.length, updated: s.courts.map((c) => c.updated_at).sort().at(-1) || null })],
+    ["GET", /^\/courts(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url);
+      const text = nrm(q.q || "");
+      return s.courts.filter((c) => (!q.department || c.department === q.department) && (!q.city || c.city === q.city) && (!q.area || c.area === q.area)
+        && (!text || nrm(c.name + " " + c.email + " " + c.code).includes(text)))
+        .sort((a, b) => (a.department + a.city + a.area + a.name).localeCompare(b.department + b.city + b.area + b.name, "es")).slice(0, Number(q.limit) || 500).map(clone);
+    }],
+    ["POST", /^\/courts\/import$/, (m, b) => {
+      need("catalog.manage");
+      const out = { created: 0, updated: 0, skipped: [] };
+      (b.rows || []).forEach((row, i) => {
+        const name = str(row.name), department = canonDep(row.department);
+        if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
+        const city = canonCity(row.city, department);
+        const v = { code: str(row.code), name, department, city, area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), updated_at: stamp() };
+        const hit = s.courts.find((c) => c.name === name && c.city === city);
+        if (hit) { Object.assign(hit, v); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
+      });
+      return out;
+    }],
+
+    // ----- agenda -----
+    ["GET", /^\/tasks(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url);
+      return s.tasks.filter((t) => {
+        const k = s.cases.find((x) => x.id === t.case_id);
+        if (!k || !inScope(k.office_id)) return false;
+        if (q.caseId && t.case_id !== +q.caseId) return false;
+        if (q.mine === "1" && !(t.assigned_user_id === me().id || (!t.assigned_user_id && (k.assigned_user_id === me().id
+          || (!k.assigned_user_id && t.created_by === me().id))))) return false;
+        if (q.status && t.status !== q.status) return false;
+        if (q.kind && t.kind !== q.kind) return false;
+        if (q.from && t.due_at < q.from) return false;
+        if (q.to && t.due_at > q.to) return false;
+        return true;
+      }).sort((a, b) => a.due_at.localeCompare(b.due_at)).map(taskOut);
+    }],
+    ["POST", /^\/tasks$/, (m, b) => {
+      need("cases.write");
+      visibleCase(+b.case_id);
+      const t = { id: nextId(), case_id: +b.case_id, created_by: me().id, created_at: stamp(), done_at: null, ...taskValues(b) };
+      s.tasks.push(t);
+      return taskOut(t);
+    }],
+    ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
+      need("cases.write");
+      const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
+      visibleCase(t.case_id);
+      const before = t.due_at;
+      Object.assign(t, taskValues(b, t));
+      t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
+      if (before !== t.due_at) s.notes = s.notes.filter((n) => !String(n.key || "").startsWith(`task:${t.id}:`));
+      return taskOut(t);
+    }],
+    ["DELETE", /^\/tasks\/(\d+)$/, (m) => { need("cases.write"); s.tasks = s.tasks.filter((t) => t.id !== +m[1]); return null; }],
+    ["GET", /^\/notifications$/, () => {
+      reminders();
+      const mine = s.notes.filter((n) => n.user_id === me().id).sort((a, b) => b.id - a.id);
+      return { items: clone(mine.slice(0, 50)), unread: mine.filter((n) => !n.read_at).length };
+    }],
+    ["POST", /^\/notifications\/read$/, (m, b) => {
+      const ids = b.ids?.length ? b.ids.map(Number) : null;
+      s.notes.forEach((n) => { if (n.user_id === me().id && !n.read_at && (!ids || ids.includes(n.id))) n.read_at = stamp(); });
+      return null;
+    }],
+
+    // ----- process consultation (simulated in the preview) -----
+    ["GET", /^\/monitor\/status$/, () => { need("processes.consult"); return { channels: { email: false, whatsapp: false }, hours: ["07:00", "13:00", "17:00"] }; }],
+    ["GET", /^\/monitor\/cases$/, () => {
+      need("processes.consult");
+      const sel = prefsOf(me().id).selected || [];
+      return s.cases.filter((k) => k.radicado && inScope(k.office_id)).map((k) => {
+        const o = caseOut(k);
+        const last = s.checks.filter((c) => c.case_id === k.id).at(-1);
+        return { ...o, client_name: o.client_name, new_7d: s.acts.filter((a) => a.case_id === k.id && a.isNew && Date.now() - a.foundMs < 7 * 86400000).length,
+          last_error: last && !last.ok ? last.error : null, selected: sel.includes(k.id), monitor: !!k.monitor };
+      }).sort((a, b) => String(b.last_action_date || "").localeCompare(String(a.last_action_date || "")));
+    }],
+    ["GET", /^\/monitor\/cases\/(\d+)\/actuaciones$/, (m) => { need("processes.consult"); visibleCase(+m[1]); return clone(s.acts.filter((a) => a.case_id === +m[1]).sort((a, b) => b.fecha.localeCompare(a.fecha))); }],
+    ["PUT", /^\/monitor\/cases\/(\d+)\/monitor$/, (m, b) => { need("processes.consult"); visibleCase(+m[1]).monitor = b.monitor ? 1 : 0; return { id: +m[1], monitor: !!b.monitor }; }],
+    ["POST", /^\/monitor\/check$/, (m, b) => {
+      need("processes.consult");
+      const ids = b.case_ids?.length ? b.case_ids.map(Number) : s.cases.filter((k) => k.radicado && k.monitor && inScope(k.office_id)).map((k) => k.id);
+      const results = ids.map((id) => simulateCheck(visibleCase(id)));
+      return { results, checked: results.length, ok: results.filter((x) => x.ok).length, newCount: results.reduce((a, x) => a + x.newCount, 0) };
+    }],
+    ["GET", /^\/monitor\/prefs$/, () => { need("processes.consult"); return prefsOf(me().id); }],
+    ["PUT", /^\/monitor\/prefs$/, (m, b) => {
+      need("processes.consult");
+      b.by_whatsapp && String(b.whatsapp || "").replace(/\D/g, "").length < 10 && fail("Número de WhatsApp no válido.");
+      s.prefs[me().id] = { user_id: me().id, hours: (b.hours || []).filter((h) => ["07:00", "13:00", "17:00"].includes(h)), by_email: !!b.by_email, email: str(b.email),
+        by_whatsapp: !!b.by_whatsapp, whatsapp: str(b.whatsapp), scope: ["mine", "office", "selected"].includes(b.scope) ? b.scope : "mine", selected: (b.selected || []).map(Number) };
+      return prefsOf(me().id);
+    }],
+    ["POST", /^\/monitor\/report$/, (m, b) => {
+      need("processes.consult");
+      const p = prefsOf(me().id);
+      const ids = s.cases.filter((k) => k.radicado && inScope(k.office_id) && (p.scope === "office" ? k.monitor : p.scope === "selected" ? (p.selected || []).includes(k.id) : k.monitor && k.assigned_user_id === me().id)).map((k) => k.id);
+      if (b.check) ids.forEach((id) => simulateCheck(s.cases.find((k) => k.id === id)));
+      const since = s.log.filter((l) => l.user_id === me().id).at(-1)?.ms || 0;
+      const news = s.acts.filter((a) => ids.includes(a.case_id) && a.isNew && a.foundMs > since);
+      const lines = [`JuanMaApp · Reporte de procesos · ${bogotaNow()} (hora Colombia)`, "", `Procesos consultados: ${ids.length}. Actuaciones nuevas: ${news.length}.`];
+      if (news.length) { lines.push("", "ACTUACIONES NUEVAS"); for (const a of news) lines.push(`• ${s.cases.find((k) => k.id === a.case_id).radicado} · ${a.fecha} · ${a.actuacion}`); }
+      lines.push("", "Vista previa: en la app real el reporte sale por correo y WhatsApp a las horas elegidas.");
+      const channels = [p.by_email && { channel: "email", ok: false, detail: "Vista previa: no envía correos." }, p.by_whatsapp && { channel: "whatsapp", ok: false, detail: "Vista previa: no envía WhatsApp." }].filter(Boolean);
+      s.log.push({ id: nextId(), user_id: me().id, sent_at: stamp(), ms: Date.now(), trigger: "manual", channels, summary: lines.join("\n") });
+      s.notes.push({ id: nextId(), user_id: me().id, kind: "reporte", title: "Reporte de procesos (manual)", body: `${ids.length} procesos · ${news.length} actuaciones nuevas`, link: "#consulta", key: null, created_at: stamp(), read_at: null });
+      return { text: lines.join("\n"), caseCount: ids.length, newCount: news.length, channels };
+    }],
+    ["GET", /^\/monitor\/log$/, () => { need("processes.consult"); return clone(s.log.filter((l) => l.user_id === me().id).reverse()); }],
+
+    // ----- clients -----    // ----- clients -----
     ["GET", /^\/clients(?:\?q=(.*))?$/, (m) => {
       const q = decodeURIComponent(m[1] || "").toLowerCase();
       return s.clients
@@ -237,6 +542,7 @@
       for (const f of CLIENT_FIELDS) c[f] = str(b[f]);
       c.full_name || fail("El nombre del cliente es obligatorio.");
       c.id_type ||= "CC";
+      placeClient(c);
       c.office_id = officeFor(b.office_id);
       s.clients.push(c);
       return { ...clone(c), office_name: officeName(c.office_id) };
@@ -246,6 +552,7 @@
       const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
       for (const f of CLIENT_FIELDS) if (f in b) c[f] = str(b[f]);
       c.full_name || fail("El nombre del cliente es obligatorio.");
+      placeClient(c);
       c.office_id = officeFor(b.office_id, c.office_id);
       return { ...clone(c), office_name: officeName(c.office_id) };
     }],
@@ -344,6 +651,7 @@
         status: str(b.status) || "Abierto", counterparty: str(b.counterparty), facts: str(b.facts),
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
         assigned_user_id: checkAssignee(b.assigned_user_id, officeId), created_at: stamp(), updated_at: stamp(),
+        last_checked_at: null, last_action_date: null, ...caseLocation(b),
       };
       s.cases.push(k);
       return caseOut(k);
@@ -358,7 +666,7 @@
         counterparty: str(b.counterparty ?? k.counterparty), facts: str(b.facts ?? k.facts),
         field_values: cleanValues(typeId, b.field_values ?? k.field_values), office_id: officeId,
         assigned_user_id: "assigned_user_id" in b ? checkAssignee(b.assigned_user_id, officeId) : k.assigned_user_id,
-        updated_at: stamp(),
+        updated_at: stamp(), ...caseLocation(b, k),
       });
       return caseOut(k);
     }],

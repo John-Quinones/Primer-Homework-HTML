@@ -1,10 +1,13 @@
 // REST routes for clients, the process catalog (categories → sub-processes →
 // custom fields) and cases. Mounted under /api by app.js.
 import express from "express";
-import { can, scopeOf } from "./auth.js";
+import { can, scopeOf, loadUser } from "./auth.js";
+import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
-const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "city", "notes", "office_id"];
+const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id"];
+
+const fail400 = (msg) => { throw new HttpError(400, msg); };
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -95,6 +98,8 @@ export function recordsRouter(db) {
     for (const f of CLIENT_FIELDS) if (f !== "office_id") v[f] = f in body ? str(body[f]) : existing[f] ?? "";
     v.full_name = requireText(v.full_name, "El nombre del cliente");
     v.id_type ||= "CC";
+    v.department = canonicalDepartment(v.department) || (v.department ? fail400("Departamento no reconocido.") : "");
+    v.city = canonicalCity(v.city, v.department);
     v.office_id = officeFor(req, body.office_id, existing.office_id);
     return v;
   };
@@ -255,14 +260,40 @@ export function recordsRouter(db) {
     if (!row || !inScope(req, row.office_id)) throw new HttpError(404, "El expediente no existe.");
     return caseOut(row);
   };
+  // Place, area, court and radicado of a case. A 23-digit radicado fills the
+  // department and city (its first five digits are the DANE municipality code).
+  const caseLocation = (b, cur = {}) => {
+    const pick = (k) => (k in b ? str(b[k]) : cur[k] ?? "");
+    const radicado = normalizeRadicado(pick("radicado"));
+    if (radicado && radicado.length !== 23) throw new HttpError(400, "El radicado debe tener 23 dígitos.");
+    let department = canonicalDepartment(pick("department"));
+    if (pick("department") && !department) throw new HttpError(400, "Departamento no reconocido.");
+    let city = canonicalCity(pick("city"), department);
+    const fromRad = radicado ? placeFromRadicado(radicado) : null;
+    if (fromRad && !department) { department = fromRad.department; city = city || fromRad.city; }
+    const area = pick("area");
+    if (area && !AREAS.includes(area)) throw new HttpError(400, "Área no válida.");
+    let courtId = "court_id" in b ? (b.court_id ? toInt(b.court_id, "El despacho") : null) : cur.court_id ?? null;
+    let courtName = pick("court_name"), courtEmail = pick("court_email");
+    if (courtId) {
+      const c = db.prepare("SELECT * FROM courts WHERE id = ?").get(courtId);
+      if (!c) throw new HttpError(400, "El despacho no existe en el directorio.");
+      courtName = c.name;
+      courtEmail = c.email;
+      department ||= c.department;
+      city ||= c.city;
+    }
+    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? (radicado ? 1 : 0);
+    return { department, city, area: area || (courtId ? db.prepare("SELECT area FROM courts WHERE id = ?").get(courtId).area : ""),
+      court_id: courtId, court_name: courtName, court_email: courtEmail, radicado, monitor: radicado ? monitor : 0 };
+  };
+
   // The responsible person must be an active user of the case's office (or see all offices).
   const checkAssignee = (userId, officeId) => {
     if (!userId) return null;
-    const u = db.prepare("SELECT id, role FROM users WHERE id = ? AND active = 1").get(userId);
-    if (!u) throw new HttpError(400, "El responsable no existe o está inactivo.");
-    const all = db.prepare("SELECT 1 FROM role_permissions WHERE role = ? AND permission = 'scope.all'").get(u.role);
-    const inOffice = db.prepare("SELECT 1 FROM user_offices WHERE user_id = ? AND office_id = ?").get(userId, officeId);
-    if (!all && !inOffice) throw new HttpError(400, "El responsable no pertenece a la oficina del expediente.");
+    const u = loadUser(db, userId);
+    if (!u?.active) throw new HttpError(400, "El responsable no existe o está inactivo.");
+    if (scopeOf(u) !== null && !scopeOf(u).includes(officeId)) throw new HttpError(400, "El responsable no pertenece a la oficina del expediente.");
     return u.id;
   };
 
@@ -301,10 +332,13 @@ export function recordsRouter(db) {
     const assignee = checkAssignee(b.assigned_user_id ? toInt(b.assigned_user_id, "El responsable") : null, officeId);
     const typeId = toInt(b.process_type_id, "El subproceso");
     const values = cleanFieldValues(typeId, b.field_values);
-    const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    const loc = caseLocation(b);
+    const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
+        department, city, area, court_id, court_name, court_email, radicado, monitor)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(clientId, typeId, str(b.title), str(b.status) || "Abierto", str(b.counterparty), str(b.facts),
-        JSON.stringify(values), officeId, assignee).lastInsertRowid;
+        JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
+        loc.court_email, loc.radicado, loc.monitor).lastInsertRowid;
     res.status(201);
     return getCase(req, id);
   }));
@@ -320,11 +354,14 @@ export function recordsRouter(db) {
     const assignee = "assigned_user_id" in b
       ? checkAssignee(b.assigned_user_id ? toInt(b.assigned_user_id, "El responsable") : null, officeId)
       : cur.assigned_user_id && officeId !== cur.office_id ? null : cur.assigned_user_id;
+    const loc = caseLocation(b, cur);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
-      field_values = ?, office_id = ?, assigned_user_id = ?, updated_at = datetime('now') WHERE id = ?`)
+      field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
+      court_name = ?, court_email = ?, radicado = ?, monitor = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) || cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
-        JSON.stringify(values), officeId, assignee, id);
+        JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
+        loc.court_email, loc.radicado, loc.monitor, id);
     return getCase(req, id);
   }));
 

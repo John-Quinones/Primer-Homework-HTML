@@ -8,6 +8,9 @@ import { recordsRouter } from "./records.js";
 import { jurisprudenceRouter } from "./jurisprudence-routes.js";
 import { sessionMiddleware, authRouter, adminRouter, requireAuth, requirePerm, scopeOf } from "./auth.js";
 import { reportsRouter } from "./reports.js";
+import { courtsRouter } from "./courts.js";
+import { agendaRouter } from "./agenda-routes.js";
+import { monitorRouter } from "./monitor-routes.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -65,6 +68,9 @@ export function createApp(db) {
   app.use("/api", recordsRouter(db));
   app.use("/api/jurisprudencia", requirePerm("jurisprudence.use"), jurisprudenceRouter(db));
   app.use("/api/reports", requirePerm("reports.view"), reportsRouter(db));
+  app.use("/api/courts", courtsRouter(db));
+  app.use("/api", agendaRouter(db));
+  app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
 
   app.post("/api/generate", requirePerm("drafts.generate"), async (req, res) => {
     let body = req.body ?? {};
@@ -121,6 +127,13 @@ export function createApp(db) {
       send({ type: "error", error: message });
     }
     res.end();
+  });
+
+  // Anything unexpected answers JSON, never the default HTML error page.
+  app.use((err, req, res, _next) => {
+    console.error(err);
+    if (res.headersSent) return res.end();
+    res.status(err.status || 500).json({ error: err.expose ? err.message : "Error interno del servidor." });
   });
 
   return app;

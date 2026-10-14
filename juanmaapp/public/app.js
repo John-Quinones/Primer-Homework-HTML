@@ -90,6 +90,7 @@ const myOfficeIds = () => (can("scope.all") ? offices.map((o) => o.id) : me.offi
 const myOffices = () => offices.filter((o) => myOfficeIds().includes(o.id));
 
 const VIEW_PERMS = {
+  consulta: "processes.consult",
   borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
   importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage",
 };
@@ -97,11 +98,12 @@ const VIEW_PERMS = {
 function applyPermissions() {
   $$(".sidenav a").forEach((a) => (a.hidden = !!VIEW_PERMS[a.dataset.view] && !can(VIEW_PERMS[a.dataset.view])));
   // Buttons that need a permission carry data-perm (set when rendered) or are matched here.
-  const needs = { "new-client": "clients.write", "new-case": "cases.write" };
+  const needs = { "new-client": "clients.write", "new-case": "cases.write", "new-task": "cases.write", "add-radicado": "cases.write" };
   $$("[data-action]").forEach((b) => { if (needs[b.dataset.action]) b.hidden = !can(needs[b.dataset.action]); });
   $("#user-name").textContent = me.name;
   $("#user-role").textContent = me.role;
   $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  $("#courts-import-btn").hidden = !can("catalog.manage");
   $("#user-offices").textContent = can("scope.all") ? "Todas las oficinas" : `Oficina: ${me.offices.map((o) => o.name).join(", ")}`;
 }
 
@@ -131,7 +133,9 @@ async function enterApp(user, { fresh = true } = {}) {
   $("#auth-screen").hidden = true;
   $("#app-root").hidden = false;
   applyPermissions();
-  await loadCatalog();
+  window.JuanmaCombo.wirePlaces(document);
+  await Promise.all([loadCatalog(), loadAreas()]);
+  startBell();
   await showView();
 }
 
@@ -159,6 +163,42 @@ for (const [formSel, url] of [["#login-form", "/auth/login"], ["#setup-form", "/
 $("#demo-logins").addEventListener("click", (e) => {
   const b = e.target.closest("[data-demo-login]");
   if (b) guarded(async () => enterApp((await api("POST", "/auth/login", { email: b.dataset.demoLogin, password: "demo" })).user));
+});
+
+let AREAS = [];
+async function loadAreas() {
+  const meta = await api("GET", "/courts/meta");
+  AREAS = meta.areas;
+  const opts = AREAS.map((a) => `<option>${escapeHtml(a)}</option>`).join("");
+  $("#courts-area").innerHTML = '<option value="">Todas</option>' + opts;
+  caseForm.elements.area.innerHTML = '<option value="">—</option>' + opts;
+}
+
+// ----- Notifications bell -----
+let bellTimer = null;
+function startBell() {
+  clearInterval(bellTimer);
+  refreshBell();
+  bellTimer = setInterval(() => me && refreshBell(), 60000);
+}
+async function refreshBell() {
+  const n = await api("GET", "/notifications").catch(() => null);
+  if (!n) return;
+  const c = $("#bell-count");
+  c.hidden = !n.unread;
+  c.textContent = n.unread > 99 ? "99+" : n.unread;
+  const ICON = { audiencia: "⚖", tarea: "✓", termino: "⏱", vencida: "!", actuacion: "•", reporte: "✉" };
+  $("#bell-list").innerHTML = n.items.map((x) => `
+    <li class="${x.read_at ? "" : "unread"}"><a href="${escapeHtml(x.link || "#inicio")}" data-note="${x.id}">
+      <span class="note-ico" aria-hidden="true">${ICON[x.kind] || "•"}</span>
+      <span><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.body)} · ${escapeHtml(x.created_at.slice(0, 16))} UTC</small></span>
+    </a></li>`).join("") || '<li class="empty">Sin notificaciones.</li>';
+}
+$("#bell-list").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-note]");
+  if (!a) return;
+  $(".bell").open = false;
+  api("POST", "/notifications/read", { ids: [Number(a.dataset.note)] }).then(refreshBell).catch(() => {});
 });
 
 // In-page confirm / prompt (the browser's own dialogs are blocked in some viewers).
@@ -206,7 +246,7 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "borradores", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
 function showView() {
   if (!me) return;
   let name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
@@ -251,7 +291,8 @@ async function renderClientDetail() {
     <dl class="facts">
       ${row("Documento", [c.id_type, c.id_number].filter(Boolean).join(" "))}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
-      ${row("Dirección", [c.address, c.city].filter(Boolean).join(", "))}
+      ${row("Dirección", c.address)}
+      ${row("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}
       ${row("Oficina", c.office_name)}
       ${row("Notas", c.notes)}
     </dl>
@@ -268,8 +309,9 @@ function caseCard(k) {
     <strong>${escapeHtml(k.type_name)}</strong>
     ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
     <span>${escapeHtml(k.office_name || "")}${k.assigned_name ? " · " + escapeHtml(k.assigned_name) : " · Sin responsable"}</span>
+    ${k.court_name ? `<span class="court-line">${escapeHtml(k.court_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : ""}</span>` : ""}
     <div class="toolbar">
-      ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+      ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
     </div>
   </li>`;
@@ -358,11 +400,12 @@ function renderCaseRows() {
     <tr>
       <td>${escapeHtml(k.client_name)}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
-      <td>${escapeHtml(k.title)}</td>
+      <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
       <td><span class="status-tag">${escapeHtml(k.status)}</span></td>
       <td class="row-actions">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+        ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
@@ -422,6 +465,44 @@ function fillAssignees(officeId, selected) {
 }
 caseForm.elements.office_id.addEventListener("change", (e) => fillAssignees(e.target.value, Number(caseForm.elements.assigned_user_id.value)));
 
+const formatRadicado = (r) => (/^\d{23}$/.test(r) ? `${r.slice(0, 5)}-${r.slice(5, 7)}-${r.slice(7, 9)}-${r.slice(9, 12)}-${r.slice(12, 16)}-${r.slice(16, 21)}-${r.slice(21)}` : r);
+
+// Courts for the chosen department / city / area, cached per filter.
+const courtCache = new Map();
+async function courtsFor(dep, city, area) {
+  const key = [dep, city, area].join("|");
+  if (!courtCache.has(key)) {
+    const q = new URLSearchParams({ ...(dep && { department: dep }), ...(city && { city }), ...(area && { area }), limit: "2000" });
+    courtCache.set(key, api("GET", `/courts?${q}`));
+  }
+  return courtCache.get(key);
+}
+function showCourtEmail(court) {
+  $("#court-email").innerHTML = court?.email
+    ? `Correo del despacho: <strong class="copyable">${escapeHtml(court.email)}</strong>${court.phone ? ` · Tel. ${escapeHtml(court.phone)}` : ""}`
+    : court ? "El directorio no trae correo para este despacho." : "";
+}
+window.JuanmaCombo.attach(caseForm.elements.court_search, {
+  limit: 30, emptyText: "Sin despachos para este filtro. Cargue el directorio oficial en Despachos.",
+  items: async () => (await courtsFor(caseForm.elements.department.value, caseForm.elements.city.value, caseForm.elements.area.value))
+    .map((c) => ({ label: c.name, sub: [c.area, c.city, c.email].filter(Boolean).join(" · "), court: c })),
+  onPick: (it) => {
+    caseForm.elements.court_id.value = it.court.id;
+    if (!caseForm.elements.area.value) caseForm.elements.area.value = it.court.area;
+    if (!caseForm.elements.department.value) caseForm.elements.department.value = it.court.department;
+    if (!caseForm.elements.city.value) caseForm.elements.city.value = it.court.city;
+    showCourtEmail(it.court);
+  },
+  onType: () => { caseForm.elements.court_id.value = ""; showCourtEmail(null); },
+});
+caseForm.elements.radicado.addEventListener("input", async (e) => {
+  const digits = e.target.value.replace(/\D/g, "");
+  if (digits.length >= 5 && !caseForm.elements.department.value) {
+    const place = await window.JuanmaCombo.placeFromRadicado(digits);
+    if (place) { caseForm.elements.department.value = place.department; caseForm.elements.city.value = place.city; }
+  }
+});
+
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
   if (!state.clients.length) {
@@ -436,7 +517,11 @@ async function openCaseDialog(k = null, clientId = null) {
 
   openDialog($("#case-dialog"), k ? "Editar expediente" : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
+    radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
+    court_search: k.court_name, court_id: k.court_id ?? "",
   } : {});
+  caseForm.elements.monitor.checked = k ? !!k.monitor || !k.radicado : true;
+  showCourtEmail(k?.court_name ? { email: k.court_email } : null);
   caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
   caseForm.elements.client_id.disabled = !!k;
   caseForm.elements.office_id.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
@@ -459,6 +544,8 @@ wireDialog($("#case-dialog"), async (form) => {
     process_type_id: Number(d.process_type_id),
     title: d.title, status: d.status, counterparty: d.counterparty, facts: d.facts, field_values,
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
+    radicado: d.radicado, department: d.department, city: d.city, area: d.area,
+    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, monitor: form.elements.monitor.checked,
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
@@ -548,6 +635,27 @@ document.addEventListener("click", (e) => {
     "change-password": () => {
       $(".user-menu").open = false;
       openDialog($("#password-dialog"), "Cambiar contraseña");
+    },
+    "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null),
+    "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id)),
+    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como hecha."); await renderAgenda(); },
+    "delete-task": async () => {
+      if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
+      await api("DELETE", `/tasks/${id}`);
+      await renderAgenda();
+    },
+    "read-all": async () => { await api("POST", "/notifications/read", {}); await refreshBell(); },
+    "view-acts": () => showActuaciones(id),
+    "add-radicado": () => openCaseDialog(null, null),
+    "new-role": () => openRoleDialog(),
+    "rename-role": async () => {
+      const name = await ask({ title: "Renombrar rol", input: btn.dataset.role, okLabel: "Guardar" });
+      if (name && name !== btn.dataset.role) { await api("PUT", `/admin/roles/${encodeURIComponent(btn.dataset.role)}`, { name }); await renderUsuarios(); }
+    },
+    "delete-role": async () => {
+      if (!(await confirmAsk("Eliminar rol", `Se eliminará el rol “${btn.dataset.role}”.`))) return;
+      await api("DELETE", `/admin/roles/${encodeURIComponent(btn.dataset.role)}`);
+      await renderUsuarios();
     },
     "new-user": () => openUserDialog(null),
     "edit-user": () => openUserDialog(adminUsers.find((u) => u.id === id)),
@@ -894,28 +1002,39 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
 const OPEN_STATUSES = new Set(["Abierto", "En trámite", "En espera de respuesta"]);
 
 async function renderInicio() {
-  const [clients, cases, catalog, saved] = await Promise.all([
+  const now = bogotaNow();
+  const in7 = new Date(Date.now() - 5 * 3600 * 1000 + 7 * 86400000).toISOString().slice(0, 16).replace("T", " ");
+  const in14 = new Date(Date.now() - 5 * 3600 * 1000 + 14 * 86400000).toISOString().slice(0, 16).replace("T", " ");
+  const [clients, cases, catalog, tasks, monitored] = await Promise.all([
     api("GET", "/clients"), api("GET", "/cases"), api("GET", "/catalog"),
-    can("jurisprudence.use") ? api("GET", "/jurisprudencia/saved") : Promise.resolve(null),
+    api("GET", `/tasks?status=pendiente&to=${encodeURIComponent(in14)}`),
+    can("processes.consult") ? api("GET", "/monitor/cases") : Promise.resolve(null),
   ]);
-  $("#kpi-rulings").closest(".kpi").hidden = !saved;
-  $("#kpi-cats").closest(".kpi").hidden = !can("catalog.manage");
+  const hour = Number(now.slice(11, 13));
+  $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
   $("#kpi-clients").textContent = clients.length;
   $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
   $("#kpi-total").textContent = `de ${cases.length} en total`;
-  if (saved) $("#kpi-rulings").textContent = saved.length;
-  $("#kpi-cats").textContent = catalog.length;
+  $("#kpi-due").textContent = tasks.filter((t) => t.due_at <= in7).length;
+  $("#kpi-hearings").textContent = tasks.filter((t) => t.kind === "audiencia" && t.due_at >= now).length;
+  $("#kpi-news-tile").hidden = !monitored;
+  if (monitored) $("#kpi-news").textContent = monitored.reduce((a, k) => a + k.new_7d, 0);
 
-  // Horizontal bars: one series, so the label names it and each bar carries its value.
+  $("#dash-agenda").innerHTML = tasks.slice(0, 7).map((t) => `
+    <li class="${t.due_at < now ? "late" : ""}">
+      <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
+      <div><strong>${escapeHtml(t.title)}</strong><span>${escapeHtml(t.client_name)} · ${escapeHtml(t.due_at < now ? "Vencida " + t.due_at : dayLabel(t.due_at.slice(0, 10)) + " " + t.due_at.slice(11))}</span></div>
+    </li>`).join("") || '<li class="empty">Sin audiencias ni vencimientos en los próximos 14 días.</li>';
+
   const counts = catalog.map((c) => ({ name: c.name, n: cases.filter((k) => k.category_id === c.id).length }))
-    .sort((a, b) => b.n - a.n);
+    .filter((c) => c.n).sort((a, b) => b.n - a.n);
   const max = Math.max(1, ...counts.map((c) => c.n));
   $("#chart-by-type").innerHTML = counts.map((c) => `
     <div class="hbar" role="listitem" title="${escapeHtml(c.name)}: ${c.n} expediente(s)">
       <span class="hbar-label">${escapeHtml(c.name)}</span>
       <span class="hbar-track"><span class="hbar-fill" style="width:${(c.n / max) * 100}%"></span></span>
       <span class="hbar-value">${c.n}</span>
-    </div>`).join("") || '<p class="empty">Sin datos.</p>';
+    </div>`).join("") || '<p class="empty">Sin expedientes todavía.</p>';
 
   $("#recent-cases").innerHTML = cases.slice(0, 6).map((k) => `
     <li>
@@ -1314,7 +1433,7 @@ async function renderUsuarios() {
   $("#user-rows").innerHTML = adminUsers.map((u) => `
     <tr class="${u.active ? "" : "inactive"}">
       <td><strong>${escapeHtml(u.name)}</strong><br><span class="muted">${escapeHtml(u.email)}</span></td>
-      <td>${escapeHtml(u.role)}</td>
+      <td>${escapeHtml(u.role)}${u.custom_permissions ? '<br><span class="badge warn">Permisos propios</span>' : ""}</td>
       <td>${u.permissions.includes("scope.all") ? "Todas" : escapeHtml(u.offices.map((o) => o.name).join(", "))}</td>
       <td>${u.active ? '<span class="badge ok">Activo</span>' : '<span class="badge">Inactivo</span>'}</td>
       <td class="row-actions"><button data-action="edit-user" data-id="${u.id}">Editar</button></td>
@@ -1330,7 +1449,9 @@ async function renderUsuarios() {
       </div>
     </article>`).join("");
   const perms = Object.entries(roleInfo.permissions);
-  $("#role-matrix").innerHTML = `<thead><tr><th>Permiso</th>${roleInfo.roles.map((r) => `<th>${escapeHtml(r)}</th>`).join("")}</tr></thead>
+  const details = Object.fromEntries((roleInfo.details || []).map((d) => [d.name, d]));
+  $("#role-matrix").innerHTML = `<thead><tr><th>Permiso</th>${roleInfo.roles.map((r) => `<th>${escapeHtml(r)}${details[r] && !details[r].builtin
+    ? `<div class="role-actions"><button class="mini" data-action="rename-role" data-role="${escapeHtml(r)}">Renombrar</button><button class="mini danger" data-action="delete-role" data-role="${escapeHtml(r)}" aria-label="Eliminar rol">✕</button></div>` : ""}</th>`).join("")}</tr></thead>
     <tbody>${perms.map(([p, label]) => `<tr><td>${escapeHtml(label)}</td>${roleInfo.roles.map((r) => {
       const locked = r === "Gerencia" && p === "users.manage";
       return `<td class="center"><input type="checkbox" data-role="${escapeHtml(r)}" data-perm="${p}" aria-label="${escapeHtml(r)}: ${escapeHtml(label)}"
@@ -1344,17 +1465,38 @@ function openUserDialog(u) {
   form.elements.role.innerHTML = roleInfo.roles.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
   $("#user-office-checks").innerHTML = offices.map((o) => `<label class="inline"><input type="checkbox" name="office" value="${o.id}"
     ${u ? (u.offices.some((x) => x.id === o.id) ? "checked" : "") : (o.is_main ? "checked" : "")}> ${escapeHtml(o.name)}</label>`).join("");
-  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role } : { role: "Abogado" });
+  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone } : { role: "Abogado" });
+  form.elements.custom_permissions.checked = !!u?.custom_permissions;
+  renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
   form.elements.password.required = !u;
   $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)" : "Contraseña inicial *";
 }
 
+// Per-user checklist: shows the role's permissions until "específicos" is on.
+function renderUserPerms(checked) {
+  const form = $("#user-dialog form");
+  const custom = form.elements.custom_permissions.checked;
+  $("#user-perm-checks").innerHTML = Object.entries(roleInfo.permissions).map(([p, label]) => `
+    <label class="inline"><input type="checkbox" name="perm" value="${p}" ${checked.includes(p) ? "checked" : ""} ${custom ? "" : "disabled"} /> ${escapeHtml(label)}</label>`).join("");
+}
+$("#user-dialog [name=custom_permissions]").addEventListener("change", () => {
+  const form = $("#user-dialog form");
+  renderUserPerms(form.elements.custom_permissions.checked
+    ? $$("#user-perm-checks input:checked").map((i) => i.value)
+    : roleInfo.matrix[form.elements.role.value] || []);
+});
+$("#user-dialog [name=role]").addEventListener("change", (e) => {
+  if (!$("#user-dialog [name=custom_permissions]").checked) renderUserPerms(roleInfo.matrix[e.target.value] || []);
+});
+
 wireDialog($("#user-dialog"), async (form) => {
   const d = formData(form);
   const body = {
-    name: d.name, email: d.email, role: d.role, active: form.elements.active.checked,
+    name: d.name, email: d.email, phone: d.phone, role: d.role, active: form.elements.active.checked,
     office_ids: $$("#user-office-checks input:checked").map((i) => Number(i.value)),
+    custom_permissions: form.elements.custom_permissions.checked,
+    permissions: $$("#user-perm-checks input:checked").map((i) => i.value),
   };
   if (d.password) body.password = d.password;
   if (d.id) await api("PUT", `/admin/users/${d.id}`, body);
@@ -1382,6 +1524,19 @@ wireDialog($("#office-dialog"), async (form) => {
   await renderUsuarios();
 });
 
+function openRoleDialog() {
+  const dlg = $("#role-dialog");
+  $("[name=copy_from]", dlg).innerHTML = '<option value="">— Sin permisos —</option>' + roleInfo.roles.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
+  openDialog(dlg, "Nuevo rol");
+}
+wireDialog($("#role-dialog"), async (form) => {
+  const d = formData(form);
+  await api("POST", "/admin/roles", { name: d.name, copy_from: d.copy_from });
+  toast(`Rol “${d.name}” creado.`);
+  await renderUsuarios();
+  showATab("roles");
+});
+
 $("#save-roles").addEventListener("click", () => guarded(async () => {
   for (const role of roleInfo.roles) {
     const permissions = $$(`#role-matrix input[data-role="${CSS.escape(role)}"]:checked`).map((i) => i.dataset.perm);
@@ -1398,7 +1553,268 @@ wireDialog($("#password-dialog"), async (form) => {
   toast("Contraseña actualizada.");
 });
 
+// ---------- Agenda (tareas, audiencias, términos) ----------
+const KIND_LABEL = { audiencia: "Audiencia", tarea: "Tarea", termino: "Término" };
+const bogotaNow = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+const DAY_FMT = new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const dayLabel = (ymd) => {
+  const today = bogotaNow().slice(0, 10);
+  const tomorrow = new Date(Date.parse(today) + 86400000).toISOString().slice(0, 10);
+  const txt = DAY_FMT.format(new Date(ymd + "T00:00:00Z"));
+  return ymd === today ? `Hoy · ${txt}` : ymd === tomorrow ? `Mañana · ${txt}` : txt.charAt(0).toUpperCase() + txt.slice(1);
+};
+
+async function renderAgenda() {
+  const q = new URLSearchParams();
+  if ($("#agenda-mine").checked) q.set("mine", "1");
+  if ($("#agenda-kind").value) q.set("kind", $("#agenda-kind").value);
+  if ($("#agenda-status").value) q.set("status", $("#agenda-status").value);
+  const tasks = await api("GET", `/tasks?${q}`);
+  const now = bogotaNow();
+  const groups = new Map();
+  for (const t of tasks) {
+    const key = t.status === "pendiente" && t.due_at < now ? "vencidas" : t.due_at.slice(0, 10);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(t);
+  }
+  const keys = [...groups.keys()].sort((a, b) => (a === "vencidas" ? -1 : b === "vencidas" ? 1 : a.localeCompare(b)));
+  $("#agenda-list").innerHTML = keys.map((key) => `
+    <section class="agenda-day ${key === "vencidas" ? "overdue" : ""}">
+      <h3>${key === "vencidas" ? "Vencidas" : escapeHtml(dayLabel(key))}</h3>
+      <ul>${groups.get(key).map((t) => `
+        <li class="agenda-item kind-${t.kind} ${t.status !== "pendiente" ? "done" : ""}">
+          <span class="time">${escapeHtml(key === "vencidas" ? t.due_at : t.due_at.slice(11))}</span>
+          <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
+          <div class="agenda-body">
+            <strong>${escapeHtml(t.title)}</strong>
+            <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
+            ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
+            <span class="muted">${escapeHtml(t.assigned_name || "Responsable del expediente")}</span>
+          </div>
+          ${can("cases.write") ? `<span class="toolbar">
+            ${t.status === "pendiente" ? `<button data-action="task-done" data-id="${t.id}">Hecha</button>` : ""}
+            <button data-action="edit-task" data-id="${t.id}">Editar</button>
+            <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button></span>` : ""}
+        </li>`).join("")}</ul>
+    </section>`).join("") || '<p class="empty panel">No hay tareas ni audiencias con este filtro. Cree una con “+ Tarea o audiencia” o desde un expediente.</p>';
+  agendaCache = tasks;
+}
+let agendaCache = [];
+["#agenda-mine", "#agenda-kind", "#agenda-status"].forEach((sel) => $(sel).addEventListener("change", () => guarded(renderAgenda)));
+
+const taskForm = $("#task-dialog form");
+async function openTaskDialog(t = null, caseId = null) {
+  const cases = await api("GET", "/cases");
+  if (!cases.length) { toast("Primero cree un expediente.", true); return; }
+  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : "Nueva tarea o audiencia", t ? {
+    id: t.id, kind: t.kind, title: t.title, location: t.location, notes: t.notes, due_at: t.due_at.replace(" ", "T"),
+  } : { kind: "audiencia" });
+  taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
+  taskForm.elements.case_id.disabled = !!t;
+  const officeOf = cases.find((k) => k.id === Number(taskForm.elements.case_id.value))?.office_id;
+  taskForm.elements.assigned_user_id.innerHTML = '<option value="">— El del expediente —</option>' +
+    directory.filter((u) => u.scopeAll || u.offices.some((o) => o.id === officeOf)).map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+  taskForm.elements.assigned_user_id.value = t?.assigned_user_id ?? "";
+  const days = t ? t.remind_days : [1];
+  $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
+  taskForm.elements.done.checked = t?.status === "hecha";
+}
+wireDialog($("#task-dialog"), async (form) => {
+  const d = formData(form);
+  const body = {
+    case_id: Number(form.elements.case_id.value), kind: d.kind, title: d.title, location: d.location, notes: d.notes,
+    due_at: d.due_at.replace("T", " "), assigned_user_id: Number(d.assigned_user_id) || null,
+    remind_days: $$("input[name=remind]:checked", form).map((c) => Number(c.value)),
+    status: form.elements.done.checked ? "hecha" : "pendiente",
+  };
+  if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
+  toast(d.id ? "Guardado." : `${KIND_LABEL[d.kind]} creada.`);
+  refreshBell();
+  await RENDER[location.hash.slice(1) || "inicio"]?.();
+});
+
+// ---------- Consulta de procesos ----------
+let monitorRows = [];
+async function renderConsulta() {
+  const [rows, prefs, status, log] = await Promise.all([
+    api("GET", "/monitor/cases"), api("GET", "/monitor/prefs"), api("GET", "/monitor/status"), api("GET", "/monitor/log"),
+  ]);
+  monitorRows = rows;
+  $("#consulta-empty").hidden = rows.length > 0;
+  $("#consulta-table tbody").innerHTML = rows.map((k) => `
+    <tr>
+      <td><input type="checkbox" class="pick" value="${k.id}" ${k.selected ? "checked" : ""} aria-label="Seleccionar ${escapeHtml(k.radicado)}" /></td>
+      <td><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span><br><strong>${escapeHtml(k.client_name)}</strong><br><span class="muted">${escapeHtml(k.type_name)}${k.assigned_name ? " · " + escapeHtml(k.assigned_name) : ""}</span></td>
+      <td>${escapeHtml(k.court_name || "—")}<br><span class="muted">${escapeHtml([k.city, k.department].filter(Boolean).join(", "))}</span>${k.court_email ? `<br><span class="muted copyable">${escapeHtml(k.court_email)}</span>` : ""}</td>
+      <td>${escapeHtml(k.last_action_date || "—")}<br><span class="muted">${k.last_checked_at ? "Consultado " + escapeHtml(k.last_checked_at.slice(0, 16)) + " UTC" : "Sin consultar"}</span>
+        ${k.last_error ? `<br><span class="badge bad" title="${escapeHtml(k.last_error)}">Error en la última consulta</span>` : ""}</td>
+      <td>${k.new_7d ? `<span class="badge ok">${k.new_7d} nueva(s)</span>` : '<span class="muted">—</span>'}</td>
+      <td><label class="switch"><input type="checkbox" data-monitor="${k.id}" ${k.monitor ? "checked" : ""} /> <span>${k.monitor ? "Activo" : "Pausado"}</span></label></td>
+      <td class="row-actions"><button data-action="view-acts" data-id="${k.id}">Actuaciones</button></td>
+    </tr>`).join("");
+  updateConsultaButtons();
+  const f = $("#prefs-form");
+  $$("input[name=hours]", f).forEach((c) => (c.checked = prefs.hours.includes(c.value)));
+  f.by_email.checked = prefs.by_email;
+  f.email.value = prefs.email || "";
+  f.by_whatsapp.checked = prefs.by_whatsapp;
+  f.whatsapp.value = prefs.whatsapp || "";
+  $(`input[name=scope][value=${prefs.scope}]`, f).checked = true;
+  const missing = [!status.channels.email && "correo (SMTP)", !status.channels.whatsapp && "WhatsApp"].filter(Boolean);
+  $("#channel-note").hidden = !missing.length;
+  $("#channel-note").textContent = missing.length ? `El servidor aún no tiene configurado: ${missing.join(" ni ")}. El reporte queda en las notificaciones de la app.` : "";
+  $("#report-log").innerHTML = log.map((r) => `<li><strong>${escapeHtml(r.sent_at.slice(0, 16))} UTC</strong> · ${r.trigger === "manual" ? "Manual" : "Programado " + escapeHtml(r.trigger)}
+    <span>${r.channels.map((c) => `<span class="badge ${c.ok ? "ok" : "warn"}" title="${escapeHtml(c.detail)}">${c.channel === "email" ? "Correo" : "WhatsApp"} ${c.ok ? "✓" : "✗"}</span>`).join(" ") || '<span class="badge">Solo en la app</span>'}</span>
+    <details><summary>Ver reporte</summary><pre>${escapeHtml(r.summary)}</pre></details></li>`).join("") || '<li class="muted">Aún no se han enviado reportes.</li>';
+}
+
+const pickedIds = () => $$("#consulta-table .pick:checked").map((c) => Number(c.value));
+function updateConsultaButtons() {
+  const n = pickedIds().length;
+  $("#consulta-selected").disabled = !n;
+  $("#consulta-selected").textContent = n ? `Consultar seleccionados (${n})` : "Consultar seleccionados";
+}
+$("#consulta-table").addEventListener("change", (e) => {
+  if (e.target.id === "consulta-check-all") $$("#consulta-table .pick").forEach((c) => (c.checked = e.target.checked));
+  const mon = e.target.closest("[data-monitor]");
+  if (mon) guarded(async () => {
+    await api("PUT", `/monitor/cases/${mon.dataset.monitor}/monitor`, { monitor: mon.checked });
+    mon.nextElementSibling.textContent = mon.checked ? "Activo" : "Pausado";
+  });
+  updateConsultaButtons();
+});
+
+async function runConsulta(ids) {
+  const box = $("#consulta-status");
+  box.hidden = false;
+  box.classList.remove("error");
+  box.textContent = `Consultando ${ids ? ids.length : "todos los"} proceso(s) en la Rama Judicial…`;
+  $("#consulta-all").disabled = $("#consulta-selected").disabled = true;
+  try {
+    const r = await api("POST", "/monitor/check", ids ? { case_ids: ids } : {});
+    const failed = r.results.filter((x) => !x.ok);
+    box.textContent = `Consulta terminada: ${r.ok} de ${r.checked} proceso(s) consultados, ${r.newCount} actuación(es) nueva(s).` +
+      (failed.length ? ` No se pudieron consultar ${failed.length}: ${failed[0].error}` : "");
+    box.classList.toggle("error", !!failed.length && !r.ok);
+    await renderConsulta();
+    refreshBell();
+  } catch (err) {
+    box.textContent = `Error: ${err.message}`;
+    box.classList.add("error");
+  } finally {
+    $("#consulta-all").disabled = false;
+    updateConsultaButtons();
+  }
+}
+$("#consulta-all").addEventListener("click", () => runConsulta(null));
+$("#consulta-selected").addEventListener("click", () => runConsulta(pickedIds()));
+
+$("#prefs-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  guarded(async () => {
+    const f = e.target;
+    await api("PUT", "/monitor/prefs", {
+      hours: $$("input[name=hours]:checked", f).map((c) => c.value),
+      by_email: f.by_email.checked, email: f.email.value, by_whatsapp: f.by_whatsapp.checked, whatsapp: f.whatsapp.value,
+      scope: $("input[name=scope]:checked", f).value, selected: pickedIds(),
+    });
+    toast("Preferencias guardadas.");
+  });
+});
+$("#report-now").addEventListener("click", () => guarded(async () => {
+  const btn = $("#report-now");
+  btn.disabled = true;
+  try {
+    const r = await api("POST", "/monitor/report", { check: true });
+    toast(`Reporte enviado: ${r.newCount} actuación(es) nueva(s).`);
+    await renderConsulta();
+    refreshBell();
+  } finally {
+    btn.disabled = false;
+  }
+}));
+
+async function showActuaciones(id) {
+  const k = monitorRows.find((x) => x.id === id);
+  const acts = await api("GET", `/monitor/cases/${id}/actuaciones`);
+  const dlg = $("#acts-dialog");
+  $("[data-title]", dlg).textContent = `Actuaciones · ${formatRadicado(k.radicado)}`;
+  $("[data-sub]", dlg).textContent = `${k.client_name} · ${k.court_name || "Despacho sin identificar"}`;
+  $("#acts-rows").innerHTML = acts.map((a) => `<tr><td class="nowrap">${escapeHtml(a.fecha)}</td><td><strong>${escapeHtml(a.actuacion)}</strong></td>
+    <td>${escapeHtml(a.anotacion)}</td><td class="nowrap">${a.fecha_inicial ? escapeHtml(a.fecha_inicial + " a " + a.fecha_final) : ""}</td></tr>`).join("")
+    || '<tr><td colspan="4" class="muted">Sin actuaciones registradas. Use “Consultar” para traerlas.</td></tr>';
+  dlg.showModal();
+}
+
+// ---------- Despachos ----------
+async function renderDespachos() {
+  const meta = await api("GET", "/courts/meta");
+  $("#courts-meta").textContent = meta.total
+    ? `${meta.total.toLocaleString("es-CO")} despachos en el directorio · actualizado ${meta.updated.slice(0, 10)}. Fuente: directorio oficial de la Rama Judicial cargado por Gerencia.`
+    : "El directorio está vacío. Descargue el directorio de despachos judiciales (correos electrónicos) del sitio de la Rama Judicial y cárguelo aquí.";
+  await searchCourts();
+}
+let courtsTimer = null;
+async function searchCourts() {
+  const q = new URLSearchParams();
+  if ($("#courts-dep").value) q.set("department", $("#courts-dep").value);
+  if ($("#courts-city").value) q.set("city", $("#courts-city").value);
+  if ($("#courts-area").value) q.set("area", $("#courts-area").value);
+  if ($("#courts-q").value.trim()) q.set("q", $("#courts-q").value.trim());
+  const rows = await api("GET", `/courts?${q}`);
+  $("#courts-count").textContent = `${rows.length}${rows.length === 500 ? "+" : ""} despacho(s)`;
+  $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
+    <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
+    <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml(c.department)}</span></td>
+    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>` : ""}</td>
+    <td>${escapeHtml(c.phone)}</td></tr>`).join("");
+}
+for (const sel of ["#courts-dep", "#courts-city", "#courts-area"]) $(sel).addEventListener("change", () => guarded(searchCourts));
+$("#courts-q").addEventListener("input", () => { clearTimeout(courtsTimer); courtsTimer = setTimeout(() => guarded(searchCourts), 250); });
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); toast("Correo copiado."); }
+  catch { toast(b.dataset.copy); }
+});
+
+// Official directory file → rows. Column names vary between editions, so match loosely.
+const COURT_COLS = {
+  department: ["departamento", "depto", "distrito"], city: ["ciudad", "municipio", "ciudad municipio", "sede"],
+  name: ["despacho", "nombre despacho", "nombre del despacho", "juzgado", "dependencia", "nombre"],
+  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
+  code: ["codigo", "codigo despacho", "cod despacho"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
+};
+$("#courts-file").addEventListener("change", (e) => guarded(async () => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const IMP = window.JuanmaImport;
+  const sheets = await IMP.readFile(file);
+  const rows = [];
+  for (const sh of sheets) {
+    const { headers, body } = IMP.splitHeader(sh.rows);
+    const idx = {};
+    headers.forEach((h, i) => {
+      const n = IMP.norm(h);
+      for (const [k, names] of Object.entries(COURT_COLS)) if (idx[k] === undefined && names.includes(n)) idx[k] = i;
+    });
+    if (idx.name === undefined || idx.department === undefined) continue;
+    body.forEach((r, j) => rows.push({ rowNumber: j + 2, ...Object.fromEntries(Object.entries(idx).map(([k, i]) => [k, r[i]])) }));
+  }
+  if (!rows.length) throw new Error("No se reconocieron columnas de Departamento y Despacho en el archivo.");
+  if (!(await ask({ title: "Cargar directorio de despachos", message: `Se cargarán ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen se actualizan.`, okLabel: "Cargar" }))) return;
+  const out = await api("POST", "/courts/import", { rows });
+  courtCache.clear();
+  toast(`Directorio cargado: ${out.created} nuevos, ${out.updated} actualizados${out.skipped.length ? `, ${out.skipped.length} omitidos` : ""}.`);
+  await renderDespachos();
+}));
+
 const RENDER = {
+  agenda: renderAgenda,
+  consulta: renderConsulta,
+  despachos: renderDespachos,
   reportes: renderReportes,
   usuarios: renderUsuarios,
   inicio: renderInicio,

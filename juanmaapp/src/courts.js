@@ -1,0 +1,96 @@
+// Court directory (despachos judiciales) loaded from the Rama Judicial's
+// official directory file, filtered by department, city and area.
+import express from "express";
+import { can } from "./auth.js";
+import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
+
+const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
+
+export function courtsRouter(db) {
+  const r = express.Router();
+
+  r.get("/meta", (req, res) => {
+    const total = db.prepare("SELECT COUNT(*) AS n FROM courts").get().n;
+    const updated = db.prepare("SELECT MAX(updated_at) AS t FROM courts").get().t;
+    res.json({ areas: AREAS, total, updated });
+  });
+
+  // Departments and cities that actually have courts (for filters).
+  r.get("/places", (req, res) => {
+    const rows = db.prepare("SELECT department, city, COUNT(*) AS n FROM courts GROUP BY department, city ORDER BY department, city").all();
+    res.json(rows.map((x) => ({ ...x })));
+  });
+
+  r.get("/", (req, res) => {
+    const where = [], params = [];
+    for (const [col, val] of [["department", req.query.department], ["city", req.query.city], ["area", req.query.area]]) {
+      if (str(val)) { where.push(`${col} = ?`); params.push(str(val)); }
+    }
+    if (str(req.query.q)) {
+      where.push("(name LIKE ? OR email LIKE ? OR code LIKE ?)");
+      const q = `%${str(req.query.q)}%`;
+      params.push(q, q, q);
+    }
+    const limit = Math.min(Number(req.query.limit) || 500, 2000);
+    const rows = db.prepare(`SELECT * FROM courts ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY department, city, area, name LIMIT ${limit}`).all(...params);
+    res.json(rows.map((x) => ({ ...x })));
+  });
+
+  // Rows come from the page, already mapped to our fields from the official file.
+  r.post("/import", (req, res) => {
+    if (!can(req, "catalog.manage")) return res.status(403).json({ error: "Su rol no tiene permiso para esta acción." });
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) return res.status(400).json({ error: "El archivo no trae despachos." });
+    if (rows.length > 20000) return res.status(400).json({ error: "Máximo 20.000 despachos por carga." });
+    const out = { created: 0, updated: 0, skipped: [] };
+    const find = db.prepare("SELECT id FROM courts WHERE name = ? AND city = ?");
+    const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, area, email, phone, address)
+      VALUES (:code, :name, :department, :city, :city_code, :area, :email, :phone, :address)`);
+    const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city_code = :city_code, area = :area,
+      email = CASE WHEN :email != '' THEN :email ELSE email END, phone = CASE WHEN :phone != '' THEN :phone ELSE phone END,
+      address = CASE WHEN :address != '' THEN :address ELSE address END, updated_at = datetime('now') WHERE id = :id`);
+    db.exec("BEGIN");
+    try {
+      if (req.body?.replace) db.prepare("DELETE FROM courts").run();
+      rows.forEach((row, i) => {
+        const name = str(row.name);
+        const department = canonicalDepartment(row.department);
+        if (!name || !department) {
+          out.skipped.push({ row: row.rowNumber ?? i + 2, reason: !name ? "Sin nombre de despacho." : `Departamento no reconocido: "${str(row.department)}".` });
+          return;
+        }
+        const city = canonicalCity(row.city, department);
+        const v = {
+          code: str(row.code), name, department, city, city_code: cityCode(city, department),
+          area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address),
+        };
+        const hit = find.get(name, city);
+        if (hit) {
+          const { name: _n, city: _c, ...rest } = v;
+          upd.run({ ...rest, id: hit.id });
+          out.updated++;
+        } else {
+          ins.run(v);
+          out.created++;
+        }
+      });
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+    res.json(out);
+  });
+
+  r.delete("/", (req, res) => {
+    if (!can(req, "catalog.manage")) return res.status(403).json({ error: "Su rol no tiene permiso para esta acción." });
+    db.prepare("UPDATE cases SET court_id = NULL WHERE court_id IS NOT NULL").run();
+    db.prepare("DELETE FROM courts").run();
+    res.status(204).end();
+  });
+
+  return r;
+}
+
+export { DIVIPOLA };

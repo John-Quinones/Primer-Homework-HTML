@@ -7,6 +7,9 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 | Section | What it does |
 |---|---|
 | **Inicio** | Dashboard: clients, active cases, saved judgments, process types; cases per process type; recent activity. |
+| **Agenda** | Tasks, hearings (audiencias) and deadlines (términos) per case, grouped by day with overdue items first. Each has a responsible person and reminders 7, 3, 1 or 0 days before; reminders and overdue alerts appear in the bell, once each. |
+| **Consulta de procesos** | Every case with a 23-digit radicado can be consulted in the Rama Judicial's Consulta Nacional Unificada de Procesos: manually (all or selected) or automatically at 7:00, 13:00 and/or 17:00 Colombia time. New actions (actuaciones) raise notifications and go into a report by e-mail and/or WhatsApp to each user, covering their assigned cases, all monitored cases of their offices, or the ones they select. |
+| **Despachos** | Court directory loaded from the Rama Judicial's official directory file (.xlsx/.csv): filter by department, city/municipality and area (Laboral, Civil, Familia…) with e-mail and phone. The case form uses it to pick the court and show its e-mail. |
 | **Clientes** | Create, search, edit and delete clients (name, ID type and number, email, phone, address, city, notes). Each client shows their cases. |
 | **Expedientes** | A case links a client to a sub-process (e.g. Laboral › Ejecutivo Laboral) and stores subject, status, counterparty, facts and the category's custom fields. Filter by process type. |
 | **Borradores** | Pick a case (or fill the form by hand) and generate a draft. The case's client data, process and custom fields are sent to NomosAI. |
@@ -18,9 +21,11 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 
 Deleting a client or sub-process that still has cases is refused.
 
+Department and city/municipality fields use the DANE DIVIPOLA list (33 departments, 1,121 municipalities; `public/data/divipola.json`, from the MIT-licensed `divipola` package) with type-ahead: typing "C" lists Caldas, Caquetá, Casanare, Cauca, Cesar, Chocó, Córdoba and Cundinamarca. A case's 23-digit radicado fills its department and city (its first five digits are the DANE municipality code).
+
 ### Users, roles and offices
 
-Roles: Gerencia, Director Jurídico, Director Contable, Gerente Regional, Abogado, Dependiente Judicial, Asistente. Each user belongs to one or more offices; every client and case belongs to an office and a case can have a responsible person from that office. Roles with **"Ve todas las oficinas"** see every office; the rest see only their own offices' clients, cases, saved judgments and reports. The starting permissions (editable in Usuarios › Roles y permisos):
+Roles: Gerencia, Director Jurídico, Director Contable, Gerente Regional, Abogado, Dependiente Judicial, Asistente, plus any role Gerencia creates (optionally copying another role's permissions). Gerencia can also give a single user their own permission checklist instead of their role's. Each user belongs to one or more offices; every client and case belongs to an office and a case can have a responsible person from that office. Roles with **"Ve todas las oficinas"** see every office; the rest see only their own offices' clients, cases, saved judgments and reports. The starting permissions (editable in Usuarios › Roles y permisos):
 
 | Permiso | Gerencia | Dir. Jurídico | Dir. Contable | Gerente Regional | Abogado | Dependiente Judicial | Asistente |
 |---|---|---|---|---|---|---|---|
@@ -35,6 +40,7 @@ Roles: Gerencia, Director Jurídico, Director Contable, Gerente Regional, Abogad
 | Jurisprudencia | ✓ | ✓ | | ✓ | ✓ | ✓ | |
 | Importar | ✓ | ✓ | | ✓ | | | |
 | Reportes | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| Consulta de procesos | ✓ | ✓ | | ✓ | ✓ | ✓ | |
 
 On first start the app asks for the Gerencia account. Passwords are hashed with scrypt (minimum 10 characters); sessions are HttpOnly cookies that last 12 hours; five failed sign-ins lock an email for 10 minutes; every write must carry the `X-JuanMa` header (CSRF). The last active Gerencia account cannot be demoted or deactivated. Set `COOKIE_SECURE=1` when serving over HTTPS.
 
@@ -56,6 +62,15 @@ Requires Node.js 22.13 or newer; data is stored with Node's built-in SQLite.
 
 Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-opus-5-5`), `DB_PATH` (default `data/juanmaapp.db`).
 
+Notifications and reports:
+
+| Variable | Purpose |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE=1`, `MAIL_FROM` | E-mail delivery (nodemailer). |
+| `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TEMPLATE`, `WHATSAPP_LANG` | WhatsApp Business Cloud API. Business-initiated messages need a template approved by Meta with one body parameter (the report text). |
+| `RAMA_API_BASE` | Rama Judicial CPNU API base (default `https://consultaprocesos.ramajudicial.gov.co:448/api/v2`). |
+| `SCHEDULER=0` | Turn off reminders and scheduled reports (e.g. on a second instance). |
+
 ## How it works
 
 | Piece | File |
@@ -66,6 +81,10 @@ Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-opus-5-5`), `DB_
 | Express app, `POST /api/generate` | `src/app.js` |
 | Users, roles, offices, sessions | `src/auth.js` |
 | Report data | `src/reports.js` |
+| Departments, municipalities, areas, radicado → place | `src/places.js`, `public/data/divipola.json`, `public/combo.js` |
+| Court directory | `src/courts.js` |
+| Tasks, hearings, notifications | `src/agenda-routes.js` |
+| Rama Judicial client, checks, reports, scheduler | `src/ramajudicial.js`, `src/monitor.js`, `src/monitor-routes.js`, `src/notify.js` |
 | Claude call (streaming, effort `high`, server-side refusal fallback) | `src/engine.js` |
 | Rule checks on every draft | `src/validate.js` |
 | UI (Spanish) | `public/` |
@@ -105,6 +124,8 @@ The response is newline-delimited JSON. It sends `{"type":"text","text":…}` de
 ## Pending before production
 
 - **Personal data.** The app stores client personal data. Serve it only over HTTPS (`COOKIE_SECURE=1`), back up `data/juanmaapp.db`, and handle the data under Colombia's Ley 1581 de 2012 (habeas data).
+- **Rama Judicial consultation.** Written against the public CPNU API (`/Procesos/Consulta/NumeroRadicacion` and `/Proceso/Actuaciones/{id}`) and tested with simulated responses; it could not be exercised against the live service from the build environment. Verify it with a few real radicados after deploying, and keep the default pause between requests.
+- **Court directory.** Download the official directory of judicial offices and their e-mails from the Rama Judicial website and load it in Despachos; reload it when the Rama publishes a new edition.
 - **Case-law search.** Needs the Anthropic API key and outbound access to the court websites (through Anthropic's web search and fetch tools). The preview shows fictitious, clearly labeled examples only. Each search or verification makes several web lookups, so it costs more than a draft; the attorney still reads the official text before relying on it.
 - **Starting catalog.** The Administrativo and Laboral sub-processes come from the firm. Those under Penal, Familia, Derecho de Petición and Datacrédito are suggested starting points; edit them in Configuración.
 

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { SEED_CATALOG } from "../src/db.js";
 import { ROLES, PERMISSIONS, DEFAULT_MATRIX } from "../src/auth.js";
 import { REPORTS } from "../src/reports.js";
+import { AREAS } from "../src/places.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(path.join(root, p), "utf8");
@@ -23,6 +24,7 @@ html = html
   .replace('<script src="vendor/marked.min.js"></script>', () => `<script>${safe(read("node_modules/marked/marked.min.js"))}</script>`)
   .replace('<script src="vendor/purify.min.js"></script>', () => `<script>${safe(read("node_modules/dompurify/dist/purify.min.js"))}</script>`)
   .replace('<script src="vendor/read-excel-file.min.js"></script>', () => `<script>${safe(read("node_modules/read-excel-file/bundle/read-excel-file.min.js"))}</script>`)
+  .replace('<script src="combo.js"></script>', () => `<script>window.JUANMA_DIVIPOLA = ${read("public/data/divipola.json")};</script>\n<script>${safe(read("public/combo.js"))}</script>`)
   .replace('<script src="importer.js"></script>', () => `<script>${safe(read("public/importer.js"))}</script>`)
   .replace('<script src="vendor/write-excel-file.min.js"></script>', () => `<script>${safe(read("node_modules/write-excel-file/bundle/write-excel-file.min.js"))}</script>`)
   .replace('<script src="vendor/jspdf.umd.min.js"></script>', () => `<script>${safe(read("node_modules/jspdf/dist/jspdf.umd.min.js"))}</script>`)
@@ -31,7 +33,8 @@ html = html
   .replace('<script src="app.js"></script>', () => [
     `<script>window.JUANMA_SEED_CATALOG = ${JSON.stringify(SEED_CATALOG)};
 window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, matrix: DEFAULT_MATRIX })};
-window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};</script>`,
+window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
+window.JUANMA_AREAS = ${JSON.stringify(AREAS)};</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,
     `<script>${safe(read("public/app.js"))}</script>`,
   ].join("\n"));

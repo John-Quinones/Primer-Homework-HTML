@@ -3,7 +3,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { DEFAULT_MATRIX } from "./auth.js";
+import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -40,6 +40,115 @@ CREATE TABLE IF NOT EXISTS sessions (
   token_hash  TEXT PRIMARY KEY,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at  TEXT NOT NULL
+);
+
+-- Roles: the seven built-in ones plus any the firm creates.
+CREATE TABLE IF NOT EXISTS roles (
+  name     TEXT PRIMARY KEY,
+  builtin  INTEGER NOT NULL DEFAULT 0
+);
+
+-- Per-user permissions, used only when users.custom_permissions = 1.
+CREATE TABLE IF NOT EXISTS user_permissions (
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  permission  TEXT NOT NULL,
+  PRIMARY KEY (user_id, permission)
+);
+
+-- Court directory (Rama Judicial), loaded from the official directory file.
+CREATE TABLE IF NOT EXISTS courts (
+  id          INTEGER PRIMARY KEY,
+  code        TEXT NOT NULL DEFAULT '',
+  name        TEXT NOT NULL,
+  department  TEXT NOT NULL DEFAULT '',
+  city        TEXT NOT NULL DEFAULT '',
+  city_code   TEXT NOT NULL DEFAULT '',
+  area        TEXT NOT NULL DEFAULT '',
+  email       TEXT NOT NULL DEFAULT '',
+  phone       TEXT NOT NULL DEFAULT '',
+  address     TEXT NOT NULL DEFAULT '',
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (name, city)
+);
+CREATE INDEX IF NOT EXISTS courts_place ON courts(department, city, area);
+
+-- Tasks, hearings and deadlines on a case.
+CREATE TABLE IF NOT EXISTS tasks (
+  id                INTEGER PRIMARY KEY,
+  case_id           INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  kind              TEXT NOT NULL DEFAULT 'tarea' CHECK (kind IN ('tarea','audiencia','termino')),
+  title             TEXT NOT NULL,
+  notes             TEXT NOT NULL DEFAULT '',
+  due_at            TEXT NOT NULL,           -- local Bogotá time, 'YYYY-MM-DD HH:MM'
+  location          TEXT NOT NULL DEFAULT '', -- sala or virtual link (hearings)
+  assigned_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  remind_days       TEXT NOT NULL DEFAULT '[1]', -- JSON: days before due_at to alert
+  status            TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente','hecha','cancelada')),
+  created_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  done_at           TEXT
+);
+CREATE INDEX IF NOT EXISTS tasks_due ON tasks(status, due_at);
+
+-- In-app notifications; key makes each reminder fire once.
+CREATE TABLE IF NOT EXISTS notifications (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  body        TEXT NOT NULL DEFAULT '',
+  link        TEXT NOT NULL DEFAULT '',
+  key         TEXT UNIQUE,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  read_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, read_at);
+
+-- Rama Judicial consultation: actions (actuaciones) seen per case and each check run.
+CREATE TABLE IF NOT EXISTS actuaciones (
+  id           INTEGER PRIMARY KEY,
+  case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  ext_key      TEXT NOT NULL,
+  fecha        TEXT NOT NULL DEFAULT '',
+  actuacion    TEXT NOT NULL DEFAULT '',
+  anotacion    TEXT NOT NULL DEFAULT '',
+  fecha_inicial TEXT NOT NULL DEFAULT '',
+  fecha_final  TEXT NOT NULL DEFAULT '',
+  found_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (case_id, ext_key)
+);
+CREATE TABLE IF NOT EXISTS process_checks (
+  id          INTEGER PRIMARY KEY,
+  case_id     INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  checked_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ok          INTEGER NOT NULL,
+  new_count   INTEGER NOT NULL DEFAULT 0,
+  error       TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS process_checks_case ON process_checks(case_id, checked_at);
+
+-- Delivery preferences for the automatic process report.
+CREATE TABLE IF NOT EXISTS report_prefs (
+  user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  hours         TEXT NOT NULL DEFAULT '["07:00"]',
+  by_email      INTEGER NOT NULL DEFAULT 1,
+  email         TEXT NOT NULL DEFAULT '',
+  by_whatsapp   INTEGER NOT NULL DEFAULT 0,
+  whatsapp      TEXT NOT NULL DEFAULT '',
+  scope         TEXT NOT NULL DEFAULT 'mine' CHECK (scope IN ('mine','office','selected'))
+);
+CREATE TABLE IF NOT EXISTS report_selection (
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  case_id  INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, case_id)
+);
+CREATE TABLE IF NOT EXISTS report_log (
+  id        INTEGER PRIMARY KEY,
+  user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  sent_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  trigger   TEXT NOT NULL,                  -- 'manual' or the scheduled hour
+  channels  TEXT NOT NULL DEFAULT '[]',     -- JSON: [{channel, ok, detail}]
+  summary   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS role_permissions (
@@ -161,20 +270,45 @@ function migrate(db) {
   add("cases", "office_id", "INTEGER REFERENCES offices(id)");
   add("cases", "assigned_user_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
   add("saved_rulings", "created_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
+  add("clients", "department", "TEXT NOT NULL DEFAULT ''");
+  add("offices", "department", "TEXT NOT NULL DEFAULT ''");
+  add("users", "custom_permissions", "INTEGER NOT NULL DEFAULT 0");
+  add("users", "phone", "TEXT NOT NULL DEFAULT ''");
+  for (const [col, def] of [["department", "TEXT NOT NULL DEFAULT ''"], ["city", "TEXT NOT NULL DEFAULT ''"], ["area", "TEXT NOT NULL DEFAULT ''"],
+    ["court_id", "INTEGER REFERENCES courts(id) ON DELETE SET NULL"], ["court_name", "TEXT NOT NULL DEFAULT ''"],
+    ["court_email", "TEXT NOT NULL DEFAULT ''"], ["radicado", "TEXT NOT NULL DEFAULT ''"],
+    ["monitor", "INTEGER NOT NULL DEFAULT 0"], ["ext_process_id", "TEXT NOT NULL DEFAULT ''"],
+    ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"]]) add("cases", col, def);
+  db.exec("CREATE INDEX IF NOT EXISTS cases_radicado ON cases(radicado)");
   db.exec("CREATE INDEX IF NOT EXISTS cases_office ON cases(office_id)");
 
   if (!db.prepare("SELECT id FROM offices WHERE is_main = 1").get()) {
     const existing = db.prepare("SELECT id FROM offices WHERE name = ?").get(MAIN_OFFICE);
     if (existing) db.prepare("UPDATE offices SET is_main = 1 WHERE id = ?").run(existing.id);
-    else db.prepare("INSERT INTO offices (name, city, is_main) VALUES (?, ?, 1)").run(MAIN_OFFICE, "Ibagué");
+    else db.prepare("INSERT INTO offices (name, department, city, is_main) VALUES (?, 'Tolima', 'Ibagué', 1)").run(MAIN_OFFICE);
   }
+  db.prepare("UPDATE offices SET department = 'Tolima' WHERE name = ? AND department = ''").run(MAIN_OFFICE);
+  const insRole = db.prepare("INSERT OR IGNORE INTO roles (name, builtin) VALUES (?, 1)");
+  for (const role of Object.keys(DEFAULT_MATRIX)) insRole.run(role);
   const main = db.prepare("SELECT id FROM offices WHERE is_main = 1").get().id;
   db.prepare("UPDATE clients SET office_id = ? WHERE office_id IS NULL").run(main);
   db.prepare("UPDATE cases SET office_id = ? WHERE office_id IS NULL").run(main);
 
-  if (!db.prepare("SELECT COUNT(*) AS n FROM role_permissions").get().n) {
-    const ins = db.prepare("INSERT INTO role_permissions (role, permission) VALUES (?, ?)");
-    for (const [role, perms] of Object.entries(DEFAULT_MATRIX)) for (const p of perms) ins.run(role, p);
+  // Grant each permission's defaults the first time this database sees it, so
+  // permissions added in later versions reach existing built-in roles once.
+  db.exec("CREATE TABLE IF NOT EXISTS known_permissions (permission TEXT PRIMARY KEY)");
+  const known = new Set(db.prepare("SELECT permission FROM known_permissions").all().map((r) => r.permission));
+  if (!known.size && db.prepare("SELECT COUNT(*) AS n FROM role_permissions").get().n) {
+    // Databases from before this table existed already hold their matrix.
+    for (const p of Object.keys(PERMISSIONS)) if (p !== "processes.consult") known.add(p);
+    const insK = db.prepare("INSERT OR IGNORE INTO known_permissions (permission) VALUES (?)");
+    for (const p of known) insK.run(p);
+  }
+  const insP = db.prepare("INSERT OR IGNORE INTO role_permissions (role, permission) VALUES (?, ?)");
+  for (const p of Object.keys(PERMISSIONS)) {
+    if (known.has(p)) continue;
+    for (const [role, perms] of Object.entries(DEFAULT_MATRIX)) if (perms.includes(p)) insP.run(role, p);
+    db.prepare("INSERT INTO known_permissions (permission) VALUES (?)").run(p);
   }
 }
 
