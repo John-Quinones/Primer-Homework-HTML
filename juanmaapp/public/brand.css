@@ -1,64 +1,73 @@
 /*
- * JuanMaApp brand tokens — the ONLY file to edit when applying the brand manual.
+ * JuanMaApp brand tokens — the only file to edit for brand changes.
  *
- * STATUS: PLACEHOLDER VALUES. The brand manual (SharePoint PDF) could not be
- * downloaded from the build environment, so these are neutral stand-ins, not
- * the official brand. Replace each value with the manual's exact HEX codes and
- * typefaces; nothing else in the app hard-codes a color or font.
+ * Colors were sampled from the brand image (image.png at the repo root:
+ * AA Centauri / TEC Jurídicos). Exact HEX values from the PDF manual should
+ * replace these if they differ. The wordmark typeface is approximated with
+ * the Google Font "Michroma" until the manual's font name is confirmed.
  */
 :root {
   /* Typography */
-  --font-heading: "Playfair Display", Georgia, "Times New Roman", serif; /* TODO: manual heading font */
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; /* TODO: manual body font */
-  --font-document: Georgia, "Times New Roman", serif;                     /* legal draft body */
+  --font-heading: "Michroma", "Eurostile", "Arial Black", sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-document: Georgia, "Times New Roman", serif;   /* legal draft body */
 
-  /* Core palette */
-  --brand-primary: #1f2a44;      /* TODO: manual primary */
-  --brand-primary-ink: #ffffff;  /* text on primary */
-  --brand-accent: #b08d57;       /* TODO: manual secondary / accent */
-  --brand-accent-ink: #1f2a44;
+  /* Core palette (sampled) */
+  --brand-navy: #002e6e;
+  --brand-blue: #017bc5;
+  --brand-blue-mid: #01569b;
+  --brand-silver: #adaeb2;
+  --brand-silver-light: #c1c5c8;
+  --brand-black: #101010;
+
+  --brand-primary: var(--brand-navy);
+  --brand-primary-ink: #ffffff;
+  --brand-accent: var(--brand-silver);
+  --brand-accent-ink: var(--brand-navy);
+  --brand-header-bg: linear-gradient(90deg, #002d6c 0%, #017bc5 50%, #002e6e 100%);
+  --heading: var(--brand-navy);
 
   /* Surfaces & text */
-  --bg: #f6f5f2;
+  --bg: #f3f5f8;
   --surface: #ffffff;
-  --surface-muted: #eeece7;
-  --border: #d9d5cc;
-  --text: #1c1f26;
-  --text-muted: #5b6070;
+  --surface-muted: #eceef1;
+  --border: #c1c5c8;
+  --text: #101010;
+  --text-muted: #555a63;
 
   /* Status */
   --ok: #2e7d4f;
   --warn: #a8670a;
   --error: #b3261e;
   --fill-highlight: #fff1b8;     /* [FILL: …] markers */
-  --link: #1f4e9c;
+  --link: #01569b;
 
   --radius: 10px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #12151c;
-    --surface: #1a1e27;
-    --surface-muted: #232836;
-    --border: #2f3546;
-    --text: #e8e6e1;
-    --text-muted: #a3a8b8;
-    --brand-primary: #2b3a5e;
-    --brand-accent: #c9a56f;
+    --bg: #0a0a0b;
+    --surface: #141518;
+    --surface-muted: #1e2025;
+    --border: #3a3d44;
+    --text: #e9eaec;
+    --text-muted: #adaeb2;
+    --brand-primary: #01569b;
+    --heading: #c1c5c8;
     --fill-highlight: #5a4a12;
-    --link: #8db4ff;
+    --link: #4fb0ee;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #12151c;
-  --surface: #1a1e27;
-  --surface-muted: #232836;
-  --border: #2f3546;
-  --text: #e8e6e1;
-  --text-muted: #a3a8b8;
-  --brand-primary: #2b3a5e;
-  --brand-accent: #c9a56f;
+  --bg: #0a0a0b;
+  --surface: #141518;
+  --surface-muted: #1e2025;
+  --border: #3a3d44;
+  --text: #e9eaec;
+  --text-muted: #adaeb2;
+  --brand-primary: #01569b;
+  --heading: #c1c5c8;
   --fill-highlight: #5a4a12;
-  --link: #8db4ff;
+  --link: #4fb0ee;
 }
