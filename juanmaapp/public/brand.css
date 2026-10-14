@@ -1,0 +1,64 @@
+/*
+ * JuanMaApp brand tokens — the ONLY file to edit when applying the brand manual.
+ *
+ * STATUS: PLACEHOLDER VALUES. The brand manual (SharePoint PDF) could not be
+ * downloaded from the build environment, so these are neutral stand-ins, not
+ * the official brand. Replace each value with the manual's exact HEX codes and
+ * typefaces; nothing else in the app hard-codes a color or font.
+ */
+:root {
+  /* Typography */
+  --font-heading: "Playfair Display", Georgia, "Times New Roman", serif; /* TODO: manual heading font */
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; /* TODO: manual body font */
+  --font-document: Georgia, "Times New Roman", serif;                     /* legal draft body */
+
+  /* Core palette */
+  --brand-primary: #1f2a44;      /* TODO: manual primary */
+  --brand-primary-ink: #ffffff;  /* text on primary */
+  --brand-accent: #b08d57;       /* TODO: manual secondary / accent */
+  --brand-accent-ink: #1f2a44;
+
+  /* Surfaces & text */
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-muted: #eeece7;
+  --border: #d9d5cc;
+  --text: #1c1f26;
+  --text-muted: #5b6070;
+
+  /* Status */
+  --ok: #2e7d4f;
+  --warn: #a8670a;
+  --error: #b3261e;
+  --fill-highlight: #fff1b8;     /* [FILL: …] markers */
+  --link: #1f4e9c;
+
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151c;
+    --surface: #1a1e27;
+    --surface-muted: #232836;
+    --border: #2f3546;
+    --text: #e8e6e1;
+    --text-muted: #a3a8b8;
+    --brand-primary: #2b3a5e;
+    --brand-accent: #c9a56f;
+    --fill-highlight: #5a4a12;
+    --link: #8db4ff;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151c;
+  --surface: #1a1e27;
+  --surface-muted: #232836;
+  --border: #2f3546;
+  --text: #e8e6e1;
+  --text-muted: #a3a8b8;
+  --brand-primary: #2b3a5e;
+  --brand-accent: #c9a56f;
+  --fill-highlight: #5a4a12;
+  --link: #8db4ff;
+}

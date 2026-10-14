@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JuanMaApp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="brand.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">JM</span>
+      <div>
+        <h1>JuanMaApp</h1>
+        <p class="tagline">Borradores legales con NomosAI Engine</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <form id="draft-form" class="panel" autocomplete="off">
+      <h2>Nuevo borrador</h2>
+
+      <fieldset class="doc-types">
+        <legend>Tipo de documento</legend>
+        <label><input type="radio" name="documentType" value="PETITION" checked /> Derecho de petición</label>
+        <label><input type="radio" name="documentType" value="CONTRACT" /> Contrato</label>
+        <label><input type="radio" name="documentType" value="POWER_OF_ATTORNEY" /> Poder</label>
+      </fieldset>
+
+      <div class="grid2">
+        <label>Idioma del documento
+          <select name="language">
+            <option>Spanish</option>
+            <option>English</option>
+          </select>
+        </label>
+        <label>Jurisdicción
+          <input name="jurisdiction" placeholder="Ej. Colombia" />
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Cliente</legend>
+        <div class="grid2">
+          <label>Nombre completo <input name="fullName" /></label>
+          <label>Documento de identidad <input name="idNumber" /></label>
+          <label>Correo electrónico <input name="email" type="email" /></label>
+          <label>Dirección de notificación <input name="address" /></label>
+        </div>
+      </fieldset>
+
+      <label>Contraparte / entidad destinataria
+        <input name="counterparty" placeholder="Ej. Secretaría de Movilidad de Bogotá" />
+      </label>
+
+      <label>Hechos e instrucciones
+        <textarea name="facts" rows="7" placeholder="Hechos en orden cronológico, lo que se pide, facultades del apoderado, condiciones del contrato…"></textarea>
+      </label>
+
+      <fieldset>
+        <legend>Honorarios (Bold)</legend>
+        <label class="inline"><input type="checkbox" name="paymentRequired" /> Incluir sección de pago con enlace Bold</label>
+        <label>Detalle de honorarios
+          <textarea name="paymentItems" rows="3" placeholder="Ej. Redacción y radicación: COP 350.000; Gastos de notificación: COP 20.000" disabled></textarea>
+        </label>
+      </fieldset>
+
+      <button type="submit" id="submit">Generar borrador</button>
+    </form>
+
+    <section class="panel output" aria-live="polite">
+      <div class="output-head">
+        <h2>Borrador</h2>
+        <div class="actions">
+          <button type="button" data-action="copy-md" disabled>Copiar Markdown</button>
+          <button type="button" data-action="download-md" disabled>Descargar .md</button>
+          <button type="button" data-action="print" disabled>Imprimir / PDF</button>
+          <button type="button" data-action="copy-json" disabled>Copiar JSON</button>
+        </div>
+      </div>
+
+      <div id="status" class="status" hidden></div>
+      <div id="audit" class="audit" hidden></div>
+
+      <article id="document" class="document">
+        <p class="empty">Complete el formulario y genere un borrador. El documento aparecerá aquí.</p>
+      </article>
+
+      <details id="payload-box" hidden>
+        <summary>JSON para el backend</summary>
+        <pre id="payload"></pre>
+      </details>
+    </section>
+  </main>
+
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
