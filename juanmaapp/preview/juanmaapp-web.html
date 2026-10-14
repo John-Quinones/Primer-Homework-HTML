@@ -3222,13 +3222,54 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
     return st;
   }
 
+  // The earlier test versions kept data in this browser, mixed with sample
+  // records. Bring over what the firm entered (catalog, fields, templates,
+  // clients, cases, tasks…) and leave the samples behind. The old copy stays.
+  function rescueOld() {
+    let old = null, from = null;
+    for (const v of [5, 4, 3, 2, 1]) {
+      try { old = JSON.parse(localStorage.getItem(`juanmaapp-preview-v${v}`) || "null"); } catch { old = null; }
+      if (old) { from = v; break; }
+    }
+    if (!old) return null;
+    const isSample = (x) => /@ejemplo(-ficticio)?\.co$/i.test(x?.email || "") || /\(ejemplo\)|ejemplo ficticio|de ejemplo/i.test(`${x?.name || ""} ${x?.title || ""} ${x?.notes || ""} ${x?.reference || ""}`);
+    const st = fresh();
+    for (const k of ["categories", "types", "fields"]) if (old[k]?.length) st[k] = old[k];
+    if (old.matrix) st.matrix = old.matrix;
+    if (old.roles?.length) st.roles = old.roles;
+    st.users = (old.users || []).filter((u) => !isSample(u));
+    st.clients = (old.clients || []).filter((c) => !isSample(c));
+    const clientIds = new Set(st.clients.map((c) => c.id));
+    st.cases = (old.cases || []).filter((k) => clientIds.has(k.client_id));
+    const userIds = new Set(st.users.map((u) => u.id));
+    const caseIds = new Set(st.cases.map((k) => k.id));
+    st.courts = (old.courts || []).filter((c) => !isSample(c) && !String(c.code || "").startsWith("ej-"));
+    const courtIds = new Set(st.courts.map((c) => c.id));
+    for (const k of st.cases) {
+      if (k.assigned_user_id && !userIds.has(k.assigned_user_id)) k.assigned_user_id = null;
+      if (k.court_id && !courtIds.has(k.court_id)) Object.assign(k, { court_id: null, court_email: /ejemplo/.test(k.court_email || "") ? "" : k.court_email });
+      if (/ejemplo/.test(k.court_name || "")) k.court_name = "";
+      k.last_checked_at = null; k.last_action_date = null;
+    }
+    st.tasks = (old.tasks || []).filter((x) => caseIds.has(x.case_id) && !isSample(x))
+      .map((x) => ({ ...x, assigned_user_id: userIds.has(x.assigned_user_id) ? x.assigned_user_id : null }));
+    st.saved = (old.saved || []).filter((r) => !isSample(r) && (!r.case_id || caseIds.has(r.case_id)));
+    st.templates = (old.templates || st.templates).map((x) => ({ ...x }));
+    // Offices: the main one, plus any that the firm's own records use.
+    const used = new Set([...st.clients, ...st.cases].map((x) => x.office_id).concat(st.users.flatMap((u) => u.office_ids || [])));
+    st.offices = (old.offices || st.offices).filter((o) => o.is_main || used.has(o.id));
+    if (!st.offices.some((o) => o.is_main)) st.offices.unshift(fresh().offices[0]);
+    st.info.rescuedFrom = `juanmaapp-preview-v${from}`;
+    return st;
+  }
+
   let s = null;
   let saving = Promise.resolve();
   // One save at a time, in order.
   const save = () => (saving = saving.catch(() => {}).then(() => window.JuanmaStore.save(s)));
   const READY = (async () => {
     const loaded = await window.JuanmaStore.load();
-    s = migrate(loaded || fresh());
+    s = migrate(loaded || rescueOld() || fresh());
     await save();
   })();
   // Who is signed in is per viewer, never shared.
