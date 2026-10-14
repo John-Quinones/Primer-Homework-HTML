@@ -6,11 +6,12 @@
   "type": "module",
   "main": "server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "preview": "node scripts/build-preview.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

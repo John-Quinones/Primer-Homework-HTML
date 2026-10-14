@@ -16,87 +16,212 @@
       <img class="logo" src="logo-t.png" alt="" width="44" height="44" />
       <div>
         <h1>JuanMaApp</h1>
-        <p class="tagline">Borradores legales con NomosAI Engine</p>
+        <p class="tagline">Gestión de clientes, procesos y borradores legales</p>
       </div>
     </div>
+    <span id="demo-badge" class="demo-badge" hidden>Vista previa · datos de ejemplo</span>
   </header>
 
-  <main class="layout">
-    <form id="draft-form" class="panel" autocomplete="off">
-      <h2>Nuevo borrador</h2>
+  <div class="shell">
+    <nav class="sidenav" aria-label="Secciones">
+      <a href="#clientes" data-view="clientes">Clientes</a>
+      <a href="#expedientes" data-view="expedientes">Expedientes</a>
+      <a href="#borradores" data-view="borradores">Borradores</a>
+      <a href="#configuracion" data-view="configuracion">Configuración</a>
+    </nav>
 
-      <fieldset class="doc-types">
-        <legend>Tipo de documento</legend>
-        <label><input type="radio" name="documentType" value="PETITION" checked /> Derecho de petición</label>
-        <label><input type="radio" name="documentType" value="CONTRACT" /> Contrato</label>
-        <label><input type="radio" name="documentType" value="POWER_OF_ATTORNEY" /> Poder</label>
-      </fieldset>
+    <main>
+      <!-- ============ CLIENTES ============ -->
+      <section id="view-clientes" class="view" hidden>
+        <div class="view-head">
+          <h2>Clientes</h2>
+          <div class="toolbar">
+            <input id="client-search" type="search" placeholder="Buscar por nombre o documento" />
+            <button class="primary" data-action="new-client">+ Nuevo cliente</button>
+          </div>
+        </div>
+        <div class="split">
+          <div class="panel list-panel">
+            <ul id="client-list" class="item-list"></ul>
+          </div>
+          <div id="client-detail" class="panel detail-panel">
+            <p class="empty">Seleccione un cliente o cree uno nuevo.</p>
+          </div>
+        </div>
+      </section>
 
+      <!-- ============ EXPEDIENTES ============ -->
+      <section id="view-expedientes" class="view" hidden>
+        <div class="view-head">
+          <h2>Expedientes</h2>
+          <div class="toolbar">
+            <select id="case-filter"><option value="">Todos los tipos de proceso</option></select>
+            <button class="primary" data-action="new-case">+ Nuevo expediente</button>
+          </div>
+        </div>
+        <div class="panel">
+          <table class="data-table">
+            <thead><tr><th>Cliente</th><th>Proceso</th><th>Asunto</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="case-rows"></tbody>
+          </table>
+          <p id="case-empty" class="empty" hidden>No hay expedientes todavía.</p>
+        </div>
+      </section>
+
+      <!-- ============ BORRADORES ============ -->
+      <section id="view-borradores" class="view" hidden>
+        <div class="layout">
+          <form id="draft-form" class="panel" autocomplete="off">
+            <h2>Nuevo borrador</h2>
+
+            <label>Expediente (opcional)
+              <select name="caseId"><option value="">— Sin expediente: llenar a mano —</option></select>
+            </label>
+            <p id="case-summary" class="hint" hidden></p>
+
+            <fieldset class="doc-types">
+              <legend>Tipo de documento</legend>
+              <label><input type="radio" name="documentType" value="PETITION" checked /> Derecho de petición</label>
+              <label><input type="radio" name="documentType" value="CONTRACT" /> Contrato</label>
+              <label><input type="radio" name="documentType" value="POWER_OF_ATTORNEY" /> Poder</label>
+            </fieldset>
+
+            <div class="grid2">
+              <label>Idioma del documento
+                <select name="language"><option>Spanish</option><option>English</option></select>
+              </label>
+              <label>Jurisdicción <input name="jurisdiction" placeholder="Ej. Colombia" value="Colombia" /></label>
+            </div>
+
+            <fieldset id="manual-client">
+              <legend>Cliente</legend>
+              <div class="grid2">
+                <label>Nombre completo <input name="fullName" /></label>
+                <label>Documento de identidad <input name="idNumber" /></label>
+                <label>Correo electrónico <input name="email" type="email" /></label>
+                <label>Dirección de notificación <input name="address" /></label>
+              </div>
+            </fieldset>
+
+            <label>Contraparte / entidad destinataria
+              <input name="counterparty" placeholder="Ej. Secretaría de Movilidad de Bogotá" />
+            </label>
+
+            <label>Hechos e instrucciones
+              <textarea name="facts" rows="6" placeholder="Hechos en orden cronológico, lo que se pide, facultades del apoderado, condiciones del contrato…"></textarea>
+            </label>
+
+            <fieldset>
+              <legend>Honorarios (Bold)</legend>
+              <label class="inline"><input type="checkbox" name="paymentRequired" /> Incluir sección de pago con enlace Bold</label>
+              <label>Detalle de honorarios
+                <textarea name="paymentItems" rows="3" placeholder="Ej. Redacción y radicación: COP 350.000" disabled></textarea>
+              </label>
+            </fieldset>
+
+            <button type="submit" id="submit" class="primary wide">Generar borrador</button>
+          </form>
+
+          <section class="panel output" aria-live="polite">
+            <div class="output-head">
+              <h2>Borrador</h2>
+              <div class="actions">
+                <button type="button" data-out="copy-md" disabled>Copiar Markdown</button>
+                <button type="button" data-out="download-md" disabled>Descargar .md</button>
+                <button type="button" data-out="print" disabled>Imprimir / PDF</button>
+                <button type="button" data-out="copy-json" disabled>Copiar JSON</button>
+              </div>
+            </div>
+            <div id="status" class="status" hidden></div>
+            <div id="audit" class="audit" hidden></div>
+            <article id="document" class="document">
+              <p class="empty">Elija un expediente o complete el formulario. El documento aparecerá aquí.</p>
+            </article>
+            <details id="payload-box" hidden>
+              <summary>JSON para el backend</summary>
+              <pre id="payload"></pre>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <!-- ============ CONFIGURACIÓN ============ -->
+      <section id="view-configuracion" class="view" hidden>
+        <div class="view-head">
+          <h2>Tipos de proceso</h2>
+          <form class="toolbar" data-form="new-category">
+            <input name="name" placeholder="Nuevo tipo de proceso (ej. Civil)" required />
+            <button class="primary">+ Agregar</button>
+          </form>
+        </div>
+        <p class="hint">Cada tipo de proceso agrupa sus subprocesos y los campos propios que se llenan en cada expediente.</p>
+        <div id="catalog" class="catalog"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Formulario de cliente -->
+  <dialog id="client-dialog">
+    <form method="dialog" data-form="client">
+      <h3 data-title>Nuevo cliente</h3>
+      <input type="hidden" name="id" />
+      <label>Nombre completo o razón social * <input name="full_name" required /></label>
       <div class="grid2">
-        <label>Idioma del documento
-          <select name="language">
-            <option>Spanish</option>
-            <option>English</option>
+        <label>Tipo de documento
+          <select name="id_type">
+            <option value="CC">Cédula de ciudadanía</option>
+            <option value="NIT">NIT</option>
+            <option value="CE">Cédula de extranjería</option>
+            <option value="PA">Pasaporte</option>
+            <option value="TI">Tarjeta de identidad</option>
           </select>
         </label>
-        <label>Jurisdicción
-          <input name="jurisdiction" placeholder="Ej. Colombia" />
-        </label>
+        <label>Número <input name="id_number" /></label>
+        <label>Correo electrónico <input name="email" type="email" /></label>
+        <label>Teléfono <input name="phone" /></label>
+        <label>Dirección <input name="address" /></label>
+        <label>Ciudad <input name="city" /></label>
       </div>
-
-      <fieldset>
-        <legend>Cliente</legend>
-        <div class="grid2">
-          <label>Nombre completo <input name="fullName" /></label>
-          <label>Documento de identidad <input name="idNumber" /></label>
-          <label>Correo electrónico <input name="email" type="email" /></label>
-          <label>Dirección de notificación <input name="address" /></label>
-        </div>
-      </fieldset>
-
-      <label>Contraparte / entidad destinataria
-        <input name="counterparty" placeholder="Ej. Secretaría de Movilidad de Bogotá" />
-      </label>
-
-      <label>Hechos e instrucciones
-        <textarea name="facts" rows="7" placeholder="Hechos en orden cronológico, lo que se pide, facultades del apoderado, condiciones del contrato…"></textarea>
-      </label>
-
-      <fieldset>
-        <legend>Honorarios (Bold)</legend>
-        <label class="inline"><input type="checkbox" name="paymentRequired" /> Incluir sección de pago con enlace Bold</label>
-        <label>Detalle de honorarios
-          <textarea name="paymentItems" rows="3" placeholder="Ej. Redacción y radicación: COP 350.000; Gastos de notificación: COP 20.000" disabled></textarea>
-        </label>
-      </fieldset>
-
-      <button type="submit" id="submit">Generar borrador</button>
+      <label>Notas <textarea name="notes" rows="3"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
     </form>
+  </dialog>
 
-    <section class="panel output" aria-live="polite">
-      <div class="output-head">
-        <h2>Borrador</h2>
-        <div class="actions">
-          <button type="button" data-action="copy-md" disabled>Copiar Markdown</button>
-          <button type="button" data-action="download-md" disabled>Descargar .md</button>
-          <button type="button" data-action="print" disabled>Imprimir / PDF</button>
-          <button type="button" data-action="copy-json" disabled>Copiar JSON</button>
-        </div>
+  <!-- Formulario de expediente -->
+  <dialog id="case-dialog">
+    <form method="dialog" data-form="case">
+      <h3 data-title>Nuevo expediente</h3>
+      <input type="hidden" name="id" />
+      <label>Cliente * <select name="client_id" required></select></label>
+      <div class="grid2">
+        <label>Tipo de proceso * <select name="category_id" required></select></label>
+        <label>Subproceso * <select name="process_type_id" required></select></label>
       </div>
+      <div class="grid2">
+        <label>Asunto <input name="title" placeholder="Ej. Cobro de prestaciones sociales" /></label>
+        <label>Estado
+          <select name="status">
+            <option>Abierto</option><option>En trámite</option><option>En espera de respuesta</option>
+            <option>Suspendido</option><option>Cerrado</option>
+          </select>
+        </label>
+      </div>
+      <label>Contraparte / entidad <input name="counterparty" /></label>
+      <div id="custom-fields" class="grid2"></div>
+      <label>Hechos <textarea name="facts" rows="5"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 
-      <div id="status" class="status" hidden></div>
-      <div id="audit" class="audit" hidden></div>
-
-      <article id="document" class="document">
-        <p class="empty">Complete el formulario y genere un borrador. El documento aparecerá aquí.</p>
-      </article>
-
-      <details id="payload-box" hidden>
-        <summary>JSON para el backend</summary>
-        <pre id="payload"></pre>
-      </details>
-    </section>
-  </main>
+  <div id="toast" class="toast" hidden></div>
 
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>

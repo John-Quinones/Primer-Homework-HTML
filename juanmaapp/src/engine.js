@@ -35,10 +35,19 @@ function buildUserMessage(req, transactionId) {
     "",
     `Counterparty / addressee: ${req.counterparty || "[not provided]"}`,
     "",
+  ];
+  if (req.process) {
+    lines.push(
+      `Process: ${req.process.category} › ${req.process.type}${req.process.title ? ` (${req.process.title})` : ""}`,
+      ...req.process.fields.map((f) => `- ${f.label}: ${f.value}`),
+      "",
+    );
+  }
+  lines.push(
     "Case facts and instructions from the paralegal or attorney:",
     req.facts || "[not provided]",
     "",
-  ];
+  );
   if (req.payment?.required) {
     lines.push(
       "Fees: payment IS required.",
