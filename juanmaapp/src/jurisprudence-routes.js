@@ -22,7 +22,7 @@ function apiError(err) {
   if (err instanceof Anthropic.AuthenticationError) return [500, "Falta o es inválida la clave de Anthropic."];
   if (err instanceof Anthropic.RateLimitError) return [429, "Demasiadas consultas seguidas. Intente en un momento."];
   if (err instanceof Anthropic.APIError) return [502, `Error del servicio de IA (${err.status}).`];
-  return [500, err.message || "Error interno."];
+  return [500, "Error interno del servidor."]; // details stay in the log (audit A10-001)
 }
 
 export function jurisprudenceRouter(db) {

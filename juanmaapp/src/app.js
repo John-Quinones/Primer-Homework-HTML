@@ -53,12 +53,22 @@ function caseContext(db, caseId, user) {
 export function createApp(db) {
   const app = express();
   app.disable("x-powered-by");
+  // Security headers (audit A02-001): pages only run the app's own scripts (no inline code),
+  // and once served over HTTPS the browser keeps using HTTPS for a year.
+  const CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob:", "connect-src 'self'", "frame-src 'self' blob:",
+    "worker-src 'self' blob:", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "same-origin");
+    res.setHeader("Content-Security-Policy", CSP);
+    if (req.secure || process.env.COOKIE_SECURE === "1") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     next();
   });
+  // Sign-in and public pages accept small bodies; 12 MB only where files are uploaded (audit A06-002).
+  app.use("/api/auth", express.json({ limit: "32kb" }));
+  app.use("/api/public", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "12mb" }));
   app.use(sessionMiddleware(db));
   app.use(express.static(path.join(root, "public")));
@@ -149,7 +159,8 @@ export function createApp(db) {
       else if (err instanceof Anthropic.RateLimitError) message = "Rate limited. Try again in a moment.";
       else if (err instanceof Anthropic.BadRequestError) message = `Bad request: ${err.message}`;
       else if (err instanceof Anthropic.APIError) message = `API error ${err.status}: ${err.message}`;
-      else if (err instanceof Error) message = err.message;
+      // Our own validation messages are for the user; anything internal (database, libraries) stays in the log (audit A10-001).
+      else if (err instanceof Error) message = err.expose || err.userMessage ? err.message : "No se pudo generar el documento. Intente de nuevo; si sigue, avise a Gerencia.";
       console.error(err);
       send({ type: "error", error: message });
     }

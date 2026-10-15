@@ -6,7 +6,8 @@ import { audit } from "./audit.js";
 import express from "express";
 import { microsoftEnabled } from "./microsoft.js";
 import { VERSION } from "./version.js";
-import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
+import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
+import { publicBase } from "./public-url.js";
 import { canonicalDepartment, canonicalCity } from "./places.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
@@ -66,25 +67,76 @@ export const effectivePermissions = (role, perms) => {
 const SESSION_HOURS = 12;
 const COOKIE = "jm_session";
 
-export function hashPassword(pw) {
-  const salt = randomBytes(16);
-  return `scrypt$${salt.toString("hex")}$${scryptSync(pw, salt, 64).toString("hex")}`;
+// scrypt with OWASP's cost (N=2^17, r=8, p=1), run off the main thread; the parameters
+// travel in the stored hash, and older hashes are upgraded at the next sign-in (audit A04-001).
+const scryptN = () => 2 ** (Number(process.env.SCRYPT_LOG_N) || 17); // tests lower it to stay fast
+const SCRYPT_MAXMEM = 256 * 1024 * 1024;
+const scryptAsync = (pw, salt, len, o) => new Promise((ok, ko) => scrypt(pw, salt, len, { ...o, maxmem: SCRYPT_MAXMEM }, (e, k) => (e ? ko(e) : ok(k))));
+
+export async function hashPassword(pw) {
+  const salt = randomBytes(16), N = scryptN();
+  const key = await scryptAsync(String(pw), salt, 64, { N, r: 8, p: 1 });
+  return `scrypt2$${N}$8$1$${salt.toString("hex")}$${key.toString("hex")}`;
 }
 
-export function checkPassword(pw, stored) {
-  const [alg, saltHex, hashHex] = String(stored).split("$");
-  if (alg !== "scrypt" || !saltHex || !hashHex) return false;
+export async function checkPassword(pw, stored) {
+  const parts = String(stored).split("$");
+  let N = 16384, r = 8, p = 1, saltHex, hashHex;
+  if (parts[0] === "scrypt" && parts.length === 3) [, saltHex, hashHex] = parts;
+  else if (parts[0] === "scrypt2" && parts.length === 6) [N, r, p, saltHex, hashHex] = [Number(parts[1]), Number(parts[2]), Number(parts[3]), parts[4], parts[5]];
+  else return false;
+  if (!(N >= 1024 && N <= 2 ** 20 && r >= 1 && r <= 16 && p >= 1 && p <= 4)) return false;
   const want = Buffer.from(hashHex, "hex");
-  const got = scryptSync(String(pw), Buffer.from(saltHex, "hex"), want.length);
-  return timingSafeEqual(want, got);
+  const got = await scryptAsync(String(pw), Buffer.from(saltHex, "hex"), want.length, { N, r, p });
+  return got.length === want.length && timingSafeEqual(want, got);
 }
+export const needsRehash = (stored) => /^scrypt/.test(String(stored)) && !String(stored).startsWith(`scrypt2$${scryptN()}$8$1$`);
+// Unknown accounts take as long to answer as wrong passwords (audit A07-007).
+let dummy = null;
+const dummyHash = async () => (dummy ??= await hashPassword(randomBytes(12).toString("hex")));
 
 const sha = (t) => createHash("sha256").update(t).digest("hex");
+/** BEGIN … COMMIT, rolled back on any error so the single connection is never left inside a transaction (audit A10-002). */
+export function inTransaction(db, fn) {
+  db.exec("BEGIN");
+  try { const out = fn(); db.exec("COMMIT"); return out; } catch (err) { db.exec("ROLLBACK"); throw err; }
+}
+const safeEqual = (a, b) => timingSafeEqual(Buffer.from(sha(String(a))), Buffer.from(sha(String(b))));
 const str = (v) => (typeof v === "string" ? v.trim() : "");
 
-function validPassword(pw) {
-  return typeof pw === "string" && pw.length >= 10;
+// Too easy to guess even when long enough (audit A07-006).
+const COMMON = new Set(["1234567890", "0123456789", "12345678910", "contraseña", "contrasena1", "password123", "qwertyuiop", "colombia123", "abogado123", "tecjuridicos",
+  "1111111111", "abc1234567", "administrador", "iloveyou12", "1q2w3e4r5t", "asdfghjkl1", "contraseña1", "password12"]);
+/** Why a new password is not acceptable, or "" when it is. */
+export function passwordProblem(pw, { email = "", name = "" } = {}) {
+  if (typeof pw !== "string" || pw.length < 10) return "La contraseña debe tener al menos 10 caracteres.";
+  if (pw.length > 128) return "La contraseña puede tener máximo 128 caracteres.";
+  const low = pw.toLowerCase();
+  const words = [String(email).split("@")[0], ...String(name).split(/\s+/)].map((w) => w.toLowerCase()).filter((w) => w.length >= 4);
+  if (COMMON.has(low) || /^(.)\1+$/.test(pw) || /^\d+$/.test(pw) || words.some((w) => low.includes(w)))
+    return "Esa contraseña es fácil de adivinar: no use su nombre, su correo ni solo números; pruebe una frase de varias palabras.";
+  return "";
 }
+
+// Failed sign-ins and reset requests are counted in the database, per account and per IP,
+// so the limits survive restarts (audit A07-001, A06-002). Repeated lockouts grow longer.
+function throttle(db) {
+  const get = (key) => db.prepare("SELECT * FROM auth_throttle WHERE key = ?").get(key);
+  return {
+    wait(key) { const r = get(key); return r && r.until_ms > Date.now() ? Math.ceil((r.until_ms - Date.now()) / 60000) : 0; },
+    fail(key, max, windowMs, lockMs) {
+      const now = Date.now(), r = get(key);
+      const n = r && r.first_ms > now - windowMs ? r.n + 1 : 1;
+      const until = n >= max ? now + lockMs * 2 ** Math.min(n - max, 4) : 0;
+      db.prepare(`INSERT INTO auth_throttle (key, n, first_ms, until_ms) VALUES (?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET n = excluded.n, first_ms = CASE WHEN excluded.n = 1 THEN excluded.first_ms ELSE first_ms END, until_ms = excluded.until_ms`)
+        .run(key, n, now, until);
+      if (Math.random() < 0.02) db.prepare("DELETE FROM auth_throttle WHERE until_ms < ? AND first_ms < ?").run(now - 86400000, now - 86400000);
+    },
+    clear(key) { db.prepare("DELETE FROM auth_throttle WHERE key = ?").run(key); },
+  };
+}
+const passwordLoginOff = () => microsoftEnabled() && String(process.env.PASSWORD_LOGIN || "").toLowerCase() === "off";
 
 function parseCookies(header = "") {
   return Object.fromEntries(header.split(";").map((p) => p.trim().split("=")).filter(([k]) => k).map(([k, ...v]) => [k, decodeURIComponent(v.join("="))]));
@@ -123,9 +175,15 @@ export function sessionMiddleware(db) {
   return (req, res, next) => {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) {
-      const s = db.prepare("SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > datetime('now')").get(sha(token));
+      // Sessions end after 12 hours, or after SESSION_IDLE_HOURS (default 4) without use (audit A07-005).
+      const s = db.prepare(`SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > datetime('now')
+        AND (last_seen IS NULL OR last_seen > datetime('now', ?))`).get(sha(token), `-${Number(process.env.SESSION_IDLE_HOURS) || 4} hours`);
       const u = s && loadUser(db, s.user_id);
-      if (u?.active) req.user = u;
+      if (u?.active) {
+        req.user = u;
+        req.sessionHash = sha(token);
+        db.prepare("UPDATE sessions SET last_seen = datetime('now') WHERE token_hash = ? AND (last_seen IS NULL OR last_seen < datetime('now', '-1 minute'))").run(req.sessionHash);
+      }
     }
     next();
   };
@@ -148,7 +206,7 @@ export function requirePerm(perm) {
 
 export function setSession(db, req, res, userId) {
   const token = randomBytes(32).toString("base64url");
-  db.prepare(`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+${SESSION_HOURS} hours'))`)
+  db.prepare(`INSERT INTO sessions (token_hash, user_id, expires_at, last_seen) VALUES (?, ?, datetime('now', '+${SESSION_HOURS} hours'), datetime('now'))`)
     .run(sha(token), userId);
   db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
   const secure = req.secure || process.env.COOKIE_SECURE === "1" ? "; Secure" : "";
@@ -157,22 +215,30 @@ export function setSession(db, req, res, userId) {
 
 export function authRouter(db) {
   const r = express.Router();
+  const t = throttle(db);
+  // The same anti-forgery header as the rest of the API, also for sign-in and sign-out (audit A01-005).
+  r.use((req, res, next) => (req.method === "POST" && req.get("X-JuanMa") !== "1" ? res.status(403).json({ error: "Solicitud no permitida." }) : next()));
   const failures = new Map(); // email -> { n, until }
 
   r.get("/status", (req, res) => {
     const hasUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0;
-    res.json({ setupNeeded: !hasUsers, user: req.user || null, microsoft: microsoftEnabled(), version: VERSION });
+    res.json({ setupNeeded: !hasUsers, setupToken: !hasUsers && !!process.env.SETUP_TOKEN, passwordLogin: !passwordLoginOff(), user: req.user || null, microsoft: microsoftEnabled(), version: VERSION });
   });
 
   // First run only: create the Gerencia account.
-  r.post("/setup", (req, res) => {
+  r.post("/setup", async (req, res) => {
     if (db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0) return res.status(409).json({ error: "La app ya está configurada." });
     const b = req.body ?? {};
+    // With SETUP_TOKEN set, only whoever knows it can create the first Gerencia account (audit A07-003).
+    if (process.env.SETUP_TOKEN && !safeEqual(str(b.setup_token), process.env.SETUP_TOKEN)) return res.status(403).json({ error: "El código de instalación no es correcto." });
     const name = str(b.name), email = str(b.email).toLowerCase();
     if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
-    if (!validPassword(b.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
+    const bad = passwordProblem(b.password, { email, name });
+    if (bad) return res.status(400).json({ error: bad });
+    const hash = await hashPassword(b.password);
+    if (db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0) return res.status(409).json({ error: "La app ya está configurada." });
     const id = db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'Gerencia')")
-      .run(name, email, hashPassword(b.password)).lastInsertRowid;
+      .run(name, email, hash).lastInsertRowid;
     const main = db.prepare("SELECT id FROM offices WHERE is_main = 1").get();
     if (main) db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)").run(id, main.id);
     setSession(db, req, res, id);
@@ -180,22 +246,25 @@ export function authRouter(db) {
     res.status(201).json({ user: loadUser(db, id) });
   });
 
-  r.post("/login", (req, res) => {
-    const email = str(req.body?.email).toLowerCase();
-    const f = failures.get(email);
-    if (f && f.n >= 5 && f.until > Date.now()) {
-      audit(db, req, { user: null, action: "Ingreso bloqueado", ok: false, summary: `Demasiados intentos con ${email}` });
-      return res.status(429).json({ error: "Demasiados intentos. Espere 10 minutos." });
+  r.post("/login", async (req, res) => {
+    if (passwordLoginOff()) return res.status(403).json({ error: "En esta firma se ingresa solo con la cuenta de Microsoft 365." });
+    const email = str(req.body?.email).toLowerCase().slice(0, 200), ip = String(req.ip || "");
+    const wait = Math.max(t.wait(`email:${email}`), t.wait(`ip:${ip}`));
+    if (wait) {
+      audit(db, req, { user: null, action: "Ingreso bloqueado", ok: false, summary: `Demasiados intentos (${email})` });
+      return res.status(429).json({ error: `Demasiados intentos. Espere ${wait} minuto(s).` });
     }
-    const u = db.prepare("SELECT id, password_hash, active FROM users WHERE email = ?").get(email);
-    if (!u || !u.active || !checkPassword(req.body?.password ?? "", u.password_hash)) {
-      const n = (f && f.until > Date.now() ? f.n : 0) + 1;
-      failures.set(email, { n, until: Date.now() + 10 * 60 * 1000 });
-      const who = u && db.prepare("SELECT id, name FROM users WHERE id = ?").get(u.id);
-      audit(db, req, { user: who || null, action: "Ingreso fallido", ok: false, summary: `${u ? (u.active ? "Contraseña incorrecta" : "Usuario inactivo") : "Correo no registrado"}: ${email}` });
+    const u = db.prepare("SELECT id, name, password_hash, active FROM users WHERE email = ?").get(email);
+    const pw = String(req.body?.password ?? "").slice(0, 200);
+    const ok = u?.active && u.password_hash !== "!" ? await checkPassword(pw, u.password_hash) : (await checkPassword(pw, await dummyHash()), false);
+    if (!ok) {
+      t.fail(`email:${email}`, 5, 10 * 60000, 10 * 60000);
+      t.fail(`ip:${ip}`, 20, 15 * 60000, 15 * 60000);
+      audit(db, req, { user: u ? { id: u.id, name: u.name } : null, action: "Ingreso fallido", ok: false, summary: `${u ? (u.active ? "Contraseña incorrecta" : "Usuario inactivo") : "Correo no registrado"}: ${email}` });
       return res.status(401).json({ error: "Correo o contraseña incorrectos." });
     }
-    failures.delete(email);
+    t.clear(`email:${email}`);
+    if (needsRehash(u.password_hash)) db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(await hashPassword(pw), u.id);
     setSession(db, req, res, u.id);
     const user = loadUser(db, u.id);
     audit(db, req, { user, action: "Ingresó", summary: "Inicio de sesión con contraseña" });
@@ -212,34 +281,40 @@ export function authRouter(db) {
 
   // Forgotten password: an e-mailed link valid for 30 minutes. The answer is the same
   // whether or not the e-mail is registered, so it cannot be used to find accounts.
-  const resetSent = new Map(); // email -> last request time
   r.post("/forgot", async (req, res) => {
-    const email = str(req.body?.email).toLowerCase();
+    const email = str(req.body?.email).toLowerCase().slice(0, 200), ip = String(req.ip || "");
     const reply = () => res.json({ ok: true, message: "Si el correo está registrado, le llegará un enlace para crear una contraseña nueva." });
     if (!email.includes("@")) return res.status(400).json({ error: "Escriba su correo." });
-    const last = resetSent.get(email);
-    if (last && last > Date.now() - 5 * 60 * 1000) return reply();
-    resetSent.set(email, Date.now());
-    const u = db.prepare("SELECT id, name, active FROM users WHERE email = ?").get(email);
+    // One e-mail per account every 5 minutes and 10 requests per IP an hour.
+    if (t.wait(`forgot:${email}`) || t.wait(`forgot-ip:${ip}`)) return reply();
+    t.fail(`forgot:${email}`, 1, 5 * 60000, 5 * 60000);
+    t.fail(`forgot-ip:${ip}`, 10, 60 * 60000, 60 * 60000);
+    const u = db.prepare("SELECT id, name, active, password_hash FROM users WHERE email = ?").get(email);
     if (!u?.active) return reply();
+    // Accounts that enter with Microsoft 365 do not get a local password, which would skip Microsoft's MFA (audit A07-006).
+    if (passwordLoginOff() || (u.password_hash === "!" && microsoftEnabled())) return reply();
     audit(db, req, { user: u, action: "Pidió restablecer contraseña", summary: `Enlace enviado a ${email}` });
     const token = randomBytes(24).toString("base64url");
     db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 minutes'))").run(sha(token), u.id);
-    const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    const base = publicBase(req);
     const link = `${base}/#restablecer-${token}`;
-    await sendEmail(email, "Crear una contraseña nueva · TecjuridicosApp",
+    // Sent without waiting, so the answer takes the same time whether or not the account exists (audit A07-007).
+    sendEmail(email, "Crear una contraseña nueva · TecjuridicosApp",
       `Hola ${u.name}:\n\nPara crear una contraseña nueva abra este enlace (vence en 30 minutos):\n${link}\n\nSi usted no lo pidió, ignore este mensaje: su contraseña no cambia.\n\nTecjuridicosApp`,
-      `<p>Hola ${u.name.replace(/[<>&]/g, "")}:</p><p>Para crear una contraseña nueva abra este enlace (vence en 30 minutos):</p><p><a href="${link}">Crear contraseña nueva</a></p><p style="color:#666;font-size:12px">Si usted no lo pidió, ignore este mensaje: su contraseña no cambia.</p>`);
+      `<p>Hola ${u.name.replace(/[<>&]/g, "")}:</p><p>Para crear una contraseña nueva abra este enlace (vence en 30 minutos):</p><p><a href="${link}">Crear contraseña nueva</a></p><p style="color:#666;font-size:12px">Si usted no lo pidió, ignore este mensaje: su contraseña no cambia.</p>`)
+      .catch((err) => console.error("forgot e-mail:", err.message));
     reply();
   });
 
-  r.post("/reset", (req, res) => {
+  r.post("/reset", async (req, res) => {
     const row = db.prepare("SELECT * FROM password_resets WHERE token_hash = ?").get(sha(str(req.body?.token)));
     if (!row || row.used_at || Date.parse(row.expires_at.replace(" ", "T") + "Z") < Date.now()) {
       return res.status(400).json({ error: "El enlace venció o ya se usó. Pida uno nuevo." });
     }
-    if (!validPassword(req.body?.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
-    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hashPassword(req.body.password), row.user_id);
+    const who = db.prepare("SELECT email, name FROM users WHERE id = ?").get(row.user_id);
+    const bad = passwordProblem(req.body?.password, who || {});
+    if (bad) return res.status(400).json({ error: bad });
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(await hashPassword(req.body.password), row.user_id);
     db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL").run(row.user_id);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.user_id);
     setSession(db, req, res, row.user_id);
@@ -253,7 +328,9 @@ export function authRouter(db) {
     const email = str(req.body?.email).toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: "Escriba un correo válido." });
     const row = db.prepare("SELECT email, password_hash FROM users WHERE id = ?").get(req.user.id);
-    if (row.password_hash !== "!" && !checkPassword(req.body?.password ?? "", row.password_hash)) {
+    // Without a password there is nothing to confirm with: Gerencia changes it in Usuarios (audit A07-005).
+    if (row.password_hash === "!") return res.status(403).json({ error: "Su cuenta ingresa con Microsoft 365: pida a Gerencia que cambie su correo en Usuarios." });
+    if (!(await checkPassword(req.body?.password ?? "", row.password_hash))) {
       return res.status(400).json({ error: "La contraseña actual no es correcta." });
     }
     if (email === row.email) return res.status(400).json({ error: "Ese ya es su correo." });
@@ -263,16 +340,20 @@ export function authRouter(db) {
       changes: [{ field: "email", label: "Correo", before: row.email, after: email }] });
     sendEmail(row.email, "Su correo en TecjuridicosApp cambió",
       `Hola ${req.user.name}: el correo de su cuenta en TecjuridicosApp cambió a ${email}. Si usted no hizo este cambio, avise de inmediato a Gerencia.`,
-      `<p>Hola ${req.user.name.replace(/[<>&]/g, "")}: el correo de su cuenta en TecjuridicosApp cambió a <strong>${email}</strong>. Si usted no hizo este cambio, avise de inmediato a Gerencia.</p>`).catch(() => {});
+      `<p>Hola ${req.user.name.replace(/[<>&]/g, "")}: el correo de su cuenta en TecjuridicosApp cambió a <strong>${email}</strong>. Si usted no hizo este cambio, avise de inmediato a Gerencia.</p>`)
+      .catch((err) => console.error("e-mail change notice:", err.message));
     res.json({ user: loadUser(db, req.user.id) });
   });
 
-  r.post("/password", requireAuth, (req, res) => {
+  r.post("/password", requireAuth, async (req, res) => {
     const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(req.user.id);
-    if (!checkPassword(req.body?.current ?? "", row.password_hash)) return res.status(400).json({ error: "La contraseña actual no es correcta." });
-    if (!validPassword(req.body?.next)) return res.status(400).json({ error: "La nueva contraseña debe tener al menos 10 caracteres." });
+    if (!(await checkPassword(req.body?.current ?? "", row.password_hash))) return res.status(400).json({ error: "La contraseña actual no es correcta." });
+    const bad = passwordProblem(req.body?.next, req.user);
+    if (bad) return res.status(400).json({ error: bad });
     if (req.body?.next === req.body?.current) return res.status(400).json({ error: "La nueva contraseña debe ser distinta de la actual." });
-    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hashPassword(req.body.next), req.user.id);
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(await hashPassword(req.body.next), req.user.id);
+    // Other devices signed in with the old password are signed out (audit A07-005).
+    db.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").run(req.user.id, req.sessionHash || "");
     audit(db, req, { action: "Cambió su contraseña", summary: "Cambió su contraseña" });
     res.status(204).end();
   });
@@ -340,10 +421,10 @@ export function adminRouter(db) {
     try {
       db.prepare("UPDATE offices SET name = :name, department = :department, city = :city, address = :address, phone = :phone, email = :email WHERE id = :id").run(o);
       if (req.body?.is_main === true) {
-        db.exec("BEGIN");
-        db.prepare("UPDATE offices SET is_main = 0").run();
-        db.prepare("UPDATE offices SET is_main = 1 WHERE id = ?").run(id);
-        db.exec("COMMIT");
+        inTransaction(db, () => {
+          db.prepare("UPDATE offices SET is_main = 0").run();
+          db.prepare("UPDATE offices SET is_main = 1 WHERE id = ?").run(id);
+        });
       }
       res.json(officeOut(db.prepare("SELECT * FROM offices WHERE id = ?").get(id)));
     } catch {
@@ -398,7 +479,7 @@ export function adminRouter(db) {
     const u = db.prepare("SELECT id, name, email FROM users WHERE id = ?").get(userId);
     const token = randomBytes(24).toString("base64url");
     db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+72 hours'))").run(sha(token), u.id);
-    const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    const base = publicBase(req);
     const link = `${base}/#invitacion-${token}`;
     const ms = microsoftEnabled() ? `\nTambién puede ingresar con su cuenta de Microsoft 365 (${u.email}) con el botón «Ingresar con la cuenta de Microsoft».` : "";
     const esc = (t) => String(t).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
@@ -427,7 +508,11 @@ export function adminRouter(db) {
     if (!roleExists(db, b.role)) return res.status(400).json({ error: "Rol no válido." });
     // The password is optional when the user will create it from the invitation, or enter with Microsoft.
     const noPassword = !b.password && (microsoftEnabled() || !!b.invite);
-    if (!noPassword && !validPassword(b.password)) return res.status(400).json({ error: microsoftEnabled()
+    // Only Gerencia creates Gerencia accounts (audit A01-004).
+    if (b.role === "Gerencia" && req.user.role !== "Gerencia") return res.status(403).json({ error: "Solo Gerencia puede crear usuarios de Gerencia." });
+    const pwBad = noPassword ? "" : passwordProblem(b.password, { email, name });
+    if (pwBad && b.password) return res.status(400).json({ error: pwBad });
+    if (pwBad) return res.status(400).json({ error: microsoftEnabled()
       ? "La contraseña inicial debe tener al menos 10 caracteres, o déjela vacía para que ingrese solo con su cuenta de Microsoft."
       : "Asigne una contraseña de al menos 10 caracteres o marque «Enviar invitación por correo» para que el usuario cree la suya." });
     if (!Array.isArray(b.office_ids) || !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
@@ -435,7 +520,7 @@ export function adminRouter(db) {
     try {
       // A password Gerencia assigns is temporary: the user changes it at the first sign-in.
       id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(name, email, str(b.phone), str(b.professional_card), noPassword ? "!" : hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
+        .run(name, email, str(b.phone), str(b.professional_card), noPassword ? "!" : await hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
       setOffices(id, b.office_ids);
       setUserPermissions(id, b.custom_permissions, b.permissions);
     } catch {
@@ -445,20 +530,22 @@ export function adminRouter(db) {
     res.status(201).json({ ...loadUser(db, id), invitation: sent ? { ok: sent.ok, detail: sent.detail } : null });
   });
 
-  r.put("/users/:id", manage, (req, res) => {
+  r.put("/users/:id", manage, async (req, res) => {
     const id = Number(req.params.id);
     const cur = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
     if (!cur) return res.status(404).json({ error: "El usuario no existe." });
     const b = req.body ?? {};
     const role = b.role ?? cur.role;
     if (!roleExists(db, role)) return res.status(400).json({ error: "Rol no válido." });
+    // Only Gerencia gives the Gerencia role or changes a Gerencia account (audit A01-004).
+    if ((cur.role === "Gerencia" || role === "Gerencia") && req.user.role !== "Gerencia") return res.status(403).json({ error: "Solo Gerencia puede modificar usuarios de Gerencia." });
     const active = b.active === undefined ? !!cur.active : !!b.active;
     // Never leave the firm without an active Gerencia account.
     if (cur.role === "Gerencia" && (role !== "Gerencia" || !active)) {
       const others = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'Gerencia' AND active = 1 AND id != ?").get(id).n;
       if (!others) return res.status(409).json({ error: "Debe quedar al menos un usuario activo de Gerencia." });
     }
-    if (b.password && !validPassword(b.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
+    if (b.password && passwordProblem(b.password, { email: cur.email, name: cur.name })) return res.status(400).json({ error: passwordProblem(b.password, { email: cur.email, name: cur.name }) });
     if (Array.isArray(b.office_ids) && !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     const email = b.email ? str(b.email).toLowerCase() : cur.email;
     try {
@@ -470,7 +557,7 @@ export function adminRouter(db) {
     }
     if (b.password) {
       // Assigned by Gerencia to someone else: temporary until that user changes it.
-      db.prepare("UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?").run(hashPassword(b.password), id === req.user.id ? 0 : 1, id);
+      db.prepare("UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?").run(await hashPassword(b.password), id === req.user.id ? 0 : 1, id);
       db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
     }
     if (!active) db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
@@ -512,21 +599,21 @@ export function adminRouter(db) {
       const builtin = db.prepare("SELECT builtin FROM roles WHERE name = ?").get(role).builtin;
       if (builtin) return res.status(409).json({ error: "Los roles incluidos no se pueden renombrar." });
       if (roleExists(db, newName)) return res.status(409).json({ error: "Ya existe un rol con ese nombre." });
-      db.exec("BEGIN");
-      db.prepare("UPDATE roles SET name = ? WHERE name = ?").run(newName, role);
-      db.prepare("UPDATE role_permissions SET role = ? WHERE role = ?").run(newName, role);
-      db.prepare("UPDATE users SET role = ? WHERE role = ?").run(newName, role);
-      db.exec("COMMIT");
+      inTransaction(db, () => {
+        db.prepare("UPDATE roles SET name = ? WHERE name = ?").run(newName, role);
+        db.prepare("UPDATE role_permissions SET role = ? WHERE role = ?").run(newName, role);
+        db.prepare("UPDATE users SET role = ? WHERE role = ?").run(newName, role);
+      });
       return res.json({ role: newName, permissions: rolePermissions(db, newName) });
     }
     if (!Array.isArray(req.body?.permissions)) return res.status(400).json({ error: "Faltan los permisos." });
     const perms = req.body.permissions.filter((p) => p in PERMISSIONS);
     if (role === "Gerencia" && !perms.includes("users.manage")) perms.push("users.manage");
-    db.exec("BEGIN");
-    db.prepare("DELETE FROM role_permissions WHERE role = ?").run(role);
-    const ins = db.prepare("INSERT INTO role_permissions (role, permission) VALUES (?, ?)");
-    for (const p of new Set(perms)) ins.run(role, p);
-    db.exec("COMMIT");
+    inTransaction(db, () => {
+      db.prepare("DELETE FROM role_permissions WHERE role = ?").run(role);
+      const ins = db.prepare("INSERT INTO role_permissions (role, permission) VALUES (?, ?)");
+      for (const p of new Set(perms)) ins.run(role, p);
+    });
     res.json({ role, permissions: rolePermissions(db, role) });
   });
 

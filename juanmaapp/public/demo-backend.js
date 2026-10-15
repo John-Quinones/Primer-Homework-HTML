@@ -392,6 +392,11 @@
     if (!CM.RESPONSE_KINDS.includes(v.kind)) Object.assign(v, { delivered_at: "", response_at: "", response_notes: "" });
     [v.delivered_at, v.response_at].every((d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(d)) || fail("Fecha no válida.");
     if (v.response_at && v.response_at !== (cur.response_at || "") && v.status !== "cancelada") v.status = "hecha";
+    // Same as the server: the assignee must be able to open the case (audit A01-003).
+    const k = s.cases.find((x) => x.id === (+b.case_id || cur.case_id));
+    const who = v.assigned_user_id && v.assigned_user_id !== cur.assigned_user_id && s.users.find((u) => u.id === v.assigned_user_id && u.active);
+    if (v.assigned_user_id && v.assigned_user_id !== cur.assigned_user_id && !who) fail("El responsable no existe.");
+    if (who && k) { const o = userOut(who); if (!o.permissions.includes("scope.all") && !o.offices.some((x) => x.id === k.office_id)) fail("Ese funcionario no tiene acceso a la oficina de este expediente."); }
     return v;
   };
   // Same windows as the server's taskReminders(): each fires once.
@@ -514,6 +519,7 @@
     ["GET", /^\/admin\/users$/, () => { need("users.manage"); return s.users.slice().sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, "es")).map(userOut); }],
     ["POST", /^\/admin\/users$/, (m, b) => {
       need("users.manage");
+      if (b.role === "Gerencia" && me().role !== "Gerencia") fail("Solo Gerencia puede crear usuarios de Gerencia.");
       const name = str(b.name), email = str(b.email).toLowerCase();
       (name && email.includes("@")) || fail("Nombre y correo son obligatorios.");
       s.roles.some((r) => r.name === b.role) || fail("Rol no válido.");
@@ -528,6 +534,7 @@
       need("users.manage");
       const u = s.users.find((x) => x.id === +m[1]) || fail("El usuario no existe.");
       const role = b.role ?? u.role;
+      if ((u.role === "Gerencia" || role === "Gerencia") && me().role !== "Gerencia") fail("Solo Gerencia puede modificar usuarios de Gerencia.");
       s.roles.some((r) => r.name === role) || fail("Rol no válido.");
       const active = b.active === undefined ? u.active : !!b.active;
       if (u.role === "Gerencia" && (role !== "Gerencia" || !active) && !s.users.some((x) => x.id !== u.id && x.role === "Gerencia" && x.active)) {
@@ -598,6 +605,7 @@
     }],
     ["POST", /^\/courts\/import$/, (m, b) => {
       need("catalog.manage");
+      if (b.replace && me().role !== "Gerencia") fail("Solo Gerencia puede reemplazar todo el directorio.");
       const out = { created: 0, updated: 0, skipped: [] };
       (b.rows || []).forEach((row, i) => {
         const name = str(row.name), department = canonDep(row.department);

@@ -4,6 +4,8 @@ import { openDb } from "../src/db.js";
 /** Start the app on an in-memory DB; returns { base, db, close, setup, login }. */
 // Tests never call a real Time Stamping Authority (the stamp tests use a fake one).
 process.env.TSA_URL ??= "off";
+// Passwords: the production scrypt cost is slow on purpose; tests use a lower one.
+process.env.SCRYPT_LOG_N ??= "12";
 
 export async function startServer() {
   const db = openDb(":memory:");

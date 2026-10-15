@@ -1,0 +1,12 @@
+# Weekly update proposals for the app's packages and the deploy workflow's actions (audit A03-001, A08-001).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /juanmaapp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

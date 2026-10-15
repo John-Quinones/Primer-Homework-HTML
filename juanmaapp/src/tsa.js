@@ -46,6 +46,8 @@ export async function stamp(sha256Hex) {
   if (!url) return { ok: false, detail: "Sello de tiempo desactivado (TSA_URL=off)." };
   try {
     const headers = { "Content-Type": "application/timestamp-query" };
+    // A user and password only travel over HTTPS (audit A04-002).
+    if (process.env.TSA_USER && !/^https:/i.test(url)) return { ok: false, url, detail: "TSA_USER está configurado pero TSA_URL no es https: no se envían credenciales sin cifrar." };
     if (process.env.TSA_USER) headers.Authorization = "Basic " + Buffer.from(`${process.env.TSA_USER}:${process.env.TSA_PASS || ""}`).toString("base64");
     const nonce = randomBytes(8);
     nonce[0] = (nonce[0] & 0x3f) | 0x40; // positive and minimal INTEGER, so the TSA echoes the same bytes

@@ -39,6 +39,7 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 - Client and case screens (`#cliente-ID`, `#expediente-ID`, changes 46–47): the case screen gathers tasks per funcionario with follow-up (`taskFollowUp` in `src/case-meta.js`), oficios/peticiones/requerimientos with delivery and answer, all actuaciones with one-click consult, and the full history. Task kinds: `TASK_KINDS`; petitions 15 business days (`addBusinessDays`).
 - Parties (change 49): `cases.parties` JSON list {side activa|pasiva, name, id_number, ours, client_id}; our clients linked by document see the case. Nothing opens on a stray click: only "Ver …" buttons (`data-action="go"`, routes `#expediente-ID-section`).
 - Audit log (change 50): `src/audit.js` middleware logs every API change (who, Colombia time, device from User-Agent, IP, field diff via `auditDiff`); auth events logged explicitly. View «Bitácora» needs `audit.view`. Never edited or deleted. Demo mirrors it in `s.audit` (last 5000).
+- Security (change 51, OWASP audit): scrypt2 hashes (N=2^17, rehash on login; tests set SCRYPT_LOG_N), `auth_throttle` table per e-mail and IP, idle sessions (`last_seen`), `users.ms_oid` binding, `publicBase()` for mailed links, CSP header (no inline scripts: page code in `*-page.js`), `inTransaction()`. Options PASSWORD_LOGIN=off, SESSION_IDLE_HOURS, SETUP_TOKEN. Weak passwords (name/e-mail inside, digits only) are refused: test passwords avoid the user's name.
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.

@@ -549,6 +549,10 @@ function migrate(db) {
   // Invitations and temporary passwords (change 45).
   add("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
   add("users", "invited_at", "TEXT");
+  // Change 51 (security audit): sign-in counters in the database, idle sessions, Microsoft object id.
+  db.exec("CREATE TABLE IF NOT EXISTS auth_throttle (key TEXT PRIMARY KEY, n INTEGER NOT NULL, first_ms INTEGER NOT NULL, until_ms INTEGER NOT NULL DEFAULT 0)");
+  add("sessions", "last_seen", "TEXT");
+  add("users", "ms_oid", "TEXT");
   for (const [col, def] of [["department", "TEXT NOT NULL DEFAULT ''"], ["city", "TEXT NOT NULL DEFAULT ''"], ["area", "TEXT NOT NULL DEFAULT ''"],
     ["court_id", "INTEGER REFERENCES courts(id) ON DELETE SET NULL"], ["court_name", "TEXT NOT NULL DEFAULT ''"],
     ["court_email", "TEXT NOT NULL DEFAULT ''"], ["radicado", "TEXT NOT NULL DEFAULT ''"],

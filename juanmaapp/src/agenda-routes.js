@@ -1,7 +1,7 @@
 // Tasks, hearings and deadlines on cases, plus each user's notifications.
 import express from "express";
 import { typePath } from "./sql.js";
-import { can, scopeOf } from "./auth.js";
+import { can, scopeOf, loadUser } from "./auth.js";
 import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS } from "./case-meta.js";
 import { notify } from "./monitor.js";
 const STATUSES = ["pendiente", "hecha", "cancelada"];
@@ -26,7 +26,7 @@ export function agendaRouter(db) {
   const caseVisible = (req, caseId) => db.prepare(`SELECT k.* FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(caseId);
   const err = (res, status, error) => res.status(status).json({ error });
 
-  function values(req, b, cur = {}) {
+  function values(req, b, cur = {}, officeId = null) {
     const v = {
       kind: KINDS.includes(b.kind) ? b.kind : cur.kind || "tarea",
       title: "title" in b ? str(b.title) : cur.title,
@@ -56,6 +56,11 @@ export function agendaRouter(db) {
     if (!LOCAL.test(v.due_at || "")) return "Indique fecha y hora.";
     if (!Array.isArray(v.remind_days) || v.remind_days.some((d) => !Number.isInteger(d) || d < 0 || d > 60)) return "Avisos no válidos.";
     if (v.assigned_user_id && !db.prepare("SELECT 1 FROM users WHERE id = ? AND active = 1").get(v.assigned_user_id)) return "El responsable no existe.";
+    // The assignee must be able to open the case: its office, or every office (audit A01-003).
+    if (v.assigned_user_id && v.assigned_user_id !== cur.assigned_user_id && officeId != null) {
+      const u = loadUser(db, v.assigned_user_id);
+      if (!u.permissions.includes("scope.all") && !u.offices.some((o) => o.id === officeId)) return "Ese funcionario no tiene acceso a la oficina de este expediente.";
+    }
     v.remind_days = JSON.stringify([...new Set(v.remind_days)].sort((a, b) => b - a));
     return v;
   }
@@ -91,7 +96,7 @@ export function agendaRouter(db) {
     if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");
     const caseId = Number(req.body?.case_id);
     if (!caseVisible(req, caseId)) return err(res, 404, "El expediente no existe.");
-    const v = values(req, req.body ?? {});
+    const v = values(req, req.body ?? {}, {}, caseVisible(req, caseId).office_id);
     if (typeof v === "string") return err(res, 400, v);
     const done = v.status === "hecha";
     const id = db.prepare(`INSERT INTO tasks (case_id, kind, title, notes, due_at, location, assigned_user_id, remind_days, status, created_by,
@@ -108,7 +113,7 @@ export function agendaRouter(db) {
     if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");
     const cur = visible(req, Number(req.params.id));
     if (!cur) return err(res, 404, "La tarea no existe.");
-    const v = values(req, req.body ?? {}, out(cur));
+    const v = values(req, req.body ?? {}, out(cur), cur.office_id);
     if (typeof v === "string") return err(res, 400, v);
     db.prepare(`UPDATE tasks SET kind = ?, title = ?, notes = ?, due_at = ?, location = ?, assigned_user_id = ?, remind_days = ?, status = ?,
       done_at = CASE WHEN ? = 'hecha' AND status != 'hecha' THEN datetime('now') WHEN ? != 'hecha' THEN NULL ELSE done_at END,

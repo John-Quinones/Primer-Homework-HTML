@@ -48,6 +48,7 @@
         <label>Nombre completo <input id="setup-name" name="name" required /></label>
         <label>Correo <input id="setup-email" name="email" type="email" required autocomplete="username" /></label>
         <label class="pw-field">Contraseña (mínimo 10 caracteres) <input id="setup-password" name="password" type="password" minlength="10" required autocomplete="new-password" /></label>
+        <label data-setup-token hidden>Código de instalación <input name="setup_token" autocomplete="off" /></label>
         <p class="form-error" hidden></p>
         <button class="primary wide">Crear cuenta e ingresar</button>
       </form>
@@ -63,6 +64,7 @@
 
       <div id="demo-logins" class="demo-logins" hidden>
         <p class="auth-note">Elija su usuario para ingresar.</p>
+        <p class="hint">Este es el <strong>enlace de prueba</strong>: quien pueda abrirlo entra con cualquier usuario y ve todos los datos. Úselo con datos de prueba; para los datos reales de la firma use la app en Azure, con contraseña o Microsoft 365.</p>
         <div class="demo-grid"></div>
       </div>
     </div>

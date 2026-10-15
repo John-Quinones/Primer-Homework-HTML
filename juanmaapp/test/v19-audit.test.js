@@ -7,8 +7,8 @@ let srv, admin, laura, caseId, base;
 before(async () => {
   srv = await startServer(); admin = await srv.setup();
   const office = (await admin.call("GET", "/admin/offices")).body[0].id;
-  await admin.call("POST", "/admin/users", { name: "Laura Gómez", email: "laura@firma.co", role: "Abogado", office_ids: [office], password: "laura-clave-2026" });
-  laura = await srv.login("laura@firma.co", "laura-clave-2026");
+  await admin.call("POST", "/admin/users", { name: "Laura Gómez", email: "laura@firma.co", role: "Abogado", office_ids: [office], password: "tribunal-azul-2026" });
+  laura = await srv.login("laura@firma.co", "tribunal-azul-2026");
   const c = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Marco", last_names: "Pineda", id_number: "9" })).body;
   const type = (await admin.call("GET", "/catalog")).body.flatMap((x) => x.types)[0].id;
   caseId = (await admin.call("POST", "/cases", { client_id: c.id, process_type_id: type, title: "Ordinario" })).body.id;

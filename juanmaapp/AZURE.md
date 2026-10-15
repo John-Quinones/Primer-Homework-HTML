@@ -75,6 +75,11 @@ En el App Service (`juanmaapp-tec`):
    | `MS_CLIENT_ID` | el Id. de aplicación del paso 2 |
    | `MS_CLIENT_SECRET` | el valor del secreto del paso 2 |
    | `ANTHROPIC_API_KEY` | opcional por ahora: la clave de Anthropic, para NomosAI y jurisprudencia |
+   | `PASSWORD_LOGIN` | opcional: `off` para que todos ingresen **solo con Microsoft 365** (aplica la verificación en dos pasos de Microsoft) |
+   | `SESSION_IDLE_HOURS` | opcional: horas sin uso tras las que se cierra la sesión (por defecto `4`) |
+   | `SETUP_TOKEN` | solo en una instalación nueva: código que pide el formulario para crear la cuenta inicial de Gerencia |
+
+   Seguridad (Cambio 51): los enlaces de los correos usan siempre `PUBLIC_URL` (o el nombre que Azure da al sitio), nunca el dominio que envíe quien hace la petición. En **Configuración → Configuración general** active **Solo HTTPS**.
 
    Para enviar correos (firmas, recordatorios, reportes), agregue también:
 

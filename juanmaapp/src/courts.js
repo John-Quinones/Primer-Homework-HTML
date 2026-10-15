@@ -42,6 +42,8 @@ export function courtsRouter(db) {
   // Rows come from the page, already mapped to our fields from the official file.
   r.post("/import", (req, res) => {
     if (!can(req, "catalog.manage")) return res.status(403).json({ error: "Su rol no tiene permiso para esta acción." });
+    // Replacing deletes the whole directory first: only Gerencia deletes (audit A01-001).
+    if (req.body?.replace && req.user.role !== "Gerencia") return res.status(403).json({ error: "Solo Gerencia puede reemplazar todo el directorio." });
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
     if (!rows.length) return res.status(400).json({ error: "El archivo no trae despachos." });
     if (rows.length > 20000) return res.status(400).json({ error: "Máximo 20.000 despachos por carga." });
@@ -54,7 +56,7 @@ export function courtsRouter(db) {
       address = CASE WHEN :address != '' THEN :address ELSE address END, updated_at = datetime('now') WHERE id = :id`);
     db.exec("BEGIN");
     try {
-      if (req.body?.replace) db.prepare("DELETE FROM courts").run();
+      if (req.body?.replace) db.prepare("DELETE FROM courts").run(); // Gerencia only, checked above (audit A01-001)
       rows.forEach((row, i) => {
         const name = str(row.name);
         const department = canonicalDepartment(row.department);

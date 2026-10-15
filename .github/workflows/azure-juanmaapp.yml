@@ -13,6 +13,10 @@ on:
 
 concurrency: azure-juanmaapp
 
+# The job only reads the code; the deploy uses the publish profile secret (audit A08-001).
+permissions:
+  contents: read
+
 jobs:
   deploy:
     # Publishes only when asked: a commit whose message contains [azure], or a manual run.
@@ -22,11 +26,12 @@ jobs:
       run:
         working-directory: juanmaapp
     steps:
-      - uses: actions/checkout@v4
+      # Actions pinned to the exact commit of the version used (audit A08-001); Dependabot proposes updates.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0   # full history: the change number counts every commit to juanmaapp/
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -34,6 +39,11 @@ jobs:
         run: |
           npm ci
           npm test
+
+      # Known vulnerabilities in the production dependencies are reported in the run (audit A03-001).
+      - name: Dependency audit
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Package (production dependencies only; the database lives in /home/data, not in the package)
         run: |
@@ -43,7 +53,7 @@ jobs:
           zip -qr ../juanmaapp.zip . -x "preview/*" "test/*" "data/*" "scripts/*" "README.md" "DESPLIEGUE.md" "AZURE.md" "CAMBIOS.md"
 
       - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3.0.8
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}

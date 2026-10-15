@@ -55,7 +55,7 @@ test("first Microsoft sign-in on an empty install creates Gerencia; later ones n
   s = await start();
   claims = good(s, { preferred_username: "otra@tecjuridicos.co" });
   const stranger = await callback(s);
-  assert.match(decodeURIComponent(stranger.location), /otra@tecjuridicos\.co no está registrada/);
+  assert.match(decodeURIComponent(stranger.location), /ms_error=not_registered$/);
   assert.equal(stranger.session, undefined);
 
   // Gerencia creates the user without a password; then that account gets in.
@@ -82,4 +82,21 @@ test("rejects a wrong state, a replayed nonce, another tenant or another app", a
     assert.match(r.location, /ms_error=/, JSON.stringify(bad));
     assert.equal(r.session, undefined);
   }
+});
+
+test("Microsoft accounts are bound to their fixed id (oid); guests and look-alike accounts are refused (audit A07-002)", async () => {
+  let s = await start();
+  claims = good(s, { oid: "oid-jm-1" });
+  assert.ok((await callback(s)).session, "binds the oid at the next sign-in");
+  s = await start();
+  claims = good(s, { oid: "oid-otro-2" });
+  const other = await callback(s);
+  assert.match(other.location, /ms_error=other_account$/, "same e-mail, different Microsoft account");
+  assert.equal(other.session, undefined);
+  s = await start();
+  claims = good(s, { oid: "oid-jm-1", preferred_username: "nuevo.correo@tecjuridicos.co" });
+  assert.ok((await callback(s)).session, "the same person enters even if the e-mail changed");
+  s = await start();
+  claims = good(s, { oid: "oid-guest", acct: 1, preferred_username: "x@otra.com" });
+  assert.match((await callback(s)).location, /ms_error=guest$/);
 });

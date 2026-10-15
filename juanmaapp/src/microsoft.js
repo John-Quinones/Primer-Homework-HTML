@@ -35,10 +35,11 @@ function claimsOf(idToken) {
 
 export function microsoftRouter(db) {
   const r = express.Router();
-  const back = (res, error) => res.redirect(302, error ? `/?ms_error=${encodeURIComponent(error)}` : "/");
+  // Only a short code travels in the address; the page shows its own fixed message for it (audit A06-003).
+  const back = (res, code) => res.redirect(302, code ? `/?ms_error=${encodeURIComponent(code)}` : "/");
 
   r.get("/start", (req, res) => {
-    if (!microsoftEnabled()) return back(res, "El inicio de sesión con Microsoft no está configurado en el servidor.");
+    if (!microsoftEnabled()) return back(res, "not_configured");
     const state = b64url(randomBytes(24)), nonce = b64url(randomBytes(24)), verifier = b64url(randomBytes(48));
     const challenge = b64url(createHash("sha256").update(verifier).digest());
     // The state, nonce and PKCE verifier ride in a short-lived cookie bound to this browser.
@@ -53,11 +54,11 @@ export function microsoftRouter(db) {
   r.get("/callback", async (req, res) => {
     res.append("Set-Cookie", `${STATE_COOKIE}=; HttpOnly; SameSite=Lax; Path=/api/auth/microsoft; Max-Age=0`);
     try {
-      if (!microsoftEnabled()) return back(res, "El inicio de sesión con Microsoft no está configurado en el servidor.");
-      if (req.query.error) return back(res, req.query.error === "access_denied" ? "Se canceló el inicio de sesión con Microsoft." : `Microsoft no permitió el ingreso (${String(req.query.error_description || req.query.error).slice(0, 160)}).`);
+      if (!microsoftEnabled()) return back(res, "not_configured");
+      if (req.query.error) return back(res, req.query.error === "access_denied" ? "cancelled" : "denied");
       let saved = null;
       try { saved = JSON.parse(cookies(req)[STATE_COOKIE] || "null"); } catch { saved = null; }
-      if (!saved?.state || saved.state !== req.query.state || !req.query.code) return back(res, "El inicio de sesión venció o no es válido. Intente de nuevo.");
+      if (!saved?.state || saved.state !== req.query.state || !req.query.code) return back(res, "expired");
 
       const tokenRes = await fetchImpl(`https://login.microsoftonline.com/${env.MS_TENANT_ID}/oauth2/v2.0/token`, {
         method: "POST",
@@ -68,32 +69,48 @@ export function microsoftRouter(db) {
         }),
       });
       const tok = await tokenRes.json().catch(() => ({}));
-      if (!tokenRes.ok) return back(res, tok.error === "invalid_client" ? "La clave de la app en Microsoft (secreto) no es válida o venció." : "Microsoft no confirmó el ingreso. Intente de nuevo.");
+      if (!tokenRes.ok) return back(res, tok.error === "invalid_client" ? "secret" : "not_confirmed");
 
       const c = claimsOf(tok.id_token);
       const ok = c.aud === env.MS_CLIENT_ID && c.tid === env.MS_TENANT_ID && c.iss === `https://login.microsoftonline.com/${c.tid}/v2.0`
         && c.nonce === saved.nonce && Number(c.exp) * 1000 > Date.now() - 300000;
-      if (!ok) return back(res, "La respuesta de Microsoft no es válida.");
+      if (!ok) return back(res, "invalid");
       const email = String(c.email || c.preferred_username || "").toLowerCase();
-      if (!email.includes("@")) return back(res, "Su cuenta de Microsoft no tiene correo.");
+      if (!email.includes("@")) return back(res, "no_email");
 
-      let u = db.prepare("SELECT id, active FROM users WHERE lower(email) = ?").get(email);
+      // Guests from other organizations are not members of the firm (audit A07-002).
+      if (c.acct === 1 || (c.idp && !String(c.idp).includes(String(c.tid)))) {
+        audit(db, req, { user: null, action: "Ingreso fallido", ok: false, summary: `Microsoft 365: cuenta invitada ${email}` });
+        return back(res, "guest");
+      }
+      // The person is identified by Microsoft's fixed object id (oid), not by the e-mail, which can change (audit A07-002).
+      const oid = String(c.oid || "");
+      let u = oid ? db.prepare("SELECT id, active, ms_oid FROM users WHERE ms_oid = ?").get(oid) : null;
+      if (!u) {
+        u = db.prepare("SELECT id, active, ms_oid FROM users WHERE lower(email) = ?").get(email);
+        if (u?.ms_oid && u.ms_oid !== oid) {
+          audit(db, req, { user: db.prepare("SELECT id, name FROM users WHERE id = ?").get(u.id), action: "Ingreso fallido", ok: false, summary: `Microsoft 365: otra cuenta de Microsoft con el correo ${email}` });
+          return back(res, "other_account");
+        }
+        if (u && oid) db.prepare("UPDATE users SET ms_oid = ? WHERE id = ?").run(oid, u.id);
+      }
       if (!u && !db.prepare("SELECT COUNT(*) AS n FROM users").get().n) {
+        // With SETUP_TOKEN set, the first account is created only from the setup form (audit A07-003).
+        if (env.SETUP_TOKEN) return back(res, "setup_token");
         // First run: the first person of the firm's own directory becomes Gerencia.
-        const id = db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, '!', 'Gerencia')").run(String(c.name || email), email).lastInsertRowid;
+        const id = db.prepare("INSERT INTO users (name, email, password_hash, role, ms_oid) VALUES (?, ?, '!', 'Gerencia', ?)").run(String(c.name || email), email, oid || null).lastInsertRowid;
         const main = db.prepare("SELECT id FROM offices WHERE is_main = 1").get();
         if (main) db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)").run(id, main.id);
         u = { id, active: 1 };
       }
-      if (!u) audit(db, req, { user: null, action: "Ingreso fallido", ok: false, summary: `Microsoft 365: ${email} no está registrado` });
-      if (!u) return back(res, `La cuenta ${email} no está registrada en TecjuridicosApp. Pida a Gerencia que cree su usuario con ese mismo correo.`);
-      if (!u.active) return back(res, "Su usuario de TecjuridicosApp está inactivo.");
+      if (!u) return back(res, "not_registered");
+      if (!u.active) return back(res, "inactive");
       setSession(db, req, res, u.id);
       audit(db, req, { user: db.prepare("SELECT id, name FROM users WHERE id = ?").get(u.id), action: "Ingresó", summary: "Inicio de sesión con Microsoft 365" });
       back(res);
     } catch (err) {
       console.error("microsoft sign-in:", err);
-      back(res, "No se pudo completar el ingreso con Microsoft.");
+      back(res, "failed");
     }
   });
 

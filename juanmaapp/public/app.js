@@ -151,15 +151,29 @@ function showAuth(status = {}) {
   me = null;
   $("#app-root").hidden = true;
   $("#auth-screen").hidden = false;
-  if ($("#login-form")) $("#login-form").hidden = !!status.setupNeeded;
+  // PASSWORD_LOGIN=off on the server: only the Microsoft 365 button (its MFA applies to everyone).
+  if ($("#login-form")) $("#login-form").hidden = !!status.setupNeeded || status.passwordLogin === false;
   $("#setup-form").hidden = !status.setupNeeded;
+  $("[data-setup-token]").hidden = !status.setupToken;
   // Microsoft 365 sign-in (installed app with MS_* settings).
   $("#ms-login").hidden = !(status.microsoft ?? authInfo.microsoft);
   $("[data-ms-label]").textContent = status.setupNeeded ? "Crear la cuenta de Gerencia con Microsoft" : "Ingresar con la cuenta de Microsoft";
-  const msError = new URLSearchParams(location.search).get("ms_error");
+  // Fixed messages only: the code in the address cannot put arbitrary text on this screen (audit A06-003).
+  const MS_ERRORS = {
+    not_configured: "El inicio de sesión con Microsoft no está configurado en el servidor.", cancelled: "Se canceló el inicio de sesión con Microsoft.",
+    denied: "Microsoft no permitió el ingreso. Intente de nuevo o consulte al administrador de Microsoft 365.", expired: "El inicio de sesión venció o no es válido. Intente de nuevo.",
+    secret: "La clave de la app en Microsoft (secreto) no es válida o venció. Avise a Gerencia.", not_confirmed: "Microsoft no confirmó el ingreso. Intente de nuevo.",
+    invalid: "La respuesta de Microsoft no es válida.", no_email: "Su cuenta de Microsoft no tiene correo.",
+    guest: "Las cuentas invitadas de otras organizaciones no pueden ingresar. Use su cuenta de la firma.",
+    not_registered: "Su cuenta de Microsoft no está registrada en TecjuridicosApp. Pida a Gerencia que cree su usuario con ese mismo correo.",
+    other_account: "Ese correo ya está vinculado a otra cuenta de Microsoft. Avise a Gerencia.", inactive: "Su usuario de TecjuridicosApp está inactivo.",
+    setup_token: "La cuenta inicial de Gerencia se crea con el formulario y el código de instalación.", failed: "No se pudo completar el ingreso con Microsoft.",
+  };
+  const msCode = new URLSearchParams(location.search).get("ms_error");
+  const msError = msCode ? MS_ERRORS[msCode] || MS_ERRORS.failed : "";
   $("#ms-error").hidden = !msError;
-  $("#ms-error").textContent = msError || "";
-  if (msError) history.replaceState(null, "", location.pathname + location.hash);
+  $("#ms-error").textContent = msError;
+  if (msCode) history.replaceState(null, "", location.pathname + location.hash);
   const demo = backend.demoUsers?.();
   $("#demo-logins").hidden = !demo?.length || !!status.setupNeeded;
   if (demo) {
@@ -1521,9 +1535,10 @@ function setStatus(text, isError = false) {
   el.classList.toggle("error", isError);
 }
 
+// [FILL: …] markers are highlighted before sanitizing, so nothing is added to the HTML after DOMPurify checked it (audit A05-001).
 function renderMarkdown(md) {
-  const html = DOMPurify.sanitize(marked.parse(md));
-  return html.replace(/\[FILL:\s*([^\]]+)\]/g, '<mark class="fill">[FILL: $1]</mark>');
+  const marked_ = marked.parse(md).replace(/\[FILL:\s*([^\]<>"]+)\]/g, '<mark class="fill">[FILL: $1]</mark>');
+  return DOMPurify.sanitize(marked_, { ADD_TAGS: ["mark"] });
 }
 
 const ISSUE_LABELS = {

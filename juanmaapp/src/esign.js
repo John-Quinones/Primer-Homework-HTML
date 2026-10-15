@@ -2,6 +2,7 @@
 // private link; signing records the document's SHA-256, time, IP, browser,
 // typed name and drawn signature, and every step goes to an audit trail.
 // Signers can also sign in person on an office device.
+import { publicBase } from "./public-url.js";
 import express from "express";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { can, scopeOf } from "./auth.js";
@@ -15,7 +16,7 @@ const MAX_PDF = 10 * 1024 * 1024;
 const OTP_MINUTES = 10;
 const PNG = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
 
-export const publicUrl = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+export const publicUrl = (req) => publicBase(req);
 // req.ip honours "trust proxy" (TRUST_PROXY=1 behind Render), so a client cannot forge it otherwise.
 const clientIp = (req) => String(req.ip || req.socket.remoteAddress || "");
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -193,6 +194,7 @@ export function esignRouter(db) {
     const remote = b.mode !== "presencial";
     for (const s of signers) {
       if (!s.name) return res.status(400).json({ error: "Cada firmante necesita nombre." });
+      if (s.email && !/^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']+$/.test(s.email)) return res.status(400).json({ error: `El correo de ${s.name} no es válido.` });
       if (remote && s.otp_channel === "email" && !s.email.includes("@")) return res.status(400).json({ error: `Falta un correo válido para ${s.name}.` });
       if (remote && s.otp_channel !== "email" && s.phone.replace(/\D/g, "").length < 10) return res.status(400).json({ error: `Falta el celular de ${s.name} para enviarle el código por ${CHANNEL_LABEL[s.otp_channel]}.` });
       if (remote && s.otp_channel !== "email" && !channelReady(s.otp_channel)) {
@@ -275,7 +277,7 @@ export function esignRouter(db) {
     event(db, x.id, s.id, "firmado_presencial", `Testigo: ${req.user.name} · SHA-256 ${x.doc_hash}`, clientIp(req));
     const done = finishIfDone(db, x.id);
     res.json(requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(x.id)));
-    (done ? notifyCompleted(db, req, x.id) : notifySigned(db, x.id, s.name)).catch(() => {});
+    (done ? notifyCompleted(db, req, x.id) : notifySigned(db, x.id, s.name)).catch((err) => console.error("esign notice:", err.message));
   });
 
   return r;
@@ -298,12 +300,10 @@ export function esignPublicRouter(db) {
     };
     // Once everybody signed, the signer can download the signed document (stamps + certificate).
     if (x.status === "completada") {
+      // Only names and dates of the others: their documents, IPs and signatures are in the signed PDF itself (audit A01-002).
       v.signed = {
-        id: x.id, title: x.title, status: x.status, completed_at: x.completed_at, doc_hash: x.doc_hash, doc_text: x.doc_text, stamp_page: x.stamp_page, stamp_pos: x.stamp_pos,
-        signers: db.prepare("SELECT * FROM sign_signers WHERE request_id = ? ORDER BY id").all(x.id).map((o) => ({
-          name: o.name, id_type: o.id_type, id_number: o.id_number, email: maskEmail(o.email), status: o.status, method: o.method, otp_channel: o.otp_channel,
-          signed_at: o.signed_at, typed_name: o.typed_name, signature_png: o.signature_png, ip: o.ip, user_agent: o.user_agent })),
-        events: db.prepare("SELECT at, event, detail, ip FROM sign_events WHERE request_id = ? ORDER BY id").all(x.id).map((e) => ({ ...e })),
+        id: x.id, title: x.title, status: x.status, completed_at: x.completed_at, doc_hash: x.doc_hash,
+        signers: db.prepare("SELECT name, status, signed_at FROM sign_signers WHERE request_id = ? ORDER BY id").all(x.id).map((o) => ({ ...o })),
       };
     }
     return v;
@@ -371,7 +371,7 @@ export function esignPublicRouter(db) {
     event(db, f.x.id, s.id, "firmado", `OTP verificado por ${via} · SHA-256 ${f.x.doc_hash}`, clientIp(req));
     const done = finishIfDone(db, f.x.id);
     res.json(view(bySigner(req.params.token)));
-    (done ? notifyCompleted(db, req, f.x.id) : notifySigned(db, f.x.id, s.name)).catch(() => {});
+    (done ? notifyCompleted(db, req, f.x.id) : notifySigned(db, f.x.id, s.name)).catch((err) => console.error("esign notice:", err.message));
   });
 
   r.post("/:token/reject", (req, res) => {
@@ -380,7 +380,7 @@ export function esignPublicRouter(db) {
     db.prepare("UPDATE sign_signers SET status = 'rechazado', reject_reason = ? WHERE id = ?").run(str(req.body?.reason).slice(0, 500), f.s.id);
     db.prepare("UPDATE sign_requests SET status = 'rechazada' WHERE id = ?").run(f.x.id);
     event(db, f.x.id, f.s.id, "rechazado", str(req.body?.reason).slice(0, 500), clientIp(req));
-    notifyOwner(db, f.x.id, `No firmó: ${f.x.title}`, `${f.s.name} decidió no firmar "${f.x.title}"${str(req.body?.reason) ? `: ${str(req.body.reason).slice(0, 300)}` : ""}.`).catch(() => {});
+    notifyOwner(db, f.x.id, `No firmó: ${f.x.title}`, `${f.s.name} decidió no firmar "${f.x.title}"${str(req.body?.reason) ? `: ${str(req.body.reason).slice(0, 300)}` : ""}.`).catch((err) => console.error("esign notice:", err.message));
     res.json(view(bySigner(req.params.token)));
   });
 
@@ -408,6 +408,8 @@ export function verifyRouter(db) {
     const t = (tries.get(ip) || []).filter((x) => x > now - 60000);
     if (t.length >= 20) return res.status(429).json({ error: "Demasiadas consultas. Espere un minuto." });
     tries.set(ip, [...t, now]);
+    // The map never grows without limit: old addresses are dropped (audit A06-002).
+    if (tries.size > 5000) for (const [k, v] of tries) if (!v.some((x) => x > now - 60000)) tries.delete(k);
     const hash = String(req.body?.sha256 || "").toLowerCase();
     const code = normVerifyCode(req.body?.code);
     if (/^[0-9a-f]{64}$/.test(hash)) {

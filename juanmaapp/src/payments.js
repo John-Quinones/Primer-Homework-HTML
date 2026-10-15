@@ -129,7 +129,8 @@ export function paymentsRouter(db) {
       if (!res.headersSent) res.json(out ?? null);
     } catch (err) {
       if (!(err instanceof HttpError)) console.error(err);
-      res.status(err.status || 500).json({ error: err.message || "Error interno." });
+      // Only messages written for the user; internal ones (database, libraries) stay in the log (audit A10-001).
+      res.status(err instanceof HttpError ? err.status : 500).json({ error: err instanceof HttpError ? err.message : "Error interno del servidor." });
     }
   };
   const getCharge = (req, id) => db.prepare(`SELECT * FROM charges WHERE id = ? AND ${officeSql(req.user, "office_id")}`).get(id)

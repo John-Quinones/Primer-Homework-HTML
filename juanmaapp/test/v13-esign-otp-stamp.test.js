@@ -43,15 +43,20 @@ test("OTP by SMS, stamp settings, and an e-mail with the signed document to ever
   const signed = await pub("POST", `/public/sign/${link}/sign`, { otp: code, typed_name: "Ana María Pérez", accept: true, signature_png: PNG });
   assert.equal(signed.status, 200);
   assert.equal(signed.body.request_status, "completada");
-  assert.equal(signed.body.signed.signers[0].otp_channel, "sms");
-  assert.equal(signed.body.signed.stamp_page, "new");
+  // The evidence stays on the server and in the signed PDF; the public page shows only names and dates (audit A01-002).
+  assert.deepEqual(Object.keys(signed.body.signed.signers[0]).sort(), ["name", "signed_at", "status"]);
+  const row = srv.db.prepare("SELECT s.otp_channel, r.stamp_page FROM sign_signers s JOIN sign_requests r ON r.id = s.request_id ORDER BY s.id DESC LIMIT 1").get();
+  assert.equal(row.otp_channel, "sms");
+  assert.equal(row.stamp_page, "new");
 
   await new Promise((ok) => setTimeout(ok, 50));
   const notice = mails.find((m) => m.to === "ana@cliente.co" && /firmado por todos/.test(m.subject));
   assert.ok(notice, "signer gets the completion e-mail");
   const fresh = notice.text.match(/firmar\.html#(\S+)/)[1];
   const after = (await pub("GET", `/public/sign/${fresh}`)).body;
-  assert.ok(after.signed?.signers[0].signature_png, "fresh link opens the signed document data");
+  assert.equal(after.signed?.status, "completada", "fresh link opens the signed document");
+  assert.equal(after.signed.signers[0].signature_png, undefined, "without the other signers' signature images");
+  assert.equal((await pub("GET", `/public/sign/${fresh}/signed`)).body.base64.length > 100, true, "the signed PDF downloads");
   await new Promise((ok) => setTimeout(ok, 300));
   const copy = mails.find((m) => m.to === "gerencia@firma.co" && /firmado por todos/.test(m.subject));
   assert.ok(copy?.attachments?.[0]?.content.subarray(0, 5).toString() === "%PDF-", "sender gets the signed PDF");
