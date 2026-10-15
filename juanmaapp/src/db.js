@@ -509,6 +509,9 @@ function migrate(db) {
   add("users", "custom_permissions", "INTEGER NOT NULL DEFAULT 0");
   add("users", "phone", "TEXT NOT NULL DEFAULT ''");
   add("users", "professional_card", "TEXT NOT NULL DEFAULT ''");
+  // Invitations and temporary passwords (change 45).
+  add("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
+  add("users", "invited_at", "TEXT");
   for (const [col, def] of [["department", "TEXT NOT NULL DEFAULT ''"], ["city", "TEXT NOT NULL DEFAULT ''"], ["area", "TEXT NOT NULL DEFAULT ''"],
     ["court_id", "INTEGER REFERENCES courts(id) ON DELETE SET NULL"], ["court_name", "TEXT NOT NULL DEFAULT ''"],
     ["court_email", "TEXT NOT NULL DEFAULT ''"], ["radicado", "TEXT NOT NULL DEFAULT ''"],

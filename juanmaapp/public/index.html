@@ -36,7 +36,7 @@
       </form>
 
       <form id="reset-form" hidden>
-        <p class="auth-note">Cree su contraseña nueva (mínimo 10 caracteres).</p>
+        <p class="auth-note" data-reset-note>Cree su contraseña nueva (mínimo 10 caracteres).</p>
         <label>Contraseña nueva <input name="password" type="password" minlength="10" required autocomplete="new-password" /></label>
         <label>Repítala <input name="again" type="password" minlength="10" required autocomplete="new-password" /></label>
         <p class="form-error" hidden></p>
@@ -688,7 +688,7 @@
           <div class="toolbar end"><button class="primary" data-action="new-user">+ Nuevo usuario</button></div>
           <div class="panel"><div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>Nombre</th><th>Rol</th><th>Oficinas</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Rol</th><th>Oficinas</th><th>Estado</th><th>Acceso</th><th></th></tr></thead>
               <tbody id="user-rows"></tbody>
             </table>
           </div></div>
@@ -842,9 +842,14 @@
         <label>Nombre completo * <input name="name" required /></label>
         <label>Correo * <input name="email" type="email" required /></label>
         <label>Rol * <select name="role" required></select></label>
-        <label><span data-pw-label>Contraseña inicial *</span> <input name="password" type="password" minlength="10" autocomplete="new-password" /></label>
+        <label data-pw-only><span data-pw-label>Contraseña asignada</span>
+          <span class="pw-row"><input name="password" type="text" minlength="10" autocomplete="new-password" spellcheck="false" /><button type="button" class="mini" data-gen-password>Generar</button></span></label>
         <label>Celular / WhatsApp <input name="phone" inputmode="tel" /></label>
         <label>Tarjeta profesional (abogados) <input name="professional_card" /></label>
+      </div>
+      <div data-pw-only>
+        <label class="inline"><input type="checkbox" name="invite" /> Enviar invitación por correo: el usuario recibe un enlace para crear su propia contraseña (vence en 72 horas)</label>
+        <p class="hint">La contraseña que usted asigne es temporal: al primer ingreso la app le pide al usuario cambiarla. Entréguela por un medio distinto al correo (en persona o por teléfono); por seguridad la invitación no la incluye.</p>
       </div>
       <fieldset><legend>Oficinas *</legend><div id="user-office-checks" class="check-grid"></div></fieldset>
       <fieldset><legend>Permisos</legend>
@@ -1291,7 +1296,8 @@
 
   <dialog id="password-dialog">
     <form method="dialog" data-form="password">
-      <h3>Cambiar contraseña</h3>
+      <h3 data-title>Cambiar contraseña</h3>
+      <p class="hint" data-must-change hidden>Su contraseña es temporal (la asignó Gerencia). Cree una propia para continuar.</p>
       <label>Contraseña actual <input name="current" type="password" required autocomplete="current-password" /></label>
       <label>Nueva contraseña (mínimo 10 caracteres) <input name="next" type="password" minlength="10" required autocomplete="new-password" /></label>
       <p class="form-error" hidden></p>

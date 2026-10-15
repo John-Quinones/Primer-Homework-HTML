@@ -99,8 +99,10 @@ export function rolePermissions(db, role) {
 }
 
 export function loadUser(db, id) {
-  const u = db.prepare("SELECT id, name, email, phone, professional_card, role, active, custom_permissions, created_at FROM users WHERE id = ?").get(id);
-  if (!u) return null;
+  const row = db.prepare(`SELECT id, name, email, phone, professional_card, role, active, custom_permissions, created_at, must_change_password, invited_at,
+    password_hash != '!' AS has_password FROM users WHERE id = ?`).get(id);
+  if (!row) return null;
+  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password };
   const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
     WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
   // A user's own checklist replaces the role's when it is turned on.
@@ -227,7 +229,7 @@ export function authRouter(db) {
       return res.status(400).json({ error: "El enlace venció o ya se usó. Pida uno nuevo." });
     }
     if (!validPassword(req.body?.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(req.body.password), row.user_id);
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hashPassword(req.body.password), row.user_id);
     db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL").run(row.user_id);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.user_id);
     setSession(db, req, res, row.user_id);
@@ -255,7 +257,8 @@ export function authRouter(db) {
     const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(req.user.id);
     if (!checkPassword(req.body?.current ?? "", row.password_hash)) return res.status(400).json({ error: "La contraseña actual no es correcta." });
     if (!validPassword(req.body?.next)) return res.status(400).json({ error: "La nueva contraseña debe tener al menos 10 caracteres." });
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(req.body.next), req.user.id);
+    if (req.body?.next === req.body?.current) return res.status(400).json({ error: "La nueva contraseña debe ser distinta de la actual." });
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hashPassword(req.body.next), req.user.id);
     res.status(204).end();
   });
 
@@ -374,26 +377,57 @@ export function adminRouter(db) {
     for (const oid of new Set((officeIds || []).map(Number))) if (valid.has(oid)) ins.run(userId, oid);
   };
 
-  r.post("/users", manage, (req, res) => {
+  // Invitation by e-mail: a private link (72 hours, one use) to create one's own password.
+  // The password itself never travels by e-mail.
+  async function invite(req, userId) {
+    const u = db.prepare("SELECT id, name, email FROM users WHERE id = ?").get(userId);
+    const token = randomBytes(24).toString("base64url");
+    db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+72 hours'))").run(sha(token), u.id);
+    const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    const link = `${base}/#invitacion-${token}`;
+    const ms = microsoftEnabled() ? `\nTambién puede ingresar con su cuenta de Microsoft 365 (${u.email}) con el botón «Ingresar con la cuenta de Microsoft».` : "";
+    const esc = (t) => String(t).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+    const r = await sendEmail(u.email, "Invitación a TecjuridicosApp · TEC Jurídicos",
+      `Hola ${u.name}:\n\n${req.user.name} le dio acceso a TecjuridicosApp, la aplicación de gestión de TEC Jurídicos.\n\nSu usuario es: ${u.email}\nCree su contraseña con este enlace (vence en 72 horas y sirve una sola vez):\n${link}${ms}\n\nSi no esperaba este mensaje, ignórelo.\n\nTecjuridicosApp`,
+      `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(u.name)}:</p><p><strong>${esc(req.user.name)}</strong> le dio acceso a <strong>TecjuridicosApp</strong>, la aplicación de gestión de TEC Jurídicos.</p>
+       <p>Su usuario es: <strong>${esc(u.email)}</strong></p>
+       <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Crear mi contraseña</a></p>
+       <p style="color:#666;font-size:12px">El enlace vence en 72 horas y sirve una sola vez.${microsoftEnabled() ? " También puede ingresar con su cuenta de Microsoft 365." : ""} Si no esperaba este mensaje, ignórelo.</p></div>`);
+    if (r.ok) db.prepare("UPDATE users SET invited_at = datetime('now') WHERE id = ?").run(u.id);
+    return r;
+  }
+
+  r.post("/users/:id/invite", manage, async (req, res) => {
+    const u = db.prepare("SELECT id, active FROM users WHERE id = ?").get(Number(req.params.id));
+    if (!u) return res.status(404).json({ error: "El usuario no existe." });
+    if (!u.active) return res.status(400).json({ error: "El usuario está inactivo: actívelo antes de invitarlo." });
+    const r = await invite(req, u.id);
+    res.status(r.ok ? 200 : 502).json(r.ok ? { ok: true, detail: r.detail, user: loadUser(db, u.id) } : { error: `No se envió la invitación: ${r.detail}` });
+  });
+
+  r.post("/users", manage, async (req, res) => {
     const b = req.body ?? {};
     const name = str(b.name), email = str(b.email).toLowerCase();
     if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
     if (!roleExists(db, b.role)) return res.status(400).json({ error: "Rol no válido." });
-    // With Microsoft sign-in the password is optional: the user then enters only with their Microsoft account.
-    const noPassword = !b.password && microsoftEnabled();
+    // The password is optional when the user will create it from the invitation, or enter with Microsoft.
+    const noPassword = !b.password && (microsoftEnabled() || !!b.invite);
     if (!noPassword && !validPassword(b.password)) return res.status(400).json({ error: microsoftEnabled()
       ? "La contraseña inicial debe tener al menos 10 caracteres, o déjela vacía para que ingrese solo con su cuenta de Microsoft."
-      : "La contraseña inicial debe tener al menos 10 caracteres." });
+      : "Asigne una contraseña de al menos 10 caracteres o marque «Enviar invitación por correo» para que el usuario cree la suya." });
     if (!Array.isArray(b.office_ids) || !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
+    let id;
     try {
-      const id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(name, email, str(b.phone), str(b.professional_card), noPassword ? "!" : hashPassword(b.password), b.role).lastInsertRowid;
+      // A password Gerencia assigns is temporary: the user changes it at the first sign-in.
+      id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(name, email, str(b.phone), str(b.professional_card), noPassword ? "!" : hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
       setOffices(id, b.office_ids);
       setUserPermissions(id, b.custom_permissions, b.permissions);
-      res.status(201).json(loadUser(db, id));
     } catch {
-      res.status(409).json({ error: "Ya existe un usuario con ese correo." });
+      return res.status(409).json({ error: "Ya existe un usuario con ese correo." });
     }
+    const sent = b.invite ? await invite(req, id) : null;
+    res.status(201).json({ ...loadUser(db, id), invitation: sent ? { ok: sent.ok, detail: sent.detail } : null });
   });
 
   r.put("/users/:id", manage, (req, res) => {
@@ -420,7 +454,8 @@ export function adminRouter(db) {
       return res.status(409).json({ error: "Ya existe un usuario con ese correo." });
     }
     if (b.password) {
-      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(b.password), id);
+      // Assigned by Gerencia to someone else: temporary until that user changes it.
+      db.prepare("UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?").run(hashPassword(b.password), id === req.user.id ? 0 : 1, id);
       db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
     }
     if (!active) db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);

@@ -60,7 +60,7 @@ if (WEB) {
   $("#reset-form").remove();
   $('[data-action="change-password"]')?.remove();
   $("#email-dialog [data-pw-only]")?.remove();
-  $('#user-dialog input[name="password"]')?.closest("label")?.remove();
+  $$("#user-dialog [data-pw-only]").forEach((el) => el.remove());
 }
 
 // ---------- Shared state ----------
@@ -180,7 +180,18 @@ async function enterApp(user, { fresh = true } = {}) {
   await Promise.all([loadCatalog(), loadAreas()]);
   startBell();
   await showView();
+  if (me.must_change_password && !WEB) openForcedPasswordChange();
 }
+
+// A temporary password assigned by Gerencia must be replaced before working.
+function openForcedPasswordChange() {
+  const dlg = $("#password-dialog");
+  openDialog(dlg, "Cambiar contraseña");
+  $("[data-must-change]", dlg).hidden = false;
+  $("button[value=cancel]", dlg).hidden = true;
+  dlg.dataset.forced = "1";
+}
+$("#password-dialog").addEventListener("cancel", (e) => { if (e.currentTarget.dataset.forced) e.preventDefault(); });
 
 let authInfo = {};
 async function boot() {
@@ -191,12 +202,15 @@ async function boot() {
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
   // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
-  const reset = location.hash.match(/^#restablecer-([\w-]+)$/);
+  const reset = location.hash.match(/^#(restablecer|invitacion)-([\w-]+)$/);
   if (reset && $("#reset-form")) {
     showAuth(st);
     $("#login-form").hidden = true;
     $("#reset-form").hidden = false;
-    $("#reset-form").dataset.token = reset[1];
+    $("#reset-form").dataset.token = reset[2];
+    $("[data-reset-note]").textContent = reset[1] === "invitacion"
+      ? "Bienvenido(a) a TecjuridicosApp. Cree su contraseña (mínimo 10 caracteres) para ingresar."
+      : "Cree su contraseña nueva (mínimo 10 caracteres).";
     history.replaceState(null, "", location.pathname);
     return;
   }
@@ -996,6 +1010,12 @@ document.addEventListener("click", (e) => {
     },
     "new-user": () => openUserDialog(null),
     "edit-user": () => openUserDialog(adminUsers.find((u) => u.id === id)),
+    "invite-user": async () => {
+      const u = adminUsers.find((x) => x.id === id);
+      await api("POST", `/admin/users/${id}/invite`);
+      toast(`Invitación enviada a ${u.email}. El enlace vence en 72 horas.`);
+      await renderUsuarios();
+    },
     "new-office": () => openOfficeDialog(null),
     "edit-office": () => openOfficeDialog(offices.find((o) => o.id === id)),
     "delete-office": async () => {
@@ -1813,7 +1833,11 @@ async function renderUsuarios() {
       <td>${escapeHtml(u.role)}${u.custom_permissions ? '<br><span class="badge warn">Permisos propios</span>' : ""}</td>
       <td>${u.permissions.includes("scope.all") ? "Todas" : escapeHtml(u.offices.map((o) => o.name).join(", "))}</td>
       <td>${u.active ? '<span class="badge ok">Activo</span>' : '<span class="badge">Inactivo</span>'}</td>
-      <td class="row-actions"><button data-action="edit-user" data-id="${u.id}">Editar</button></td>
+      <td>${WEB ? '<span class="muted">Entra eligiendo su nombre</span>'
+        : `${u.must_change_password ? '<span class="badge warn">Contraseña temporal</span>' : u.has_password ? '<span class="badge ok">Con contraseña</span>' : '<span class="badge">Sin contraseña</span>'}
+          ${u.invited_at ? `<br><span class="muted">Invitado ${escapeHtml(window.JuanmaPdf.colombiaTime(u.invited_at).replace(" (hora de Colombia)", ""))}</span>` : ""}`}</td>
+      <td class="row-actions"><button data-action="edit-user" data-id="${u.id}">Editar</button>
+        ${!WEB && u.active ? `<button data-action="invite-user" data-id="${u.id}">${u.invited_at ? "Reenviar invitación" : "Invitar por correo"}</button>` : ""}</td>
     </tr>`).join("");
   $("#office-cards").innerHTML = offices.map((o) => `
     <article class="result-card">
@@ -1838,6 +1862,14 @@ async function renderUsuarios() {
     }).join("")}</tr>`).join("")}</tbody>`;
 }
 
+// A readable random password (no look-alike characters) for Gerencia to hand over.
+$("#user-dialog [data-gen-password]")?.addEventListener("click", () => {
+  const A = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789", v = crypto.getRandomValues(new Uint32Array(12));
+  const pw = [...v].map((x) => A[x % A.length]).join("");
+  const input = $("#user-dialog [name=password]");
+  input.value = `${pw.slice(0, 4)}-${pw.slice(4, 8)}-${pw.slice(8)}`;
+  input.select();
+});
 function openUserDialog(u) {
   const dlg = $("#user-dialog");
   const form = $("form", dlg);
@@ -1848,9 +1880,10 @@ function openUserDialog(u) {
   form.elements.custom_permissions.checked = !!u?.custom_permissions;
   renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
-  if (form.elements.password) form.elements.password.required = !u && !authInfo.microsoft;
-  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Nueva contraseña (opcional)"
-    : authInfo.microsoft ? "Contraseña inicial (opcional: sin contraseña ingresa solo con su cuenta de Microsoft)" : "Contraseña inicial *";
+  if (form.elements.password) form.elements.password.required = false;
+  if (form.elements.invite) form.elements.invite.checked = !u;
+  if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Asignar contraseña nueva (opcional, temporal)"
+    : "Contraseña asignada (opcional si envía la invitación)";
 }
 
 // Per-user checklist: shows the role's permissions until "específicos" is on.
@@ -1879,9 +1912,18 @@ wireDialog($("#user-dialog"), async (form) => {
     permissions: $$("#user-perm-checks input:checked").map((i) => i.value),
   };
   if (d.password) body.password = d.password;
-  if (d.id) await api("PUT", `/admin/users/${d.id}`, body);
-  else await api("POST", "/admin/users", body);
-  toast(d.id ? "Usuario actualizado." : "Usuario creado.");
+  const invite = !!form.elements.invite?.checked;
+  if (!d.id && !d.password && !invite && !authInfo.microsoft && !WEB) throw new Error("Asigne una contraseña o marque «Enviar invitación por correo».");
+  let msg;
+  if (d.id) {
+    await api("PUT", `/admin/users/${d.id}`, body);
+    const sent = invite ? await api("POST", `/admin/users/${d.id}/invite`).then(() => true, (e) => e.message) : null;
+    msg = `Usuario actualizado.${sent === true ? " Invitación enviada por correo." : sent ? ` ${sent}` : ""}`;
+  } else {
+    const u = await api("POST", "/admin/users", { ...body, invite });
+    msg = `Usuario creado.${u.invitation ? (u.invitation.ok ? ` Invitación enviada a ${u.email}.` : ` La invitación no se envió: ${u.invitation.detail}`) : ""}${d.password ? " Entréguele la contraseña temporal por un medio distinto al correo." : ""}`;
+  }
+  toast(msg);
   await renderUsuarios();
 });
 
@@ -1930,6 +1972,11 @@ $("#save-roles").addEventListener("click", () => guarded(async () => {
 
 wireDialog($("#password-dialog"), async (form) => {
   await api("POST", "/auth/password", formData(form));
+  const dlg = $("#password-dialog");
+  delete dlg.dataset.forced;
+  $("[data-must-change]", dlg).hidden = true;
+  $("button[value=cancel]", dlg).hidden = false;
+  if (me) me.must_change_password = false;
   toast("Contraseña actualizada.");
 });
 

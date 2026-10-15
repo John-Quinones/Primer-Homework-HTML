@@ -40,3 +40,32 @@ test("change one's own e-mail with the current password", async () => {
   assert.equal(r.body.user.email, "nuevo@firma.co");
   assert.ok(mails.some((m) => m.to === "gerencia@firma.co" && /cambió/.test(m.subject)), "old address is told");
 });
+
+test("Gerencia invites users by e-mail (link to create their password) or assigns a temporary password", async () => {
+  const g = await srv.login("nuevo@firma.co", "otra-clave-segura");
+  const office = (await g.call("GET", "/admin/offices")).body[0].id;
+  assert.equal((await g.call("POST", "/admin/users", { name: "Sin Clave", email: "sin@firma.co", role: "Abogado", office_ids: [office] })).status, 400,
+    "needs a password or the invitation");
+  const inv = await g.call("POST", "/admin/users", { name: "Laura Gómez", email: "laura@firma.co", role: "Abogado", office_ids: [office], invite: true });
+  assert.equal(inv.status, 201, JSON.stringify(inv.body));
+  assert.equal(inv.body.invitation.ok, true);
+  assert.equal(inv.body.has_password, false);
+  const mail = mails.filter((m) => m.to === "laura@firma.co").at(-1);
+  assert.match(mail.subject, /Invitación/);
+  assert.doesNotMatch(mail.text, /contraseña temporal|clave-/i, "no password in the e-mail");
+  const token = mail.text.match(/#invitacion-([\w-]+)/)[1];
+  const created = await pub("/auth/reset", { token, password: "laura-clave-2026" });
+  assert.equal(created.status, 200);
+  assert.equal(created.body.user.must_change_password, false);
+  assert.equal((await pub("/auth/login", { email: "laura@firma.co", password: "laura-clave-2026" })).status, 200);
+
+  const tmp = await g.call("POST", "/admin/users", { name: "Pedro Ruiz", email: "pedro@firma.co", role: "Abogado", office_ids: [office], password: "Temporal-2026-x" });
+  assert.equal(tmp.body.must_change_password, true, "assigned password is temporary");
+  const p = await srv.login("pedro@firma.co", "Temporal-2026-x");
+  assert.equal((await p.call("POST", "/auth/password", { current: "Temporal-2026-x", next: "Temporal-2026-x" })).status, 400, "must be a different one");
+  assert.equal((await p.call("POST", "/auth/password", { current: "Temporal-2026-x", next: "pedro-propia-2026" })).status, 204);
+  assert.equal((await p.call("GET", "/auth/status")).body.user.must_change_password, false);
+  const again = await g.call("POST", `/admin/users/${tmp.body.id}/invite`);
+  assert.equal(again.status, 200);
+  assert.ok(again.body.user.invited_at);
+});

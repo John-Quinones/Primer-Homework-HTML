@@ -29,7 +29,7 @@
     reportes: ["Reportes", "Informes de expedientes, agenda, actuaciones, cartera y recibos en Excel o PDF.",
       ["Elija el reporte, la oficina y el rango de fechas.", "Los reportes de pagos requieren el permiso de pagos."]],
     usuarios: ["Usuarios y oficinas", "Personas que usan la app, sus roles, oficinas y permisos.",
-      ["Cada usuario ve solo las oficinas que tenga asignadas.", "Puede dar permisos específicos a un usuario en lugar de los de su rol."]],
+      ["Cada usuario ve solo las oficinas que tenga asignadas.", "Puede dar permisos específicos a un usuario en lugar de los de su rol.", "Al crear un usuario, marque «Enviar invitación por correo»: le llega un enlace para crear su propia contraseña (vence en 72 horas). También puede asignarle una contraseña (botón «Generar»): es temporal y se la pide cambiar al primer ingreso; entréguela en persona o por teléfono, nunca por correo."]],
     configuracion: ["Configuración", "Catálogo de tipos de proceso, subprocesos (dos niveles) y campos propios de cada uno.",
       ["Use nombres cortos: «Laboral», «Ordinario laboral de primera instancia».", "Los campos propios aparecen en el expediente según su subproceso."]],
   };
