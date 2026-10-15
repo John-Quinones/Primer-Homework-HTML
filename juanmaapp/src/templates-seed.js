@@ -38,7 +38,7 @@ export const VARIABLES = [
   ["fecha.ciudad_y_fecha", "Ciudad y fecha (Ibagué, 14 de octubre de 2026)", "Fecha"],
 ].map(([key, label, group]) => ({ key, label, group }));
 
-const FOOTER = "\n\n---\n\n*Borrador generado con JuanMaApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*";
+const FOOTER = "\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*";
 
 export const SEED_TEMPLATES = [
   {

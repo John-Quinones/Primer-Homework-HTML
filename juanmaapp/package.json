@@ -2,7 +2,7 @@
   "name": "juanmaapp",
   "version": "0.1.0",
   "private": true,
-  "description": "JuanMaApp — legal draft generator powered by the NomosAI Engine prompt",
+  "description": "TecjuridicosApp — legal draft generator powered by the NomosAI Engine prompt",
   "type": "module",
   "main": "server.js",
   "engines": {

@@ -1,4 +1,4 @@
-# Registro de cambios de JuanMaApp
+# Registro de cambios de TecjuridicosApp (antes JuanMaApp)
 
 Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto. La app muestra el número que está corriendo (en la pantalla de ingreso y al pie del menú lateral). El número es la cantidad de cambios guardados en la carpeta `juanmaapp/` del repositorio, así que no se repite ni se salta.
 
@@ -18,6 +18,7 @@ Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto.
 | 12 | 14/10/2026 | Permiso de Pagos para los roles en datos guardados antes del módulo. |
 | 13 | 14/10/2026 | Importación del Excel del servidor de la firma (área, tipo, fecha, estado 1/2, radicado, carpeta, despacho, honorarios y pagos). |
 | 14 | 14/10/2026 | Instalación en Azure (plan gratuito) e ingreso con la cuenta de Microsoft 365. |
-| 15 | 15/10/2026 | Guía de Azure ajustada a la dirección real de la app y al portal actual. |
-| 16 | 15/10/2026 | Corrección: el listado de departamentos y municipios no se estaba publicando. Primera publicación en Azure. |
-| 17 | 15/10/2026 | La app muestra el número de cambio publicado; este registro de cambios. |
+| 15 | 14/10/2026 | Guía de Azure ajustada a la dirección real de la app y al portal actual. |
+| 16 | 14/10/2026 | Corrección: el listado de departamentos y municipios no se estaba publicando. Primera publicación en Azure. |
+| 17 | 14/10/2026 | La app muestra el número de cambio publicado; este registro de cambios. |
+| 18 | 14/10/2026 | La app pasa a llamarse **TecjuridicosApp**: pantallas, PDF, correos, reportes y documentos de Word. Los datos y la dirección de Azure no cambian. |

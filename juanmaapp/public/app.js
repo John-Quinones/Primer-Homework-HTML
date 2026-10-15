@@ -1,4 +1,4 @@
-// JuanMaApp front end. Talks to the Express API; the preview build swaps in
+// TecjuridicosApp front end. Talks to the Express API; the preview build swaps in
 // an in-browser backend by defining window.JuanmaBackend before this script.
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1555,7 +1555,7 @@ $("#report-xlsx").addEventListener("click", () => guarded(async () => {
     const v = row[c.key];
     return { value: v === null || v === undefined ? null : v, type: typeof v === "number" ? Number : String };
   }));
-  const title = [[{ value: `${r.title} — JuanMaApp`, fontWeight: "bold" }], [{ value: r.filters }],
+  const title = [[{ value: `${r.title} — TecjuridicosApp`, fontWeight: "bold" }], [{ value: r.filters }],
     [{ value: `Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy}` }], []];
   const widths = r.columns.map((c) => ({ width: Math.min(45, Math.max(c.label.length, ...r.rows.map((x) => String(x[c.key] ?? "").length)) + 2) }));
   const blob = await window.writeXlsxFile([...title, header, ...body], { columns: widths, sheet: r.title.slice(0, 31) }).toBlob();
@@ -1574,7 +1574,7 @@ $("#report-pdf").addEventListener("click", () => guarded(async () => {
   doc.setFontSize(9);
   doc.setTextColor(80);
   doc.text(`${r.filters}  ·  ${r.rows.length} fila(s)`, 40, 62);
-  doc.text(`Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy} · JuanMaApp`, 40, 74);
+  doc.text(`Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy} · TecjuridicosApp`, 40, 74);
   doc.autoTable({
     startY: 88,
     head: [r.columns.map((c) => c.label)],
@@ -1774,7 +1774,7 @@ function renderTplList() {
     <h4>${escapeHtml(cat)}</h4>
     <ul class="tpl-items">${ts.map((t) => `<li><button type="button" class="tpl-item ${tplActive?.id === t.id ? "selected" : ""}" data-tpl="${t.id}">
       <strong>${escapeHtml(t.name)}</strong>
-      <span>${t.format === "docx" ? "Word" : "Texto"}${t.builtin ? " · ejemplo JuanMaApp" : ""}${t.description ? " · " + escapeHtml(t.description) : ""}</span></button>
+      <span>${t.format === "docx" ? "Word" : "Texto"}${t.builtin ? " · ejemplo TecjuridicosApp" : ""}${t.description ? " · " + escapeHtml(t.description) : ""}</span></button>
       ${can("templates.manage") ? `<span class="tpl-tools">${t.format === "markdown" ? `<button class="mini" data-action="edit-template" data-id="${t.id}">Editar</button>` : ""}
         <button class="mini danger" data-action="delete-template" data-id="${t.id}" aria-label="Eliminar plantilla">✕</button></span>` : ""}</li>`).join("")}</ul>`).join("")
     || '<p class="empty">No hay plantillas con ese filtro.</p>';
@@ -2153,7 +2153,7 @@ function signatureCertificate(r) {
   line("Registro de eventos", { size: 12, bold: true, color: [0, 43, 106] });
   for (const e of r.events) line(`${e.at} UTC · ${e.event.replace(/_/g, " ")}${e.detail ? " · " + e.detail : ""}${e.ip ? " · IP " + e.ip : ""}`, { size: 8, gap: 1 });
   y += 8;
-  line("Firma electrónica con verificación de identidad por código de un solo uso, conforme a la Ley 527 de 1999 y el Decreto 2364 de 2012. Generado por JuanMaApp.", { size: 8, color: [90, 90, 90] });
+  line("Firma electrónica con verificación de identidad por código de un solo uso, conforme a la Ley 527 de 1999 y el Decreto 2364 de 2012. Generado por TecjuridicosApp.", { size: 8, color: [90, 90, 90] });
   return doc.output("blob");
 }
 
@@ -2260,7 +2260,7 @@ function mailProof(m) {
   line("Mensaje", { size: 11, bold: true });
   line(m.body, { size: 10 });
   y += 6;
-  line("Constancia generada por JuanMaApp a partir de los registros del sistema. No reemplaza la certificación de un proveedor de correo electrónico certificado acreditado.", { size: 8, color: [90, 90, 90] });
+  line("Constancia generada por TecjuridicosApp a partir de los registros del sistema. No reemplaza la certificación de un proveedor de correo electrónico certificado acreditado.", { size: 8, color: [90, 90, 90] });
   return doc.output("blob");
 }
 
@@ -2831,7 +2831,7 @@ async function downloadReceipt(r) {
   doc.line(M, y, M + 220, y);
   doc.text(`Recibido por: ${r.created_by_name || me.name}`, M, y + 14);
   doc.setFontSize(8); doc.setTextColor(110, 110, 110);
-  doc.text(`Emitido con JuanMaApp el ${new Date().toLocaleString("es-CO")}`, M, y + 40);
+  doc.text(`Emitido con TecjuridicosApp el ${new Date().toLocaleString("es-CO")}`, M, y + 40);
   if (r.voided_at) {
     doc.setTextColor(179, 38, 30); doc.setFontSize(54); doc.setFont("helvetica", "bold");
     doc.text("ANULADO", W / 2, 330, { align: "center", angle: 20 });

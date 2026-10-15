@@ -454,6 +454,8 @@ function migrate(db) {
     ["monitor", "INTEGER NOT NULL DEFAULT 0"], ["ext_process_id", "TEXT NOT NULL DEFAULT ''"],
     ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"],
     ["client_role", "TEXT NOT NULL DEFAULT ''"], ["affiliated", "INTEGER NOT NULL DEFAULT 0"]]) add("cases", col, def);
+  // The app was renamed (change 18): starter templates carry the new name in their footer.
+  if (cols("document_templates").has("builtin")) db.exec("UPDATE document_templates SET body = replace(body, 'JuanMaApp', 'TecjuridicosApp') WHERE builtin = 1 AND body LIKE '%JuanMaApp%'");
   // Three statuses: Activo, Archivo provisional, Archivo definitivo.
   for (const row of db.prepare("SELECT DISTINCT status FROM cases").all()) {
     const next = normStatus(row.status);

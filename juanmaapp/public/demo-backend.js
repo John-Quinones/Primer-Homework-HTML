@@ -54,6 +54,7 @@
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
     for (const k of ["charges", "receipts", "reminders"]) st[k] ||= [];
     st.payset ||= null;
+    for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
   }
@@ -561,7 +562,7 @@
       b.check && fail(NEEDS_SERVER.rama);
       const since = s.log.filter((l) => l.user_id === me().id).at(-1)?.ms || 0;
       const news = s.acts.filter((a) => ids.includes(a.case_id) && a.isNew && a.foundMs > since);
-      const lines = [`JuanMaApp · Reporte de procesos · ${bogotaNow()} (hora Colombia)`, "", `Procesos consultados: ${ids.length}. Actuaciones nuevas: ${news.length}.`];
+      const lines = [`TecjuridicosApp · Reporte de procesos · ${bogotaNow()} (hora Colombia)`, "", `Procesos consultados: ${ids.length}. Actuaciones nuevas: ${news.length}.`];
       if (news.length) { lines.push("", "ACTUACIONES NUEVAS"); for (const a of news) lines.push(`• ${s.cases.find((k) => k.id === a.case_id).radicado} · ${a.fecha} · ${a.actuacion}`); }
       lines.push("", "Enlace de prueba: con la app instalada el reporte sale por correo y WhatsApp a las horas elegidas.");
       const channels = [p.by_email && { channel: "email", ok: false, detail: "Requiere la app instalada." }, p.by_whatsapp && { channel: "whatsapp", ok: false, detail: "Requiere la app instalada." }].filter(Boolean);

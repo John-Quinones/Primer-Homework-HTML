@@ -1,4 +1,4 @@
-# Instalar JuanMaApp en internet (Render)
+# Instalar TecjuridicosApp en internet (Render)
 
 El enlace de prueba sirve para revisar la app y trabajar con datos reales, pero hay funciones que solo trabajan con la app instalada en un servidor: la consulta en la Rama Judicial, la búsqueda de jurisprudencia en las relatorías oficiales, los correos (enlaces de firma, códigos, correo con trazabilidad, recordatorios de pago y reportes) y el WhatsApp automático.
 

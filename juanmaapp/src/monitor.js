@@ -129,7 +129,7 @@ export function buildReport(db, userId, now = new Date()) {
     ORDER BY t.due_at`).all(from, to, userId, userId, userId);
 
   const KIND = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término" };
-  const lines = [`JuanMaApp · Reporte de procesos · ${bogota(now)} (hora Colombia)`, ""];
+  const lines = [`TecjuridicosApp · Reporte de procesos · ${bogota(now)} (hora Colombia)`, ""];
   lines.push(`Procesos consultados: ${ids.length}. Actuaciones nuevas: ${news.length}.`);
   if (news.length) {
     lines.push("", "ACTUACIONES NUEVAS");
@@ -163,7 +163,7 @@ export async function deliverReport(db, userId, trigger, now = new Date()) {
   const p = prefsOf(db, userId);
   const r = buildReport(db, userId, now);
   const results = [];
-  const subject = `JuanMaApp · ${r.newCount} actuación(es) nueva(s) · ${bogota(now).slice(0, 10)}`;
+  const subject = `TecjuridicosApp · ${r.newCount} actuación(es) nueva(s) · ${bogota(now).slice(0, 10)}`;
   if (p.by_email) results.push(await sendEmail(p.email, subject, r.text, r.html));
   if (p.by_whatsapp) results.push(await sendWhatsapp(p.whatsapp, r.text));
   db.prepare("INSERT INTO report_log (user_id, trigger, channels, summary) VALUES (?, ?, ?, ?)")

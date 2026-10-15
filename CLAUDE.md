@@ -1,9 +1,9 @@
-# Project memory — JuanMaApp (TEC Jurídicos)
+# Project memory — TecjuridicosApp (formerly JuanMaApp; TEC Jurídicos)
 
 The app lives in `juanmaapp/`. The other files at the root are unrelated homework.
 
 ## Who and how
-- Client: TEC Jurídicos, Colombia; main office Ibagué (Tolima). The app name "JuanMaApp" may change later.
+- Client: TEC Jurídicos, Colombia; main office Ibagué (Tolima). The app is named "TecjuridicosApp" (renamed from JuanMaApp in change 18); internal identifiers (folder juanmaapp, Azure juanmaapp-tec, window.Juanma*, storage keys) keep the old name on purpose.
 - Talk to the user in Spanish. UI text is Spanish (Colombia); code and comments are English.
 - Brand: navy `#002b6a`, blue `#027cc6`, silver `#989795`, light silver `#c4c8cb`; "T" column logo (`public/logo-t.png`). Layout follows appbogado.app with these colors.
 - Drafting engine: `prompts/nomosai-system-prompt.md` (NomosAI: no AI clichés, `[FILL: …]` markers, audit footer, Bold link, e-signature block, JSON payload). `src/validate.js` enforces it.
@@ -16,6 +16,7 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 - Server: Node 22, Express 5, `node:sqlite`, tests with `npm test` (node --test). Every feature exists twice: server routes in `src/` and the same routes in `public/demo-backend.js` for the published link. Shared pure logic is in `src/case-meta.js`, `src/ledger.js`, `src/validate.js`, served to the page as `/shared.js` (`src/browser-module.js`).
 - Published link: `npm run preview` → `preview/juanmaapp-web.html`, published as a claude.ai artifact with capabilities `{downloads: true, db: {}, sample: {}}` (data in the artifact database, NomosAI through the viewer's Claude account). Republish to the same artifact so the link and its data stay.
 - Deployment: chosen for testing = Azure App Service free F1 (`juanmaapp/AZURE.md`, `.github/workflows/azure-juanmaapp.yml`, DB in `/home/data`). Alternative: Render (`render.yaml`, `Dockerfile`, `DESPLIEGUE.md`). Sign-in with Microsoft 365 via `src/microsoft.js` (MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET).
+- Every published change is numbered (Cambio N = commits touching juanmaapp/); tell the user the number and add a row to `juanmaapp/CAMBIOS.md` in the same commit. Republish the artifact and let CI deploy to Azure on each change.
 - Firm's server Excel export (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO 1/2, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) is recognized by `public/importer.js` `guessAll`. Open questions to the user: which column holds the client name; whether ESTADO 2 is archivo definitivo or provisional.
 - Permissions: `src/auth.js` (`PERMISSIONS`, `DEFAULT_MATRIX`); new permissions reach built-in roles once via `known_permissions`.
 

@@ -1,5 +1,5 @@
 // Excel / CSV import. Reads the file in the browser, lets the user map each
-// column to a JuanMaApp field, then creates or completes clients and cases
+// column to a TecjuridicosApp field, then creates or completes clients and cases
 // through the regular API (so it works the same against the server and the
 // preview backend). Exposes window.JuanmaImport for app.js.
 (function () {
@@ -206,7 +206,7 @@
     const byName = new Map(clients.map((c) => [norm(c.full_name), c]));
     let catalog = await api("GET", "/catalog");
     const cases = opts.withCases ? await api("GET", "/cases") : [];
-    // A case already in JuanMaApp: same radicado, or same client + sub-process + folder number, or + subject.
+    // A case already in TecjuridicosApp: same radicado, or same client + sub-process + folder number, or + subject.
     const folderFieldIds = () => new Set(catalog.flatMap((c) => c.fields).filter((f) => norm(f.label) === "no carpeta").map((f) => String(f.id)));
     const caseKeys = new Set();
     const addKeys = (k) => {
@@ -271,7 +271,7 @@
           client = await api("POST", "/clients", c);
           summary.clientsCreated++;
         } else {
-          // Only fill blanks; never overwrite data already in JuanMaApp.
+          // Only fill blanks; never overwrite data already in TecjuridicosApp.
           const fill = Object.fromEntries(Object.entries(c).filter(([k, v]) => v && !client[k]));
           if (Object.keys(fill).length) {
             client = await api("PUT", `/clients/${client.id}`, fill);

@@ -24,7 +24,7 @@ function event(db, requestId, signerId, name, detail = "", ip = "") {
 
 async function sendLink(db, req, request, signer, token) {
   const link = `${publicUrl(req)}/firmar.html#${token}`;
-  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}\n\nAl firmar le enviaremos un código de verificación a este correo.\n\nJuanMaApp`;
+  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}\n\nAl firmar le enviaremos un código de verificación a este correo.\n\nTecjuridicosApp`;
   const html = `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(signer.name)}:</p><p>${esc(request.message || "Le enviamos un documento para su firma electrónica.")}</p>
     <p><strong>Documento:</strong> ${esc(request.title)}</p>
     <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Leer y firmar</a></p>

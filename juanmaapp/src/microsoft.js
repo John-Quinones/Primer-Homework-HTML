@@ -1,7 +1,7 @@
 // Sign-in with the firm's Microsoft 365 accounts (Microsoft Entra ID, OpenID
 // Connect authorization code flow with PKCE). A Microsoft account only gets in
-// if Gerencia created a JuanMaApp user with the same e-mail; roles, offices
-// and permissions stay in JuanMaApp.
+// if Gerencia created a TecjuridicosApp user with the same e-mail; roles, offices
+// and permissions stay in TecjuridicosApp.
 //
 // Settings: MS_TENANT_ID (the firm's directory id), MS_CLIENT_ID and
 // MS_CLIENT_SECRET (from the app registration), PUBLIC_URL (for the redirect).
@@ -84,8 +84,8 @@ export function microsoftRouter(db) {
         if (main) db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)").run(id, main.id);
         u = { id, active: 1 };
       }
-      if (!u) return back(res, `La cuenta ${email} no está registrada en JuanMaApp. Pida a Gerencia que cree su usuario con ese mismo correo.`);
-      if (!u.active) return back(res, "Su usuario de JuanMaApp está inactivo.");
+      if (!u) return back(res, `La cuenta ${email} no está registrada en TecjuridicosApp. Pida a Gerencia que cree su usuario con ese mismo correo.`);
+      if (!u.active) return back(res, "Su usuario de TecjuridicosApp está inactivo.");
       setSession(db, req, res, u.id);
       back(res);
     } catch (err) {
