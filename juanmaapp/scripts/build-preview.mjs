@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SEED_CATALOG } from "../src/db.js";
-import { ROLES, PERMISSIONS, DEFAULT_MATRIX } from "../src/auth.js";
+import { ROLES, PERMISSIONS, DEFAULT_MATRIX, GERENCIA_ONLY } from "../src/auth.js";
 import { REPORTS } from "../src/reports.js";
 import { AREAS } from "../src/places.js";
 import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES } from "../src/templates-seed.js";
@@ -42,7 +42,7 @@ html = html
   .replace('<script src="email-suggest.js"></script>', () => `<script>${safe(read("public/email-suggest.js"))}</script>`)
   .replace('<script src="app.js"></script>', () => [
     `<script>window.JUANMA_SEED_CATALOG = ${JSON.stringify(SEED_CATALOG)};
-window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, matrix: DEFAULT_MATRIX })};
+window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, matrix: DEFAULT_MATRIX, gerenciaOnly: GERENCIA_ONLY })};
 window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
 window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
 window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES })};</script>`,

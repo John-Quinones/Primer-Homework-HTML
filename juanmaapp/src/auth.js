@@ -24,9 +24,9 @@ export const PERMISSIONS = {
   "users.manage": "Gestiona usuarios, roles y oficinas",
   "catalog.manage": "Configura tipos de proceso, subprocesos y campos",
   "clients.write": "Crea y edita clientes",
-  "clients.delete": "Elimina clientes",
+  "clients.delete": "Elimina clientes (solo Gerencia)",
   "cases.write": "Crea y edita expedientes",
-  "cases.delete": "Elimina expedientes",
+  "cases.delete": "Elimina expedientes (solo Gerencia)",
   "drafts.generate": "Genera borradores",
   "jurisprudence.use": "Usa el buscador de jurisprudencia",
   "import.run": "Importa datos desde Excel",
@@ -41,12 +41,21 @@ export const PERMISSIONS = {
 // Starting matrix; Gerencia edits it in Usuarios › Roles.
 export const DEFAULT_MATRIX = {
   "Gerencia": Object.keys(PERMISSIONS),
-  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "clients.delete", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage", "esign.use", "mail.send"],
+  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage", "esign.use", "mail.send"],
   "Director Contable": ["scope.all", "reports.view", "payments.manage"],
-  "Gerente Regional": ["clients.write", "cases.write", "cases.delete", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "esign.use", "mail.send", "payments.manage"],
+  "Gerente Regional": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "esign.use", "mail.send", "payments.manage"],
   "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view", "processes.consult", "esign.use", "mail.send"],
   "Dependiente Judicial": ["cases.write", "jurisprudence.use", "processes.consult", "mail.send"],
   "Asistente": ["clients.write", "cases.write", "drafts.generate", "payments.manage"],
+};
+
+// Deleting anything is for Gerencia only (change 24): these permissions are
+// always on for Gerencia and never reach another role or a user's own checklist.
+export const GERENCIA_ONLY = ["clients.delete", "cases.delete"];
+export const effectivePermissions = (role, perms) => {
+  const p = perms.filter((x) => role === "Gerencia" || !GERENCIA_ONLY.includes(x));
+  if (role === "Gerencia") for (const x of ["users.manage", ...GERENCIA_ONLY]) if (!p.includes(x)) p.push(x);
+  return p;
 };
 
 const SESSION_HOURS = 12;
@@ -95,8 +104,7 @@ export function loadUser(db, id) {
   const permissions = u.custom_permissions
     ? db.prepare("SELECT permission FROM user_permissions WHERE user_id = ?").all(id).map((r) => r.permission)
     : rolePermissions(db, u.role);
-  if (u.role === "Gerencia" && !permissions.includes("users.manage")) permissions.push("users.manage");
-  return { ...u, active: !!u.active, custom_permissions: !!u.custom_permissions, offices, permissions };
+  return { ...u, active: !!u.active, custom_permissions: !!u.custom_permissions, offices, permissions: effectivePermissions(u.role, permissions) };
 }
 
 /** Office ids a user may see, or null for every office. */
@@ -121,6 +129,7 @@ export function requireAuth(req, res, next) {
   if (req.method !== "GET" && req.get("X-JuanMa") !== "1") {
     return res.status(403).json({ error: "Solicitud no permitida." });
   }
+  if (req.method === "DELETE" && req.user.role !== "Gerencia") return res.status(403).json({ error: "Solo Gerencia puede eliminar." });
   next();
 }
 

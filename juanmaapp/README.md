@@ -22,7 +22,7 @@ Client, case and legal-draft manager for paralegals and attorneys. Drafts are wr
 | **Importar** | Load existing data exported from Access (or any spreadsheet) as `.xlsx` or `.csv`. Columns are matched automatically (Nombres + Apellidos are joined, IdCliente/Código are skipped) and can be reassigned. A file can hold clients only, or one case per row with the client's data on the same row. Existing clients are matched by document number or name and only their blank fields are filled; identical cases are not created twice; missing process types, sub-processes and custom fields can be created on the fly. Rows that fail are listed by row number. The firm's server export is recognized as is: AREA → process type, TIPO DE PROCESO → sub-process (matched to an existing one when the name is contained in it), FECHA DE CREACIÓN keeps the original date, ESTADO 1/2 → Activo/Archivo definitivo, RADICADO (dashes allowed; one that is not 23 digits is kept in its own field), CIUDAD and DESPACHO JUDICIAL (linked to the directory when the name matches), No. CARPETA and ACTUACIONES as fields of the case, HONORARIOS → a charge in Pagos and PAGOS → a receipt against it. Re-importing the same file creates nothing twice (same radicado, or same client, sub-process and folder). |
 | **Configuración** | Reorder process types, sub-processes (drag or arrows, or "Ordenar por más usados" by number of cases) and custom fields; add second-order sub-processes under any sub-process (e.g. Ordinario Laboral › Con medidas cautelares). Manage process types (Administrativo, Laboral, Penal, Familia, Derecho de Petición, Datacrédito, or new ones), their sub-processes, and custom fields per type: text, long text, number, date, or a drop-down list, optionally required. |
 
-Deleting a client or sub-process that still has cases is refused.
+Only Gerencia deletes (clients, cases, tasks, templates, catalog entries, saved judgments, offices, roles), and every deletion asks for confirmation first. Deleting a client or sub-process that still has cases is refused.
 
 Department and city/municipality fields use the DANE DIVIPOLA list (33 departments, 1,121 municipalities; `public/data/divipola.json`, from the MIT-licensed `divipola` package) with type-ahead: typing "C" lists Caldas, Caquetá, Casanare, Cauca, Cesar, Chocó, Córdoba and Cundinamarca. A case's 23-digit radicado fills its department and city (its first five digits are the DANE municipality code).
 
@@ -36,9 +36,9 @@ Roles: Gerencia, Director Jurídico, Director Contable, Gerente Regional, Abogad
 | Usuarios, roles y oficinas | ✓ | | | | | | |
 | Configuración del catálogo | ✓ | ✓ | | | | | |
 | Crear/editar clientes | ✓ | ✓ | | ✓ | ✓ | | ✓ |
-| Eliminar clientes | ✓ | ✓ | | | | | |
+| Eliminar clientes (solo Gerencia) | ✓ | | | | | | |
 | Crear/editar expedientes | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ |
-| Eliminar expedientes | ✓ | ✓ | | ✓ | | | |
+| Eliminar expedientes (solo Gerencia) | ✓ | | | | | | |
 | Generar borradores | ✓ | ✓ | | ✓ | ✓ | | ✓ |
 | Jurisprudencia | ✓ | ✓ | | ✓ | ✓ | ✓ | |
 | Importar | ✓ | ✓ | | ✓ | | | |

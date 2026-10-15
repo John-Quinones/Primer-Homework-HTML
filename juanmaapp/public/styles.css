@@ -610,3 +610,6 @@ fieldset.person-type legend { font-size: .8rem; color: var(--text-muted); paddin
    the same muted gray with some transparency, so they read as a hint, not as data. */
 input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: .6; }
 .field-tip, form .hint.span2 { color: var(--text-muted); opacity: .6; font-weight: 400; }
+
+/* Only Gerencia deletes (change 24): delete buttons are hidden for every other role. */
+body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-jact^="delete-"] { display: none !important; }

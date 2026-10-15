@@ -116,7 +116,12 @@ const VIEW_PERMS = {
   importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage",
 };
 
+// Only Gerencia deletes (change 24); every delete button carries data-action="delete-…" or data-jact="delete-…".
+const isGerencia = () => me?.role === "Gerencia";
+const DELETE_PERMS = ["clients.delete", "cases.delete"];
+
 function applyPermissions() {
+  document.body.classList.toggle("is-gerencia", isGerencia());
   $$(".sidenav a").forEach((a) => (a.hidden = !!VIEW_PERMS[a.dataset.view] && !can(VIEW_PERMS[a.dataset.view])));
   // Buttons that need a permission carry data-perm (set when rendered) or are matched here.
   const needs = { "new-receipt": "payments.manage", "new-charge": "payments.manage", "new-sign": "esign.use", "new-mail": "mail.send", "new-client": "clients.write", "new-case": "cases.write", "new-task": "cases.write", "add-radicado": "cases.write" };
@@ -839,7 +844,8 @@ document.addEventListener("click", (e) => {
     "new-client": () => openClientDialog(null),
     "edit-client": () => openClientDialog(state.clients.find((c) => c.id === id)),
     "delete-client": async () => {
-      if (!(await confirmAsk("Eliminar cliente", "Se eliminará el cliente. Esta acción no se puede deshacer."))) return;
+      const c = state.clients.find((x) => x.id === id);
+      if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
       await api("DELETE", `/clients/${id}`);
       state.selectedClientId = null;
       toast("Cliente eliminado.");
@@ -848,7 +854,9 @@ document.addEventListener("click", (e) => {
     "new-case": () => openCaseDialog(null, btn.dataset.client ? Number(btn.dataset.client) : state.selectedClientId),
     "edit-case": async () => openCaseDialog(await api("GET", `/cases/${id}`)),
     "delete-case": async () => {
-      if (!(await confirmAsk("Eliminar expediente", "Se eliminará el expediente con sus datos. Esta acción no se puede deshacer."))) return;
+      const k = state.cases.find((x) => x.id === id);
+      const which = k ? [caseFolder(k) && `carpeta ${caseFolder(k)}`, k.client_name, k.type_name].filter(Boolean).join(" · ") : "";
+      if (!(await confirmAsk("¿Eliminar expediente?", `Se eliminará el expediente${which ? ` (${which})` : ""} con sus datos. Esta acción no se puede deshacer.`))) return;
       await api("DELETE", `/cases/${id}`);
       toast("Expediente eliminado.");
       await renderExpedientes();
@@ -905,6 +913,7 @@ document.addEventListener("click", (e) => {
       await renderConfiguracion();
     },
   };
+  if (btn.dataset.action?.startsWith("delete-") && !isGerencia()) return toast("Solo Gerencia puede eliminar.", true);
   if (ACTIONS[btn.dataset.action]) guarded(ACTIONS[btn.dataset.action]);
 });
 
@@ -1669,9 +1678,11 @@ async function renderUsuarios() {
   $("#role-matrix").innerHTML = `<thead><tr><th>Permiso</th>${roleInfo.roles.map((r) => `<th>${escapeHtml(r)}${details[r] && !details[r].builtin
     ? `<div class="role-actions"><button class="mini" data-action="rename-role" data-role="${escapeHtml(r)}">Renombrar</button><button class="mini danger" data-action="delete-role" data-role="${escapeHtml(r)}" aria-label="Eliminar rol">✕</button></div>` : ""}</th>`).join("")}</tr></thead>
     <tbody>${perms.map(([p, label]) => `<tr><td>${escapeHtml(label)}</td>${roleInfo.roles.map((r) => {
-      const locked = r === "Gerencia" && p === "users.manage";
+      const onlyGerencia = DELETE_PERMS.includes(p);
+      const locked = (r === "Gerencia" && p === "users.manage") || onlyGerencia;
+      const on = onlyGerencia ? r === "Gerencia" : roleInfo.matrix[r].includes(p);
       return `<td class="center"><input type="checkbox" data-role="${escapeHtml(r)}" data-perm="${p}" aria-label="${escapeHtml(r)}: ${escapeHtml(label)}"
-        ${roleInfo.matrix[r].includes(p) ? "checked" : ""} ${locked ? "disabled" : ""}></td>`;
+        ${on ? "checked" : ""} ${locked ? "disabled" : ""}></td>`;
     }).join("")}</tr>`).join("")}</tbody>`;
 }
 

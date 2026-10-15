@@ -70,6 +70,14 @@ test("offices, users, roles and office scope", async () => {
   assert.equal((await laura.call("GET", "/admin/users")).status, 403);
   assert.equal((await laura.call("GET", "/cases?mine=1")).body.length, 1);
 
+  // Only Gerencia deletes, whatever the role or the user's own checklist says (change 24).
+  await mk("Directora", "dir@firma.co", "Director Jurídico", [ibague.id]);
+  const dir = await srv.login("dir@firma.co", "clave-segura-9");
+  assert.ok(!(await dir.call("GET", "/auth/status")).body.user.permissions.includes("cases.delete"));
+  assert.equal((await dir.call("DELETE", `/cases/${k1.id}`)).status, 403, "Director Jurídico cannot delete cases");
+  assert.equal((await dir.call("DELETE", `/clients/${cl1.id}`)).status, 403, "nor clients");
+  assert.equal((await dir.call("GET", `/cases/${k1.id}`)).status, 200, "the case is still there");
+
   // Director Contable sees every office but cannot write.
   const conta = await srv.login("conta@firma.co", "clave-segura-9");
   assert.equal((await conta.call("GET", "/cases")).body.length, 2);

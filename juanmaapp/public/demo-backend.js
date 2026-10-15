@@ -138,8 +138,10 @@
   };
   const userPerms = (u) => {
     const p = u.custom_permissions ? [...u.permissions] : permsOf(u.role);
-    if (u.role === "Gerencia" && !p.includes("users.manage")) p.push("users.manage");
-    return p;
+    // Deleting is for Gerencia only (change 24).
+    const only = AUTH.gerenciaOnly || [];
+    if (u.role === "Gerencia") { for (const x of ["users.manage", ...only]) if (!p.includes(x)) p.push(x); return p; }
+    return p.filter((x) => !only.includes(x));
   };
   const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
   const canonDep = (x) => {
@@ -1224,6 +1226,7 @@ Return only a JSON object:
     esignRemote: false,
     async request(method, url, body) {
       await READY;
+      if (method === "DELETE" && me().role !== "Gerencia") fail("Solo Gerencia puede eliminar.");
       for (const [m, re, fn] of routes) {
         const match = m === method && url.match(re);
         if (match) {
