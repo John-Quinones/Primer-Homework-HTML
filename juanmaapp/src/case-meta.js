@@ -77,6 +77,18 @@ export function courtMatches(c, { department = "", city = "", area = "" } = {}) 
   return true;
 }
 
+/**
+ * Courts for a search. The exact city and area come first (Ibagué + Familia →
+ * only Ibagué's family courts); only when none exist does it widen to the
+ * circuit's courts and the ones that also hear the area (promiscuous).
+ */
+export function filterCourts(list, want = {}) {
+  const exact = list.filter((c) => courtMatches(c, want)
+    && (!want.city || plain(c.city) === plain(want.city))
+    && (!want.area || c.area === want.area));
+  return exact.length ? exact : list.filter((c) => courtMatches(c, want));
+}
+
 // The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
 export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));
 

@@ -2,7 +2,7 @@
 // official directory file, filtered by department, city and area.
 import express from "express";
 import { can } from "./auth.js";
-import { courtCircuit, courtMatches } from "./case-meta.js";
+import { courtCircuit, filterCourts } from "./case-meta.js";
 import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -36,7 +36,7 @@ export function courtsRouter(db) {
     const rows = db.prepare(`SELECT * FROM courts ${where.length ? "WHERE " + where.join(" AND ") : ""}
       ORDER BY department, city, area, name`).all(...params);
     const want = { city: str(req.query.city), area: str(req.query.area) };
-    res.json(rows.filter((c) => courtMatches(c, want)).slice(0, limit).map((x) => ({ ...x })));
+    res.json(filterCourts(rows, want).slice(0, limit).map((x) => ({ ...x })));
   });
 
   // Rows come from the page, already mapped to our fields from the official file.

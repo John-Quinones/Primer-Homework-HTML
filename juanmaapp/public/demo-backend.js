@@ -625,8 +625,8 @@
     ["GET", /^\/courts(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       const text = nrm(q.q || "");
-      return s.courts.filter((c) => CM.courtMatches(c, { department: q.department, city: q.city, area: q.area })
-        && (!text || nrm(c.name + " " + c.email + " " + c.code).includes(text)))
+      return CM.filterCourts(s.courts.filter((c) => !text || nrm(c.name + " " + c.email + " " + c.code).includes(text)),
+        { department: q.department, city: q.city, area: q.area })
         .sort((a, b) => (a.department + a.city + a.area + a.name).localeCompare(b.department + b.city + b.area + b.name, "es")).slice(0, Number(q.limit) || 500).map(clone);
     }],
     ["POST", /^\/courts\/import$/, (m, b) => {
