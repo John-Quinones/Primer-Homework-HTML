@@ -10,7 +10,7 @@
 export const PORTALS = [
   {
     id: "cpnu",
-    name: "Rama Judicial · Consulta de procesos",
+    name: "Rama Judicial · Consulta de procesos (Justicia Siglo XXI)",
     url: "https://consultaprocesos.ramajudicial.gov.co/Procesos/NumeroRadicacion",
     how: "Pegue el radicado de 23 dígitos en «Número de radicación» y pulse Consultar.",
     auto: true,
@@ -24,7 +24,7 @@ export const PORTALS = [
   },
   {
     id: "tyba",
-    name: "TYBA · Justicia XXI Web",
+    name: "TYBA · Justicia Siglo XXI Web",
     url: "https://procesojudicial.ramajudicial.gov.co/Justicia21/Administracion/Ciudadanos/frmConsulta.aspx",
     how: "Busque por número de proceso (radicado de 23 dígitos); el portal pide una verificación de seguridad antes de mostrar el resultado.",
     auto: false,
