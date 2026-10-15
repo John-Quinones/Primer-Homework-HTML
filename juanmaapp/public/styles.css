@@ -507,7 +507,7 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
   .field-form { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidenav {
     flex-direction: row; overflow-x: auto; padding: 8px 12px; gap: 4px;
     position: sticky; top: 0; z-index: 5;
@@ -634,3 +634,14 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 #case-rows .row-actions button { margin: 2px 0; }
 .fees-box { margin: 10px 0; }
 .fees-box .grid4 { align-items: end; }
+
+/* Display preferences (change 37): badge with the layout in use, forced mobile layout on wide screens. */
+.view-badge {
+  font-size: .75rem; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.4); color: #fff;
+}
+.view-badge:hover, .view-badge:focus-visible { background: rgba(255,255,255,.22); }
+html[data-view="mobile"] body { max-width: 480px; margin: 0 auto; box-shadow: 0 0 0 1px var(--border), 0 8px 40px rgba(0,0,0,.25); min-height: 100vh; }
+.auth-links { margin: 10px 0 0; text-align: center; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--link, var(--brand-blue)); text-decoration: underline; cursor: pointer; font: inherit; }
+.auth-card .form-error.ok { color: #b8f5c8; }

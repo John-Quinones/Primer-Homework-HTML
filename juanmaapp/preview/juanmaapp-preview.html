@@ -615,7 +615,7 @@ details pre { background: var(--surface-muted); padding: 12px; border-radius: 6p
   .field-form { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidenav {
     flex-direction: row; overflow-x: auto; padding: 8px 12px; gap: 4px;
     position: sticky; top: 0; z-index: 5;
@@ -743,6 +743,17 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 .fees-box { margin: 10px 0; }
 .fees-box .grid4 { align-items: end; }
 
+/* Display preferences (change 37): badge with the layout in use, forced mobile layout on wide screens. */
+.view-badge {
+  font-size: .75rem; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.4); color: #fff;
+}
+.view-badge:hover, .view-badge:focus-visible { background: rgba(255,255,255,.22); }
+html[data-view="mobile"] body { max-width: 480px; margin: 0 auto; box-shadow: 0 0 0 1px var(--border), 0 8px 40px rgba(0,0,0,.25); min-height: 100vh; }
+.auth-links { margin: 10px 0 0; text-align: center; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--link, var(--brand-blue)); text-decoration: underline; cursor: pointer; font: inherit; }
+.auth-card .form-error.ok { color: #b8f5c8; }
+
 </style>
 </head>
 <body>
@@ -759,6 +770,23 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
         <label class="pw-field">Contraseña <input id="login-password" name="password" type="password" required autocomplete="current-password" /></label>
         <p class="form-error" hidden></p>
         <button class="primary wide">Ingresar</button>
+        <p class="auth-links"><button type="button" class="link-btn" id="forgot-open">¿Olvidó su contraseña?</button></p>
+      </form>
+
+      <form id="forgot-form" hidden>
+        <p class="auth-note">Escriba su correo. Si está registrado, le enviaremos un enlace para crear una contraseña nueva (vence en 30 minutos).</p>
+        <label>Correo <input name="email" type="email" required autocomplete="username" /></label>
+        <p class="form-error" hidden></p>
+        <button class="primary wide">Enviarme el enlace</button>
+        <p class="auth-links"><button type="button" class="link-btn" id="forgot-back">Volver a ingresar</button></p>
+      </form>
+
+      <form id="reset-form" hidden>
+        <p class="auth-note">Cree su contraseña nueva (mínimo 10 caracteres).</p>
+        <label>Contraseña nueva <input name="password" type="password" minlength="10" required autocomplete="new-password" /></label>
+        <label>Repítala <input name="again" type="password" minlength="10" required autocomplete="new-password" /></label>
+        <p class="form-error" hidden></p>
+        <button class="primary wide">Guardar contraseña</button>
       </form>
 
       <form id="setup-form" hidden>
@@ -797,6 +825,7 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
     </div>
     <div class="topbar-right">
       <span id="demo-badge" class="demo-badge" hidden>Enlace de prueba · datos guardados</span>
+      <button type="button" id="view-badge" class="view-badge" data-action="display-prefs" title="Cambiar tamaño de letra, vista y modo día o noche">Vista: Web</button>
       <details class="bell">
         <summary aria-label="Notificaciones"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span id="bell-count" class="bell-count" hidden></span></summary>
         <div class="bell-pop">
@@ -808,6 +837,8 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
         <summary><span class="avatar" id="user-initials"></span><span class="user-meta"><strong id="user-name"></strong><span id="user-role"></span></span></summary>
         <div class="user-pop">
           <p class="muted" id="user-offices"></p>
+          <button type="button" data-action="display-prefs">Pantalla: letra, vista, día o noche</button>
+          <button type="button" data-action="change-email">Cambiar correo</button>
           <button type="button" data-action="change-password">Cambiar contraseña</button>
           <button type="button" data-action="logout">Cerrar sesión</button>
         </div>
@@ -1931,6 +1962,48 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
       <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
     </form>
   </dialog>
+  <!-- Preferencias de pantalla (de este equipo) -->
+  <dialog id="prefs-dialog">
+    <form method="dialog">
+      <h3>Pantalla</h3>
+      <p class="hint">Se guarda en este equipo y navegador.</p>
+      <fieldset><legend>Tamaño de la letra</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="font" value="normal" /> Normal</label>
+          <label class="inline"><input type="radio" name="font" value="mediana" /> Mediana</label>
+          <label class="inline"><input type="radio" name="font" value="grande" /> Grande</label>
+        </div>
+      </fieldset>
+      <fieldset><legend>Forma de visualizarse</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="view" value="auto" /> Automático (según la pantalla)</label>
+          <label class="inline"><input type="radio" name="view" value="mobile" /> Móvil</label>
+          <label class="inline"><input type="radio" name="view" value="web" /> Web</label>
+        </div>
+      </fieldset>
+      <fieldset><legend>Modo</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="theme" value="auto" /> Automático (como el equipo)</label>
+          <label class="inline"><input type="radio" name="theme" value="dia" /> Día</label>
+          <label class="inline"><input type="radio" name="theme" value="noche" /> Noche</label>
+        </div>
+      </fieldset>
+      <div class="dialog-actions"><button value="cancel">Listo</button></div>
+    </form>
+  </dialog>
+
+  <!-- Cambiar correo -->
+  <dialog id="email-dialog">
+    <form method="dialog" data-form="email">
+      <h3 data-title>Cambiar correo</h3>
+      <label>Correo nuevo <input name="email" type="email" required autocomplete="email" /></label>
+      <label data-pw-only>Contraseña actual (para confirmar) <input name="password" type="password" autocomplete="current-password" /></label>
+      <p class="hint">Con este correo ingresa a la app y recibe avisos. Le avisaremos del cambio al correo anterior.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
+    </form>
+  </dialog>
+
   <dialog id="password-dialog">
     <form method="dialog" data-form="password">
       <h3>Cambiar contraseña</h3>
@@ -4024,6 +4097,68 @@ function withDecisions(acts) {
 return { decisionOf, withDecisions };
 })();
 </script>
+  <script>// Display preferences of this device: font size, layout (automatic, mobile or
+// web) and day / night theme. They are a per-device convenience, kept in the
+// browser; nothing here touches the firm's data.
+(function () {
+  const KEY = "tecjuridicos-display-v1";
+  const DEFAULTS = { font: "normal", view: "auto", theme: "auto" };
+  const FONT = { normal: "100%", mediana: "112.5%", grande: "125%" };
+  const MOBILE_MAX = 760;
+  let prefs = { ...DEFAULTS };
+  try { prefs = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch {}
+
+  // The layout rules live in @media (max-width: …) blocks. "Móvil" makes them
+  // always apply and "Web" never; "Automático" restores what the screen decides.
+  const original = new Map();
+  function layoutRules() {
+    const out = [];
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try { rules = sheet.cssRules; } catch { continue; }
+      for (const r of rules) if (r instanceof CSSMediaRule && /max-width/.test(original.get(r) ?? r.media.mediaText)) out.push(r);
+    }
+    return out;
+  }
+  function applyView() {
+    for (const r of layoutRules()) {
+      if (!original.has(r)) original.set(r, r.media.mediaText);
+      r.media.mediaText = prefs.view === "mobile" ? "all" : prefs.view === "web" ? "not all" : original.get(r);
+    }
+    // On a phone, "Web" shows the desktop layout (zoomed out), like a browser's desktop-site option.
+    const vp = document.querySelector('meta[name="viewport"]');
+    if (vp) {
+      vp.dataset.auto ??= vp.content;
+      vp.content = prefs.view === "web" && window.screen.width < 900 ? "width=1280" : vp.dataset.auto;
+    }
+  }
+  /** The layout in use right now, for the badge at the top. */
+  function currentView() {
+    if (prefs.view === "mobile") return "Móvil";
+    if (prefs.view === "web") return "Web";
+    return window.matchMedia(`(max-width: ${MOBILE_MAX}px)`).matches ? "Móvil (automático)" : "Web (automático)";
+  }
+  function apply() {
+    const root = document.documentElement;
+    root.style.fontSize = FONT[prefs.font] || "100%";
+    // "Automático" follows the device (or the viewer's own choice); only undo a theme this page set.
+    if (prefs.theme === "auto") { if (root.dataset.themeByApp) { root.removeAttribute("data-theme"); delete root.dataset.themeByApp; } }
+    else { root.dataset.theme = prefs.theme === "noche" ? "dark" : "light"; root.dataset.themeByApp = "1"; }
+    root.dataset.view = prefs.view;
+    applyView();
+    const badge = document.getElementById("view-badge");
+    if (badge) badge.textContent = `Vista: ${currentView()}`;
+  }
+  function set(next) {
+    prefs = { ...prefs, ...next };
+    try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch {}
+    apply();
+  }
+  window.addEventListener("resize", () => { if (prefs.view === "auto") apply(); });
+  window.JuanmaDisplay = { get: () => ({ ...prefs }), set, apply, currentView };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+})();
+</script>
   <script>// In-app help: a "?" button on every module explains what it does, and every
 // field shows an example (placeholder) and a writing tip while it has focus.
 (() => {
@@ -4271,7 +4406,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."]};</script>
-<script>window.JUANMA_VERSION = {"change":36,"sha":"","date":"2026-10-14"};</script>
+<script>window.JUANMA_VERSION = {"change":37,"sha":"","date":"2026-10-14"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -4753,6 +4888,16 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
     }],
     ["POST", /^\/auth\/logout$/, () => { setCurrent(null); return null; }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
+    ["POST", /^\/auth\/(forgot|reset)$/, () => fail("En el enlace de prueba no hay contraseñas: se entra eligiendo el usuario. Recuperar la contraseña funciona en la app instalada.")],
+    ["POST", /^\/auth\/email$/, (m, b) => {
+      const u = s.users.find((x) => x.id === currentId) || fail("Inicie sesión.");
+      const email = str(b.email).toLowerCase();
+      /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || fail("Escriba un correo válido.");
+      email === u.email && fail("Ese ya es su correo.");
+      s.users.some((x) => x.email === email && x.id !== u.id) && fail("Ese correo ya está registrado por otro usuario.");
+      u.email = email;
+      return { user: userOut(u) };
+    }],
 
     // ----- admin -----
     ["GET", /^\/admin\/offices$/, () => { me(); return s.offices.slice().sort((a, b) => b.is_main - a.is_main || a.name.localeCompare(b.name, "es")).map((o) => ({
@@ -5777,7 +5922,10 @@ const WEB = !!window.JuanmaBackend?.web;
 if (WEB) {
   $$(".pw-field").forEach((l) => l.remove());
   $("#login-form").remove();
+  $("#forgot-form").remove();
+  $("#reset-form").remove();
   $('[data-action="change-password"]')?.remove();
+  $("#email-dialog [data-pw-only]")?.remove();
   $('#user-dialog input[name="password"]')?.closest("label")?.remove();
 }
 
@@ -5908,9 +6056,62 @@ async function boot() {
   const v = st.version || {};
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
+  // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
+  const reset = location.hash.match(/^#restablecer-([\w-]+)$/);
+  if (reset && $("#reset-form")) {
+    showAuth(st);
+    $("#login-form").hidden = true;
+    $("#reset-form").hidden = false;
+    $("#reset-form").dataset.token = reset[1];
+    history.replaceState(null, "", location.pathname);
+    return;
+  }
   if (st.user) await enterApp(st.user, { fresh: false });
   else showAuth(st);
 }
+
+// ----- Forgotten password (installed app) -----
+const authSwap = (show) => { for (const id of ["#login-form", "#forgot-form", "#reset-form"]) if ($(id)) $(id).hidden = id !== show; };
+$("#forgot-open")?.addEventListener("click", () => authSwap("#forgot-form"));
+$("#forgot-back")?.addEventListener("click", () => authSwap("#login-form"));
+$("#forgot-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $(".form-error", e.target);
+  err.hidden = true;
+  try {
+    const out = await api("POST", "/auth/forgot", formData(e.target));
+    err.textContent = out.message;
+    err.hidden = false;
+    err.classList.add("ok");
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
+$("#reset-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, err = $(".form-error", f);
+  err.hidden = true;
+  try {
+    if (f.elements.password.value !== f.elements.again.value) throw new Error("Las dos contraseñas no coinciden.");
+    const out = await api("POST", "/auth/reset", { token: f.dataset.token, password: f.elements.password.value });
+    f.reset();
+    toast("Contraseña nueva guardada.");
+    await enterApp(out.user);
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
+
+// ----- Display preferences (this device) and account -----
+const prefsForm = $("#prefs-dialog form");
+function openPrefs() {
+  const p = window.JuanmaDisplay.get();
+  for (const k of ["font", "view", "theme"]) prefsForm.elements[k].value = p[k];
+  $("#prefs-dialog").showModal();
+}
+prefsForm.addEventListener("change", () => window.JuanmaDisplay.set({
+  font: prefsForm.elements.font.value, view: prefsForm.elements.view.value, theme: prefsForm.elements.theme.value }));
+wireDialog($("#email-dialog"), async (form) => {
+  const out = await api("POST", "/auth/email", formData(form));
+  me = out.user;
+  toast(`Su correo ahora es ${out.user.email}.`);
+});
 
 for (const [formSel, url] of [["#login-form", "/auth/login"], ["#setup-form", "/auth/setup"]]) {
   $(formSel)?.addEventListener("submit", async (e) => {
@@ -6586,6 +6787,8 @@ document.addEventListener("click", (e) => {
       $(".user-menu").open = false;
       showAuth({});
     },
+    "display-prefs": () => openPrefs(),
+    "change-email": () => openDialog($("#email-dialog"), "Cambiar correo", { email: me?.email || "" }),
     "change-password": () => {
       $(".user-menu").open = false;
       openDialog($("#password-dialog"), "Cambiar contraseña");

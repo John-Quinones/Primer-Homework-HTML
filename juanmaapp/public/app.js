@@ -56,7 +56,10 @@ const WEB = !!window.JuanmaBackend?.web;
 if (WEB) {
   $$(".pw-field").forEach((l) => l.remove());
   $("#login-form").remove();
+  $("#forgot-form").remove();
+  $("#reset-form").remove();
   $('[data-action="change-password"]')?.remove();
+  $("#email-dialog [data-pw-only]")?.remove();
   $('#user-dialog input[name="password"]')?.closest("label")?.remove();
 }
 
@@ -187,9 +190,62 @@ async function boot() {
   const v = st.version || {};
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
+  // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
+  const reset = location.hash.match(/^#restablecer-([\w-]+)$/);
+  if (reset && $("#reset-form")) {
+    showAuth(st);
+    $("#login-form").hidden = true;
+    $("#reset-form").hidden = false;
+    $("#reset-form").dataset.token = reset[1];
+    history.replaceState(null, "", location.pathname);
+    return;
+  }
   if (st.user) await enterApp(st.user, { fresh: false });
   else showAuth(st);
 }
+
+// ----- Forgotten password (installed app) -----
+const authSwap = (show) => { for (const id of ["#login-form", "#forgot-form", "#reset-form"]) if ($(id)) $(id).hidden = id !== show; };
+$("#forgot-open")?.addEventListener("click", () => authSwap("#forgot-form"));
+$("#forgot-back")?.addEventListener("click", () => authSwap("#login-form"));
+$("#forgot-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $(".form-error", e.target);
+  err.hidden = true;
+  try {
+    const out = await api("POST", "/auth/forgot", formData(e.target));
+    err.textContent = out.message;
+    err.hidden = false;
+    err.classList.add("ok");
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
+$("#reset-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, err = $(".form-error", f);
+  err.hidden = true;
+  try {
+    if (f.elements.password.value !== f.elements.again.value) throw new Error("Las dos contraseñas no coinciden.");
+    const out = await api("POST", "/auth/reset", { token: f.dataset.token, password: f.elements.password.value });
+    f.reset();
+    toast("Contraseña nueva guardada.");
+    await enterApp(out.user);
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
+
+// ----- Display preferences (this device) and account -----
+const prefsForm = $("#prefs-dialog form");
+function openPrefs() {
+  const p = window.JuanmaDisplay.get();
+  for (const k of ["font", "view", "theme"]) prefsForm.elements[k].value = p[k];
+  $("#prefs-dialog").showModal();
+}
+prefsForm.addEventListener("change", () => window.JuanmaDisplay.set({
+  font: prefsForm.elements.font.value, view: prefsForm.elements.view.value, theme: prefsForm.elements.theme.value }));
+wireDialog($("#email-dialog"), async (form) => {
+  const out = await api("POST", "/auth/email", formData(form));
+  me = out.user;
+  toast(`Su correo ahora es ${out.user.email}.`);
+});
 
 for (const [formSel, url] of [["#login-form", "/auth/login"], ["#setup-form", "/auth/setup"]]) {
   $(formSel)?.addEventListener("submit", async (e) => {
@@ -865,6 +921,8 @@ document.addEventListener("click", (e) => {
       $(".user-menu").open = false;
       showAuth({});
     },
+    "display-prefs": () => openPrefs(),
+    "change-email": () => openDialog($("#email-dialog"), "Cambiar correo", { email: me?.email || "" }),
     "change-password": () => {
       $(".user-menu").open = false;
       openDialog($("#password-dialog"), "Cambiar contraseña");

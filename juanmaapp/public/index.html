@@ -24,6 +24,23 @@
         <label class="pw-field">Contraseña <input id="login-password" name="password" type="password" required autocomplete="current-password" /></label>
         <p class="form-error" hidden></p>
         <button class="primary wide">Ingresar</button>
+        <p class="auth-links"><button type="button" class="link-btn" id="forgot-open">¿Olvidó su contraseña?</button></p>
+      </form>
+
+      <form id="forgot-form" hidden>
+        <p class="auth-note">Escriba su correo. Si está registrado, le enviaremos un enlace para crear una contraseña nueva (vence en 30 minutos).</p>
+        <label>Correo <input name="email" type="email" required autocomplete="username" /></label>
+        <p class="form-error" hidden></p>
+        <button class="primary wide">Enviarme el enlace</button>
+        <p class="auth-links"><button type="button" class="link-btn" id="forgot-back">Volver a ingresar</button></p>
+      </form>
+
+      <form id="reset-form" hidden>
+        <p class="auth-note">Cree su contraseña nueva (mínimo 10 caracteres).</p>
+        <label>Contraseña nueva <input name="password" type="password" minlength="10" required autocomplete="new-password" /></label>
+        <label>Repítala <input name="again" type="password" minlength="10" required autocomplete="new-password" /></label>
+        <p class="form-error" hidden></p>
+        <button class="primary wide">Guardar contraseña</button>
       </form>
 
       <form id="setup-form" hidden>
@@ -62,6 +79,7 @@
     </div>
     <div class="topbar-right">
       <span id="demo-badge" class="demo-badge" hidden>Enlace de prueba · datos guardados</span>
+      <button type="button" id="view-badge" class="view-badge" data-action="display-prefs" title="Cambiar tamaño de letra, vista y modo día o noche">Vista: Web</button>
       <details class="bell">
         <summary aria-label="Notificaciones"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span id="bell-count" class="bell-count" hidden></span></summary>
         <div class="bell-pop">
@@ -73,6 +91,8 @@
         <summary><span class="avatar" id="user-initials"></span><span class="user-meta"><strong id="user-name"></strong><span id="user-role"></span></span></summary>
         <div class="user-pop">
           <p class="muted" id="user-offices"></p>
+          <button type="button" data-action="display-prefs">Pantalla: letra, vista, día o noche</button>
+          <button type="button" data-action="change-email">Cambiar correo</button>
           <button type="button" data-action="change-password">Cambiar contraseña</button>
           <button type="button" data-action="logout">Cerrar sesión</button>
         </div>
@@ -1196,6 +1216,48 @@
       <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
     </form>
   </dialog>
+  <!-- Preferencias de pantalla (de este equipo) -->
+  <dialog id="prefs-dialog">
+    <form method="dialog">
+      <h3>Pantalla</h3>
+      <p class="hint">Se guarda en este equipo y navegador.</p>
+      <fieldset><legend>Tamaño de la letra</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="font" value="normal" /> Normal</label>
+          <label class="inline"><input type="radio" name="font" value="mediana" /> Mediana</label>
+          <label class="inline"><input type="radio" name="font" value="grande" /> Grande</label>
+        </div>
+      </fieldset>
+      <fieldset><legend>Forma de visualizarse</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="view" value="auto" /> Automático (según la pantalla)</label>
+          <label class="inline"><input type="radio" name="view" value="mobile" /> Móvil</label>
+          <label class="inline"><input type="radio" name="view" value="web" /> Web</label>
+        </div>
+      </fieldset>
+      <fieldset><legend>Modo</legend>
+        <div class="radio-row">
+          <label class="inline"><input type="radio" name="theme" value="auto" /> Automático (como el equipo)</label>
+          <label class="inline"><input type="radio" name="theme" value="dia" /> Día</label>
+          <label class="inline"><input type="radio" name="theme" value="noche" /> Noche</label>
+        </div>
+      </fieldset>
+      <div class="dialog-actions"><button value="cancel">Listo</button></div>
+    </form>
+  </dialog>
+
+  <!-- Cambiar correo -->
+  <dialog id="email-dialog">
+    <form method="dialog" data-form="email">
+      <h3 data-title>Cambiar correo</h3>
+      <label>Correo nuevo <input name="email" type="email" required autocomplete="email" /></label>
+      <label data-pw-only>Contraseña actual (para confirmar) <input name="password" type="password" autocomplete="current-password" /></label>
+      <p class="hint">Con este correo ingresa a la app y recibe avisos. Le avisaremos del cambio al correo anterior.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
+    </form>
+  </dialog>
+
   <dialog id="password-dialog">
     <form method="dialog" data-form="password">
       <h3>Cambiar contraseña</h3>
@@ -1254,6 +1316,7 @@
   <script src="vendor/pdf-lib.min.js"></script>
   <script src="pdf-tools.js"></script>
   <script src="shared.js"></script>
+  <script src="display.js"></script>
   <script src="help.js"></script>
   <script src="email-suggest.js"></script>
   <script src="app.js"></script>

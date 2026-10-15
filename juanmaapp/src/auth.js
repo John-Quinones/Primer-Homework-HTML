@@ -7,6 +7,7 @@ import { microsoftEnabled } from "./microsoft.js";
 import { VERSION } from "./version.js";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { canonicalDepartment, canonicalCity } from "./places.js";
+import { sendEmail } from "./notify.js";
 
 // Built-in roles; the firm can add more in Usuarios › Roles y permisos.
 export const ROLES = [
@@ -194,6 +195,58 @@ export function authRouter(db) {
     if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha(token));
     res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
     res.status(204).end();
+  });
+
+  // Forgotten password: an e-mailed link valid for 30 minutes. The answer is the same
+  // whether or not the e-mail is registered, so it cannot be used to find accounts.
+  const resetSent = new Map(); // email -> last request time
+  r.post("/forgot", async (req, res) => {
+    const email = str(req.body?.email).toLowerCase();
+    const reply = () => res.json({ ok: true, message: "Si el correo está registrado, le llegará un enlace para crear una contraseña nueva." });
+    if (!email.includes("@")) return res.status(400).json({ error: "Escriba su correo." });
+    const last = resetSent.get(email);
+    if (last && last > Date.now() - 5 * 60 * 1000) return reply();
+    resetSent.set(email, Date.now());
+    const u = db.prepare("SELECT id, name, active FROM users WHERE email = ?").get(email);
+    if (!u?.active) return reply();
+    const token = randomBytes(24).toString("base64url");
+    db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 minutes'))").run(sha(token), u.id);
+    const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    const link = `${base}/#restablecer-${token}`;
+    await sendEmail(email, "Crear una contraseña nueva · TecjuridicosApp",
+      `Hola ${u.name}:\n\nPara crear una contraseña nueva abra este enlace (vence en 30 minutos):\n${link}\n\nSi usted no lo pidió, ignore este mensaje: su contraseña no cambia.\n\nTecjuridicosApp`,
+      `<p>Hola ${u.name.replace(/[<>&]/g, "")}:</p><p>Para crear una contraseña nueva abra este enlace (vence en 30 minutos):</p><p><a href="${link}">Crear contraseña nueva</a></p><p style="color:#666;font-size:12px">Si usted no lo pidió, ignore este mensaje: su contraseña no cambia.</p>`);
+    reply();
+  });
+
+  r.post("/reset", (req, res) => {
+    const row = db.prepare("SELECT * FROM password_resets WHERE token_hash = ?").get(sha(str(req.body?.token)));
+    if (!row || row.used_at || Date.parse(row.expires_at.replace(" ", "T") + "Z") < Date.now()) {
+      return res.status(400).json({ error: "El enlace venció o ya se usó. Pida uno nuevo." });
+    }
+    if (!validPassword(req.body?.password)) return res.status(400).json({ error: "La contraseña debe tener al menos 10 caracteres." });
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(req.body.password), row.user_id);
+    db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL").run(row.user_id);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.user_id);
+    setSession(db, req, res, row.user_id);
+    res.json({ user: loadUser(db, row.user_id) });
+  });
+
+  // Change one's own e-mail (confirmed with the current password when the account has one).
+  r.post("/email", requireAuth, async (req, res) => {
+    const email = str(req.body?.email).toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: "Escriba un correo válido." });
+    const row = db.prepare("SELECT email, password_hash FROM users WHERE id = ?").get(req.user.id);
+    if (row.password_hash !== "!" && !checkPassword(req.body?.password ?? "", row.password_hash)) {
+      return res.status(400).json({ error: "La contraseña actual no es correcta." });
+    }
+    if (email === row.email) return res.status(400).json({ error: "Ese ya es su correo." });
+    if (db.prepare("SELECT 1 FROM users WHERE email = ? AND id != ?").get(email, req.user.id)) return res.status(409).json({ error: "Ese correo ya está registrado por otro usuario." });
+    db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, req.user.id);
+    sendEmail(row.email, "Su correo en TecjuridicosApp cambió",
+      `Hola ${req.user.name}: el correo de su cuenta en TecjuridicosApp cambió a ${email}. Si usted no hizo este cambio, avise de inmediato a Gerencia.`,
+      `<p>Hola ${req.user.name.replace(/[<>&]/g, "")}: el correo de su cuenta en TecjuridicosApp cambió a <strong>${email}</strong>. Si usted no hizo este cambio, avise de inmediato a Gerencia.</p>`).catch(() => {});
+    res.json({ user: loadUser(db, req.user.id) });
   });
 
   r.post("/password", requireAuth, (req, res) => {

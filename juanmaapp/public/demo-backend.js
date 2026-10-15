@@ -370,6 +370,16 @@
     }],
     ["POST", /^\/auth\/logout$/, () => { setCurrent(null); return null; }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
+    ["POST", /^\/auth\/(forgot|reset)$/, () => fail("En el enlace de prueba no hay contraseñas: se entra eligiendo el usuario. Recuperar la contraseña funciona en la app instalada.")],
+    ["POST", /^\/auth\/email$/, (m, b) => {
+      const u = s.users.find((x) => x.id === currentId) || fail("Inicie sesión.");
+      const email = str(b.email).toLowerCase();
+      /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || fail("Escriba un correo válido.");
+      email === u.email && fail("Ese ya es su correo.");
+      s.users.some((x) => x.email === email && x.id !== u.id) && fail("Ese correo ya está registrado por otro usuario.");
+      u.email = email;
+      return { user: userOut(u) };
+    }],
 
     // ----- admin -----
     ["GET", /^\/admin\/offices$/, () => { me(); return s.offices.slice().sort((a, b) => b.is_main - a.is_main || a.name.localeCompare(b.name, "es")).map((o) => ({
