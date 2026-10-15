@@ -481,6 +481,9 @@ function renderCaseRows() {
       <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
       <td><span class="status-tag">${escapeHtml(k.status)}</span></td>
+      <td>${k.radicado
+        ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
+        : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
       <td class="row-actions">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
@@ -505,6 +508,21 @@ $("#case-filter").addEventListener("change", renderCaseRows);
 $("#case-office-filter").addEventListener("change", renderCaseRows);
 $("#case-mine").addEventListener("change", renderCaseRows);
 $("#case-search").addEventListener("input", renderCaseRows);
+$("#case-rows").addEventListener("change", (e) => guarded(async () => {
+  const box = e.target.closest("[data-case-monitor]");
+  if (!box) return;
+  const id = Number(box.dataset.caseMonitor);
+  try {
+    await api("PUT", `/monitor/cases/${id}/monitor`, { monitor: box.checked });
+  } catch (err) {
+    box.checked = !box.checked;
+    throw err;
+  }
+  const k = state.cases.find((x) => x.id === id);
+  if (k) k.monitor = box.checked ? 1 : 0;
+  box.nextElementSibling.textContent = box.checked ? "Sí" : "No";
+  toast(box.checked ? "Se consultará en automático." : "Ya no se consultará en automático.");
+}));
 
 const caseForm = $("#case-dialog form");
 
@@ -2512,8 +2530,10 @@ async function showActuaciones(id) {
   $("[data-title]", dlg).textContent = `Actuaciones · ${formatRadicado(k.radicado)}`;
   $("[data-sub]", dlg).textContent = `${k.client_name} · ${k.court_name || "Despacho sin identificar"}`;
   $("#acts-rows").innerHTML = acts.map((a) => `<tr><td class="nowrap">${escapeHtml(a.fecha)}</td><td><strong>${escapeHtml(a.actuacion)}</strong></td>
-    <td>${escapeHtml(a.anotacion)}</td><td class="nowrap">${a.fecha_inicial ? escapeHtml(a.fecha_inicial + " a " + a.fecha_final) : ""}</td></tr>`).join("")
-    || '<tr><td colspan="4" class="muted">Sin actuaciones registradas. Use “Consultar” para traerlas.</td></tr>';
+    <td>${escapeHtml(a.anotacion)}</td>
+    <td>${a.decision ? `<span class="pill">${escapeHtml(a.decision_kind)}</span> ${escapeHtml(a.decision)}${a.notified ? `<br><span class="muted">${escapeHtml(a.notified)}</span>` : ""}` : '<span class="muted">—</span>'}</td>
+    <td class="nowrap">${a.fecha_inicial ? escapeHtml(a.fecha_inicial + " a " + a.fecha_final) : ""}</td></tr>`).join("")
+    || '<tr><td colspan="5" class="muted">Sin actuaciones registradas. Use “Consultar” para traerlas.</td></tr>';
   dlg.showModal();
 }
 

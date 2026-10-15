@@ -9,4 +9,4 @@ export function asGlobal(file, globalName) {
   return `window.${globalName} = (function () {\n${body}\nreturn { ${names.join(", ")} };\n})();\n`;
 }
 
-export const SHARED_MODULES = [["src/case-meta.js", "JuanmaCaseMeta"], ["src/ledger.js", "JuanmaLedger"], ["src/validate.js", "JuanmaValidate"], ["src/person.js", "JuanmaPerson"], ["src/portals.js", "JuanmaPortals"]];
+export const SHARED_MODULES = [["src/case-meta.js", "JuanmaCaseMeta"], ["src/ledger.js", "JuanmaLedger"], ["src/validate.js", "JuanmaValidate"], ["src/person.js", "JuanmaPerson"], ["src/portals.js", "JuanmaPortals"], ["src/decision.js", "JuanmaDecision"]];

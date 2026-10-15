@@ -557,7 +557,7 @@
           last_error: last && !last.ok ? last.error : null, selected: sel.includes(k.id), monitor: !!k.monitor };
       }).sort((a, b) => String(b.last_action_date || "").localeCompare(String(a.last_action_date || "")));
     }],
-    ["GET", /^\/monitor\/cases\/(\d+)\/actuaciones$/, (m) => { need("processes.consult"); visibleCase(+m[1]); return clone(s.acts.filter((a) => a.case_id === +m[1]).sort((a, b) => b.fecha.localeCompare(a.fecha))); }],
+    ["GET", /^\/monitor\/cases\/(\d+)\/actuaciones$/, (m) => { need("processes.consult"); visibleCase(+m[1]); return clone(window.JuanmaDecision.withDecisions(s.acts.filter((a) => a.case_id === +m[1]).sort((a, b) => b.fecha.localeCompare(a.fecha)))); }],
     ["PUT", /^\/monitor\/cases\/(\d+)\/monitor$/, (m, b) => { need("processes.consult"); visibleCase(+m[1]).monitor = b.monitor ? 1 : 0; return { id: +m[1], monitor: !!b.monitor }; }],
     ["POST", /^\/monitor\/check$/, () => { need("processes.consult"); fail(NEEDS_SERVER.rama); }],
     ["GET", /^\/monitor\/prefs$/, () => { need("processes.consult"); return prefsOf(me().id); }],

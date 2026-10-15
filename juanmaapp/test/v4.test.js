@@ -95,7 +95,10 @@ test("Rama Judicial check: baseline first, then only new actions count; report a
   const list = (await admin.call("GET", "/monitor/cases")).body;
   assert.equal(list[0].new_7d, 1);
   assert.equal(list[0].last_action_date, "2026-10-13");
-  assert.equal((await admin.call("GET", `/monitor/cases/${caseId}/actuaciones`)).body.length, 3);
+  const seen = (await admin.call("GET", `/monitor/cases/${caseId}/actuaciones`)).body;
+  assert.equal(seen.length, 3);
+  assert.deepEqual(seen.map((a) => a.decision_kind), ["Auto", "Auto", ""]);
+  assert.equal(seen[1].decision, "Auto admite demanda: Notificar");
 
   // Error path is recorded, not thrown.
   setFetch(async () => ({ ok: false, status: 503, json: async () => ({}) }));
@@ -116,6 +119,7 @@ test("Rama Judicial check: baseline first, then only new actions count; report a
   const rep = (await admin.call("POST", "/monitor/report", {})).body;
   assert.equal(rep.newCount, 1);
   assert.match(rep.text, /Fija fecha de audiencia/);
+  assert.match(rep.text, /Auto notificado: Fija fecha de audiencia: Audiencia el 20 de noviembre/);
   assert.match(rep.text, /NO SE PUDIERON CONSULTAR/);
   assert.deepEqual(rep.channels.map((c) => [c.channel, c.ok]), [["email", true], ["whatsapp", true]]);
   assert.deepEqual(sent.map((x) => x[0]), ["email", "whatsapp"]);

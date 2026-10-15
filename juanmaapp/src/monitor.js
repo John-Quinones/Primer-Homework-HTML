@@ -5,6 +5,7 @@ import { sendEmail, sendWhatsapp } from "./notify.js";
 import { loadUser, scopeOf } from "./auth.js";
 import { LIVE_STATUSES } from "./case-meta.js";
 import { paymentReminders } from "./payments.js";
+import { withDecisions } from "./decision.js";
 
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
 const OPEN = LIVE_STATUSES;
@@ -113,6 +114,12 @@ export function buildReport(db, userId, now = new Date()) {
     WHERE a.case_id IN (${idList}) AND a.found_at > ? AND EXISTS (
       SELECT 1 FROM process_checks pc WHERE pc.case_id = a.case_id AND pc.ok = 1 AND pc.checked_at < a.found_at)
     ORDER BY a.case_id, a.fecha DESC`).all(last);
+  // The decision each new actuación carries or notifies, read against the case's whole history.
+  const decided = new Map();
+  for (const caseId of new Set(news.map((a) => a.case_id))) {
+    for (const a of withDecisions(db.prepare("SELECT * FROM actuaciones WHERE case_id = ?").all(caseId).map((x) => ({ ...x })))) decided.set(a.id, a);
+  }
+  for (const a of news) Object.assign(a, { decision: decided.get(a.id)?.decision || "", decision_kind: decided.get(a.id)?.decision_kind || "" });
   const errors = db.prepare(`
     SELECT k.radicado, pc.error FROM cases k JOIN process_checks pc ON pc.id = (
       SELECT id FROM process_checks WHERE case_id = k.id ORDER BY id DESC LIMIT 1)
@@ -133,7 +140,7 @@ export function buildReport(db, userId, now = new Date()) {
   lines.push(`Procesos consultados: ${ids.length}. Actuaciones nuevas: ${news.length}.`);
   if (news.length) {
     lines.push("", "ACTUACIONES NUEVAS");
-    for (const a of news) lines.push(`• ${a.radicado} (${a.client}) · ${a.fecha} · ${a.actuacion}${a.anotacion ? " — " + a.anotacion : ""}`);
+    for (const a of news) lines.push(`• ${a.radicado} (${a.client}) · ${a.fecha} · ${a.actuacion}${a.anotacion ? " — " + a.anotacion : ""}${a.decision ? `\n  ${a.decision_kind} notificado: ${a.decision}` : ""}`);
   }
   if (agenda.length) {
     lines.push("", "PRÓXIMOS 7 DÍAS");
@@ -151,7 +158,7 @@ export function buildReport(db, userId, now = new Date()) {
     ${news.length ? `<h3 style="color:#002b6a">Actuaciones nuevas</h3><table cellpadding="6" style="border-collapse:collapse;font-size:13px">
       <tr style="background:#002b6a;color:#fff"><th align="left">Radicado</th><th align="left">Cliente</th><th align="left">Fecha</th><th align="left">Actuación</th></tr>
       ${news.map((a) => `<tr style="border-bottom:1px solid #ddd"><td>${esc(a.radicado)}</td><td>${esc(a.client)}</td><td>${esc(a.fecha)}</td>
-        <td><strong>${esc(a.actuacion)}</strong>${a.anotacion ? "<br>" + esc(a.anotacion) : ""}</td></tr>`).join("")}</table>` : "<p>Sin actuaciones nuevas.</p>"}
+        <td><strong>${esc(a.actuacion)}</strong>${a.anotacion ? "<br>" + esc(a.anotacion) : ""}${a.decision ? `<br><span style="color:#002b6a">${esc(a.decision_kind)} notificado: ${esc(a.decision)}</span>` : ""}</td></tr>`).join("")}</table>` : "<p>Sin actuaciones nuevas.</p>"}
     ${agenda.length ? `<h3 style="color:#002b6a">Próximos 7 días</h3><ul>${agenda.map((t) => `<li>${esc(t.due_at)} · ${KIND[t.kind]}: ${esc(t.title)} (${esc(t.client)})</li>`).join("")}</ul>` : ""}
     ${errors.length ? `<h3 style="color:#b3261e">No se pudieron consultar</h3><ul>${errors.map((e) => `<li>${esc(e.radicado)}: ${esc(e.error)}</li>`).join("")}</ul>` : ""}
     <p style="color:#888;font-size:12px">Fuente: Consulta Nacional Unificada de Procesos, Rama Judicial. Verifique en el despacho antes de actuar.</p></div>`;

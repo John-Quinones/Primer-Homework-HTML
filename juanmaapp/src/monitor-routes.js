@@ -4,6 +4,7 @@ import { typePath } from "./sql.js";
 import { scopeOf } from "./auth.js";
 import { checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS } from "./monitor.js";
 import { channelsStatus } from "./notify.js";
+import { withDecisions } from "./decision.js";
 
 export function monitorRouter(db) {
   const r = express.Router();
@@ -32,7 +33,7 @@ export function monitorRouter(db) {
   r.get("/cases/:id/actuaciones", (req, res) => {
     const k = db.prepare(`SELECT k.id FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(Number(req.params.id));
     if (!k) return res.status(404).json({ error: "El expediente no existe." });
-    res.json(db.prepare("SELECT * FROM actuaciones WHERE case_id = ? ORDER BY fecha DESC, id DESC").all(k.id).map((x) => ({ ...x })));
+    res.json(withDecisions(db.prepare("SELECT * FROM actuaciones WHERE case_id = ? ORDER BY fecha DESC, id DESC").all(k.id).map((x) => ({ ...x }))));
   });
 
   r.put("/cases/:id/monitor", (req, res) => {
