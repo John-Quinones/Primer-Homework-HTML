@@ -1,6 +1,7 @@
 // Persistence for clients, the process catalog and cases. Uses Node's built-in
 // SQLite (node:sqlite), so there is no native dependency to install.
 import { AUDIT_SCHEMA } from "./audit.js";
+import { CONSENT_SCHEMA } from "./consents.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -601,6 +602,9 @@ function migrate(db) {
 
   // Grant each permission's defaults the first time this database sees it, so
   // permissions added in later versions reach existing built-in roles once.
+  // Client authorizations (change 56): append-only evidence.
+  db.exec(CONSENT_SCHEMA);
+
   db.exec("CREATE TABLE IF NOT EXISTS known_permissions (permission TEXT PRIMARY KEY)");
   const known = new Set(db.prepare("SELECT permission FROM known_permissions").all().map((r) => r.permission));
   if (!known.size && db.prepare("SELECT COUNT(*) AS n FROM role_permissions").get().n) {

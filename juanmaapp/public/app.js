@@ -490,7 +490,7 @@ const factRow = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</
 async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
-  const [c, cases] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), loadCatalog()]);
+  const [c, cases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -523,6 +523,7 @@ async function renderClienteFicha(id) {
           ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
+      ${consents ? consentPanel(c, consents) : ""}
       <section id="sec-expedientes" class="panel ficha-wide">
         <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)}</h3>
         ${cases.length ? `<ul class="case-open-list">${cases.map((k) => `
@@ -538,6 +539,141 @@ async function renderClienteFicha(id) {
       </section>
     </div>`;
 }
+
+// ---------- Legal documents and client authorizations (change 56) ----------
+const LEGAL = window.JuanmaLegal;
+const coTime = (utc) => window.JuanmaPdf.colombiaTime(utc);
+let legalCurrent = null;
+function openLegal(id) {
+  const doc = LEGAL.legalDoc(id) || LEGAL.LEGAL_DOCS[0];
+  legalCurrent = doc;
+  const dlg = $("#legal-dialog");
+  $("[data-title]", dlg).textContent = doc.title;
+  $("#legal-tabs").innerHTML = LEGAL.LEGAL_DOCS.map((d) => `<button type="button" data-legal="${d.id}" class="${d.id === doc.id ? "active" : ""}">${escapeHtml(d.short)}</button>`).join("");
+  $("#legal-body").innerHTML = doc.html;
+  $("#legal-body").scrollTop = 0;
+  if (!dlg.open) dlg.showModal();
+}
+/** A legal document as Markdown, for the PDF. */
+const legalMarkdown = (html) => html.replace(/\n\s*/g, " ")
+  .replace(/<h3>(.*?)<\/h3>/g, "\n## $1\n").replace(/<tr>(.*?)<\/tr>/g, (_, r) => `\n- ${r.replace(/<\/t[hd]>\s*<t[hd]>/g, " · ")}`)
+  .replace(/<li>/g, "\n- ").replace(/<\/p>|<\/ul>|<\/ol>|<\/table>/g, "\n").replace(/<\/?strong>/g, "**").replace(/<[^>]+>/g, "")
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n /g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-legal]");
+  if (!a) return;
+  e.preventDefault();
+  openLegal(a.dataset.legal);
+});
+$("#legal-print").addEventListener("click", () => guarded(() =>
+  saveFile(`${safeName(legalCurrent.title)}.pdf`, markdownToPdf(`# ${legalCurrent.title}\n\n${legalMarkdown(legalCurrent.html)}`))));
+
+const consentState = (r) => (r ? (r.granted ? '<span class="consent-state yes">Autorizó</span>' : '<span class="consent-state no">No autorizó</span>') : '<span class="consent-state none">Sin respuesta</span>');
+const consentWhen = (r, methods) => `${escapeHtml(methods[r.method] || r.method)} · ${escapeHtml(coTime(r.at))}${r.registered_by_name ? ` · registró ${escapeHtml(r.registered_by_name)}` : ""}${r.note ? ` · ${escapeHtml(r.note)}` : ""}`;
+function consentPanel(c, k) {
+  const pending = k.requests.find((q) => !q.answered_at);
+  const remote = !window.JuanmaBackend?.web;
+  const w = can("clients.write");
+  return `<section id="sec-autorizaciones" class="panel">
+    <h3 class="panel-title">Autorizaciones de datos <span class="muted">· versión ${escapeHtml(k.version)}</span></h3>
+    <ul class="consent-status">${k.items.map((i) => { const r = k.status[i.key]; return `<li><span>${escapeHtml(i.title)}</span>${consentState(r)}${r ? `<small>${consentWhen(r, k.methods)}</small>` : ""}</li>`; }).join("")}</ul>
+    ${pending ? `<p class="hint">Enlace ${pending.channel === "copy" ? "generado" : `enviado por ${pending.channel === "whatsapp" ? "WhatsApp" : "correo"}`} el ${escapeHtml(coTime(pending.created_at))}${pending.opened_at ? " · el cliente lo abrió" : ""}; aún sin responder.</p>` : ""}
+    <div class="toolbar">
+      ${w && remote ? `<button class="mini primary" data-consent="email" data-client="${c.id}" ${c.email ? "" : "disabled title=\"El cliente no tiene correo\""}>Enviar enlace por correo</button>
+        <button class="mini" data-consent="whatsapp" data-client="${c.id}" ${c.phone ? "" : "disabled title=\"El cliente no tiene teléfono\""}>Enviar por WhatsApp</button>
+        <button class="mini" data-consent="copy" data-client="${c.id}">Copiar enlace</button>` : ""}
+      ${w ? `<button class="mini ${remote ? "" : "primary"}" data-consent="inperson" data-client="${c.id}">Firmar en la oficina</button>
+        <button class="mini" data-consent="revoke" data-client="${c.id}">Registrar revocación</button>` : ""}
+      ${k.records.length ? `<button class="mini" data-consent="pdf" data-client="${c.id}">Constancia PDF</button>` : ""}
+      <button class="mini" data-legal="autorizacion">Ver documentos</button>
+    </div>
+    ${remote ? "" : '<p class="hint">El envío por enlace necesita la app en el servidor; en este enlace de prueba use «Firmar en la oficina».</p>'}
+    ${k.records.length ? `<details class="consent-history"><summary>Historial de respuestas (${k.records.length})</summary><ul class="ficha-list">${k.records.slice().reverse().map((r) =>
+      `<li><span><strong>${escapeHtml(LEGAL.consentItem(r.item)?.title || r.item)}</strong>: ${r.granted ? "autorizó" : "no autorizó"}<br><span class="muted">${consentWhen(r, k.methods)}${r.ip ? ` · IP ${escapeHtml(r.ip)}` : ""}</span></span></li>`).join("")}</ul></details>` : ""}
+  </section>`;
+}
+
+let consentClient = null, consentPad = null;
+const consentData = (cid) => Promise.all([api("GET", `/clients/${cid}`), api("GET", `/clients/${cid}/consents`)]);
+const CONSENT_ACTIONS = {
+  async link(cid, channel) {
+    const r = await api("POST", `/clients/${cid}/consent-link`, { channel });
+    if (r.sent?.ok) toast(`Enlace enviado a ${r.sent.detail}.`);
+    else {
+      const copied = await copyText(r.link);
+      toast(r.sent ? `No se envió (${r.sent.detail}). ${copied ? "Copié el enlace para que lo envíe por otro medio." : r.link}` : copied ? "Enlace copiado. Envíelo al cliente por el medio que prefiera." : r.link, !!r.sent);
+    }
+    await refreshView();
+  },
+  email: (cid) => CONSENT_ACTIONS.link(cid, "email"),
+  whatsapp: (cid) => CONSENT_ACTIONS.link(cid, "whatsapp"),
+  copy: (cid) => CONSENT_ACTIONS.link(cid, "copy"),
+  async inperson(cid) {
+    const [c] = await consentData(cid);
+    consentClient = c;
+    openDialog($("#consent-dialog"), `Autorizaciones en la oficina · ${c.full_name}`, { typed_name: c.full_name, typed_id: c.id_number });
+    $("#consent-items").innerHTML = LEGAL.CONSENT_ITEMS.map((i) => `<li class="consent-card"><h4>${escapeHtml(i.title)}</h4>
+      <label class="consent-check"><input type="checkbox" name="c_${i.key}" /> <span>${escapeHtml(i.label)}</span></label>
+      <details><summary>Leer: ${escapeHtml(LEGAL.legalDoc(i.doc).title)}</summary><div class="legal-doc">${LEGAL.legalDoc(i.doc).html}</div></details></li>`).join("");
+    consentPad = window.JuanmaSigPad($("#consent-pad"));
+    consentPad.clear();
+  },
+  async revoke(cid) {
+    const [c, k] = await consentData(cid);
+    consentClient = c;
+    openDialog($("#revoke-dialog"), `Registrar revocación · ${c.full_name}`);
+    $("#revoke-item").innerHTML = k.items.map((i) => `<option value="${i.key}">${escapeHtml(i.title)}${k.status[i.key]?.granted ? "" : " (hoy no autorizada)"}</option>`).join("");
+  },
+  async pdf(cid) {
+    const [c, k] = await consentData(cid);
+    const ev = (r) => [`- **${LEGAL.consentItem(r.item)?.title || r.item}: ${r.granted ? "AUTORIZÓ" : "NO AUTORIZÓ"}**`,
+      `  Registro N.º ${r.id} · ${k.methods[r.method] || r.method} · ${coTime(r.at)}`,
+      r.typed_name || r.typed_id ? `  Nombre escrito: ${r.typed_name || "—"} · Documento escrito: ${r.typed_id || "—"}` : "",
+      r.ip || r.user_agent ? `  IP: ${r.ip || "—"} · Navegador: ${r.user_agent || "—"}` : "",
+      r.registered_by_name ? `  Registrado por: ${r.registered_by_name}${r.signature_png ? " · firma en pantalla guardada" : ""}` : "",
+      r.note ? `  Observación: ${r.note}` : "",
+      `  Versión del documento ${r.doc_version} · huella del texto (SHA-256): ${r.doc_sha256}`,
+      `  Huella del registro: ${r.hash}`].filter(Boolean).join("\n");
+    const md = `# CONSTANCIA DE AUTORIZACIONES DE DATOS PERSONALES
+
+**${LEGAL.FIRM.brand}** · Ley 1581 de 2012 y Decreto 1074 de 2015 (art. 2.2.2.25.2.5, prueba de la autorización)
+
+Titular: **${c.full_name}**${c.id_number ? ` · ${c.id_type || ""} ${c.id_number}` : ""}
+
+Expedida el ${coTime(new Date().toISOString().slice(0, 19).replace("T", " "))} por ${me.name}.
+
+## Estado actual
+
+${k.items.map((i) => { const r = k.status[i.key]; return `- ${i.title}: **${r ? (r.granted ? "Autorizó" : "No autorizó") : "Sin respuesta"}**${r ? ` (${coTime(r.at)})` : ""}`; }).join("\n")}
+
+## Registro de respuestas
+
+${k.records.map(ev).join("\n\n")}
+
+---
+
+Cada registro guarda el texto exacto que se respondió (su huella SHA-256 identifica la versión del documento) y está encadenado con el anterior: cualquier modificación posterior rompe la cadena. Los registros no se pueden editar ni borrar.`;
+    await saveFile(`Autorizaciones ${safeName(c.full_name)}.pdf`, markdownToPdf(md));
+  },
+};
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-consent]");
+  if (b) guarded(() => CONSENT_ACTIONS[b.dataset.consent](Number(b.dataset.client)));
+});
+$("#consent-clear").addEventListener("click", () => consentPad?.clear());
+wireDialog($("#consent-dialog"), async (form) => {
+  if (consentPad.isEmpty()) throw new Error("Falta la firma del cliente.");
+  const answers = Object.fromEntries(LEGAL.CONSENT_ITEMS.map((i) => [i.key, form.elements[`c_${i.key}`].checked]));
+  await api("POST", `/clients/${consentClient.id}/consents`, { answers, typed_name: form.elements.typed_name.value, typed_id: form.elements.typed_id.value,
+    note: form.elements.note.value, signature_png: consentPad.toPng() });
+  toast("Autorizaciones guardadas.");
+  await refreshView();
+});
+wireDialog($("#revoke-dialog"), async (form) => {
+  await api("POST", `/clients/${consentClient.id}/consents/revoke`, { item: form.elements.item.value, note: form.elements.note.value });
+  toast("Revocación registrada.");
+  await refreshView();
+});
 
 // ---------- Case screen: everything about one case, with the other modules ----------
 const fmtDue = (d) => escapeHtml(String(d || "").replace("T", " ").slice(0, 16));

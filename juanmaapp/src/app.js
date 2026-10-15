@@ -18,6 +18,7 @@ import { esignRouter, esignPublicRouter, verifyRouter } from "./esign.js";
 import { mailRouter, mailPublicRouter } from "./mailtrace.js";
 import { paymentsRouter } from "./payments.js";
 import { microsoftRouter } from "./microsoft.js";
+import { consentRouter, consentPublicRouter } from "./consents.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -94,11 +95,13 @@ export function createApp(db) {
   app.use("/api/public/sign", esignPublicRouter(db));
   app.use("/api/public/verify", verifyRouter(db));
   app.use("/api/public/mail", mailPublicRouter(db));
+  app.use("/api/public/consent", consentPublicRouter(db));
   app.use("/api", auditMiddleware(db)); // before requireAuth so refused deletes are logged too
   app.use("/api", requireAuth);
   app.use("/api/audit", auditRouter(db));
   app.use("/api/admin", adminRouter(db));
   app.use("/api", recordsRouter(db));
+  app.use("/api", consentRouter(db));
   app.use("/api/jurisprudencia", requirePerm("jurisprudence.use"), jurisprudenceRouter(db));
   app.use("/api/reports", requirePerm("reports.view"), reportsRouter(db));
   app.use("/api/courts", courtsRouter(db));

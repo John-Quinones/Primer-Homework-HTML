@@ -188,6 +188,7 @@ export function deviceOf(ua = "") {
 const AUDIT_ENTITIES = [
   [/^\/cases\/(\d+)\/documents/, "Expedientes", "documento del expediente", "case"],
   [/^\/cases(?:\/(\d+))?/, "Expedientes", "expediente", "case"],
+  [/^\/clients\/(\d+)\/consent/, "Clientes", "autorización de datos"],
   [/^\/clients(?:\/(\d+))?/, "Clientes", "cliente"],
   [/^\/tasks(?:\/(\d+))?/, "Agenda", "tarea"],
   [/^\/payments\/charges(?:\/(\d+))?/, "Pagos", "cobro"],

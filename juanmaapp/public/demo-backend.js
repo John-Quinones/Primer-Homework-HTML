@@ -23,7 +23,7 @@
     const now = stamp();
     const st = { offices: [], users: [], matrix: JSON.parse(JSON.stringify(AUTH.matrix)), roles: AUTH.roles.map((name) => ({ name, builtin: true })),
       clients: [], categories: [], types: [], fields: [], cases: [], saved: [], courts: [], tasks: [], notes: [], acts: [], checks: [],
-      prefs: {}, log: [], templates: [], signs: [], blobs: {}, info: { created: now } };
+      prefs: {}, log: [], templates: [], signs: [], consents: [], consentTexts: {}, blobs: {}, info: { created: now } };
     st.offices.push({ id: nextId(), name: "Ibagué", department: "Tolima", city: "Ibagué", address: "", phone: "", email: "", is_main: true });
     SEED.forEach(([name, types], i) => {
       const cat = { id: nextId(), name, sort: i };
@@ -53,7 +53,8 @@
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents"]) st[k] ||= [];
+    st.consentTexts ||= {}; // change 56: exact text of each answered authorization, by its SHA-256
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -429,8 +430,33 @@
     rama: "La consulta automática en la Rama Judicial necesita la app instalada en el servidor (este enlace no puede conectarse a sitios externos). Mientras tanto, use el botón «Portales» de cada expediente: copia el radicado y abre la Rama Judicial, Publicaciones Procesales, TYBA o SAMAI.",
     juris: "La búsqueda y verificación en las relatorías oficiales necesita la app instalada en el servidor (este enlace no puede abrir sitios externos). Aquí puede analizar una sentencia pegando su texto.",
     mail: "El envío de correos necesita la app instalada en el servidor con el correo de la firma configurado (SMTP).",
+    consent: "El envío del enlace de autorizaciones necesita la app instalada en el servidor. En este enlace use «Firmar en la oficina».",
     remote: "La firma por enlace con código OTP (correo, SMS o WhatsApp) necesita la app instalada en el servidor. En este enlace use la firma presencial.",
   };
+  // ----- Client authorizations (change 56): append-only, hash-chained like the server -----
+  const LEGAL = window.JuanmaLegal;
+  const shaText = (text) => sha256(new TextEncoder().encode(text)); // sha256(bytes) is defined with e-signature
+  const consentClient = (id) => s.clients.find((x) => x.id === id && clientVisible(x)) || fail("El cliente no existe.");
+  const consentsOut = (cid) => {
+    const records = clone(s.consents.filter((r) => r.client_id === cid));
+    return { version: LEGAL.LEGAL_VERSION, items: LEGAL.CONSENT_ITEMS, methods: LEGAL.CONSENT_METHODS, status: LEGAL.consentStatus(records), records, requests: [] };
+  };
+  async function recordConsents(c, answers, ctx) {
+    const keys = LEGAL.CONSENT_ITEMS.map((i) => i.key).filter((k) => typeof answers[k] === "boolean");
+    keys.length || fail("Marque o desmarque al menos una autorización.");
+    const at = stamp(), u = me();
+    for (const key of keys) {
+      const text = LEGAL.consentText(key), docSha = await shaText(text);
+      s.consentTexts[docSha] ||= { version: LEGAL.LEGAL_VERSION, item: key, text };
+      const prev = s.consents.length ? s.consents[s.consents.length - 1].hash : "";
+      const r = { id: nextId(), client_id: c.id, client_name: c.full_name, client_id_number: [c.id_type, c.id_number].filter(Boolean).join(" "), item: key,
+        granted: answers[key] ? 1 : 0, method: ctx.method, doc_version: LEGAL.LEGAL_VERSION, doc_sha256: docSha, at, ip: "", user_agent: str(ctx.user_agent).slice(0, 400),
+        typed_name: str(ctx.typed_name).slice(0, 200), typed_id: str(ctx.typed_id).slice(0, 40), signature_png: ctx.signature_png || "", note: str(ctx.note).slice(0, 1000),
+        registered_by: u.id, registered_by_name: u.name, request_id: null, prev_hash: prev };
+      r.hash = await shaText(LEGAL.consentCanonical(r, prev) + r.signature_png);
+      s.consents.push(r);
+    }
+  }
   const routes = [
     // ----- auth -----
     ["GET", /^\/auth\/status$/, () => {
@@ -749,8 +775,29 @@
       s.clients.some((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
       s.cases.some((k) => k.client_id === +m[1]) && fail("No se puede eliminar: tiene expedientes asociados.");
       s.clients = s.clients.filter((c) => c.id !== +m[1]);
+      for (const r of s.consents) if (r.client_id === +m[1]) r.client_id = null; // the evidence stays, with the name and document
       return null;
     }],
+
+    // ----- client authorizations (change 56), same records as the server's consent_records -----
+    ["GET", /^\/clients\/(\d+)\/consents$/, (m) => consentsOut(consentClient(+m[1]).id)],
+    ["POST", /^\/clients\/(\d+)\/consents$/, async (m, b) => {
+      need("clients.write");
+      const c = consentClient(+m[1]);
+      str(b.typed_name) || fail("Escriba el nombre de quien autoriza.");
+      /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || fail("Falta la firma en pantalla.");
+      await recordConsents(c, b.answers || {}, { method: "presencial", user_agent: navigator.userAgent, typed_name: b.typed_name, typed_id: b.typed_id, signature_png: b.signature_png, note: b.note });
+      return consentsOut(c.id);
+    }],
+    ["POST", /^\/clients\/(\d+)\/consents\/revoke$/, async (m, b) => {
+      need("clients.write");
+      const c = consentClient(+m[1]);
+      LEGAL.consentItem(b.item) || fail("Autorización no válida.");
+      str(b.note) || fail("Indique cómo pidió el cliente la revocación (por ejemplo, correo del 15/10/2026).");
+      await recordConsents(c, { [b.item]: false }, { method: "revocacion", user_agent: navigator.userAgent, note: b.note });
+      return consentsOut(c.id);
+    }],
+    ["POST", /^\/clients\/(\d+)\/consent-link$/, () => fail(NEEDS_SERVER.consent)],
 
     // ----- catalog -----
     ["GET", /^\/catalog$/, () => s.categories.slice().sort((a, b) => a.sort - b.sort).map((c) => ({

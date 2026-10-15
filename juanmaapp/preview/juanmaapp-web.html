@@ -881,6 +881,42 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
 .portal-check li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; }
 .portal-check li > span:nth-child(2) { min-width: 0; }
 @media (max-width: 760px) { .portal-check li { grid-template-columns: 1fr; } }
+/* Change 56: legal documents and client authorizations */
+.legal-doc { line-height: 1.6; overflow-wrap: anywhere; }
+.legal-doc h3 { margin: 18px 0 6px; font-size: 1rem; color: var(--heading); }
+.legal-doc ul, .legal-doc ol { padding-left: 22px; }
+.legal-doc li { margin: 3px 0; }
+.legal-meta { color: var(--text-muted); font-size: .85rem; margin: 0 0 8px; }
+.legal-fill { background: #fff4d6; color: #6b4b00; padding: 0 3px; border-radius: 3px; font-weight: 600; }
+.legal-table-wrap, .legal-doc table { display: block; overflow-x: auto; }
+.legal-table { border-collapse: collapse; width: 100%; font-size: .88rem; margin: 6px 0 12px; }
+.legal-table th, .legal-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+.legal-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.legal-tabs button, .legal-tabs a { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: .85rem; cursor: pointer; text-decoration: none; }
+.legal-tabs .active { background: var(--brand-navy); border-color: var(--brand-navy); color: #fff; }
+.legal-dialog { width: min(860px, calc(100vw - 24px)); }
+.legal-dialog .legal-doc { max-height: 62vh; overflow: auto; padding-right: 6px; }
+.legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; margin-top: 14px; font-size: .78rem; }
+.legal-links a, .legal-links button { color: inherit; opacity: .85; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.nav-legal { display: block; margin: 4px 14px 0; font-size: .78rem; color: inherit; opacity: .8; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-align: left; }
+.public-footer { max-width: 860px; margin: 0 auto; padding: 0 16px 28px; }
+.consent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.consent-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+.consent-card label.consent-check { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-weight: 400; color: var(--text); }
+.consent-card input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; }
+.consent-card h4 { margin: 0 0 6px; font-size: .95rem; }
+.consent-card details { margin-top: 8px; }
+.consent-card details .legal-doc { max-height: 40vh; overflow: auto; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; font-size: .9rem; }
+.consent-state { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.consent-state.yes { background: #e3f6e8; color: #0d5a26; }
+.consent-state.no { background: #fde2e1; color: #8a1c17; }
+.consent-state.none { background: var(--surface-muted); color: var(--text-muted); }
+.consent-status { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.consent-status li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.consent-status li small { grid-column: 1 / -1; color: var(--text-muted); }
+.consent-history { font-size: .82rem; }
+@media (max-width: 760px) { .consent-status li { grid-template-columns: 1fr; } }
+@media print { .topbar, .legal-tabs, .no-print { display: none !important; } .legal-doc { max-height: none !important; overflow: visible !important; } }
 
 </style>
 
@@ -951,6 +987,7 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
         <p class="hint">Este es el <strong>enlace de prueba</strong>: quien pueda abrirlo entra con cualquier usuario y ve todos los datos. Úselo con datos de prueba; para los datos reales de la firma use la app en Azure, con contraseña o Microsoft 365.</p>
         <div class="demo-grid"></div>
       </div>
+      <p class="legal-links"><a href="legal.html#tratamiento" data-legal="tratamiento">Tratamiento de datos</a><a href="legal.html#privacidad" data-legal="privacidad">Privacidad</a><a href="legal.html#cookies" data-legal="cookies">Cookies</a><a href="legal.html#terminos" data-legal="terminos">Términos y condiciones</a></p>
     </div>
   </div>
 
@@ -1006,6 +1043,7 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
       <a href="#bitacora" data-view="bitacora"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 12h7M9 15.5h7M9 19h4"/></svg><span>Bitácora</span></a>
       <a href="#usuarios" data-view="usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.6-4 3.8-6.5 8-6.5s7.4 2.5 8 6.5"/><path d="M18.5 3.5l1 1.8 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2-1.5-1.4 2-.3z"/></svg><span>Usuarios</span></a>
       <p class="app-version nav-version" data-version></p>
+      <a href="legal.html#tratamiento" class="nav-legal" data-legal="tratamiento">Documentos legales</a>
     </nav>
 
     <main>
@@ -2294,6 +2332,55 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Documentos legales (change 56) -->
+  <dialog id="legal-dialog" class="legal-dialog">
+    <form method="dialog">
+      <h3 data-title>Documentos legales</h3>
+      <nav class="legal-tabs" id="legal-tabs" aria-label="Documentos"></nav>
+      <div class="legal-doc" id="legal-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="legal-print">Descargar PDF</button>
+        <button class="primary" value="ok">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Autorizaciones del cliente en la oficina (change 56) -->
+  <dialog id="consent-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3 data-title>Autorizaciones en la oficina</h3>
+      <p class="hint">Entregue el equipo al cliente. Cada autorización es independiente: el cliente marca solo las que acepta; las que deje sin marcar quedan registradas como <strong>no autorizadas</strong>. Usted queda registrado como quien recibió la firma.</p>
+      <ul class="consent-list" id="consent-items"></ul>
+      <div class="grid2">
+        <label>Nombre completo de quien autoriza * <input name="typed_name" required /></label>
+        <label>Documento de identidad <input name="typed_id" /></label>
+      </div>
+      <canvas class="sig-canvas" id="consent-pad"></canvas>
+      <p><button type="button" class="mini" id="consent-clear">Borrar firma</button></p>
+      <label>Observación (opcional) <input name="note" placeholder="Ej. firmó acompañado de su hija" /></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar autorizaciones</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Revocar una autorización (change 56) -->
+  <dialog id="revoke-dialog">
+    <form method="dialog">
+      <h3 data-title>Registrar revocación</h3>
+      <p class="hint">Use esto cuando el cliente pida retirar una autorización por escrito, por correo o en persona. Queda un nuevo registro; el anterior se conserva como prueba.</p>
+      <label>Autorización <select name="item" id="revoke-item"></select></label>
+      <label>¿Cómo lo pidió el cliente? * <input name="note" required placeholder="Ej. correo del 15/10/2026 desde ana@correo.co" /></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Registrar revocación</button>
       </div>
     </form>
   </dialog>
@@ -3899,6 +3986,7 @@ function deviceOf(ua = "") {
 const AUDIT_ENTITIES = [
   [/^\/cases\/(\d+)\/documents/, "Expedientes", "documento del expediente", "case"],
   [/^\/cases(?:\/(\d+))?/, "Expedientes", "expediente", "case"],
+  [/^\/clients\/(\d+)\/consent/, "Clientes", "autorización de datos"],
   [/^\/clients(?:\/(\d+))?/, "Clientes", "cliente"],
   [/^\/tasks(?:\/(\d+))?/, "Agenda", "tarea"],
   [/^\/payments\/charges(?:\/(\d+))?/, "Pagos", "cobro"],
@@ -4575,6 +4663,334 @@ function withDecisions(acts) {
 
 return { decisionOf, withDecisions };
 })();
+
+window.JuanmaLegal = (function () {
+// Legal documents of the firm (personal-data policy, privacy, cookies, terms,
+// privacy notice, authorization) and the separate consent items a client
+// accepts or declines. Colombian law: Ley 1581 de 2012, Decreto 1074 de 2015
+// (which compiles Decreto 1377 de 2013), Ley 1266 de 2008, Ley 1123 de 2007.
+// Dependency-free: served to the page as window.JuanmaLegal (browser-module.js).
+
+// Firm data. An empty value shows as [COMPLETAR: …] in every document until
+// Gerencia fills it in here. Changing any text needs a new LEGAL_VERSION, so
+// each stored authorization keeps pointing at the exact text that was accepted.
+const FIRM = {
+  brand: "TEC Jurídicos",
+  legal_name: "",
+  nit: "",
+  address: "",
+  city: "Ibagué (Tolima)",
+  email: "",
+  phone: "",
+  website: "",
+  privacy_officer: "",
+};
+const LEGAL_VERSION = "1.0";
+const LEGAL_DATE = "15 de octubre de 2026";
+
+const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const LABELS = { legal_name: "razón social", nit: "NIT", address: "dirección de la sede principal", email: "correo para datos personales",
+  phone: "teléfono", website: "sitio web", privacy_officer: "cargo o área responsable de datos personales" };
+const F = (key) => (FIRM[key] ? esc(FIRM[key]) : `<mark class="legal-fill">[COMPLETAR: ${LABELS[key] || key}]</mark>`);
+const WHO = () => `<strong>${esc(FIRM.brand)}</strong> (${F("legal_name")}, NIT ${F("nit")})`;
+const CONTACT = () => `<ul>
+  <li>Correo electrónico: ${F("email")}</li>
+  <li>Dirección: ${F("address")}, ${esc(FIRM.city)}</li>
+  <li>Teléfono: ${F("phone")}</li>
+  <li>Área responsable: ${F("privacy_officer")}</li>
+</ul>`;
+const LINK = (id, text) => `<a href="legal.html#${id}" data-legal="${id}">${text}</a>`;
+
+const tratamiento = () => `
+<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+<h3>1. Responsable del tratamiento</h3>
+<p>${WHO()}, firma de abogados con domicilio en ${esc(FIRM.city)}, es responsable del tratamiento de los datos personales que recoge en la prestación de sus servicios jurídicos y en el uso de TecjuridicosApp, su sistema de gestión de clientes y expedientes. Datos de contacto:</p>
+${CONTACT()}
+
+<h3>2. Marco legal</h3>
+<p>Esta política aplica el artículo 15 de la Constitución Política (habeas data), la Ley Estatutaria 1581 de 2012, el Decreto Único 1074 de 2015 (capítulo 25, que compiló el Decreto 1377 de 2013), la Ley 1266 de 2008 en lo relativo a información financiera y crediticia, el artículo 74 de la Constitución y el numeral 9 del artículo 28 de la Ley 1123 de 2007 (secreto profesional del abogado), la Ley 527 de 1999 (mensajes de datos y firma electrónica) y la Ley 2300 de 2023 (canales y horarios de contacto para cobranza).</p>
+
+<h3>3. Definiciones</h3>
+<ul>
+  <li><strong>Dato personal:</strong> información vinculada o que pueda asociarse a una persona natural determinada o determinable.</li>
+  <li><strong>Dato sensible:</strong> el que afecta la intimidad del titular o cuyo uso indebido puede generar su discriminación, como datos de salud, origen racial o étnico, orientación política, convicciones religiosas, pertenencia a sindicatos, vida sexual y datos biométricos.</li>
+  <li><strong>Titular:</strong> persona natural cuyos datos son objeto de tratamiento.</li>
+  <li><strong>Tratamiento:</strong> cualquier operación sobre datos personales: recolección, almacenamiento, uso, circulación o supresión.</li>
+  <li><strong>Responsable:</strong> quien decide sobre la base de datos y el tratamiento; en este caso, ${esc(FIRM.brand)}.</li>
+  <li><strong>Encargado:</strong> quien trata datos por cuenta del responsable, como los proveedores de alojamiento, correo y mensajería.</li>
+  <li><strong>Autorización:</strong> consentimiento previo, expreso e informado del titular.</li>
+  <li><strong>Transmisión y transferencia:</strong> envío de datos a un encargado (transmisión) o a otro responsable (transferencia), dentro o fuera de Colombia.</li>
+</ul>
+
+<h3>4. Principios</h3>
+<p>El tratamiento sigue los principios de legalidad, finalidad, libertad, veracidad o calidad, transparencia, acceso y circulación restringida, seguridad y confidencialidad del artículo 4 de la Ley 1581 de 2012. Además, toda la información que el cliente confía a la firma está cubierta por el <strong>secreto profesional</strong>, que se mantiene aun después de terminado el encargo.</p>
+
+<h3>5. Titulares y datos que tratamos</h3>
+<ul>
+  <li><strong>Clientes y sus representantes:</strong> nombres, tipo y número de documento, NIT y representante legal, dirección, ciudad, correo, teléfono, datos del proceso o asunto, hechos, pruebas y documentos que aporten, honorarios, pagos y recibos, y su firma electrónica o manuscrita.</li>
+  <li><strong>Contrapartes, terceros y apoderados</strong> que aparecen en los procesos: los datos que constan en el expediente judicial o administrativo o que el cliente suministra para su defensa.</li>
+  <li><strong>Funcionarios, abogados y contratistas</strong> de la firma: datos de identificación, contacto, tarjeta profesional, rol, oficina, credenciales de acceso y registro de actividad en TecjuridicosApp.</li>
+  <li><strong>Firmantes y destinatarios</strong> de documentos y correos enviados desde la app: nombre, documento, correo o teléfono, y la evidencia técnica de la firma, apertura o acuse (fecha y hora, dirección IP y navegador).</li>
+  <li><strong>Proveedores y aspirantes:</strong> datos de contacto, tributarios, bancarios y hoja de vida.</li>
+</ul>
+
+<h3>6. Finalidades</h3>
+<ol>
+  <li>Prestar la asesoría y la representación judicial, extrajudicial y administrativa contratada: estudiar el caso, redactar documentos, radicar actuaciones, asistir a audiencias y comunicarse con autoridades y contrapartes.</li>
+  <li>Abrir y mantener el expediente del cliente, consultar el estado de sus procesos en los portales de la Rama Judicial y de la jurisdicción de lo contencioso administrativo, y avisarle de actuaciones, audiencias y términos.</li>
+  <li>Celebrar y ejecutar el contrato de prestación de servicios: facturar, registrar pagos, expedir recibos, gestionar la cartera y enviar recordatorios de pago según la Ley 2300 de 2023.</li>
+  <li>Enviar documentos para firma electrónica y correos con trazabilidad, y conservar la evidencia de cada envío, firma, apertura y acuse.</li>
+  <li>Preparar borradores de documentos con herramientas de inteligencia artificial bajo la revisión de un abogado de la firma.</li>
+  <li>Cumplir obligaciones legales, contables, tributarias y disciplinarias, y atender requerimientos de autoridades.</li>
+  <li>Garantizar la seguridad de la información: control de accesos por rol y oficina, bitácora de auditoría y prevención de fraudes.</li>
+  <li>Gestionar la relación con funcionarios, contratistas y proveedores.</li>
+</ol>
+<p>Los datos no se venden, no se usan para publicidad de terceros y no se usan para finalidades distintas sin una nueva autorización.</p>
+
+<h3>7. Datos sensibles y de niños, niñas y adolescentes</h3>
+<p>En asuntos laborales, de seguridad social, familia, salud o víctimas, el caso puede requerir datos sensibles como historias clínicas, dictámenes de pérdida de capacidad laboral o información sobre la vida familiar. Solo se tratan con autorización <strong>explícita</strong> del titular, cuando son necesarios para el encargo, con acceso restringido al equipo que lleva el caso. El titular <strong>no está obligado</strong> a autorizar el tratamiento de datos sensibles (artículos 5 y 6 de la Ley 1581 de 2012).</p>
+<p>Los datos de niños, niñas y adolescentes se tratan solo cuando el asunto lo exige, respetando su interés superior y con autorización de su representante legal (artículo 7 de la Ley 1581 de 2012).</p>
+
+<h3>8. Autorización</h3>
+<p>La firma pide autorización previa, expresa e informada al titular, por escrito, en la oficina con firma en pantalla o por un enlace privado en el que el titular marca por separado cada autorización. TecjuridicosApp guarda la prueba de cada respuesta: qué texto se aceptó o rechazó, la versión del documento y su huella SHA-256, la fecha y hora, el medio, la dirección IP y el navegador o, si fue en la oficina, la firma y el funcionario que la registró.</p>
+<p>No se requiere autorización, conforme al artículo 10 de la Ley 1581 de 2012, cuando la información la pide una autoridad en ejercicio de sus funciones o por orden judicial, cuando se trata de datos de naturaleza pública (como los que constan en expedientes judiciales públicos), en casos de urgencia médica o sanitaria, para fines históricos, estadísticos o científicos, y para datos del registro civil.</p>
+
+<h3>9. Derechos del titular</h3>
+<p>Conforme al artículo 8 de la Ley 1581 de 2012, el titular puede:</p>
+<ul>
+  <li>Conocer, actualizar y rectificar sus datos.</li>
+  <li>Pedir prueba de la autorización otorgada.</li>
+  <li>Ser informado del uso que se ha dado a sus datos.</li>
+  <li>Presentar quejas ante la Superintendencia de Industria y Comercio, después de agotar el trámite ante la firma.</li>
+  <li>Revocar la autorización o pedir la supresión de sus datos cuando no exista un deber legal o contractual de conservarlos.</li>
+  <li>Acceder en forma gratuita a sus datos.</li>
+</ul>
+
+<h3>10. Consultas y reclamos</h3>
+<p>El titular, sus causahabientes o su representante pueden presentar consultas y reclamos al correo ${F("email")} o por escrito en ${F("address")}, indicando su nombre, documento, datos de contacto, la descripción de lo que pide y los documentos que quiera hacer valer.</p>
+<ul>
+  <li><strong>Consultas:</strong> se responden en máximo diez (10) días hábiles desde su recibo. Si no es posible, se informa el motivo y la nueva fecha, que no superará cinco (5) días hábiles adicionales.</li>
+  <li><strong>Reclamos</strong> (corrección, actualización, supresión o incumplimiento): se responden en máximo quince (15) días hábiles, prorrogables por ocho (8) días hábiles más con aviso al titular. Si el reclamo está incompleto, se pide completarlo dentro de los cinco (5) días siguientes; pasados dos (2) meses sin respuesta, se entiende desistido. Mientras se tramita, el dato se marca como «reclamo en trámite».</li>
+</ul>
+<p>Antes de acudir a la Superintendencia de Industria y Comercio, el titular debe agotar este trámite ante la firma (artículo 16 de la Ley 1581 de 2012).</p>
+
+<h3>11. Deberes de la firma y de sus encargados</h3>
+<p>La firma cumple los deberes de los artículos 17 y 18 de la Ley 1581 de 2012: garantizar el ejercicio del habeas data, conservar la prueba de la autorización, informar la finalidad, mantener la información segura, veraz y actualizada, tramitar consultas y reclamos en los términos legales e informar a la Superintendencia de Industria y Comercio los incidentes de seguridad. Cuando aplique, inscribe sus bases de datos en el Registro Nacional de Bases de Datos.</p>
+
+<h3>12. Encargados y transferencias internacionales</h3>
+<p>Para operar TecjuridicosApp, la firma usa proveedores que tratan datos por su cuenta, con contratos que les exigen confidencialidad y seguridad:</p>
+<ul>
+  <li><strong>Microsoft</strong> (Azure y Microsoft 365): alojamiento del sistema y de la base de datos, inicio de sesión y envío de correos.</li>
+  <li><strong>Meta</strong> (WhatsApp Business): avisos y códigos de verificación por WhatsApp, cuando el titular elige ese medio.</li>
+  <li><strong>Anthropic</strong> (Claude): preparación de borradores de documentos con inteligencia artificial, siempre revisados por un abogado.</li>
+  <li><strong>Google</strong> (Google Fonts): tipografías de la aplicación; recibe la dirección IP del navegador, no datos de clientes.</li>
+</ul>
+<p>Algunos de estos servidores están en los Estados Unidos, país que la Superintendencia de Industria y Comercio reconoce con nivel adecuado de protección (Circular Externa 005 de 2017). La consulta de procesos se hace en los portales oficiales de la Rama Judicial y de la jurisdicción de lo contencioso administrativo.</p>
+
+<h3>13. Seguridad</h3>
+<p>La firma aplica medidas técnicas y administrativas razonables: acceso con usuario y contraseña robusta o con la cuenta de Microsoft 365 de la firma, contraseñas guardadas con cifrado de una vía, cierre de sesión por inactividad, límite de intentos de ingreso, permisos por rol y por oficina, conexión cifrada (HTTPS), bitácora de auditoría que no se puede editar ni borrar, y compromisos de confidencialidad de funcionarios y contratistas.</p>
+
+<h3>14. Conservación</h3>
+<p>Los datos se conservan mientras dure la relación con el titular y, después, el tiempo necesario para atender reclamaciones, responder por la gestión profesional y cumplir obligaciones legales: los soportes contables, diez (10) años (artículo 28 de la Ley 962 de 2005), y los expedientes, en principio diez (10) años desde la terminación del encargo. La prueba de las autorizaciones se conserva mientras se traten los datos y por el mismo término.</p>
+
+<h3>15. Vigencia y cambios</h3>
+<p>Esta política rige desde el ${LEGAL_DATE}. Los cambios sustanciales se informan a los titulares antes de aplicarlos, por correo o en la propia aplicación, y cada versión queda identificada con su número y fecha.</p>`;
+
+const privacidad = () => `
+<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+<p>Esta política explica, en lenguaje sencillo, qué información maneja ${WHO()} en TecjuridicosApp y en sus páginas públicas (firma electrónica, acuse de correo, verificación de documentos y autorizaciones), y cómo la protege. Complementa la ${LINK("tratamiento", "Política de tratamiento de datos personales")}.</p>
+
+<h3>1. Qué información recogemos</h3>
+<ul>
+  <li><strong>La que usted nos da:</strong> sus datos de identificación y contacto, los hechos y documentos de su caso, y la información de pagos.</li>
+  <li><strong>La de su proceso:</strong> número de radicado, despacho y actuaciones, consultadas en los portales oficiales de la Rama Judicial y de la jurisdicción de lo contencioso administrativo.</li>
+  <li><strong>La evidencia técnica de lo que hace en nuestras páginas:</strong> cuando firma, abre un correo, descarga un anexo o responde una autorización, guardamos la fecha y hora, la dirección IP y el navegador, para probar que el acto ocurrió.</li>
+  <li><strong>La de los funcionarios de la firma:</strong> su cuenta, sus permisos y cada cambio que hacen en la aplicación (bitácora de auditoría).</li>
+</ul>
+
+<h3>2. Para qué la usamos</h3>
+<p>Para llevar su caso, mantenerle informado, preparar y firmar documentos, registrar pagos y recordarle vencimientos, cumplir la ley y proteger la información. No vendemos ni alquilamos sus datos y no los usamos para publicidad.</p>
+
+<h3>3. Quién puede verla</h3>
+<ul>
+  <li>Dentro de la firma, solo los funcionarios con permiso para ello y de la oficina que lleva su caso. Todo acceso queda registrado.</li>
+  <li>Las autoridades judiciales y administrativas ante las que actuamos por usted, y quienes la ley autorice.</li>
+  <li>Nuestros proveedores tecnológicos (alojamiento, correo, WhatsApp, inteligencia artificial para borradores), solo para prestar el servicio y bajo confidencialidad. La lista está en la Política de tratamiento de datos personales.</li>
+</ul>
+
+<h3>4. Secreto profesional</h3>
+<p>Lo que usted confía a sus abogados está protegido por el secreto profesional (artículo 74 de la Constitución y Ley 1123 de 2007). Nuestros funcionarios y contratistas firman compromisos de confidencialidad.</p>
+
+<h3>5. Inteligencia artificial</h3>
+<p>Algunos borradores se preparan con un asistente de inteligencia artificial (Claude, de Anthropic). Solo se envían los datos necesarios para el documento, el proveedor los trata por cuenta de la firma conforme a sus condiciones de servicio, y todo borrador lo revisa y ajusta un abogado antes de usarse. Ninguna decisión sobre su caso la toma una máquina.</p>
+
+<h3>6. Cómo la protegemos</h3>
+<p>Conexión cifrada, contraseñas robustas guardadas con cifrado de una vía, cierre de sesión por inactividad, permisos por rol, copias en servidores de Microsoft y una bitácora que no se puede alterar. Los documentos firmados llevan una huella SHA-256 y un código de verificación para comprobar que nadie los modificó.</p>
+
+<h3>7. Cuánto tiempo la guardamos</h3>
+<p>Mientras dure nuestra relación y, después, el tiempo que exige la ley o el necesario para responder por la gestión, como se explica en la Política de tratamiento de datos personales.</p>
+
+<h3>8. Sus derechos</h3>
+<p>Puede conocer, actualizar, rectificar y pedir la supresión de sus datos, pedir prueba de su autorización y revocarla, escribiendo a ${F("email")}. Respondemos consultas en 10 días hábiles y reclamos en 15 días hábiles.</p>
+
+<h3>9. Cambios</h3>
+<p>Si cambiamos esta política se lo informaremos antes de aplicar el cambio. Cada versión queda numerada y fechada.</p>`;
+
+const cookies = () => `
+<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+<p>Las cookies son pequeños archivos que un sitio guarda en su navegador. TecjuridicosApp usa <strong>solo cookies técnicas, necesarias para funcionar</strong>, y almacenamiento local del navegador para recordar preferencias. <strong>No usamos cookies de publicidad, de analítica ni de redes sociales</strong>, y no rastreamos su navegación en otros sitios.</p>
+
+<h3>1. Cookies que usamos</h3>
+<table class="legal-table">
+  <thead><tr><th>Nombre</th><th>Para qué sirve</th><th>Duración</th><th>Tipo</th></tr></thead>
+  <tbody>
+    <tr><td><code>jm_session</code></td><td>Mantener abierta la sesión del funcionario que ingresó. Es inaccesible para otros scripts (HttpOnly) y solo viaja a nuestro servidor.</td><td>Hasta 12 horas; se cierra antes tras horas sin uso o al salir.</td><td>Propia, técnica</td></tr>
+    <tr><td><code>jm_ms</code></td><td>Proteger el ingreso con la cuenta de Microsoft 365 (verifica que la respuesta de Microsoft corresponde a su navegador).</td><td>10 minutos</td><td>Propia, técnica</td></tr>
+  </tbody>
+</table>
+<p>Las páginas públicas para clientes y terceros (firma electrónica, acuse de correo, verificación y autorizaciones) no instalan cookies: el enlace privado que recibe es la llave de acceso.</p>
+
+<h3>2. Almacenamiento local del navegador</h3>
+<table class="legal-table">
+  <thead><tr><th>Nombre</th><th>Para qué sirve</th><th>Duración</th></tr></thead>
+  <tbody>
+    <tr><td><code>tecjuridicos-display-v1</code></td><td>Recordar el tamaño de letra, la vista (web o celular) y el modo día o noche.</td><td>Hasta que usted lo borre</td></tr>
+    <tr><td><code>juanmaapp-data-v1</code>, <code>juanmaapp-current</code></td><td>Solo en el enlace de prueba: copia local de los datos y usuario elegido.</td><td>Hasta que usted lo borre</td></tr>
+  </tbody>
+</table>
+
+<h3>3. Servicios de terceros</h3>
+<ul>
+  <li><strong>Google Fonts:</strong> descarga las tipografías; Google recibe la dirección IP del navegador. No instala cookies desde nuestra aplicación.</li>
+  <li><strong>Microsoft:</strong> si ingresa con Microsoft 365, la página de inicio de sesión de Microsoft usa sus propias cookies, regidas por la política de privacidad de Microsoft.</li>
+</ul>
+
+<h3>4. Cómo controlarlas</h3>
+<p>Puede ver y borrar las cookies y el almacenamiento local en la configuración de su navegador (Chrome, Edge, Safari o Firefox: «Privacidad» o «Cookies y datos de sitios»). Si bloquea las cookies técnicas no podrá iniciar sesión en la aplicación.</p>
+
+<h3>5. Marco legal</h3>
+<p>En Colombia la información que se obtiene mediante cookies, cuando identifica a una persona, se rige por la Ley 1581 de 2012. Cualquier cookie nueva que no sea técnica se informará y se pedirá su autorización antes de usarla.</p>`;
+
+const terminos = () => `
+<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+<h3>1. Objeto</h3>
+<p>Estos términos regulan el uso de TecjuridicosApp, el sistema de gestión jurídica de ${WHO()}, por sus funcionarios y contratistas, y el uso de sus páginas públicas por clientes y terceros. Usar la aplicación implica aceptarlos.</p>
+
+<h3>2. Cuentas y acceso</h3>
+<ul>
+  <li>Las cuentas las crea Gerencia; son personales e intransferibles. Cada usuario responde por lo que se haga con su cuenta y debe avisar de inmediato cualquier uso no autorizado.</li>
+  <li>Cada usuario ve y modifica solo lo que su rol y sus oficinas le permiten. Solo Gerencia elimina información.</li>
+  <li>La firma registra en la bitácora quién hizo cada cambio, cuándo y desde qué dispositivo.</li>
+</ul>
+
+<h3>3. Uso aceptable</h3>
+<p>La aplicación solo se usa para los asuntos de la firma. Está prohibido extraer o divulgar información de clientes fuera de lo que exige el encargo, cargar contenido ilícito, intentar vulnerar la seguridad o acceder a información sin permiso. El incumplimiento puede acarrear la suspensión de la cuenta y las acciones disciplinarias, civiles y penales que correspondan.</p>
+
+<h3>4. Confidencialidad y datos personales</h3>
+<p>Toda la información de clientes está sujeta al secreto profesional y a la ${LINK("tratamiento", "Política de tratamiento de datos personales")}. La obligación de confidencialidad continúa después de terminada la relación con la firma.</p>
+
+<h3>5. Borradores con inteligencia artificial</h3>
+<p>Los documentos que prepara NomosAI son <strong>borradores</strong>. El abogado responsable debe revisarlos, verificar las normas y la jurisprudencia citadas y ajustarlos antes de firmarlos o radicarlos. La responsabilidad profesional sobre cada documento es del abogado que lo usa.</p>
+
+<h3>6. Consulta de procesos</h3>
+<p>La información de procesos proviene de los portales oficiales de la Rama Judicial y de la jurisdicción de lo contencioso administrativo, que pueden presentar retrasos, errores o interrupciones. No reemplaza la revisión del expediente ni el control de términos por el abogado responsable.</p>
+
+<h3>7. Firma electrónica y correo con trazabilidad</h3>
+<p>La firma electrónica de la aplicación (enlace privado con código de verificación o firma presencial en pantalla) es un método de firma electrónica conforme a la Ley 527 de 1999 y al Decreto 1074 de 2015, que identifica al firmante y deja evidencia de su voluntad. El correo con trazabilidad conserva prueba de envío, apertura, descarga y acuse; no es un servicio de correo electrónico certificado acreditado ante el ONAC.</p>
+
+<h3>8. Páginas públicas</h3>
+<p>Quien recibe un enlace privado para firmar, ver un correo o responder una autorización debe usarlo personalmente y no compartirlo. Al usarlo, se registra la evidencia descrita en la ${LINK("privacidad", "Política de privacidad")}.</p>
+
+<h3>9. Disponibilidad</h3>
+<p>La firma procura que la aplicación esté disponible y segura, pero puede haber interrupciones por mantenimiento o por fallas de proveedores o de internet. Los plazos judiciales siguen corriendo: ante una falla, use los medios alternos.</p>
+
+<h3>10. Propiedad intelectual</h3>
+<p>La aplicación, su diseño, sus plantillas y su contenido pertenecen a ${esc(FIRM.brand)} o a sus licenciantes. Los documentos de cada caso pertenecen al cliente y a la firma según el contrato de servicios.</p>
+
+<h3>11. Ley aplicable</h3>
+<p>Estos términos se rigen por las leyes de Colombia. Las controversias se resolverán ante los jueces de ${esc(FIRM.city)}, sin perjuicio de los mecanismos de protección de datos ante la Superintendencia de Industria y Comercio.</p>
+
+<h3>12. Cambios</h3>
+<p>La firma puede actualizar estos términos; cada versión queda numerada y fechada y se informa en la aplicación.</p>`;
+
+const aviso = () => `
+<p class="legal-meta">Versión ${LEGAL_VERSION} · ${LEGAL_DATE}</p>
+<p><strong>Responsable:</strong> ${WHO()}, ${F("address")}, ${esc(FIRM.city)}. Correo: ${F("email")}. Teléfono: ${F("phone")}.</p>
+<p><strong>Finalidades:</strong> sus datos personales se usarán para prestarle los servicios jurídicos contratados; llevar su expediente y consultar sus procesos; comunicarle actuaciones, audiencias y términos; ejecutar el contrato, registrar pagos y enviarle recordatorios de cobro; firmar documentos electrónicamente y conservar su evidencia; preparar borradores con herramientas tecnológicas revisadas por un abogado; y cumplir obligaciones legales.</p>
+<p><strong>Datos sensibles:</strong> no está obligado(a) a autorizar el tratamiento de datos sensibles (como los de salud) ni a responder preguntas sobre ellos o sobre niños, niñas y adolescentes. Si los autoriza, solo se usarán para su caso.</p>
+<p><strong>Sus derechos:</strong> conocer, actualizar, rectificar y suprimir sus datos, pedir prueba de la autorización, saber cómo se han usado, revocar la autorización y presentar quejas ante la Superintendencia de Industria y Comercio (artículo 8 de la Ley 1581 de 2012).</p>
+<p><strong>Cómo ejercerlos:</strong> escriba a ${F("email")} o acuda a nuestra sede.</p>
+<p><strong>Política completa:</strong> consulte la ${LINK("tratamiento", "Política de tratamiento de datos personales")}, la ${LINK("privacidad", "Política de privacidad")} y la ${LINK("cookies", "Política de cookies")}.</p>`;
+
+const autorizacion = () => `
+<p class="legal-meta">Versión ${LEGAL_VERSION} · ${LEGAL_DATE}</p>
+<p>Como titular de los datos, de manera libre, previa, expresa e informada, y luego de leer el ${LINK("aviso", "Aviso de privacidad")} y la ${LINK("tratamiento", "Política de tratamiento de datos personales")} de ${WHO()}, respondo <strong>por separado</strong> cada una de las siguientes autorizaciones:</p>
+<ol>
+  <li><strong>Tratamiento de datos personales</strong> para las finalidades de la política: prestación de los servicios jurídicos, expediente, consulta de procesos, contrato, pagos y cumplimiento legal.</li>
+  <li><strong>Datos sensibles</strong> (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es <strong>facultativa</strong>.</li>
+  <li><strong>Política de privacidad</strong>, incluida la evidencia técnica que se registra cuando uso las páginas de la firma.</li>
+  <li><strong>Política de cookies</strong> de la aplicación y sus páginas públicas.</li>
+  <li><strong>Comunicaciones</strong> por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023.</li>
+</ol>
+<p>Sé que puedo conocer, actualizar, rectificar y suprimir mis datos y revocar cualquiera de estas autorizaciones escribiendo a ${F("email")}, y que la firma conserva la prueba de esta respuesta: el texto aceptado o rechazado, su versión, la fecha y hora y el medio por el que respondí.</p>`;
+
+const LEGAL_DOCS = [
+  { id: "tratamiento", title: "Política de tratamiento de datos personales", short: "Datos personales", html: tratamiento() },
+  { id: "privacidad", title: "Política de privacidad", short: "Privacidad", html: privacidad() },
+  { id: "cookies", title: "Política de cookies", short: "Cookies", html: cookies() },
+  { id: "terminos", title: "Términos y condiciones de uso", short: "Términos", html: terminos() },
+  { id: "aviso", title: "Aviso de privacidad", short: "Aviso", html: aviso() },
+  { id: "autorizacion", title: "Autorización para el tratamiento de datos personales", short: "Autorización", html: autorizacion() },
+];
+
+// What a client authorizes, each item on its own: one checkbox, one stored answer.
+const CONSENT_ITEMS = [
+  { key: "datos", doc: "tratamiento", title: "Tratamiento de datos personales",
+    label: `Autorizo a ${FIRM.brand} a tratar mis datos personales para las finalidades de su Política de tratamiento de datos personales: prestación de los servicios jurídicos, expediente, consulta de procesos, contrato, pagos y cumplimiento legal.` },
+  { key: "sensibles", doc: "tratamiento", title: "Datos sensibles (facultativo)",
+    label: `Autorizo de forma expresa el tratamiento de mis datos sensibles (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que no estoy obligado(a) a autorizarlo.` },
+  { key: "privacidad", doc: "privacidad", title: "Política de privacidad",
+    label: `Leí y acepto la Política de privacidad de ${FIRM.brand}, incluida la evidencia técnica (fecha, hora, dirección IP y navegador) que se registra cuando uso sus páginas.` },
+  { key: "cookies", doc: "cookies", title: "Política de cookies",
+    label: `Leí y acepto la Política de cookies: la aplicación y sus páginas usan solo cookies técnicas y almacenamiento local para funcionar, sin publicidad ni analítica.` },
+  { key: "comunicaciones", doc: "aviso", title: "Comunicaciones por correo, WhatsApp y llamada",
+    label: `Autorizo que ${FIRM.brand} me contacte por correo electrónico, WhatsApp y llamada para informarme sobre mi caso y mis pagos, en los horarios que permite la Ley 2300 de 2023.` },
+];
+
+const CONSENT_METHODS = { enlace: "Enlace privado", presencial: "En la oficina (firma en pantalla)", revocacion: "Revocación registrada por la firma" };
+
+const legalDoc = (id) => LEGAL_DOCS.find((d) => d.id === id) || null;
+const consentItem = (key) => CONSENT_ITEMS.find((i) => i.key === key) || null;
+
+/** Plain text of a document (what its SHA-256 is computed over). */
+const legalPlain = (html) => String(html).replace(/<(br|\/p|\/li|\/h3|\/tr)>/g, "\n").replace(/<[^>]+>/g, "")
+  .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&")
+  .replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+
+/** The exact text a client answers for one item: the checkbox sentence plus the full document it refers to. */
+function consentText(key) {
+  const item = consentItem(key);
+  const doc = item && legalDoc(item.doc);
+  if (!doc) return "";
+  return `${item.title}\n${item.label}\n\n${doc.title} · versión ${LEGAL_VERSION} (${LEGAL_DATE})\n${legalPlain(doc.html)}`;
+}
+
+/** Latest answer per item from a client's records (oldest first or any order). */
+function consentStatus(records) {
+  const out = {};
+  for (const item of CONSENT_ITEMS) out[item.key] = null;
+  for (const r of [...(records || [])].sort((a, b) => (a.at === b.at ? a.id - b.id : a.at < b.at ? -1 : 1))) {
+    if (r.item in out) out[r.item] = r;
+  }
+  return out;
+}
+
+/** Canonical form of one record for the hash chain: any later edit breaks the chain (the drawn signature is appended to it). */
+const consentCanonical = (r, prevHash) => JSON.stringify([prevHash || "", r.client_name, r.client_id_number, r.item, r.granted ? 1 : 0,
+  r.method, r.doc_version, r.doc_sha256, r.at, r.ip || "", r.user_agent || "", r.typed_name || "", r.typed_id || "", r.note || "", r.registered_by_name || ""]);
+
+return { FIRM, LEGAL_VERSION, LEGAL_DATE, LEGAL_DOCS, CONSENT_ITEMS, CONSENT_METHODS, legalDoc, consentItem, legalPlain, consentText, consentStatus, consentCanonical };
+})();
 </script>
   <script>// Display preferences of this device: font size, layout (automatic, mobile or
 // web) and day / night theme. They are a per-device convenience, kept in the
@@ -4645,7 +5061,8 @@ return { decisionOf, withDecisions };
     inicio: ["Panel general", "Resumen del día: procesos activos, clientes, vencimientos de los próximos 7 días, audiencias de los próximos 14 días y actuaciones nuevas de la Rama Judicial.",
       ["Toque cualquier recuadro para ir al módulo correspondiente.", "Las cifras salen solo de los datos guardados; si no hay datos, el recuadro queda en cero."]],
     clientes: ["Clientes", "Registro de las personas naturales y jurídicas que representa la firma, con sus datos de contacto y sus expedientes.",
-      ["Persona natural: nombres y apellidos por separado; se corrigen solos a mayúscula inicial (JOHN → John).", "Persona jurídica: razón social, NIT con dígito de verificación y representante legal.", "Busque por nombre o número de documento en la casilla superior.", "Escriba el documento sin puntos ni espacios."]],
+      ["Persona natural: nombres y apellidos por separado; se corrigen solos a mayúscula inicial (JOHN → John).", "Persona jurídica: razón social, NIT con dígito de verificación y representante legal.", "Busque por nombre o número de documento en la casilla superior.", "Escriba el documento sin puntos ni espacios.",
+        "Autorizaciones de datos (en la ficha del cliente): envíe el enlace por correo o WhatsApp, o use «Firmar en la oficina». Cada autorización (datos, sensibles, privacidad, cookies y comunicaciones) se responde por separado y queda el soporte con fecha, hora y medio; «Constancia PDF» lo descarga."]],
     expedientes: ["Expedientes", "Cada proceso o asunto de un cliente: tipo y subproceso, calidad del cliente (demandante, demandado, ejecutante…), estado, despacho, radicado y responsable.",
       ["Filtre por departamento, ciudad o circuito, área y despacho: si marca Ibagué y Civil, ve los expedientes de los despachos civiles del circuito de Ibagué.", "El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior.", "La columna Carpeta muestra el número de carpeta física; búsquelo en la casilla «Buscar carpeta, cliente o radicado»."]],
     agenda: ["Agenda", "Audiencias, términos, tareas, recursos, requerimientos, peticiones y oficios de cada expediente, asignados a un funcionario con plazo y recordatorio.",
@@ -4890,8 +5307,8 @@ return { decisionOf, withDecisions };
 window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contable","Gerente Regional","Abogado","Dependiente Judicial","Asistente"],"permissions":{"scope.all":"Ve todas las oficinas","users.manage":"Gestiona usuarios, roles y oficinas","catalog.manage":"Configura tipos de proceso, subprocesos y campos","clients.write":"Crea y edita clientes","clients.delete":"Elimina clientes (solo Gerencia)","cases.write":"Crea y edita expedientes","cases.delete":"Elimina expedientes (solo Gerencia)","drafts.generate":"Genera borradores","jurisprudence.use":"Usa el buscador de jurisprudencia","import.run":"Importa datos desde Excel","reports.view":"Ve y exporta reportes","processes.consult":"Consulta procesos en la Rama Judicial y recibe reportes","templates.manage":"Crea, carga y edita plantillas de documentos","esign.use":"Envía documentos a firma electrónica","mail.send":"Envía correo electrónico con trazabilidad","payments.manage":"Registra cobros y recibos, maneja cartera y envía recordatorios de pago","audit.view":"Ve la bitácora de auditoría (quién cambió qué, cuándo y desde qué dispositivo)"},"matrix":{"Gerencia":["scope.all","users.manage","catalog.manage","clients.write","clients.delete","cases.write","cases.delete","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send","payments.manage","audit.view"],"Director Jurídico":["scope.all","catalog.manage","clients.write","cases.write","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send"],"Director Contable":["scope.all","reports.view","payments.manage"],"Gerente Regional":["clients.write","cases.write","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","esign.use","mail.send","payments.manage"],"Abogado":["clients.write","cases.write","drafts.generate","jurisprudence.use","reports.view","processes.consult","esign.use","mail.send"],"Dependiente Judicial":["cases.write","jurisprudence.use","processes.consult","mail.send"],"Asistente":["clients.write","cases.write","drafts.generate","payments.manage"]},"gerenciaOnly":["clients.delete","cases.delete"]};
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
-window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
-<script>window.JUANMA_VERSION = {"change":55,"sha":"","date":"2026-10-15"};</script>
+window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Autorización para el tratamiento de datos personales","category":"Autorización","description":"Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies y comunicaciones), para firmar en papel.","body":"# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **{{oficina.nombre}}** (TEC Jurídicos), en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:\n\n| Autorización | SÍ | NO |\n|---|---|---|\n| 1. **Tratamiento de datos personales** para prestar los servicios jurídicos, llevar mi expediente, consultar mis procesos, ejecutar el contrato, registrar pagos y cumplir obligaciones legales. | ☐ | ☐ |\n| 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |\n| 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |\n| 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |\n| 5. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |\n\n## DERECHOS DEL TITULAR\n\nConozco que, conforme al artículo 8 de la Ley 1581 de 2012, puedo conocer, actualizar, rectificar y suprimir mis datos; pedir prueba de esta autorización; ser informado(a) del uso de mis datos; revocar cualquiera de estas autorizaciones cuando no exista un deber legal o contractual de conservarlos; y presentar quejas ante la Superintendencia de Industria y Comercio después de agotar el trámite ante EL RESPONSABLE, escribiendo a {{oficina.correo}} o en {{oficina.direccion}}, {{oficina.ciudad}}.\n\nLa información que entrego está amparada por el secreto profesional del abogado (artículo 74 de la Constitución y numeral 9 del artículo 28 de la Ley 1123 de 2007). EL RESPONSABLE conservará la prueba de esta autorización mientras trate mis datos.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Acuerdo de confidencialidad y tratamiento de datos (funcionarios y contratistas)","category":"Contrato","description":"Secreto profesional (Ley 1123 de 2007) y deberes del encargado (Ley 1581 de 2012) para quien accede a la información de los clientes.","body":"# ACUERDO DE CONFIDENCIALIDAD Y TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nEntre **{{oficina.nombre}}** (TEC Jurídicos), en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:\n\n## PRIMERA. Información confidencial\n\nEs confidencial toda la información de clientes, contrapartes y procesos a la que EL RECEPTOR acceda por cualquier medio, incluida TecjuridicosApp: datos personales, hechos, estrategias, documentos, honorarios, pagos y credenciales de acceso.\n\n## SEGUNDA. Obligaciones\n\nEL RECEPTOR se obliga a:\n\n1. Guardar el secreto profesional y la reserva de la información, aun después de terminada su relación con LA FIRMA (artículo 74 de la Constitución y Ley 1123 de 2007).\n2. Usar la información solo para las labores que LA FIRMA le asigne y conforme a la Política de tratamiento de datos personales.\n3. No copiar, extraer, reenviar ni divulgar información fuera de lo que exige cada encargo, ni usar correos o dispositivos personales no autorizados para ello.\n4. Mantener en secreto su usuario y contraseña, no compartir su cuenta y cerrar sesión en equipos compartidos.\n5. Informar de inmediato a LA FIRMA cualquier pérdida, acceso indebido o incidente de seguridad.\n6. Devolver o destruir la información en su poder al terminar la relación.\n\n## TERCERA. Registro de actividad\n\nEL RECEPTOR conoce que TecjuridicosApp registra en una bitácora cada cambio que hace, con fecha, hora, dirección IP y dispositivo, y lo autoriza para fines de seguridad y control.\n\n## CUARTA. Incumplimiento\n\nEl incumplimiento de este acuerdo es falta grave y da lugar a las acciones laborales, contractuales, disciplinarias, civiles y penales que correspondan, sin perjuicio de la indemnización de los perjuicios causados.\n\n## QUINTA. Vigencia\n\nEste acuerdo rige desde su firma y sus obligaciones de confidencialidad no terminan con la relación.\n\nFirmas:\n\n____________________________________\n**LA FIRMA**\n{{abogado.nombre}}\n\n____________________________________\n**EL RECEPTOR**\n[FILL: Nombre completo]\nC.C. [FILL: Número de documento]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
+<script>window.JUANMA_VERSION = {"change":56,"sha":"","date":"2026-10-15"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -5027,7 +5444,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     const now = stamp();
     const st = { offices: [], users: [], matrix: JSON.parse(JSON.stringify(AUTH.matrix)), roles: AUTH.roles.map((name) => ({ name, builtin: true })),
       clients: [], categories: [], types: [], fields: [], cases: [], saved: [], courts: [], tasks: [], notes: [], acts: [], checks: [],
-      prefs: {}, log: [], templates: [], signs: [], blobs: {}, info: { created: now } };
+      prefs: {}, log: [], templates: [], signs: [], consents: [], consentTexts: {}, blobs: {}, info: { created: now } };
     st.offices.push({ id: nextId(), name: "Ibagué", department: "Tolima", city: "Ibagué", address: "", phone: "", email: "", is_main: true });
     SEED.forEach(([name, types], i) => {
       const cat = { id: nextId(), name, sort: i };
@@ -5057,7 +5474,8 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents"]) st[k] ||= [];
+    st.consentTexts ||= {}; // change 56: exact text of each answered authorization, by its SHA-256
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -5433,8 +5851,33 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     rama: "La consulta automática en la Rama Judicial necesita la app instalada en el servidor (este enlace no puede conectarse a sitios externos). Mientras tanto, use el botón «Portales» de cada expediente: copia el radicado y abre la Rama Judicial, Publicaciones Procesales, TYBA o SAMAI.",
     juris: "La búsqueda y verificación en las relatorías oficiales necesita la app instalada en el servidor (este enlace no puede abrir sitios externos). Aquí puede analizar una sentencia pegando su texto.",
     mail: "El envío de correos necesita la app instalada en el servidor con el correo de la firma configurado (SMTP).",
+    consent: "El envío del enlace de autorizaciones necesita la app instalada en el servidor. En este enlace use «Firmar en la oficina».",
     remote: "La firma por enlace con código OTP (correo, SMS o WhatsApp) necesita la app instalada en el servidor. En este enlace use la firma presencial.",
   };
+  // ----- Client authorizations (change 56): append-only, hash-chained like the server -----
+  const LEGAL = window.JuanmaLegal;
+  const shaText = (text) => sha256(new TextEncoder().encode(text)); // sha256(bytes) is defined with e-signature
+  const consentClient = (id) => s.clients.find((x) => x.id === id && clientVisible(x)) || fail("El cliente no existe.");
+  const consentsOut = (cid) => {
+    const records = clone(s.consents.filter((r) => r.client_id === cid));
+    return { version: LEGAL.LEGAL_VERSION, items: LEGAL.CONSENT_ITEMS, methods: LEGAL.CONSENT_METHODS, status: LEGAL.consentStatus(records), records, requests: [] };
+  };
+  async function recordConsents(c, answers, ctx) {
+    const keys = LEGAL.CONSENT_ITEMS.map((i) => i.key).filter((k) => typeof answers[k] === "boolean");
+    keys.length || fail("Marque o desmarque al menos una autorización.");
+    const at = stamp(), u = me();
+    for (const key of keys) {
+      const text = LEGAL.consentText(key), docSha = await shaText(text);
+      s.consentTexts[docSha] ||= { version: LEGAL.LEGAL_VERSION, item: key, text };
+      const prev = s.consents.length ? s.consents[s.consents.length - 1].hash : "";
+      const r = { id: nextId(), client_id: c.id, client_name: c.full_name, client_id_number: [c.id_type, c.id_number].filter(Boolean).join(" "), item: key,
+        granted: answers[key] ? 1 : 0, method: ctx.method, doc_version: LEGAL.LEGAL_VERSION, doc_sha256: docSha, at, ip: "", user_agent: str(ctx.user_agent).slice(0, 400),
+        typed_name: str(ctx.typed_name).slice(0, 200), typed_id: str(ctx.typed_id).slice(0, 40), signature_png: ctx.signature_png || "", note: str(ctx.note).slice(0, 1000),
+        registered_by: u.id, registered_by_name: u.name, request_id: null, prev_hash: prev };
+      r.hash = await shaText(LEGAL.consentCanonical(r, prev) + r.signature_png);
+      s.consents.push(r);
+    }
+  }
   const routes = [
     // ----- auth -----
     ["GET", /^\/auth\/status$/, () => {
@@ -5753,8 +6196,29 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       s.clients.some((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
       s.cases.some((k) => k.client_id === +m[1]) && fail("No se puede eliminar: tiene expedientes asociados.");
       s.clients = s.clients.filter((c) => c.id !== +m[1]);
+      for (const r of s.consents) if (r.client_id === +m[1]) r.client_id = null; // the evidence stays, with the name and document
       return null;
     }],
+
+    // ----- client authorizations (change 56), same records as the server's consent_records -----
+    ["GET", /^\/clients\/(\d+)\/consents$/, (m) => consentsOut(consentClient(+m[1]).id)],
+    ["POST", /^\/clients\/(\d+)\/consents$/, async (m, b) => {
+      need("clients.write");
+      const c = consentClient(+m[1]);
+      str(b.typed_name) || fail("Escriba el nombre de quien autoriza.");
+      /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || fail("Falta la firma en pantalla.");
+      await recordConsents(c, b.answers || {}, { method: "presencial", user_agent: navigator.userAgent, typed_name: b.typed_name, typed_id: b.typed_id, signature_png: b.signature_png, note: b.note });
+      return consentsOut(c.id);
+    }],
+    ["POST", /^\/clients\/(\d+)\/consents\/revoke$/, async (m, b) => {
+      need("clients.write");
+      const c = consentClient(+m[1]);
+      LEGAL.consentItem(b.item) || fail("Autorización no válida.");
+      str(b.note) || fail("Indique cómo pidió el cliente la revocación (por ejemplo, correo del 15/10/2026).");
+      await recordConsents(c, { [b.item]: false }, { method: "revocacion", user_agent: navigator.userAgent, note: b.note });
+      return consentsOut(c.id);
+    }],
+    ["POST", /^\/clients\/(\d+)\/consent-link$/, () => fail(NEEDS_SERVER.consent)],
 
     // ----- catalog -----
     ["GET", /^\/catalog$/, () => s.categories.slice().sort((a, b) => a.sort - b.sort).map((c) => ({
@@ -7004,7 +7468,7 @@ const factRow = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</
 async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
-  const [c, cases] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), loadCatalog()]);
+  const [c, cases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -7037,6 +7501,7 @@ async function renderClienteFicha(id) {
           ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
+      ${consents ? consentPanel(c, consents) : ""}
       <section id="sec-expedientes" class="panel ficha-wide">
         <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)}</h3>
         ${cases.length ? `<ul class="case-open-list">${cases.map((k) => `
@@ -7052,6 +7517,141 @@ async function renderClienteFicha(id) {
       </section>
     </div>`;
 }
+
+// ---------- Legal documents and client authorizations (change 56) ----------
+const LEGAL = window.JuanmaLegal;
+const coTime = (utc) => window.JuanmaPdf.colombiaTime(utc);
+let legalCurrent = null;
+function openLegal(id) {
+  const doc = LEGAL.legalDoc(id) || LEGAL.LEGAL_DOCS[0];
+  legalCurrent = doc;
+  const dlg = $("#legal-dialog");
+  $("[data-title]", dlg).textContent = doc.title;
+  $("#legal-tabs").innerHTML = LEGAL.LEGAL_DOCS.map((d) => `<button type="button" data-legal="${d.id}" class="${d.id === doc.id ? "active" : ""}">${escapeHtml(d.short)}</button>`).join("");
+  $("#legal-body").innerHTML = doc.html;
+  $("#legal-body").scrollTop = 0;
+  if (!dlg.open) dlg.showModal();
+}
+/** A legal document as Markdown, for the PDF. */
+const legalMarkdown = (html) => html.replace(/\n\s*/g, " ")
+  .replace(/<h3>(.*?)<\/h3>/g, "\n## $1\n").replace(/<tr>(.*?)<\/tr>/g, (_, r) => `\n- ${r.replace(/<\/t[hd]>\s*<t[hd]>/g, " · ")}`)
+  .replace(/<li>/g, "\n- ").replace(/<\/p>|<\/ul>|<\/ol>|<\/table>/g, "\n").replace(/<\/?strong>/g, "**").replace(/<[^>]+>/g, "")
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n /g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-legal]");
+  if (!a) return;
+  e.preventDefault();
+  openLegal(a.dataset.legal);
+});
+$("#legal-print").addEventListener("click", () => guarded(() =>
+  saveFile(`${safeName(legalCurrent.title)}.pdf`, markdownToPdf(`# ${legalCurrent.title}\n\n${legalMarkdown(legalCurrent.html)}`))));
+
+const consentState = (r) => (r ? (r.granted ? '<span class="consent-state yes">Autorizó</span>' : '<span class="consent-state no">No autorizó</span>') : '<span class="consent-state none">Sin respuesta</span>');
+const consentWhen = (r, methods) => `${escapeHtml(methods[r.method] || r.method)} · ${escapeHtml(coTime(r.at))}${r.registered_by_name ? ` · registró ${escapeHtml(r.registered_by_name)}` : ""}${r.note ? ` · ${escapeHtml(r.note)}` : ""}`;
+function consentPanel(c, k) {
+  const pending = k.requests.find((q) => !q.answered_at);
+  const remote = !window.JuanmaBackend?.web;
+  const w = can("clients.write");
+  return `<section id="sec-autorizaciones" class="panel">
+    <h3 class="panel-title">Autorizaciones de datos <span class="muted">· versión ${escapeHtml(k.version)}</span></h3>
+    <ul class="consent-status">${k.items.map((i) => { const r = k.status[i.key]; return `<li><span>${escapeHtml(i.title)}</span>${consentState(r)}${r ? `<small>${consentWhen(r, k.methods)}</small>` : ""}</li>`; }).join("")}</ul>
+    ${pending ? `<p class="hint">Enlace ${pending.channel === "copy" ? "generado" : `enviado por ${pending.channel === "whatsapp" ? "WhatsApp" : "correo"}`} el ${escapeHtml(coTime(pending.created_at))}${pending.opened_at ? " · el cliente lo abrió" : ""}; aún sin responder.</p>` : ""}
+    <div class="toolbar">
+      ${w && remote ? `<button class="mini primary" data-consent="email" data-client="${c.id}" ${c.email ? "" : "disabled title=\"El cliente no tiene correo\""}>Enviar enlace por correo</button>
+        <button class="mini" data-consent="whatsapp" data-client="${c.id}" ${c.phone ? "" : "disabled title=\"El cliente no tiene teléfono\""}>Enviar por WhatsApp</button>
+        <button class="mini" data-consent="copy" data-client="${c.id}">Copiar enlace</button>` : ""}
+      ${w ? `<button class="mini ${remote ? "" : "primary"}" data-consent="inperson" data-client="${c.id}">Firmar en la oficina</button>
+        <button class="mini" data-consent="revoke" data-client="${c.id}">Registrar revocación</button>` : ""}
+      ${k.records.length ? `<button class="mini" data-consent="pdf" data-client="${c.id}">Constancia PDF</button>` : ""}
+      <button class="mini" data-legal="autorizacion">Ver documentos</button>
+    </div>
+    ${remote ? "" : '<p class="hint">El envío por enlace necesita la app en el servidor; en este enlace de prueba use «Firmar en la oficina».</p>'}
+    ${k.records.length ? `<details class="consent-history"><summary>Historial de respuestas (${k.records.length})</summary><ul class="ficha-list">${k.records.slice().reverse().map((r) =>
+      `<li><span><strong>${escapeHtml(LEGAL.consentItem(r.item)?.title || r.item)}</strong>: ${r.granted ? "autorizó" : "no autorizó"}<br><span class="muted">${consentWhen(r, k.methods)}${r.ip ? ` · IP ${escapeHtml(r.ip)}` : ""}</span></span></li>`).join("")}</ul></details>` : ""}
+  </section>`;
+}
+
+let consentClient = null, consentPad = null;
+const consentData = (cid) => Promise.all([api("GET", `/clients/${cid}`), api("GET", `/clients/${cid}/consents`)]);
+const CONSENT_ACTIONS = {
+  async link(cid, channel) {
+    const r = await api("POST", `/clients/${cid}/consent-link`, { channel });
+    if (r.sent?.ok) toast(`Enlace enviado a ${r.sent.detail}.`);
+    else {
+      const copied = await copyText(r.link);
+      toast(r.sent ? `No se envió (${r.sent.detail}). ${copied ? "Copié el enlace para que lo envíe por otro medio." : r.link}` : copied ? "Enlace copiado. Envíelo al cliente por el medio que prefiera." : r.link, !!r.sent);
+    }
+    await refreshView();
+  },
+  email: (cid) => CONSENT_ACTIONS.link(cid, "email"),
+  whatsapp: (cid) => CONSENT_ACTIONS.link(cid, "whatsapp"),
+  copy: (cid) => CONSENT_ACTIONS.link(cid, "copy"),
+  async inperson(cid) {
+    const [c] = await consentData(cid);
+    consentClient = c;
+    openDialog($("#consent-dialog"), `Autorizaciones en la oficina · ${c.full_name}`, { typed_name: c.full_name, typed_id: c.id_number });
+    $("#consent-items").innerHTML = LEGAL.CONSENT_ITEMS.map((i) => `<li class="consent-card"><h4>${escapeHtml(i.title)}</h4>
+      <label class="consent-check"><input type="checkbox" name="c_${i.key}" /> <span>${escapeHtml(i.label)}</span></label>
+      <details><summary>Leer: ${escapeHtml(LEGAL.legalDoc(i.doc).title)}</summary><div class="legal-doc">${LEGAL.legalDoc(i.doc).html}</div></details></li>`).join("");
+    consentPad = window.JuanmaSigPad($("#consent-pad"));
+    consentPad.clear();
+  },
+  async revoke(cid) {
+    const [c, k] = await consentData(cid);
+    consentClient = c;
+    openDialog($("#revoke-dialog"), `Registrar revocación · ${c.full_name}`);
+    $("#revoke-item").innerHTML = k.items.map((i) => `<option value="${i.key}">${escapeHtml(i.title)}${k.status[i.key]?.granted ? "" : " (hoy no autorizada)"}</option>`).join("");
+  },
+  async pdf(cid) {
+    const [c, k] = await consentData(cid);
+    const ev = (r) => [`- **${LEGAL.consentItem(r.item)?.title || r.item}: ${r.granted ? "AUTORIZÓ" : "NO AUTORIZÓ"}**`,
+      `  Registro N.º ${r.id} · ${k.methods[r.method] || r.method} · ${coTime(r.at)}`,
+      r.typed_name || r.typed_id ? `  Nombre escrito: ${r.typed_name || "—"} · Documento escrito: ${r.typed_id || "—"}` : "",
+      r.ip || r.user_agent ? `  IP: ${r.ip || "—"} · Navegador: ${r.user_agent || "—"}` : "",
+      r.registered_by_name ? `  Registrado por: ${r.registered_by_name}${r.signature_png ? " · firma en pantalla guardada" : ""}` : "",
+      r.note ? `  Observación: ${r.note}` : "",
+      `  Versión del documento ${r.doc_version} · huella del texto (SHA-256): ${r.doc_sha256}`,
+      `  Huella del registro: ${r.hash}`].filter(Boolean).join("\n");
+    const md = `# CONSTANCIA DE AUTORIZACIONES DE DATOS PERSONALES
+
+**${LEGAL.FIRM.brand}** · Ley 1581 de 2012 y Decreto 1074 de 2015 (art. 2.2.2.25.2.5, prueba de la autorización)
+
+Titular: **${c.full_name}**${c.id_number ? ` · ${c.id_type || ""} ${c.id_number}` : ""}
+
+Expedida el ${coTime(new Date().toISOString().slice(0, 19).replace("T", " "))} por ${me.name}.
+
+## Estado actual
+
+${k.items.map((i) => { const r = k.status[i.key]; return `- ${i.title}: **${r ? (r.granted ? "Autorizó" : "No autorizó") : "Sin respuesta"}**${r ? ` (${coTime(r.at)})` : ""}`; }).join("\n")}
+
+## Registro de respuestas
+
+${k.records.map(ev).join("\n\n")}
+
+---
+
+Cada registro guarda el texto exacto que se respondió (su huella SHA-256 identifica la versión del documento) y está encadenado con el anterior: cualquier modificación posterior rompe la cadena. Los registros no se pueden editar ni borrar.`;
+    await saveFile(`Autorizaciones ${safeName(c.full_name)}.pdf`, markdownToPdf(md));
+  },
+};
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-consent]");
+  if (b) guarded(() => CONSENT_ACTIONS[b.dataset.consent](Number(b.dataset.client)));
+});
+$("#consent-clear").addEventListener("click", () => consentPad?.clear());
+wireDialog($("#consent-dialog"), async (form) => {
+  if (consentPad.isEmpty()) throw new Error("Falta la firma del cliente.");
+  const answers = Object.fromEntries(LEGAL.CONSENT_ITEMS.map((i) => [i.key, form.elements[`c_${i.key}`].checked]));
+  await api("POST", `/clients/${consentClient.id}/consents`, { answers, typed_name: form.elements.typed_name.value, typed_id: form.elements.typed_id.value,
+    note: form.elements.note.value, signature_png: consentPad.toPng() });
+  toast("Autorizaciones guardadas.");
+  await refreshView();
+});
+wireDialog($("#revoke-dialog"), async (form) => {
+  await api("POST", `/clients/${consentClient.id}/consents/revoke`, { item: form.elements.item.value, note: form.elements.note.value });
+  toast("Revocación registrada.");
+  await refreshView();
+});
 
 // ---------- Case screen: everything about one case, with the other modules ----------
 const fmtDue = (d) => escapeHtml(String(d || "").replace("T", " ").slice(0, 16));

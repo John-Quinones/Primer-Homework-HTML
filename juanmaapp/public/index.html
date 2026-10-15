@@ -69,6 +69,7 @@
         <p class="hint">Este es el <strong>enlace de prueba</strong>: quien pueda abrirlo entra con cualquier usuario y ve todos los datos. Úselo con datos de prueba; para los datos reales de la firma use la app en Azure, con contraseña o Microsoft 365.</p>
         <div class="demo-grid"></div>
       </div>
+      <p class="legal-links"><a href="legal.html#tratamiento" data-legal="tratamiento">Tratamiento de datos</a><a href="legal.html#privacidad" data-legal="privacidad">Privacidad</a><a href="legal.html#cookies" data-legal="cookies">Cookies</a><a href="legal.html#terminos" data-legal="terminos">Términos y condiciones</a></p>
     </div>
   </div>
 
@@ -124,6 +125,7 @@
       <a href="#bitacora" data-view="bitacora"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 12h7M9 15.5h7M9 19h4"/></svg><span>Bitácora</span></a>
       <a href="#usuarios" data-view="usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.6-4 3.8-6.5 8-6.5s7.4 2.5 8 6.5"/><path d="M18.5 3.5l1 1.8 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2-1.5-1.4 2-.3z"/></svg><span>Usuarios</span></a>
       <p class="app-version nav-version" data-version></p>
+      <a href="legal.html#tratamiento" class="nav-legal" data-legal="tratamiento">Documentos legales</a>
     </nav>
 
     <main>
@@ -1412,6 +1414,55 @@
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Documentos legales (change 56) -->
+  <dialog id="legal-dialog" class="legal-dialog">
+    <form method="dialog">
+      <h3 data-title>Documentos legales</h3>
+      <nav class="legal-tabs" id="legal-tabs" aria-label="Documentos"></nav>
+      <div class="legal-doc" id="legal-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="legal-print">Descargar PDF</button>
+        <button class="primary" value="ok">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Autorizaciones del cliente en la oficina (change 56) -->
+  <dialog id="consent-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3 data-title>Autorizaciones en la oficina</h3>
+      <p class="hint">Entregue el equipo al cliente. Cada autorización es independiente: el cliente marca solo las que acepta; las que deje sin marcar quedan registradas como <strong>no autorizadas</strong>. Usted queda registrado como quien recibió la firma.</p>
+      <ul class="consent-list" id="consent-items"></ul>
+      <div class="grid2">
+        <label>Nombre completo de quien autoriza * <input name="typed_name" required /></label>
+        <label>Documento de identidad <input name="typed_id" /></label>
+      </div>
+      <canvas class="sig-canvas" id="consent-pad"></canvas>
+      <p><button type="button" class="mini" id="consent-clear">Borrar firma</button></p>
+      <label>Observación (opcional) <input name="note" placeholder="Ej. firmó acompañado de su hija" /></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar autorizaciones</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Revocar una autorización (change 56) -->
+  <dialog id="revoke-dialog">
+    <form method="dialog">
+      <h3 data-title>Registrar revocación</h3>
+      <p class="hint">Use esto cuando el cliente pida retirar una autorización por escrito, por correo o en persona. Queda un nuevo registro; el anterior se conserva como prueba.</p>
+      <label>Autorización <select name="item" id="revoke-item"></select></label>
+      <label>¿Cómo lo pidió el cliente? * <input name="note" required placeholder="Ej. correo del 15/10/2026 desde ana@correo.co" /></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Registrar revocación</button>
       </div>
     </form>
   </dialog>

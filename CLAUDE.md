@@ -43,5 +43,7 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 - Security (change 51, OWASP audit): scrypt2 hashes (N=2^17, rehash on login; tests set SCRYPT_LOG_N), `auth_throttle` table per e-mail and IP, idle sessions (`last_seen`), `users.ms_oid` binding, `publicBase()` for mailed links, CSP header (no inline scripts: page code in `*-page.js`), `inTransaction()`. Options PASSWORD_LOGIN=off, SESSION_IDLE_HOURS, SETUP_TOKEN. Weak passwords (name/e-mail inside, digits only) are refused: test passwords avoid the user's name.
 - Client names are buttons (`clientName()`, `data-client-menu`) opening a menu with the client's data and cases (change 52); side-menu links carry a description (`NAV_DESC`).
 
+- Legal documents and client authorizations (change 56): texts in `src/legal.js` (shared as `window.JuanmaLegal`; firm data in `FIRM`, empty = [COMPLETAR]; any text change bumps `LEGAL_VERSION`). Five separate consent items (`CONSENT_ITEMS`) answered by private link (`autorizar.html`, `/api/public/consent`) or in the office with a drawn signature; `src/consents.js` keeps append-only `consent_records` (SQLite triggers forbid update/delete; hash chain, `verifyConsentChain`) and the exact texts in `consent_texts`. Demo mirrors it in `s.consents` (no link sending). Public page `legal.html`.
+
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.

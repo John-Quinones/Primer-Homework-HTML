@@ -83,6 +83,85 @@ ____________________________________
 Huella: [FILL: Huella del índice derecho, si se firma en físico]` + FOOTER,
   },
   {
+    name: "Autorización para el tratamiento de datos personales",
+    category: "Autorización",
+    description: "Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies y comunicaciones), para firmar en papel.",
+    body: `# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES
+
+{{fecha.ciudad_y_fecha}}
+
+Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **{{oficina.nombre}}** (TEC Jurídicos), en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:
+
+| Autorización | SÍ | NO |
+|---|---|---|
+| 1. **Tratamiento de datos personales** para prestar los servicios jurídicos, llevar mi expediente, consultar mis procesos, ejecutar el contrato, registrar pagos y cumplir obligaciones legales. | ☐ | ☐ |
+| 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |
+| 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |
+| 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |
+| 5. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |
+
+## DERECHOS DEL TITULAR
+
+Conozco que, conforme al artículo 8 de la Ley 1581 de 2012, puedo conocer, actualizar, rectificar y suprimir mis datos; pedir prueba de esta autorización; ser informado(a) del uso de mis datos; revocar cualquiera de estas autorizaciones cuando no exista un deber legal o contractual de conservarlos; y presentar quejas ante la Superintendencia de Industria y Comercio después de agotar el trámite ante EL RESPONSABLE, escribiendo a {{oficina.correo}} o en {{oficina.direccion}}, {{oficina.ciudad}}.
+
+La información que entrego está amparada por el secreto profesional del abogado (artículo 74 de la Constitución y numeral 9 del artículo 28 de la Ley 1123 de 2007). EL RESPONSABLE conservará la prueba de esta autorización mientras trate mis datos.
+
+Firma:
+
+____________________________________
+**{{cliente.nombre}}**
+{{cliente.tipo_documento}} No. {{cliente.documento}}
+Huella: [FILL: Huella del índice derecho, si se firma en físico]` + FOOTER,
+  },
+  {
+    name: "Acuerdo de confidencialidad y tratamiento de datos (funcionarios y contratistas)",
+    category: "Contrato",
+    description: "Secreto profesional (Ley 1123 de 2007) y deberes del encargado (Ley 1581 de 2012) para quien accede a la información de los clientes.",
+    body: `# ACUERDO DE CONFIDENCIALIDAD Y TRATAMIENTO DE DATOS PERSONALES
+
+{{fecha.ciudad_y_fecha}}
+
+Entre **{{oficina.nombre}}** (TEC Jurídicos), en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:
+
+## PRIMERA. Información confidencial
+
+Es confidencial toda la información de clientes, contrapartes y procesos a la que EL RECEPTOR acceda por cualquier medio, incluida TecjuridicosApp: datos personales, hechos, estrategias, documentos, honorarios, pagos y credenciales de acceso.
+
+## SEGUNDA. Obligaciones
+
+EL RECEPTOR se obliga a:
+
+1. Guardar el secreto profesional y la reserva de la información, aun después de terminada su relación con LA FIRMA (artículo 74 de la Constitución y Ley 1123 de 2007).
+2. Usar la información solo para las labores que LA FIRMA le asigne y conforme a la Política de tratamiento de datos personales.
+3. No copiar, extraer, reenviar ni divulgar información fuera de lo que exige cada encargo, ni usar correos o dispositivos personales no autorizados para ello.
+4. Mantener en secreto su usuario y contraseña, no compartir su cuenta y cerrar sesión en equipos compartidos.
+5. Informar de inmediato a LA FIRMA cualquier pérdida, acceso indebido o incidente de seguridad.
+6. Devolver o destruir la información en su poder al terminar la relación.
+
+## TERCERA. Registro de actividad
+
+EL RECEPTOR conoce que TecjuridicosApp registra en una bitácora cada cambio que hace, con fecha, hora, dirección IP y dispositivo, y lo autoriza para fines de seguridad y control.
+
+## CUARTA. Incumplimiento
+
+El incumplimiento de este acuerdo es falta grave y da lugar a las acciones laborales, contractuales, disciplinarias, civiles y penales que correspondan, sin perjuicio de la indemnización de los perjuicios causados.
+
+## QUINTA. Vigencia
+
+Este acuerdo rige desde su firma y sus obligaciones de confidencialidad no terminan con la relación.
+
+Firmas:
+
+____________________________________
+**LA FIRMA**
+{{abogado.nombre}}
+
+____________________________________
+**EL RECEPTOR**
+[FILL: Nombre completo]
+C.C. [FILL: Número de documento]` + FOOTER,
+  },
+  {
     name: "Contrato de prestación de servicios profesionales de abogado",
     category: "Contrato",
     description: "Honorarios, alcance del mandato, obligaciones de las partes y terminación.",
