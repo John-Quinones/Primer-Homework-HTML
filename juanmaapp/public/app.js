@@ -625,14 +625,14 @@ function taskTable(list, answers) {
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
-        <td>${escapeHtml(t.delivered_at || "—")}</td><td>${fmtDue(t.due_at)}</td>
+        <td>${escapeHtml(t.delivered_at || "—")}</td><td>${fmtDue(t.due_at)}${t.term_days ? `<br><span class="muted">${escapeHtml(termText(t))}</span>` : ""}</td>
         <td>${t.response_at ? `${escapeHtml(t.response_at)}${t.response_notes ? `<br><span class="muted">${escapeHtml(t.response_notes)}</span>` : ""}` : "—"}</td>
         <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`
       : `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" || t.kind === "recurso" ? "warn" : ""}">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.location ? `<br><span class="muted">${escapeHtml(t.location)}</span>` : ""}${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}${done ? `<br><span class="muted">${done}</span>` : ""}</td>
         <td>${escapeHtml(whoOf(t))}${t.created_by_name ? `<br><span class="muted">Asignó: ${escapeHtml(t.created_by_name)}</span>` : ""}</td>
-        <td>${fmtDue(t.due_at)}<br><span class="muted">${t.remind_days?.length ? "Aviso " + t.remind_days.map((d) => (d === 0 ? "el mismo día" : d + " d antes")).join(", ") : "Sin aviso"}</span></td>
+        <td>${fmtDue(t.due_at)}${t.term_days ? `<br><span class="muted">${escapeHtml(termText(t))}</span>` : ""}<br><span class="muted">${t.remind_days?.length ? "Aviso " + t.remind_days.map((d) => (d === 0 ? "el mismo día" : d + " d antes")).join(", ") : "Sin aviso"}</span></td>
         <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`;
   }).join("");
   return `<div class="table-scroll"><table class="data-table compact"><thead><tr>${answers
@@ -3029,6 +3029,7 @@ async function renderAgenda() {
             <span><strong><a href="#expediente-${t.case_id}" title="Abrir el expediente">${escapeHtml(t.title)}</a></strong> ${followBadge(t)}</span>
             <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
+            ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
           ${can("cases.write") ? `<span class="toolbar">
@@ -3074,9 +3075,53 @@ function syncTaskForm(autoDue = false) {
   $("[data-response-hint]", taskForm).textContent = kind === "peticion"
     ? "Derecho de petición: la entidad debe responder en 15 días hábiles (Ley 1755 de 2015, art. 14; 10 días para documentos, 30 para consultas). Al indicar la fecha de radicación la app calcula el plazo sin fines de semana ni festivos."
     : "Al registrar la fecha de respuesta, queda como cumplido. Si vence el plazo sin respuesta, el responsable recibe el aviso.";
-  if (autoDue && kind === "peticion" && f.delivered_at.value && !f.due_at.dataset.touched) f.due_at.value = `${L.addBusinessDays(f.delivered_at.value, 15)}T17:00`;
+  $("[data-term]", taskForm).hidden = kind === "audiencia";
+  if (!f.id.value) $("[data-title]", taskForm).textContent = `Nuevo: ${KIND_LABEL[kind].toLowerCase()}`;
+  // A petition's term runs from the day it was filed: 15 business days unless the user sets another.
+  if (autoDue && kind === "peticion" && f.delivered_at.value) {
+    f.term_from.value = f.delivered_at.value;
+    if (!f.term_days.value) applyTermPreset(TERM_PRESETS.findIndex((x) => x.name === "Derecho de petición (general)"));
+    computeTerm();
+  }
   $("[data-done-notes]", taskForm).hidden = !f.done.checked;
 }
+
+// ----- Término de cumplimiento (change 48): days set by the user, presets as suggestions -----
+const TERM_PRESETS = CMETA.LEGAL_TERMS.flatMap(([, items]) => items);
+taskForm.elements.term_preset.innerHTML += CMETA.LEGAL_TERMS.map(([area, items]) => `<optgroup label="${escapeHtml(area)}">${items.map((x) =>
+  `<option value="${TERM_PRESETS.indexOf(x)}">${escapeHtml(x.name)} · ${x.days} días${x.unit === "calendario" ? " calendario" : ""} (${escapeHtml(x.norm)})</option>`).join("")}</optgroup>`).join("");
+const LONG_DATE = new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const termText = (t) => (t.term_days ? `${t.term_days} día(s) ${t.term_unit === "calendario" ? "calendario" : "hábiles"} desde ${t.term_from}${t.term_label ? " · " + t.term_label : ""}` : "");
+function applyTermPreset(i) {
+  const x = TERM_PRESETS[i], f = taskForm.elements;
+  if (!x) return;
+  f.term_preset.value = String(i);
+  Object.assign(f.term_days, { value: x.days });
+  f.term_unit.value = x.unit;
+  f.term_judicial.checked = x.judicial;
+  f.term_label.value = `${x.name} (${x.norm})`;
+  if (!f.title.value.trim()) f.title.value = x.name;
+  if (!f.id.value && f.kind.value !== x.kind && !(CMETA.RESPONSE_KINDS.includes(f.kind.value) && x.kind === "peticion")) { f.kind.value = x.kind; syncTaskForm(); }
+}
+/** Due date from the term: notification date (+2 business days if notified by e-mail) + N days. */
+function computeTerm() {
+  const f = taskForm.elements, out = $("[data-term-result]", taskForm), days = Number(f.term_days.value);
+  if (!f.term_from.value || !(days > 0)) { out.textContent = f.term_days.value || f.term_from.value ? "Indique la fecha de notificación y el número de días." : ""; return; }
+  const judicial = f.term_judicial.checked;
+  const start = f.term_email.checked ? L.addBusinessDays(f.term_from.value, 2, { judicial }) : f.term_from.value;
+  const due = L.addBusinessDays(start, days, { unit: f.term_unit.value, judicial });
+  f.due_at.value = `${due}T${f.term_hour.value || "17:00"}`;
+  const txt = LONG_DATE.format(new Date(due + "T00:00:00Z"));
+  out.innerHTML = `Vence el <strong>${escapeHtml(txt)}</strong> a las ${escapeHtml(f.term_hour.value || "17:00")}. ${days} día(s) ${f.term_unit.value === "calendario" ? "calendario" : "hábiles"} contados desde el día siguiente al ${escapeHtml(start)}${f.term_email.checked ? " (notificación por correo: se entiende hecha 2 días hábiles después del envío)" : ""}${f.term_unit.value === "habiles" ? `, sin sábados, domingos ni festivos${judicial ? " ni vacancia judicial" : ""}` : ""}.`;
+}
+taskForm.elements.term_preset.addEventListener("change", (e) => { applyTermPreset(Number(e.target.value)); if (e.target.value === "") taskForm.elements.term_label.value = ""; computeTerm(); });
+for (const n of ["term_from", "term_days", "term_unit", "term_hour", "term_judicial", "term_email"]) {
+  taskForm.elements[n].addEventListener(n === "term_days" ? "input" : "change", computeTerm);
+}
+taskForm.elements.term_days.addEventListener("input", () => {
+  const x = TERM_PRESETS[Number(taskForm.elements.term_preset.value)];
+  if (x && Number(taskForm.elements.term_days.value) !== x.days) { taskForm.elements.term_preset.value = ""; taskForm.elements.term_label.value = ""; }
+});
 taskForm.elements.kind.addEventListener("change", () => syncTaskForm(true));
 taskForm.elements.delivered_at.addEventListener("change", () => syncTaskForm(true));
 taskForm.elements.done.addEventListener("change", () => syncTaskForm());
@@ -3090,7 +3135,12 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : `Nuevo: ${KIND_LABEL[k0].toLowerCase()}`, t ? {
     id: t.id, kind: t.kind, title: t.title, location: t.location, notes: t.notes, due_at: t.due_at.replace(" ", "T"),
     delivered_at: t.delivered_at || "", response_at: t.response_at || "", response_notes: t.response_notes || "", done_notes: t.done_notes || "",
-  } : { kind: k0, delivered_at: CMETA.RESPONSE_KINDS.includes(k0) ? bogotaNow().slice(0, 10) : "", ...preset });
+    term_from: t.term_from || "", term_days: t.term_days || "", term_unit: t.term_unit || "habiles", term_label: t.term_label || "", term_hour: t.due_at.slice(11, 16) || "17:00",
+  } : { kind: k0, delivered_at: CMETA.RESPONSE_KINDS.includes(k0) ? bogotaNow().slice(0, 10) : "", term_from: bogotaNow().slice(0, 10), term_unit: "habiles", term_hour: "17:00", ...preset });
+  taskForm.elements.term_preset.value = "";
+  taskForm.elements.term_judicial.checked = !/término administrativo/.test(t?.term_label || "") && t?.kind !== "peticion" && k0 !== "peticion";
+  taskForm.elements.term_email.checked = /notificación por correo/.test(t?.term_label || "");
+  $("[data-term-result]", taskForm).textContent = t?.term_days ? `Término registrado: ${termText(t)}. Vence ${t.due_at}.` : "";
   delete taskForm.elements.due_at.dataset.touched;
   if (t) taskForm.elements.due_at.dataset.touched = "1";
   taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
@@ -3118,6 +3168,12 @@ wireDialog($("#task-dialog"), async (form) => {
     done_notes: form.elements.done.checked ? d.done_notes || "" : "",
     delivered_at: d.delivered_at || "", response_at: d.response_at || "", response_notes: d.response_notes || "",
   };
+  const termOn = !$("[data-term]", form).hidden && Number(d.term_days) > 0 && d.term_from;
+  Object.assign(body, termOn ? {
+    term_from: d.term_from, term_days: Number(d.term_days), term_unit: d.term_unit,
+    term_label: [d.term_label.replace(/ · (notificación por correo|término administrativo)/g, ""), form.elements.term_email.checked && "notificación por correo",
+      !form.elements.term_judicial.checked && "término administrativo"].filter(Boolean).join(" · "),
+  } : { term_from: "", term_days: null, term_unit: "", term_label: "" });
   if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
   const who = directory.find((u) => u.id === body.assigned_user_id);
   toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who ? `. Se avisó a ${who.name}` : ""}.`);

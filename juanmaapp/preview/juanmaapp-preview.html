@@ -826,6 +826,10 @@ a.chip-stat strong { color: var(--link); }
 .agenda-body a { color: var(--link); text-decoration: none; }
 .agenda-body a:hover { text-decoration: underline; }
 @media (max-width: 760px) { .hn-text { display: none; } .history-nav button { font-size: 1rem; line-height: 1; padding: 5px 11px; } }
+.term-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.term-box legend { font-weight: 600; padding: 0 4px; }
+.term-result { margin: 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--brand-blue) 9%, transparent); font-size: .9rem; }
+.term-result:empty { display: none; }
 
 </style>
 </head>
@@ -1927,6 +1931,23 @@ a.chip-stat strong { color: var(--link); }
         </label>
         <label><span data-due-label>Fecha y hora</span> * <input name="due_at" type="datetime-local" required /></label>
         <label class="span2">Título * <input name="title" required placeholder="Ej. Audiencia inicial art. 77 CPTSS" /></label>
+        <fieldset class="span2 term-box" data-term>
+          <legend>Término de cumplimiento</legend>
+          <label class="span2">Término sugerido <select name="term_preset"><option value="">— Escribir el término a mano —</option></select></label>
+          <div class="grid4">
+            <label>Notificado o desde <input name="term_from" type="date" /></label>
+            <label>Días <input name="term_days" type="number" min="1" max="400" inputmode="numeric" placeholder="Ej. 3" /></label>
+            <label>Clase de días <select name="term_unit"><option value="habiles">Hábiles</option><option value="calendario">Calendario</option></select></label>
+            <label>Hora límite <input name="term_hour" type="time" value="17:00" /></label>
+          </div>
+          <div class="radio-row">
+            <label class="inline"><input type="checkbox" name="term_judicial" checked /> Término judicial (no corre en vacancia judicial)</label>
+            <label class="inline"><input type="checkbox" name="term_email" /> Notificación personal por correo (+2 días hábiles, Ley 2213 art. 8)</label>
+          </div>
+          <input type="hidden" name="term_label" />
+          <p class="term-result" data-term-result aria-live="polite"></p>
+          <p class="hint">El término corre desde el día siguiente a la notificación. Los términos sugeridos son una ayuda: verifique la norma y lo que diga el auto, y ajuste los días si es distinto.</p>
+        </fieldset>
         <div class="span2 grid2 response-box" data-response hidden>
           <label>Fecha de entrega o radicación <input name="delivered_at" type="date" /></label>
           <label>Respuesta recibida el <input name="response_at" type="date" /></label>
@@ -3697,7 +3718,49 @@ function taskFollowUp(t, now) {
   return soon ? { key: "por_vencer", label: "Por vencer", tone: "warn" } : { key: "en_plazo", label: "En plazo", tone: "muted" };
 }
 
-return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp };
+// ----- Procedural terms (change 48): suggestions only; the user sets the days -----
+// judicial: true → the days of vacancia judicial do not count (court terms); false → administrative (e.g. petitions).
+const LEGAL_TERMS = [
+  ["Civil y familia (CGP)", [
+    ["Recurso de reposición", 3, "habiles", "CGP art. 318", "recurso"],
+    ["Apelación de auto o sentencia fuera de audiencia", 3, "habiles", "CGP art. 322", "recurso"],
+    ["Sustentar apelación de sentencia ante el superior", 5, "habiles", "Ley 2213 art. 12", "recurso"],
+    ["Recurso de súplica", 3, "habiles", "CGP art. 331", "recurso"],
+    ["Interponer casación", 5, "habiles", "CGP art. 337", "recurso"],
+    ["Contestar demanda (verbal)", 20, "habiles", "CGP art. 369", "termino"],
+    ["Contestar demanda (verbal sumario)", 10, "habiles", "CGP art. 391", "termino"],
+    ["Excepciones en proceso ejecutivo", 10, "habiles", "CGP art. 442", "termino"],
+    ["Oposición en proceso monitorio", 10, "habiles", "CGP art. 421", "termino"],
+    ["Subsanar la demanda", 5, "habiles", "CGP art. 90", "termino"],
+    ["Descorrer traslado de excepciones (verbal)", 5, "habiles", "CGP art. 370", "termino"],
+  ]],
+  ["Laboral (CPTSS)", [
+    ["Recurso de reposición (auto notificado por estado)", 2, "habiles", "CPTSS art. 63", "recurso"],
+    ["Apelación de auto notificado por estado", 5, "habiles", "CPTSS art. 65", "recurso"],
+    ["Interponer casación", 15, "habiles", "CPTSS art. 88", "recurso"],
+    ["Contestar demanda ordinaria", 10, "habiles", "CPTSS art. 74", "termino"],
+    ["Subsanar la demanda", 5, "habiles", "CPTSS art. 28", "termino"],
+  ]],
+  ["Contencioso administrativo (CPACA)", [
+    ["Recurso de reposición", 3, "habiles", "CPACA art. 242 y CGP art. 318", "recurso"],
+    ["Apelación de auto", 3, "habiles", "CPACA art. 244", "recurso"],
+    ["Apelación de sentencia", 10, "habiles", "CPACA art. 247", "recurso"],
+    ["Contestar demanda", 30, "habiles", "CPACA art. 172", "termino"],
+    ["Subsanar la demanda", 10, "habiles", "CPACA art. 170", "termino"],
+  ]],
+  ["Tutela", [
+    ["Impugnar el fallo", 3, "habiles", "Decreto 2591 art. 31", "recurso"],
+    ["Cumplir el fallo (48 horas)", 2, "calendario", "Decreto 2591 art. 27", "termino"],
+  ]],
+  ["Actuación administrativa", [
+    ["Recursos de reposición y apelación ante la entidad", 10, "habiles", "CPACA art. 76", "recurso", false],
+    ["Derecho de petición (general)", 15, "habiles", "Ley 1755 art. 14", "peticion", false],
+    ["Petición de documentos o información", 10, "habiles", "Ley 1755 art. 14", "peticion", false],
+    ["Consulta a una autoridad", 30, "habiles", "Ley 1755 art. 14", "peticion", false],
+  ]],
+].map(([area, items]) => [area, items.map(([name, days, unit, norm, kind, judicial = true]) => ({ area, name, days, unit, norm, kind, judicial }))]);
+
+return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS };
 })();
 
 window.JuanmaLedger = (function () {
@@ -3907,13 +3970,29 @@ function feeVariables(charges, receipts = []) {
   };
 }
 
-/** Date `n` business days after `date` (no weekends, no Colombian holidays). E.g. a petition is answered within 15 (Ley 1755 de 2015, art. 14). */
-function addBusinessDays(date, n) {
-  let d = new Date(date + "T00:00:00Z"), left = n;
+/**
+ * Last day of a term of `n` days that starts running the day after `date`.
+ * unit "habiles": no weekends nor Colombian holidays; with judicial = true also no vacancia judicial
+ * (20 December to 10 January, and Monday to Wednesday of Holy Week). unit "calendario": every day counts.
+ * E.g. a petition is answered within 15 business days (Ley 1755 de 2015, art. 14).
+ */
+function addBusinessDays(date, n, { unit = "habiles", judicial = false } = {}) {
+  let d = new Date(date + "T00:00:00Z"), left = Number(n) || 0;
+  const off = (x) => {
+    if (unit === "calendario") return false;
+    if (x.getUTCDay() === 0 || x.getUTCDay() === 6 || colombianHolidays(x.getUTCFullYear()).has(iso(x))) return true;
+    if (!judicial) return false;
+    const md = iso(x).slice(5);
+    if (md >= "12-20" || md <= "01-10") return true;
+    const e = easter(x.getUTCFullYear()).getTime(), t = x.getTime();
+    return t >= e - 6 * 86400000 && t <= e - 4 * 86400000;
+  };
   while (left > 0) {
     d = new Date(d.getTime() + 86400000);
-    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6 && !colombianHolidays(d.getUTCFullYear()).has(iso(d))) left--;
+    if (!off(d)) left--;
   }
+  // A calendar term that ends on a non-working day moves to the next working day.
+  if (unit === "calendario") while (d.getUTCDay() === 0 || d.getUTCDay() === 6 || colombianHolidays(d.getUTCFullYear()).has(iso(d))) d = new Date(d.getTime() + 86400000);
   return iso(d);
 }
 
@@ -4586,7 +4665,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
-<script>window.JUANMA_VERSION = {"change":47,"sha":"","date":"2026-10-15"};</script>
+<script>window.JUANMA_VERSION = {"change":48,"sha":"","date":"2026-10-15"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -5013,7 +5092,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     const k = s.cases.find((x) => x.id === t.case_id);
     const o = caseOut(k);
     const name = (id) => s.users.find((u) => u.id === id)?.name ?? null;
-    return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", ...t,
+    return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
       radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
   };
@@ -5039,8 +5118,14 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       delivered_at: "delivered_at" in b ? str(b.delivered_at).slice(0, 10) : cur.delivered_at || "",
       response_at: "response_at" in b ? str(b.response_at).slice(0, 10) : cur.response_at || "",
       response_notes: "response_notes" in b ? str(b.response_notes) : cur.response_notes || "",
+      term_from: "term_from" in b ? str(b.term_from).slice(0, 10) : cur.term_from || "",
+      term_days: "term_days" in b ? (Number.isInteger(Number(b.term_days)) && Number(b.term_days) > 0 && b.term_days !== "" ? Number(b.term_days) : null) : cur.term_days ?? null,
+      term_unit: "term_unit" in b ? (b.term_unit === "calendario" ? "calendario" : "habiles") : cur.term_unit || "",
+      term_label: "term_label" in b ? str(b.term_label).slice(0, 200) : cur.term_label || "",
     };
     v.title || fail("Escriba el título.");
+    (!v.term_days || v.term_days <= 400) || fail("Término no válido.");
+    if (!v.term_days || !v.term_from) Object.assign(v, { term_from: "", term_days: null, term_unit: "", term_label: "" });
     /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v.due_at || "") || fail("Indique fecha y hora.");
     if (!CM.RESPONSE_KINDS.includes(v.kind)) Object.assign(v, { delivered_at: "", response_at: "", response_notes: "" });
     [v.delivered_at, v.response_at].every((d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(d)) || fail("Fecha no válida.");
@@ -6754,14 +6839,14 @@ function taskTable(list, answers) {
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
-        <td>${escapeHtml(t.delivered_at || "—")}</td><td>${fmtDue(t.due_at)}</td>
+        <td>${escapeHtml(t.delivered_at || "—")}</td><td>${fmtDue(t.due_at)}${t.term_days ? `<br><span class="muted">${escapeHtml(termText(t))}</span>` : ""}</td>
         <td>${t.response_at ? `${escapeHtml(t.response_at)}${t.response_notes ? `<br><span class="muted">${escapeHtml(t.response_notes)}</span>` : ""}` : "—"}</td>
         <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`
       : `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" || t.kind === "recurso" ? "warn" : ""}">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.location ? `<br><span class="muted">${escapeHtml(t.location)}</span>` : ""}${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}${done ? `<br><span class="muted">${done}</span>` : ""}</td>
         <td>${escapeHtml(whoOf(t))}${t.created_by_name ? `<br><span class="muted">Asignó: ${escapeHtml(t.created_by_name)}</span>` : ""}</td>
-        <td>${fmtDue(t.due_at)}<br><span class="muted">${t.remind_days?.length ? "Aviso " + t.remind_days.map((d) => (d === 0 ? "el mismo día" : d + " d antes")).join(", ") : "Sin aviso"}</span></td>
+        <td>${fmtDue(t.due_at)}${t.term_days ? `<br><span class="muted">${escapeHtml(termText(t))}</span>` : ""}<br><span class="muted">${t.remind_days?.length ? "Aviso " + t.remind_days.map((d) => (d === 0 ? "el mismo día" : d + " d antes")).join(", ") : "Sin aviso"}</span></td>
         <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`;
   }).join("");
   return `<div class="table-scroll"><table class="data-table compact"><thead><tr>${answers
@@ -9158,6 +9243,7 @@ async function renderAgenda() {
             <span><strong><a href="#expediente-${t.case_id}" title="Abrir el expediente">${escapeHtml(t.title)}</a></strong> ${followBadge(t)}</span>
             <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
+            ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
           ${can("cases.write") ? `<span class="toolbar">
@@ -9203,9 +9289,53 @@ function syncTaskForm(autoDue = false) {
   $("[data-response-hint]", taskForm).textContent = kind === "peticion"
     ? "Derecho de petición: la entidad debe responder en 15 días hábiles (Ley 1755 de 2015, art. 14; 10 días para documentos, 30 para consultas). Al indicar la fecha de radicación la app calcula el plazo sin fines de semana ni festivos."
     : "Al registrar la fecha de respuesta, queda como cumplido. Si vence el plazo sin respuesta, el responsable recibe el aviso.";
-  if (autoDue && kind === "peticion" && f.delivered_at.value && !f.due_at.dataset.touched) f.due_at.value = `${L.addBusinessDays(f.delivered_at.value, 15)}T17:00`;
+  $("[data-term]", taskForm).hidden = kind === "audiencia";
+  if (!f.id.value) $("[data-title]", taskForm).textContent = `Nuevo: ${KIND_LABEL[kind].toLowerCase()}`;
+  // A petition's term runs from the day it was filed: 15 business days unless the user sets another.
+  if (autoDue && kind === "peticion" && f.delivered_at.value) {
+    f.term_from.value = f.delivered_at.value;
+    if (!f.term_days.value) applyTermPreset(TERM_PRESETS.findIndex((x) => x.name === "Derecho de petición (general)"));
+    computeTerm();
+  }
   $("[data-done-notes]", taskForm).hidden = !f.done.checked;
 }
+
+// ----- Término de cumplimiento (change 48): days set by the user, presets as suggestions -----
+const TERM_PRESETS = CMETA.LEGAL_TERMS.flatMap(([, items]) => items);
+taskForm.elements.term_preset.innerHTML += CMETA.LEGAL_TERMS.map(([area, items]) => `<optgroup label="${escapeHtml(area)}">${items.map((x) =>
+  `<option value="${TERM_PRESETS.indexOf(x)}">${escapeHtml(x.name)} · ${x.days} días${x.unit === "calendario" ? " calendario" : ""} (${escapeHtml(x.norm)})</option>`).join("")}</optgroup>`).join("");
+const LONG_DATE = new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const termText = (t) => (t.term_days ? `${t.term_days} día(s) ${t.term_unit === "calendario" ? "calendario" : "hábiles"} desde ${t.term_from}${t.term_label ? " · " + t.term_label : ""}` : "");
+function applyTermPreset(i) {
+  const x = TERM_PRESETS[i], f = taskForm.elements;
+  if (!x) return;
+  f.term_preset.value = String(i);
+  Object.assign(f.term_days, { value: x.days });
+  f.term_unit.value = x.unit;
+  f.term_judicial.checked = x.judicial;
+  f.term_label.value = `${x.name} (${x.norm})`;
+  if (!f.title.value.trim()) f.title.value = x.name;
+  if (!f.id.value && f.kind.value !== x.kind && !(CMETA.RESPONSE_KINDS.includes(f.kind.value) && x.kind === "peticion")) { f.kind.value = x.kind; syncTaskForm(); }
+}
+/** Due date from the term: notification date (+2 business days if notified by e-mail) + N days. */
+function computeTerm() {
+  const f = taskForm.elements, out = $("[data-term-result]", taskForm), days = Number(f.term_days.value);
+  if (!f.term_from.value || !(days > 0)) { out.textContent = f.term_days.value || f.term_from.value ? "Indique la fecha de notificación y el número de días." : ""; return; }
+  const judicial = f.term_judicial.checked;
+  const start = f.term_email.checked ? L.addBusinessDays(f.term_from.value, 2, { judicial }) : f.term_from.value;
+  const due = L.addBusinessDays(start, days, { unit: f.term_unit.value, judicial });
+  f.due_at.value = `${due}T${f.term_hour.value || "17:00"}`;
+  const txt = LONG_DATE.format(new Date(due + "T00:00:00Z"));
+  out.innerHTML = `Vence el <strong>${escapeHtml(txt)}</strong> a las ${escapeHtml(f.term_hour.value || "17:00")}. ${days} día(s) ${f.term_unit.value === "calendario" ? "calendario" : "hábiles"} contados desde el día siguiente al ${escapeHtml(start)}${f.term_email.checked ? " (notificación por correo: se entiende hecha 2 días hábiles después del envío)" : ""}${f.term_unit.value === "habiles" ? `, sin sábados, domingos ni festivos${judicial ? " ni vacancia judicial" : ""}` : ""}.`;
+}
+taskForm.elements.term_preset.addEventListener("change", (e) => { applyTermPreset(Number(e.target.value)); if (e.target.value === "") taskForm.elements.term_label.value = ""; computeTerm(); });
+for (const n of ["term_from", "term_days", "term_unit", "term_hour", "term_judicial", "term_email"]) {
+  taskForm.elements[n].addEventListener(n === "term_days" ? "input" : "change", computeTerm);
+}
+taskForm.elements.term_days.addEventListener("input", () => {
+  const x = TERM_PRESETS[Number(taskForm.elements.term_preset.value)];
+  if (x && Number(taskForm.elements.term_days.value) !== x.days) { taskForm.elements.term_preset.value = ""; taskForm.elements.term_label.value = ""; }
+});
 taskForm.elements.kind.addEventListener("change", () => syncTaskForm(true));
 taskForm.elements.delivered_at.addEventListener("change", () => syncTaskForm(true));
 taskForm.elements.done.addEventListener("change", () => syncTaskForm());
@@ -9219,7 +9349,12 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : `Nuevo: ${KIND_LABEL[k0].toLowerCase()}`, t ? {
     id: t.id, kind: t.kind, title: t.title, location: t.location, notes: t.notes, due_at: t.due_at.replace(" ", "T"),
     delivered_at: t.delivered_at || "", response_at: t.response_at || "", response_notes: t.response_notes || "", done_notes: t.done_notes || "",
-  } : { kind: k0, delivered_at: CMETA.RESPONSE_KINDS.includes(k0) ? bogotaNow().slice(0, 10) : "", ...preset });
+    term_from: t.term_from || "", term_days: t.term_days || "", term_unit: t.term_unit || "habiles", term_label: t.term_label || "", term_hour: t.due_at.slice(11, 16) || "17:00",
+  } : { kind: k0, delivered_at: CMETA.RESPONSE_KINDS.includes(k0) ? bogotaNow().slice(0, 10) : "", term_from: bogotaNow().slice(0, 10), term_unit: "habiles", term_hour: "17:00", ...preset });
+  taskForm.elements.term_preset.value = "";
+  taskForm.elements.term_judicial.checked = !/término administrativo/.test(t?.term_label || "") && t?.kind !== "peticion" && k0 !== "peticion";
+  taskForm.elements.term_email.checked = /notificación por correo/.test(t?.term_label || "");
+  $("[data-term-result]", taskForm).textContent = t?.term_days ? `Término registrado: ${termText(t)}. Vence ${t.due_at}.` : "";
   delete taskForm.elements.due_at.dataset.touched;
   if (t) taskForm.elements.due_at.dataset.touched = "1";
   taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
@@ -9247,6 +9382,12 @@ wireDialog($("#task-dialog"), async (form) => {
     done_notes: form.elements.done.checked ? d.done_notes || "" : "",
     delivered_at: d.delivered_at || "", response_at: d.response_at || "", response_notes: d.response_notes || "",
   };
+  const termOn = !$("[data-term]", form).hidden && Number(d.term_days) > 0 && d.term_from;
+  Object.assign(body, termOn ? {
+    term_from: d.term_from, term_days: Number(d.term_days), term_unit: d.term_unit,
+    term_label: [d.term_label.replace(/ · (notificación por correo|término administrativo)/g, ""), form.elements.term_email.checked && "notificación por correo",
+      !form.elements.term_judicial.checked && "término administrativo"].filter(Boolean).join(" · "),
+  } : { term_from: "", term_days: null, term_unit: "", term_label: "" });
   if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
   const who = directory.find((u) => u.id === body.assigned_user_id);
   toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who ? `. Se avisó a ${who.name}` : ""}.`);

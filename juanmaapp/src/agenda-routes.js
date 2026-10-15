@@ -40,7 +40,14 @@ export function agendaRouter(db) {
       delivered_at: "delivered_at" in b ? str(b.delivered_at).slice(0, 10) : cur.delivered_at || "",
       response_at: "response_at" in b ? str(b.response_at).slice(0, 10) : cur.response_at || "",
       response_notes: "response_notes" in b ? str(b.response_notes) : cur.response_notes || "",
+      term_from: "term_from" in b ? str(b.term_from).slice(0, 10) : cur.term_from || "",
+      term_days: "term_days" in b ? (Number.isInteger(Number(b.term_days)) && Number(b.term_days) > 0 && b.term_days !== "" ? Number(b.term_days) : null) : cur.term_days ?? null,
+      term_unit: "term_unit" in b ? (b.term_unit === "calendario" ? "calendario" : "habiles") : cur.term_unit || "",
+      term_label: "term_label" in b ? str(b.term_label).slice(0, 200) : cur.term_label || "",
     };
+    if (v.term_days && v.term_days > 400) return "Término no válido.";
+    if (v.term_from && !DAY.test(v.term_from)) return "Fecha no válida.";
+    if (!v.term_days || !v.term_from) Object.assign(v, { term_from: "", term_days: null, term_unit: "", term_label: "" });
     if (!RESPONSE_KINDS.includes(v.kind)) Object.assign(v, { delivered_at: "", response_at: "", response_notes: "" });
     if ((v.delivered_at && !DAY.test(v.delivered_at)) || (v.response_at && !DAY.test(v.response_at))) return "Fecha no válida.";
     // An answer received closes the oficio / petition.
@@ -88,9 +95,10 @@ export function agendaRouter(db) {
     if (typeof v === "string") return err(res, 400, v);
     const done = v.status === "hecha";
     const id = db.prepare(`INSERT INTO tasks (case_id, kind, title, notes, due_at, location, assigned_user_id, remind_days, status, created_by,
-        done_at, done_by, done_notes, delivered_at, response_at, response_notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${done ? "datetime('now')" : "NULL"}, ?, ?, ?, ?, ?)`).run(caseId, v.kind, v.title, v.notes, v.due_at, v.location, v.assigned_user_id,
-      v.remind_days, v.status, req.user.id, done ? req.user.id : null, v.done_notes, v.delivered_at, v.response_at, v.response_notes).lastInsertRowid;
+        done_at, done_by, done_notes, delivered_at, response_at, response_notes, term_from, term_days, term_unit, term_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${done ? "datetime('now')" : "NULL"}, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(caseId, v.kind, v.title, v.notes, v.due_at, v.location, v.assigned_user_id,
+      v.remind_days, v.status, req.user.id, done ? req.user.id : null, v.done_notes, v.delivered_at, v.response_at, v.response_notes,
+      v.term_from, v.term_days, v.term_unit, v.term_label).lastInsertRowid;
     const t = visible(req, id);
     tellAssignee(req, t, null);
     res.status(201).json(out(t));
@@ -105,9 +113,9 @@ export function agendaRouter(db) {
     db.prepare(`UPDATE tasks SET kind = ?, title = ?, notes = ?, due_at = ?, location = ?, assigned_user_id = ?, remind_days = ?, status = ?,
       done_at = CASE WHEN ? = 'hecha' AND status != 'hecha' THEN datetime('now') WHEN ? != 'hecha' THEN NULL ELSE done_at END,
       done_by = CASE WHEN ? = 'hecha' AND status != 'hecha' THEN ? WHEN ? != 'hecha' THEN NULL ELSE done_by END,
-      done_notes = ?, delivered_at = ?, response_at = ?, response_notes = ? WHERE id = ?`)
+      done_notes = ?, delivered_at = ?, response_at = ?, response_notes = ?, term_from = ?, term_days = ?, term_unit = ?, term_label = ? WHERE id = ?`)
       .run(v.kind, v.title, v.notes, v.due_at, v.location, v.assigned_user_id, v.remind_days, v.status, v.status, v.status,
-        v.status, req.user.id, v.status, v.done_notes, v.delivered_at, v.response_at, v.response_notes, cur.id);
+        v.status, req.user.id, v.status, v.done_notes, v.delivered_at, v.response_at, v.response_notes, v.term_from, v.term_days, v.term_unit, v.term_label, cur.id);
     tellAssignee(req, visible(req, cur.id), cur.assigned_user_id);
     // A rescheduled task gets fresh reminders.
     if (v.due_at !== cur.due_at) db.prepare("DELETE FROM notifications WHERE key LIKE ?").run(`task:${cur.id}:%`);

@@ -314,7 +314,7 @@
     const k = s.cases.find((x) => x.id === t.case_id);
     const o = caseOut(k);
     const name = (id) => s.users.find((u) => u.id === id)?.name ?? null;
-    return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", ...t,
+    return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
       radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
   };
@@ -340,8 +340,14 @@
       delivered_at: "delivered_at" in b ? str(b.delivered_at).slice(0, 10) : cur.delivered_at || "",
       response_at: "response_at" in b ? str(b.response_at).slice(0, 10) : cur.response_at || "",
       response_notes: "response_notes" in b ? str(b.response_notes) : cur.response_notes || "",
+      term_from: "term_from" in b ? str(b.term_from).slice(0, 10) : cur.term_from || "",
+      term_days: "term_days" in b ? (Number.isInteger(Number(b.term_days)) && Number(b.term_days) > 0 && b.term_days !== "" ? Number(b.term_days) : null) : cur.term_days ?? null,
+      term_unit: "term_unit" in b ? (b.term_unit === "calendario" ? "calendario" : "habiles") : cur.term_unit || "",
+      term_label: "term_label" in b ? str(b.term_label).slice(0, 200) : cur.term_label || "",
     };
     v.title || fail("Escriba el título.");
+    (!v.term_days || v.term_days <= 400) || fail("Término no válido.");
+    if (!v.term_days || !v.term_from) Object.assign(v, { term_from: "", term_days: null, term_unit: "", term_label: "" });
     /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v.due_at || "") || fail("Indique fecha y hora.");
     if (!CM.RESPONSE_KINDS.includes(v.kind)) Object.assign(v, { delivered_at: "", response_at: "", response_notes: "" });
     [v.delivered_at, v.response_at].every((d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(d)) || fail("Fecha no válida.");

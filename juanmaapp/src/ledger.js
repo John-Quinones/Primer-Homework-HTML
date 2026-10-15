@@ -204,12 +204,28 @@ export function feeVariables(charges, receipts = []) {
   };
 }
 
-/** Date `n` business days after `date` (no weekends, no Colombian holidays). E.g. a petition is answered within 15 (Ley 1755 de 2015, art. 14). */
-export function addBusinessDays(date, n) {
-  let d = new Date(date + "T00:00:00Z"), left = n;
+/**
+ * Last day of a term of `n` days that starts running the day after `date`.
+ * unit "habiles": no weekends nor Colombian holidays; with judicial = true also no vacancia judicial
+ * (20 December to 10 January, and Monday to Wednesday of Holy Week). unit "calendario": every day counts.
+ * E.g. a petition is answered within 15 business days (Ley 1755 de 2015, art. 14).
+ */
+export function addBusinessDays(date, n, { unit = "habiles", judicial = false } = {}) {
+  let d = new Date(date + "T00:00:00Z"), left = Number(n) || 0;
+  const off = (x) => {
+    if (unit === "calendario") return false;
+    if (x.getUTCDay() === 0 || x.getUTCDay() === 6 || colombianHolidays(x.getUTCFullYear()).has(iso(x))) return true;
+    if (!judicial) return false;
+    const md = iso(x).slice(5);
+    if (md >= "12-20" || md <= "01-10") return true;
+    const e = easter(x.getUTCFullYear()).getTime(), t = x.getTime();
+    return t >= e - 6 * 86400000 && t <= e - 4 * 86400000;
+  };
   while (left > 0) {
     d = new Date(d.getTime() + 86400000);
-    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6 && !colombianHolidays(d.getUTCFullYear()).has(iso(d))) left--;
+    if (!off(d)) left--;
   }
+  // A calendar term that ends on a non-working day moves to the next working day.
+  if (unit === "calendario") while (d.getUTCDay() === 0 || d.getUTCDay() === 6 || colombianHolidays(d.getUTCFullYear()).has(iso(d))) d = new Date(d.getTime() + 86400000);
   return iso(d);
 }

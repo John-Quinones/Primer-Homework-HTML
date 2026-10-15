@@ -718,3 +718,7 @@ a.chip-stat strong { color: var(--link); }
 .agenda-body a { color: var(--link); text-decoration: none; }
 .agenda-body a:hover { text-decoration: underline; }
 @media (max-width: 760px) { .hn-text { display: none; } .history-nav button { font-size: 1rem; line-height: 1; padding: 5px 11px; } }
+.term-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.term-box legend { font-weight: 600; padding: 0 4px; }
+.term-result { margin: 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--brand-blue) 9%, transparent); font-size: .9rem; }
+.term-result:empty { display: none; }

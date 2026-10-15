@@ -1108,6 +1108,23 @@
         </label>
         <label><span data-due-label>Fecha y hora</span> * <input name="due_at" type="datetime-local" required /></label>
         <label class="span2">Título * <input name="title" required placeholder="Ej. Audiencia inicial art. 77 CPTSS" /></label>
+        <fieldset class="span2 term-box" data-term>
+          <legend>Término de cumplimiento</legend>
+          <label class="span2">Término sugerido <select name="term_preset"><option value="">— Escribir el término a mano —</option></select></label>
+          <div class="grid4">
+            <label>Notificado o desde <input name="term_from" type="date" /></label>
+            <label>Días <input name="term_days" type="number" min="1" max="400" inputmode="numeric" placeholder="Ej. 3" /></label>
+            <label>Clase de días <select name="term_unit"><option value="habiles">Hábiles</option><option value="calendario">Calendario</option></select></label>
+            <label>Hora límite <input name="term_hour" type="time" value="17:00" /></label>
+          </div>
+          <div class="radio-row">
+            <label class="inline"><input type="checkbox" name="term_judicial" checked /> Término judicial (no corre en vacancia judicial)</label>
+            <label class="inline"><input type="checkbox" name="term_email" /> Notificación personal por correo (+2 días hábiles, Ley 2213 art. 8)</label>
+          </div>
+          <input type="hidden" name="term_label" />
+          <p class="term-result" data-term-result aria-live="polite"></p>
+          <p class="hint">El término corre desde el día siguiente a la notificación. Los términos sugeridos son una ayuda: verifique la norma y lo que diga el auto, y ajuste los días si es distinto.</p>
+        </fieldset>
         <div class="span2 grid2 response-box" data-response hidden>
           <label>Fecha de entrega o radicación <input name="delivered_at" type="date" /></label>
           <label>Respuesta recibida el <input name="response_at" type="date" /></label>

@@ -104,7 +104,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   done_notes        TEXT NOT NULL DEFAULT '',  -- how it was fulfilled
   delivered_at      TEXT NOT NULL DEFAULT '',  -- oficios/peticiones: date delivered or filed (local date)
   response_at       TEXT NOT NULL DEFAULT '',  -- date the answer arrived (local date)
-  response_notes    TEXT NOT NULL DEFAULT ''
+  response_notes    TEXT NOT NULL DEFAULT '',
+  term_from         TEXT NOT NULL DEFAULT '',  -- term (change 48): runs from the day after this date
+  term_days         INTEGER,
+  term_unit         TEXT NOT NULL DEFAULT '',  -- habiles | calendario
+  term_label        TEXT NOT NULL DEFAULT ''   -- e.g. "Contestar demanda (verbal) · CGP art. 369"
 );
 CREATE INDEX IF NOT EXISTS tasks_due ON tasks(status, due_at);
 
@@ -501,6 +505,9 @@ function migrate(db) {
     db.exec("CREATE INDEX IF NOT EXISTS tasks_due ON tasks(status, due_at)");
     db.exec("COMMIT");
     db.exec("PRAGMA foreign_keys = ON");
+  }
+  for (const [col, def] of [["term_from", "TEXT NOT NULL DEFAULT ''"], ["term_days", "INTEGER"], ["term_unit", "TEXT NOT NULL DEFAULT ''"], ["term_label", "TEXT NOT NULL DEFAULT ''"]]) {
+    if (!new Set(db.prepare("PRAGMA table_info(tasks)").all().map((c) => c.name)).has(col)) db.exec(`ALTER TABLE tasks ADD COLUMN ${col} ${def}`);
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };

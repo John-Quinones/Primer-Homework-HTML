@@ -70,3 +70,17 @@ test("follow-up states and the 15 business days of a petition", () => {
   assert.equal(taskFollowUp({ kind: "tarea", status: "hecha", due_at: "2026-10-10 17:00", done_at: "2026-10-11 15:00:00" }, "2026-10-15 08:00").key, "tarde");
   assert.equal(addBusinessDays("2026-10-15", 15), "2026-11-06", "skips weekends and the 2 November holiday");
 });
+
+test("terms set by the user: business days skip holidays and, for court terms, the vacancia judicial", async () => {
+  assert.equal(addBusinessDays("2026-12-17", 3, { judicial: true }), "2027-01-13", "20 Dec–10 Jan and the 11 Jan holiday do not count");
+  assert.equal(addBusinessDays("2026-12-17", 3), "2026-12-22", "administrative terms run in December");
+  assert.equal(addBusinessDays("2026-03-27", 3, { judicial: true }), "2026-04-08", "Holy Week does not count");
+  assert.equal(addBusinessDays("2026-10-16", 2, { unit: "calendario" }), "2026-10-19", "a calendar term ending on Sunday moves to Monday");
+  const t = (await admin.call("POST", "/tasks", { case_id: caseId, kind: "termino", title: "Contestar demanda", due_at: "2026-11-13 17:00",
+    term_from: "2026-10-15", term_days: 20, term_unit: "habiles", term_label: "Contestar demanda (verbal) (CGP art. 369)" })).body;
+  assert.equal(t.term_days, 20);
+  assert.equal(t.term_label, "Contestar demanda (verbal) (CGP art. 369)");
+  const cleared = (await admin.call("PUT", `/tasks/${t.id}`, { term_days: "" })).body;
+  assert.equal(cleared.term_days, null);
+  assert.equal(cleared.term_from, "", "no days, no term");
+});

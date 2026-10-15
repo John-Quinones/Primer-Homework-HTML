@@ -106,3 +106,45 @@ export function taskFollowUp(t, now) {
   if (answered) return { key: soon ? "por_vencer" : "en_plazo", label: t.delivered_at ? (soon ? "Esperando respuesta · vence pronto" : "Esperando respuesta") : "Por entregar", tone: soon ? "warn" : "muted" };
   return soon ? { key: "por_vencer", label: "Por vencer", tone: "warn" } : { key: "en_plazo", label: "En plazo", tone: "muted" };
 }
+
+// ----- Procedural terms (change 48): suggestions only; the user sets the days -----
+// judicial: true → the days of vacancia judicial do not count (court terms); false → administrative (e.g. petitions).
+export const LEGAL_TERMS = [
+  ["Civil y familia (CGP)", [
+    ["Recurso de reposición", 3, "habiles", "CGP art. 318", "recurso"],
+    ["Apelación de auto o sentencia fuera de audiencia", 3, "habiles", "CGP art. 322", "recurso"],
+    ["Sustentar apelación de sentencia ante el superior", 5, "habiles", "Ley 2213 art. 12", "recurso"],
+    ["Recurso de súplica", 3, "habiles", "CGP art. 331", "recurso"],
+    ["Interponer casación", 5, "habiles", "CGP art. 337", "recurso"],
+    ["Contestar demanda (verbal)", 20, "habiles", "CGP art. 369", "termino"],
+    ["Contestar demanda (verbal sumario)", 10, "habiles", "CGP art. 391", "termino"],
+    ["Excepciones en proceso ejecutivo", 10, "habiles", "CGP art. 442", "termino"],
+    ["Oposición en proceso monitorio", 10, "habiles", "CGP art. 421", "termino"],
+    ["Subsanar la demanda", 5, "habiles", "CGP art. 90", "termino"],
+    ["Descorrer traslado de excepciones (verbal)", 5, "habiles", "CGP art. 370", "termino"],
+  ]],
+  ["Laboral (CPTSS)", [
+    ["Recurso de reposición (auto notificado por estado)", 2, "habiles", "CPTSS art. 63", "recurso"],
+    ["Apelación de auto notificado por estado", 5, "habiles", "CPTSS art. 65", "recurso"],
+    ["Interponer casación", 15, "habiles", "CPTSS art. 88", "recurso"],
+    ["Contestar demanda ordinaria", 10, "habiles", "CPTSS art. 74", "termino"],
+    ["Subsanar la demanda", 5, "habiles", "CPTSS art. 28", "termino"],
+  ]],
+  ["Contencioso administrativo (CPACA)", [
+    ["Recurso de reposición", 3, "habiles", "CPACA art. 242 y CGP art. 318", "recurso"],
+    ["Apelación de auto", 3, "habiles", "CPACA art. 244", "recurso"],
+    ["Apelación de sentencia", 10, "habiles", "CPACA art. 247", "recurso"],
+    ["Contestar demanda", 30, "habiles", "CPACA art. 172", "termino"],
+    ["Subsanar la demanda", 10, "habiles", "CPACA art. 170", "termino"],
+  ]],
+  ["Tutela", [
+    ["Impugnar el fallo", 3, "habiles", "Decreto 2591 art. 31", "recurso"],
+    ["Cumplir el fallo (48 horas)", 2, "calendario", "Decreto 2591 art. 27", "termino"],
+  ]],
+  ["Actuación administrativa", [
+    ["Recursos de reposición y apelación ante la entidad", 10, "habiles", "CPACA art. 76", "recurso", false],
+    ["Derecho de petición (general)", 15, "habiles", "Ley 1755 art. 14", "peticion", false],
+    ["Petición de documentos o información", 10, "habiles", "Ley 1755 art. 14", "peticion", false],
+    ["Consulta a una autoridad", 30, "habiles", "Ley 1755 art. 14", "peticion", false],
+  ]],
+].map(([area, items]) => [area, items.map(([name, days, unit, norm, kind, judicial = true]) => ({ area, name, days, unit, norm, kind, judicial }))]);
