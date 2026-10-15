@@ -26,5 +26,12 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 ## Modules done
 In-app help (`public/help.js`: "?" per module, examples and tips per field). Clients, cases (status Activo / Archivo provisional / Archivo definitivo; client's procedural role; affiliated yes/no), process catalog with two levels of sub-processes and custom fields, users/roles/offices with per-user permissions, Excel import from Access, DIVIPOLA type-ahead, court directory, agenda with reminders, Rama Judicial consultation with reports at 7/13/17 h, documents (templates + NomosAI), case law (official sites only), reports to Excel/PDF, e-signature, traced e-mail, payments (charges, installments, receipts, portfolio aging, reminders).
 
+## Decisions to keep
+- Receipts are numbered consecutively from 1155 (`RECEIPT_START`, adjustable upward in Ajustes de cobro, never backwards).
+- Payment reminders follow Ley 2300 de 2023 (`collectionWindow` in `src/ledger.js`, Colombian holidays included).
+- Contract fees = the case's charges in Pagos (`{{honorarios.*}}`, `feeVariables`).
+- Signed PDFs (stamps + certificate) are built by `public/pdf-tools.js`, also on the server via `src/signed-pdf.js`.
+- Certified e-mail keeps the exact .eml with SHA-1/256/512/SHA3-512, every opening/download/acknowledgment in `mail_events`, optional RFC 3161 stamp (`src/tsa.js`, TSA_URL). It is evidence, not an ONAC-accredited certified e-mail service.
+
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.
