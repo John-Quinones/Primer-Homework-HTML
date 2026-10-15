@@ -38,7 +38,7 @@ Para el uso diario de la firma se pasa al plan **B1**, de pago, desde la misma p
    - **Plan de precios:** pulse *Explorar planes de precios* y elija **Gratis F1**.
 4. Pulse **Revisar y crear → Crear** y espere a que termine. Luego pulse **Ir al recurso**.
 
-Anote la dirección que aparece en **Información general → Dominio predeterminado**.
+Anote la dirección que aparece en **Información general → Dominio predeterminado** (en algunos portales la página se llama **Introducción**). Azure ahora agrega un código único y la región, por ejemplo `juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net`; use esa dirección completa en `PUBLIC_URL` y en la URI de redirección del paso 2.
 
 ## Paso 2. Registrar la app en Microsoft (para el inicio de sesión)
 
@@ -90,14 +90,13 @@ En el App Service (`juanmaapp-tec`):
 
    Pulse **Aplicar** y confirme.
 
-2. Menú **Configuración → Configuración** (pestaña *Configuración general*):
-   - **Comando de inicio:** `node --disable-warning=ExperimentalWarning server.js`
-   - **Credenciales de publicación de autenticación básica de SCM:** **Activado**. Lo necesita GitHub para publicar.
-   - Pulse **Guardar**.
+2. Menú **Configuración → Configuración**:
+   - Pestaña *Configuración general*: active **Credenciales de publicación de autenticación básica de SCM**, que GitHub necesita para publicar, y pulse **Aplicar**.
+   - Pestaña *Configuración de la pila*: revise **Node 22 LTS** y escriba en **Comando de inicio** `node --disable-warning=ExperimentalWarning server.js`. Pulse **Aplicar**.
 
 ## Paso 4. Conectar GitHub para publicar
 
-1. En el App Service, **Información general → Descargar perfil de publicación**. Se descarga un archivo `.PublishSettings`; ábralo con el Bloc de notas y copie todo el contenido.
+1. En el App Service, **Información general** (o **Introducción**) **→ Descargar perfil de publicación**. Ese archivo contiene una contraseña: no lo comparta; si se expuso, use **Restablecer perfil de publicación** y descargue uno nuevo. Se descarga un archivo `.PublishSettings`; ábralo con el Bloc de notas y copie todo el contenido.
 2. En GitHub, abra el repositorio → **Settings → Secrets and variables → Actions**:
    - Pestaña **Secrets → New repository secret:** nombre `AZURE_WEBAPP_PUBLISH_PROFILE`; en el valor pegue el contenido del archivo.
    - Pestaña **Variables → New repository variable:** nombre `AZURE_WEBAPP_NAME`, valor `juanmaapp-tec` (el nombre del paso 1).
