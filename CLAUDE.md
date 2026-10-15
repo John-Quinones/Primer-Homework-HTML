@@ -17,6 +17,7 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 - Published link: `npm run preview` → `preview/juanmaapp-web.html`, published as a claude.ai artifact with capabilities `{downloads: true, db: {}, sample: {}}` (data in the artifact database, NomosAI through the viewer's Claude account). Republish to the same artifact so the link and its data stay.
 - Deployment: chosen for testing = Azure App Service free F1 (`juanmaapp/AZURE.md`, `.github/workflows/azure-juanmaapp.yml`, DB in `/home/data`). Alternative: Render (`render.yaml`, `Dockerfile`, `DESPLIEGUE.md`). Sign-in with Microsoft 365 via `src/microsoft.js` (MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET).
 - Azure publishes ONLY when the user asks: put [azure] in that commit message (workflow gate). Otherwise publish only the test link (artifact).
+- Every time Azure is published, give the user the Azure link to test: https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net (the container cannot reach it, so it cannot be checked from here).
 - Every published change is numbered (Cambio N = commits touching juanmaapp/); tell the user the number and add a row to `juanmaapp/CAMBIOS.md` in the same commit. Republish the artifact and let CI deploy to Azure on each change.
 - Firm's server Excel export (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO 1/2, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) is recognized by `public/importer.js` `guessAll`. Status codes: 1 activo, 2 archivo definitivo, 3 archivo provisional. The Excel import is done (user: do not bring it up again).
 - Permissions: `src/auth.js` (`PERMISSIONS`, `DEFAULT_MATRIX`); new permissions reach built-in roles once via `known_permissions`.
@@ -40,6 +41,7 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 - Parties (change 49): `cases.parties` JSON list {side activa|pasiva, name, id_number, ours, client_id}; our clients linked by document see the case. Nothing opens on a stray click: only "Ver …" buttons (`data-action="go"`, routes `#expediente-ID-section`).
 - Audit log (change 50): `src/audit.js` middleware logs every API change (who, Colombia time, device from User-Agent, IP, field diff via `auditDiff`); auth events logged explicitly. View «Bitácora» needs `audit.view`. Never edited or deleted. Demo mirrors it in `s.audit` (last 5000).
 - Security (change 51, OWASP audit): scrypt2 hashes (N=2^17, rehash on login; tests set SCRYPT_LOG_N), `auth_throttle` table per e-mail and IP, idle sessions (`last_seen`), `users.ms_oid` binding, `publicBase()` for mailed links, CSP header (no inline scripts: page code in `*-page.js`), `inTransaction()`. Options PASSWORD_LOGIN=off, SESSION_IDLE_HOURS, SETUP_TOKEN. Weak passwords (name/e-mail inside, digits only) are refused: test passwords avoid the user's name.
+- Client names are buttons (`clientName()`, `data-client-menu`) opening a menu with the client's data and cases (change 52); side-menu links carry a description (`NAV_DESC`).
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.

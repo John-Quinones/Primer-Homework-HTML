@@ -16,7 +16,7 @@ export function agendaRouter(db) {
     const sc = scopeOf(req.user);
     return sc === null ? "1 = 1" : sc.length ? `k.office_id IN (${sc.map(Number).join(",")})` : "0 = 1";
   };
-  const SELECT = `SELECT t.*, k.radicado, k.title AS case_title, k.office_id, c.full_name AS client_name,
+  const SELECT = `SELECT t.*, k.radicado, k.title AS case_title, k.office_id, k.client_id, c.full_name AS client_name,
       ${typePath("pt")} AS type_name, u.name AS assigned_name, ku.name AS case_assigned_name, cb.name AS created_by_name, ud.name AS done_by_name
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id
     JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users u ON u.id = t.assigned_user_id

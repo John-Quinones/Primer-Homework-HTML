@@ -355,7 +355,7 @@
     const o = caseOut(k);
     const name = (id) => s.users.find((u) => u.id === id)?.name ?? null;
     return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
-      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
+      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
   };
   // Same as the server: the assignee hears about a new task in the bell.

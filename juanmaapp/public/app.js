@@ -127,6 +127,33 @@ const VIEW_PERMS = {
 const isGerencia = () => me?.role === "Gerencia";
 const DELETE_PERMS = ["clients.delete", "cases.delete"];
 
+// What each shortcut of the side menu does (shown under its name, and as a tooltip).
+const NAV_DESC = {
+  inicio: "Resumen del día: audiencias, vencimientos y avisos",
+  clientes: "Datos de cada cliente y sus expedientes",
+  expedientes: "Procesos: partes, despacho, tareas y estado",
+  agenda: "Audiencias, términos y tareas por funcionario",
+  consulta: "Actuaciones nuevas en la Rama Judicial",
+  despachos: "Juzgados y tribunales con su correo",
+  borradores: "Contratos, poderes y escritos con los datos del cliente",
+  firmas: "Enviar documentos a firma electrónica",
+  pagos: "Cobros, recibos, cartera y recordatorios",
+  correo: "Correo con constancia de entrega y lectura",
+  jurisprudencia: "Sentencias de las altas cortes",
+  reportes: "Informes en Excel o PDF",
+  importar: "Cargar clientes y procesos desde Excel",
+  configuracion: "Tipos de proceso, campos y canales de envío",
+  bitacora: "Quién cambió qué, cuándo y desde qué equipo",
+  usuarios: "Usuarios, roles, permisos y oficinas",
+};
+for (const a of $$(".sidenav a[data-view]")) {
+  const d = NAV_DESC[a.dataset.view];
+  const label = a.querySelector("span");
+  if (!d || !label) continue;
+  a.title = d;
+  label.outerHTML = `<span class="nav-text"><span>${escapeHtml(label.textContent)}</span><small class="nav-desc">${escapeHtml(d)}</small></span>`;
+}
+
 function applyPermissions() {
   document.body.classList.toggle("is-gerencia", isGerencia());
   $$(".sidenav a").forEach((a) => (a.hidden = !!VIEW_PERMS[a.dataset.view] && !can(VIEW_PERMS[a.dataset.view])));
@@ -579,7 +606,7 @@ async function renderExpedienteFicha(id) {
         .map(([x, label]) => `<button type="button" class="mini" data-action="goto-sec" data-sec="${x}">${label}</button>`).join("")}
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
-      <span class="chip-stat">Cliente <strong>${escapeHtml(k.client_name)}</strong></span>
+      <span class="chip-stat">Cliente <strong>${clientName(k.client_id, k.client_name)}</strong></span>
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <span class="chip-stat">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></span>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
@@ -765,11 +792,62 @@ for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "chan
 $("#client-list").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-client]");
   if (!btn) return;
-  // Selecting shows the summary at the side; the screen opens only with «Ver cliente».
+  // Selecting shows the summary at the side and a menu next to the name with the client's data and cases.
   state.selectedClientId = Number(btn.dataset.client);
   renderClientList();
   guarded(renderClientDetail);
+  const again = $(`#client-list [data-client="${btn.dataset.client}"]`);
+  e.openedClientMenu = true; // the same click must not close it again below
+  guarded(() => openClientMenu(again || btn, Number(btn.dataset.client)));
 });
+
+// ---------- Client menu (change 52): tapping a client's name anywhere shows their data and their cases ----------
+let clientMenu = null;
+const closeClientMenu = () => { clientMenu?.remove(); clientMenu = null; };
+function placeClientMenu(pop, anchor) {
+  if (innerWidth < 700) { pop.classList.add("sheet"); return; } // bottom sheet on phones
+  const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = `${Math.max(10, Math.min(r.left, innerWidth - w - 10))}px`;
+  pop.style.top = `${r.bottom + 6 + h > innerHeight - 10 ? Math.max(10, r.top - h - 6) : r.bottom + 6}px`;
+}
+async function openClientMenu(anchor, clientId) {
+  closeClientMenu();
+  const pop = Object.assign(document.createElement("div"), { className: "client-menu" });
+  pop.setAttribute("role", "dialog");
+  pop.setAttribute("aria-label", "Cliente");
+  pop.innerHTML = '<p class="muted">Cargando…</p>';
+  document.body.append(pop);
+  clientMenu = pop;
+  placeClientMenu(pop, anchor);
+  const [c, cases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
+  if (clientMenu !== pop) return;
+  const doc = [c.person_type === "juridica" ? "NIT" : c.id_type, c.id_number].filter(Boolean).join(" ");
+  pop.innerHTML = `
+    <div class="cm-head"><strong>${escapeHtml(c.full_name)}</strong><button type="button" class="cm-close" aria-label="Cerrar">✕</button></div>
+    <p class="muted">${escapeHtml([doc, c.phone, c.email, c.city].filter(Boolean).join(" · ") || "Sin datos de contacto")}</p>
+    <div class="toolbar">
+      <button class="mini primary" data-action="go" data-to="#cliente-${c.id}">Ver datos del cliente</button>
+      <button class="mini" data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
+      ${can("payments.manage") ? `<button class="mini" data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
+    </div>
+    <h4>Expedientes asignados (${cases.length})</h4>
+    ${cases.length ? `<ul class="cm-cases">${cases.map((k) => `<li>
+      <span><strong>${escapeHtml(k.type_name)}</strong>${caseFolder(k) ? ` <span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : ""}
+        <br><span class="muted">${escapeHtml([k.title, k.status, k.radicado && formatRadicado(k.radicado)].filter(Boolean).join(" · "))}${k.client_id !== c.id ? " · cliente principal: " + escapeHtml(k.client_name) : ""}</span></span>
+      <button class="mini" data-action="go" data-to="#expediente-${k.id}">Ver expediente</button></li>`).join("")}</ul>`
+      : '<p class="empty">Este cliente no tiene expedientes.</p>'}`;
+  placeClientMenu(pop, anchor);
+}
+document.addEventListener("click", (e) => {
+  const opener = e.target.closest("[data-client-menu]");
+  if (opener) { e.preventDefault(); guarded(() => openClientMenu(opener, Number(opener.dataset.clientMenu))); return; }
+  if (!clientMenu || e.openedClientMenu) return;
+  if (e.target.closest(".cm-close") || (clientMenu.contains(e.target) && e.target.closest("[data-action]"))) { setTimeout(closeClientMenu); return; }
+  if (!clientMenu.contains(e.target) && !e.target.closest("#client-list [data-client]")) closeClientMenu();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeClientMenu(); });
+window.addEventListener("hashchange", closeClientMenu);
+const clientName = (id, name) => `<button type="button" class="client-link" data-client-menu="${id}" title="Ver datos y expedientes del cliente">${escapeHtml(name)}</button>`;
 
 // ---------- Dialog helpers ----------
 function openDialog(dialog, title, values = {}) {
@@ -892,7 +970,7 @@ function renderCaseRows() {
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
-      <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}${(k.parties || []).some((p) => p.ours) ? `<br><span class="muted">+ ${(k.parties || []).filter((p) => p.ours).map((p) => escapeHtml(p.name)).join(", ")}</span>` : ""}</td>
+      <td>${clientName(k.client_id, k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}${(k.parties || []).some((p) => p.ours) ? `<br><span class="muted">+ ${(k.parties || []).filter((p) => p.ours).map((p) => escapeHtml(p.name)).join(", ")}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
       <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
@@ -3167,7 +3245,7 @@ async function renderAgenda() {
           <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
           <div class="agenda-body">
             <span><strong>${escapeHtml(t.title)}</strong> ${followBadge(t)}</span>
-            <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
+            <span class="muted">${clientName(t.client_id, t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
             ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
