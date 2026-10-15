@@ -20,6 +20,7 @@
       <p class="app-version" data-version></p>
 
       <form id="login-form" autocomplete="on">
+        <p class="auth-note">Ingrese con su correo (Gmail, Outlook, Hotmail o el de la firma) y su contraseña.</p>
         <label>Correo <input id="login-email" name="email" type="email" required autocomplete="username" /></label>
         <label class="pw-field">Contraseña <input id="login-password" name="password" type="password" required autocomplete="current-password" /></label>
         <p class="form-error" hidden></p>
@@ -59,6 +60,7 @@
           <svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><path fill="#f25022" d="M1 1h9v9H1z"/><path fill="#7fba00" d="M11 1h9v9h-9z"/><path fill="#00a4ef" d="M1 11h9v9H1z"/><path fill="#ffb900" d="M11 11h9v9h-9z"/></svg>
           <span data-ms-label>Ingresar con la cuenta de Microsoft</span>
         </a>
+        <p class="hint" data-ms-hint>Solo para correos de Microsoft 365 de la firma. Con Gmail, Outlook o Hotmail use su correo y contraseña arriba.</p>
         <p class="form-error" id="ms-error" hidden></p>
       </div>
 
@@ -896,7 +898,7 @@
       </div>
       <div data-pw-only>
         <label class="inline"><input type="checkbox" name="invite" /> Enviar invitación por correo: el usuario recibe un enlace para crear su propia contraseña (vence en 72 horas)</label>
-        <p class="hint">La contraseña que usted asigne es temporal: al primer ingreso la app le pide al usuario cambiarla. Entréguela por un medio distinto al correo (en persona o por teléfono); por seguridad la invitación no la incluye.</p>
+        <p class="hint">Sirve cualquier correo: Gmail, Outlook, Hotmail o el de la firma. La contraseña que usted asigne es temporal: al primer ingreso la app le pide al usuario cambiarla. Entréguela por un medio distinto al correo (en persona o por teléfono); por seguridad la invitación no la incluye. Si el servidor aún no envía correos, asigne la contraseña en lugar de la invitación.</p>
       </div>
       <fieldset><legend>Oficinas *</legend><div id="user-office-checks" class="check-grid"></div></fieldset>
       <fieldset><legend>Permisos</legend>

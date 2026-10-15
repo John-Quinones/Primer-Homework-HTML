@@ -100,3 +100,18 @@ test("Microsoft accounts are bound to their fixed id (oid); guests and look-alik
   claims = good(s, { oid: "oid-guest", acct: 1, preferred_username: "x@otra.com" });
   assert.match((await callback(s)).location, /ms_error=guest$/);
 });
+
+test("any e-mail can enter: a Gmail user needs a password or an invitation, and then signs in with it (change 53)", async () => {
+  let s = await start();
+  claims = good(s, { oid: "oid-jm-1" });
+  const g = (await callback(s)).session;
+  const call = (method, path, body) => fetch(`${srv.base}${path}`, { method, headers: { "Content-Type": "application/json", "X-JuanMa": "1", Cookie: g }, body: body && JSON.stringify(body) });
+  const office = (await (await call("GET", "/admin/offices")).json())[0].id;
+  const bare = await call("POST", "/admin/users", { name: "Laura Gómez", email: "laura.gomez@gmail.com", role: "Abogado", office_ids: [office] });
+  assert.equal(bare.status, 400, "a Gmail address cannot be left for Microsoft-only sign-in");
+  assert.match((await bare.json()).error, /no es de la cuenta Microsoft 365/);
+  const ok = await call("POST", "/admin/users", { name: "Laura Gómez", email: "laura.gomez@gmail.com", role: "Abogado", office_ids: [office], password: "tribunal-azul-2026" });
+  assert.equal(ok.status, 201);
+  const login = await fetch(`${srv.base}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", "X-JuanMa": "1" }, body: JSON.stringify({ email: "laura.gomez@gmail.com", password: "tribunal-azul-2026" }) });
+  assert.equal(login.status, 200);
+});

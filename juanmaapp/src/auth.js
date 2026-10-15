@@ -9,7 +9,7 @@ import { VERSION } from "./version.js";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { publicBase } from "./public-url.js";
 import { canonicalDepartment, canonicalCity } from "./places.js";
-import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
+import { sendEmail, sendWhatsapp, channelsStatus, channelReady } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
 import { createHash as hashOf } from "node:crypto";
 
@@ -136,6 +136,8 @@ function throttle(db) {
     clear(key) { db.prepare("DELETE FROM auth_throttle WHERE key = ?").run(key); },
   };
 }
+// Personal mail providers: never the firm's Microsoft 365 directory.
+const PUBLIC_MAIL = /^(gmail|googlemail|hotmail|outlook|live|msn|yahoo|ymail|icloud|me|aol|protonmail|proton|zoho|gmx)\.[a-z.]+$/i;
 const passwordLoginOff = () => microsoftEnabled() && String(process.env.PASSWORD_LOGIN || "").toLowerCase() === "off";
 
 function parseCookies(header = "") {
@@ -292,7 +294,9 @@ export function authRouter(db) {
     const u = db.prepare("SELECT id, name, active, password_hash FROM users WHERE email = ?").get(email);
     if (!u?.active) return reply();
     // Accounts that enter with Microsoft 365 do not get a local password, which would skip Microsoft's MFA (audit A07-006).
-    if (passwordLoginOff() || (u.password_hash === "!" && microsoftEnabled())) return reply();
+    // Only people who already entered with Microsoft 365 (their account is bound) stay without a local password;
+    // an invited user with Gmail or Outlook can always create theirs.
+    if (passwordLoginOff() || (u.password_hash === "!" && microsoftEnabled() && db.prepare("SELECT ms_oid FROM users WHERE id = ?").get(u.id)?.ms_oid)) return reply();
     audit(db, req, { user: u, action: "Pidió restablecer contraseña", summary: `Enlace enviado a ${email}` });
     const token = randomBytes(24).toString("base64url");
     db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 minutes'))").run(sha(token), u.id);
@@ -507,7 +511,13 @@ export function adminRouter(db) {
     if (!name || !email.includes("@")) return res.status(400).json({ error: "Nombre y correo son obligatorios." });
     if (!roleExists(db, b.role)) return res.status(400).json({ error: "Rol no válido." });
     // The password is optional when the user will create it from the invitation, or enter with Microsoft.
-    const noPassword = !b.password && (microsoftEnabled() || !!b.invite);
+    // Any e-mail works (Gmail, Outlook, Hotmail or the firm's): such a user enters with a password,
+    // assigned here or created from the invitation. Only an address of the firm's own domain may
+    // go without one, to enter with Microsoft 365 (change 53).
+    if (!b.password && b.invite && !channelReady("email")) return res.status(400).json({ error: "El servidor todavía no envía correos (falta configurar el correo de Microsoft 365): asigne una contraseña temporal y entréguesela al usuario." });
+    const firmMail = microsoftEnabled() && !PUBLIC_MAIL.test(email.split("@")[1] || "");
+    if (!b.password && !b.invite && !firmMail) return res.status(400).json({ error: `El correo ${email} no es de la cuenta Microsoft 365 de la firma: asigne una contraseña temporal o marque «Enviar invitación por correo».` });
+    const noPassword = !b.password && (firmMail || !!b.invite);
     // Only Gerencia creates Gerencia accounts (audit A01-004).
     if (b.role === "Gerencia" && req.user.role !== "Gerencia") return res.status(403).json({ error: "Solo Gerencia puede crear usuarios de Gerencia." });
     const pwBad = noPassword ? "" : passwordProblem(b.password, { email, name });
