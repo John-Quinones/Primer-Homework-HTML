@@ -674,18 +674,33 @@
     <form method="dialog" data-form="client">
       <h3 data-title>Nuevo cliente</h3>
       <input type="hidden" name="id" />
-      <label>Nombre completo o razón social * <input name="full_name" required /></label>
-      <div class="grid2">
+      <fieldset class="person-type">
+        <legend>Tipo de cliente</legend>
+        <label class="inline"><input type="radio" name="person_type" value="natural" checked /> Persona natural</label>
+        <label class="inline"><input type="radio" name="person_type" value="juridica" /> Persona jurídica (empresa o entidad)</label>
+      </fieldset>
+      <div class="grid2" data-pt="natural">
+        <label>Nombres * <input name="first_names" autocomplete="off" placeholder="Ej. Juan Manuel" /></label>
+        <label>Apellidos * <input name="last_names" autocomplete="off" placeholder="Ej. Quiñones Montaña" /></label>
+        <p class="hint span2">Escriba como quiera: al salir del campo queda con mayúscula inicial en cada nombre y apellido (JOHN → John).</p>
         <label>Tipo de documento
           <select name="id_type">
             <option value="CC">Cédula de ciudadanía</option>
-            <option value="NIT">NIT</option>
             <option value="CE">Cédula de extranjería</option>
             <option value="PA">Pasaporte</option>
+            <option value="PPT">Permiso por Protección Temporal</option>
             <option value="TI">Tarjeta de identidad</option>
+            <option value="NIT">NIT (persona natural comerciante)</option>
           </select>
         </label>
-        <label>Número <input name="id_number" /></label>
+        <label>Número de documento <input name="id_number" inputmode="numeric" autocomplete="off" placeholder="Ej. 1110456789, sin puntos" /></label>
+      </div>
+      <div class="grid2" data-pt="juridica" hidden>
+        <label class="span2">Razón social * <input name="business_name" autocomplete="off" placeholder="Ej. Inversiones del Tolima S.A.S." /></label>
+        <label>NIT * <input name="nit" autocomplete="off" placeholder="Ej. 900123456-7 (con dígito de verificación)" /></label>
+        <label>Representante legal <input name="legal_rep" autocomplete="off" placeholder="Nombre completo del representante" /></label>
+      </div>
+      <div class="grid2">
         <label>Correo electrónico <input name="email" type="email" /></label>
         <label>Teléfono <input name="phone" /></label>
         <label>Departamento <input name="department" class="combo" data-combo="dep" placeholder="Escriba: C… Caldas, Cesar…" autocomplete="off" /></label>

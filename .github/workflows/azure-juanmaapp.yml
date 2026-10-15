@@ -2,7 +2,7 @@
 # Setup (see juanmaapp/AZURE.md):
 #   - Repository variable AZURE_WEBAPP_NAME: the App Service name (e.g. juanmaapp-tec).
 #   - Repository secret AZURE_WEBAPP_PUBLISH_PROFILE: the app's publish profile (.PublishSettings file contents).
-# Until the variable exists, the job is skipped.
+# Until the variable exists, the job is skipped. Pushes publish only when the commit message contains [azure].
 name: Azure · JuanMaApp
 
 on:
@@ -15,7 +15,8 @@ concurrency: azure-juanmaapp
 
 jobs:
   deploy:
-    if: ${{ vars.AZURE_WEBAPP_NAME != '' }}
+    # Publishes only when asked: a commit whose message contains [azure], or a manual run.
+    if: ${{ vars.AZURE_WEBAPP_NAME != '' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[azure]')) }}
     runs-on: ubuntu-latest
     defaults:
       run:

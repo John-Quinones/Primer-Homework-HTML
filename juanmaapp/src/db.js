@@ -6,6 +6,7 @@ import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 import { seedTemplates } from "./templates.js";
 import { normStatus } from "./case-meta.js";
+import { looksLikeCompany, splitFullName } from "./person.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -454,6 +455,18 @@ function migrate(db) {
     ["monitor", "INTEGER NOT NULL DEFAULT 0"], ["ext_process_id", "TEXT NOT NULL DEFAULT ''"],
     ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"],
     ["client_role", "TEXT NOT NULL DEFAULT ''"], ["affiliated", "INTEGER NOT NULL DEFAULT 0"]]) add("cases", col, def);
+  // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
+  for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],
+    ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def);
+  for (const c of db.prepare("SELECT id, full_name, id_type FROM clients WHERE first_names = '' AND last_names = '' AND person_type = 'natural'").all()) {
+    if (looksLikeCompany(c.full_name, c.id_type)) {
+      db.prepare("UPDATE clients SET person_type = 'juridica', id_type = 'NIT' WHERE id = ?").run(c.id);
+    } else {
+      const s = splitFullName(c.full_name);
+      if (s.first_names) db.prepare("UPDATE clients SET first_names = ?, last_names = ?, full_name = ? WHERE id = ?")
+        .run(s.first_names, s.last_names, `${s.first_names} ${s.last_names}`.trim(), c.id);
+    }
+  }
   // The app was renamed (change 18): starter templates carry the new name in their footer.
   if (cols("document_templates").has("builtin")) db.exec("UPDATE document_templates SET body = replace(body, 'JuanMaApp', 'TecjuridicosApp') WHERE builtin = 1 AND body LIKE '%JuanMaApp%'");
   // Three statuses: Activo, Archivo provisional, Archivo definitivo.

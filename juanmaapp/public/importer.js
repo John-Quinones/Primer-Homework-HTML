@@ -8,8 +8,11 @@
 
   // Target fields. "join" says how several columns mapped to one field combine.
   const TARGETS = [
-    { key: "client.full_name", label: "Cliente · Nombre (o parte del nombre)", join: " ",
-      match: ["nombre", "nombres", "apellido", "apellidos", "nombre completo", "cliente", "razon social", "nombre cliente", "primer nombre", "segundo nombre", "primer apellido", "segundo apellido"] },
+    { key: "client.full_name", label: "Cliente · Nombre completo o razón social", join: " ",
+      match: ["nombre", "nombre completo", "cliente", "razon social", "nombre cliente", "nombre del cliente"] },
+    { key: "client.first_names", label: "Cliente · Nombres", join: " ", match: ["nombres", "primer nombre", "segundo nombre", "nombre de pila"] },
+    { key: "client.last_names", label: "Cliente · Apellidos", join: " ", match: ["apellido", "apellidos", "primer apellido", "segundo apellido"] },
+    { key: "client.person_type", label: "Cliente · Tipo de persona (natural / jurídica)", match: ["tipo persona", "tipo de persona", "naturaleza", "persona"] },
     { key: "client.id_type", label: "Cliente · Tipo de documento", match: ["tipo documento", "tipo de documento", "tipo id", "tipo identificacion"] },
     { key: "client.id_number", label: "Cliente · Número de documento",
       match: ["cedula", "documento", "nit", "identificacion", "numero documento", "no documento", "cc", "numero de documento", "num documento", "doc"] },
@@ -263,11 +266,12 @@
       try {
         // ----- client: match by document number, else by exact name -----
         const c = { ...rec.client };
+        if (c.person_type) c.person_type = /jur/i.test(norm(c.person_type)) ? "juridica" : "natural";
+        if (!c.full_name && (c.first_names || c.last_names)) c.full_name = [c.first_names, c.last_names].filter(Boolean).join(" ");
         if (c.id_type) c.id_type = ID_TYPES[norm(c.id_type)] || c.id_type.toUpperCase().slice(0, 4);
         let client = (docKey(c.id_number) && byDoc.get(docKey(c.id_number))) || (c.full_name && byName.get(norm(c.full_name)));
         if (!client) {
           if (!c.full_name) throw new Error("Sin nombre de cliente.");
-          c.full_name = titleCase(c.full_name);
           client = await api("POST", "/clients", c);
           summary.clientsCreated++;
         } else {

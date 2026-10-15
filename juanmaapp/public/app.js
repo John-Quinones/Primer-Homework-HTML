@@ -316,7 +316,10 @@ async function renderClientDetail() {
       </div>
     </div>
     <dl class="facts">
-      ${row("Documento", [c.id_type, c.id_number].filter(Boolean).join(" "))}
+      ${row("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
+      ${c.person_type === "juridica" ? "" : row("Nombres", c.first_names) + row("Apellidos", c.last_names)}
+      ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
+      ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
       ${row("Dirección", c.address)}
       ${row("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}
@@ -394,15 +397,39 @@ function wireDialog(dialog, onSave) {
 
 const formData = (form) => Object.fromEntries(new FormData(form).entries());
 
+const clientForm = $("#client-dialog form");
+// Natural person: first and last names + document. Legal entity: business name + NIT.
+function setPersonType(type) {
+  clientForm.elements.person_type.value = type;
+  $$("[data-pt]", clientForm).forEach((box) => {
+    box.hidden = box.dataset.pt !== type;
+    $$("input, select", box).forEach((el) => (el.disabled = box.hidden));
+  });
+  for (const [name, on] of [["first_names", type === "natural"], ["last_names", type === "natural"], ["business_name", type === "juridica"], ["nit", type === "juridica"]]) {
+    clientForm.elements[name].required = on;
+  }
+}
+clientForm.addEventListener("change", (e) => { if (e.target.name === "person_type") setPersonType(e.target.value); });
+// Names in proper case as soon as the user leaves the field (JoHN → John).
+clientForm.addEventListener("focusout", (e) => {
+  if (["first_names", "last_names", "legal_rep"].includes(e.target.name)) e.target.value = window.JuanmaPerson.properName(e.target.value);
+});
+
 function openClientDialog(c) {
   const sel = $("#client-dialog [name=office_id]");
   sel.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
-  openDialog($("#client-dialog"), c ? "Editar cliente" : "Nuevo cliente", c || {});
+  const type = c?.person_type || "natural";
+  openDialog($("#client-dialog"), c ? "Editar cliente" : "Nuevo cliente", c ? {
+    ...c, business_name: type === "juridica" ? c.full_name : "", nit: type === "juridica" ? c.id_number : "",
+    id_number: type === "natural" ? c.id_number : "",
+  } : {});
+  setPersonType(type);
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
 }
 
 wireDialog($("#client-dialog"), async (form) => {
-  const { id, ...data } = formData(form);
+  const { id, business_name, nit, ...data } = formData(form);
+  if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
   state.selectedClientId = saved.id;
   toast(id ? "Cliente actualizado." : "Cliente creado.");
@@ -1128,7 +1155,7 @@ function renderImportPreview() {
     return `<td>${escapeHtml(k === "case.status" && v ? window.JuanmaCaseMeta.normStatus(v) : o === "pay" && v ? cop(IMP.parsePesos(v)) : v)}</td>`;
   }).join("")}${casesMode ? `<td>${escapeHtml(Object.entries(r.custom).map(([k, v]) => `${k}: ${v}`).join("\n"))}</td>` : ""}</tr>`).join("");
   $("#import-preview").innerHTML = head + `<tbody>${rows}</tbody>`;
-  const noName = !imp.mapping.includes("client.full_name");
+  const noName = !imp.mapping.includes("client.full_name") && !imp.mapping.includes("client.first_names");
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
   btn.textContent = noName ? "Asigne la columna del nombre del cliente" : `Importar ${recs.length} filas`;

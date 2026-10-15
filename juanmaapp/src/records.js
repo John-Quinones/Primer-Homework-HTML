@@ -4,10 +4,13 @@ import express from "express";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { normStatus, normPartyRole } from "./case-meta.js";
+import { personFields } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
-const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id"];
+const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id",
+  "person_type", "first_names", "last_names", "legal_rep"];
+const NAME_FIELDS = ["full_name", "id_type", "person_type", "first_names", "last_names", "legal_rep"];
 
 const fail400 = (msg) => { throw new HttpError(400, msg); };
 
@@ -97,9 +100,10 @@ export function recordsRouter(db) {
   // ---------- Clients ----------
   const clientValues = (req, body, existing = {}) => {
     const v = {};
-    for (const f of CLIENT_FIELDS) if (f !== "office_id") v[f] = f in body ? str(body[f]) : existing[f] ?? "";
-    v.full_name = requireText(v.full_name, "El nombre del cliente");
-    v.id_type ||= "CC";
+    for (const f of CLIENT_FIELDS) if (f !== "office_id" && !NAME_FIELDS.includes(f)) v[f] = f in body ? str(body[f]) : existing[f] ?? "";
+    // Names in proper case, split into first and last names; legal entities use their business name and NIT.
+    try { Object.assign(v, personFields(body, existing)); } catch (err) { throw new HttpError(400, err.message); }
+    v.id_number = v.id_number.replace(/\s+/g, "");
     v.department = canonicalDepartment(v.department) || (v.department ? fail400("Departamento no reconocido.") : "");
     v.city = canonicalCity(v.city, v.department);
     v.office_id = officeFor(req, body.office_id, existing.office_id);

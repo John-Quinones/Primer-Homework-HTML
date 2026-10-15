@@ -53,6 +53,15 @@
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
     for (const k of ["charges", "receipts", "reminders"]) st[k] ||= [];
+    // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
+    for (const c of st.clients) {
+      if (c.person_type) continue;
+      if (window.JuanmaPerson.looksLikeCompany(c.full_name, c.id_type)) Object.assign(c, { person_type: "juridica", id_type: "NIT", first_names: "", last_names: "", legal_rep: "" });
+      else {
+        const sp = window.JuanmaPerson.splitFullName(c.full_name);
+        Object.assign(c, { person_type: "natural", ...sp, full_name: `${sp.first_names} ${sp.last_names}`.trim() || c.full_name, legal_rep: "" });
+      }
+    }
     st.payset ||= null;
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
@@ -214,7 +223,9 @@
     return out;
   };
   const uniq = (list, name, ignoreId) => list.some((x) => x.name.toLowerCase() === name.toLowerCase() && x.id !== ignoreId) && fail("Ya existe un registro con ese nombre.");
-  const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes"];
+  const CLIENT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes"];
+  const PERSON = window.JuanmaPerson;
+  const nameFields = (b, existing = {}) => { try { return PERSON.personFields(b, existing); } catch (err) { fail(err.message); } };
   const placeClient = (c) => {
     const dep = canonDep(c.department);
     if (c.department && !dep) fail("Departamento no reconocido.");
@@ -584,8 +595,8 @@
       need("clients.write");
       const c = { id: nextId(), created_at: stamp() };
       for (const f of CLIENT_FIELDS) c[f] = str(b[f]);
-      c.full_name || fail("El nombre del cliente es obligatorio.");
-      c.id_type ||= "CC";
+      Object.assign(c, nameFields(b));
+      c.id_number = c.id_number.replace(/\s+/g, "");
       placeClient(c);
       c.office_id = officeFor(b.office_id);
       s.clients.push(c);
@@ -594,8 +605,10 @@
     ["PUT", /^\/clients\/(\d+)$/, (m, b) => {
       need("clients.write");
       const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
+      const names = nameFields(b, c);
       for (const f of CLIENT_FIELDS) if (f in b) c[f] = str(b[f]);
-      c.full_name || fail("El nombre del cliente es obligatorio.");
+      Object.assign(c, names);
+      c.id_number = c.id_number.replace(/\s+/g, "");
       placeClient(c);
       c.office_id = officeFor(b.office_id, c.office_id);
       return { ...clone(c), office_name: officeName(c.office_id) };

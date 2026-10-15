@@ -8,7 +8,7 @@ const { guessTarget, guessAll, splitHeader, buildRecord, parsePesos, parseDate, 
 
 test("guesses columns from typical Access export headers", () => {
   const cases = {
-    IdCliente: "", "Código": "", Nombres: "client.full_name", Apellidos: "client.full_name",
+    IdCliente: "", "Código": "", Nombres: "client.first_names", Apellidos: "client.last_names",
     "Nombre del cliente": "client.full_name", "No. Documento": "client.id_number", "Cédula": "client.id_number",
     "Correo Electrónico": "client.email", Celular: "client.phone", "Tipo de Proceso": "case.category",
     Proceso: "case.type", "Clase de proceso": "case.type", "Estado del proceso": "case.status",
