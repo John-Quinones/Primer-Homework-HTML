@@ -59,11 +59,11 @@ function decorate(db, computed) {
 export function paymentsReport(db, user, type, q) {
   const { charges, receipts, credit } = loadLedger(db, user, { officeId: Number(q.officeId) || null });
   if (type === "cartera") {
-    const rows = clientRows(charges, credit, receipts, clientsById(db, [...new Set(charges.map((c) => c.client_id))]))
+    const rows = clientRows(charges, credit, receipts, clientsById(db, [...new Set([...charges, ...receipts].map((c) => c.client_id))]))
       .filter((r) => r.balance > 0 || q.status !== "pendientes")
-      .map((r) => ({ client: r.client_name, doc: r.id_number, phone: r.phone, billed: r.billed, paid: r.paid, balance: r.balance,
+      .map((r) => ({ client: r.client_name, doc: r.id_number, phone: r.phone, billed: r.billed, paid: r.paid, received: r.received, balance: r.balance,
         overdue: r.overdue, max_days: r.max_days, next_due: r.next_due || "", last_payment: r.last_payment || "" }));
-    return { columns: [["client", "Cliente"], ["doc", "Documento"], ["phone", "Teléfono"], ["billed", "Facturado"], ["paid", "Pagado"],
+    return { columns: [["client", "Cliente"], ["doc", "Documento"], ["phone", "Teléfono"], ["billed", "Facturado"], ["paid", "Aplicado a cobros"], ["received", "Total pagado"],
       ["balance", "Saldo"], ["overdue", "Vencido"], ["max_days", "Días de mora"], ["next_due", "Próximo vencimiento"], ["last_payment", "Último pago"]], rows };
   }
   const inRange = (d) => (!DATE.test(q.from || "") || d >= q.from) && (!DATE.test(q.to || "") || d <= q.to);
@@ -157,7 +157,8 @@ export function paymentsRouter(db) {
     const dueSoon = charges.filter((c) => c.balance > 0 && c.days_overdue === 0 && c.due_date <= addDays(t, 7)).reduce((a, c) => a + c.balance, 0);
     return {
       today: t, totals: portfolio(charges, credit), collected_month: collected, due_7d: dueSoon,
-      clients: clientRows(charges, credit, receipts, clientsById(db, [...new Set(charges.map((c) => c.client_id))])),
+      received_total: receipts.filter((x) => !x.voided_at).reduce((a, x) => a + (Number(x.amount) || 0), 0),
+      clients: clientRows(charges, credit, receipts, clientsById(db, [...new Set([...charges, ...receipts].map((c) => c.client_id))])),
     };
   }));
 

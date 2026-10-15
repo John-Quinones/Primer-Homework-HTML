@@ -86,10 +86,17 @@ export function clientRows(computed, credit, receipts, clients) {
     if (c.balance > 0 && c.days_overdue === 0 && (!r.next_due || c.due_date < r.next_due)) r.next_due = c.due_date;
     rows.set(c.client_id, r);
   }
+  // Everything the client has paid, applied to a charge or not (manual payments, old payments).
+  for (const x of receipts) {
+    if (x.voided_at) continue;
+    const r = rows.get(x.client_id) || { client_id: x.client_id, billed: 0, paid: 0, balance: 0, overdue: 0, max_days: 0, next_due: null };
+    r.received = (r.received || 0) + (Number(x.amount) || 0);
+    rows.set(x.client_id, r);
+  }
   return [...rows.values()].map((r) => {
     const cl = clients.find((x) => x.id === r.client_id) || {};
     const last = receipts.filter((x) => x.client_id === r.client_id && !x.voided_at).map((x) => x.paid_on).sort().at(-1) || null;
-    return { ...r, credit: credit.get(r.client_id) || 0, client_name: cl.full_name || "", id_number: [cl.id_type, cl.id_number].filter(Boolean).join(" "),
+    return { ...r, received: r.received || 0, credit: credit.get(r.client_id) || 0, client_name: cl.full_name || "", id_number: [cl.id_type, cl.id_number].filter(Boolean).join(" "),
       email: cl.email || "", phone: cl.phone || "", last_payment: last };
   }).sort((a, b) => b.overdue - a.overdue || b.balance - a.balance);
 }

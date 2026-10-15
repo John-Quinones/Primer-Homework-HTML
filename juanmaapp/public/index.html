@@ -442,7 +442,7 @@
         <div class="view-head">
           <h2>Pagos y cartera</h2>
           <div class="toolbar">
-            <button class="primary" data-action="new-receipt">+ Recibo de caja</button>
+            <button class="primary" data-action="new-receipt" title="Registre a mano un pago que hizo el cliente (también pagos anteriores)">+ Registrar pago</button>
             <button data-action="new-charge">+ Cobro o plan de cuotas</button>
             <button data-action="pay-settings">Ajustes de cobro</button>
           </div>
@@ -452,6 +452,7 @@
           <div class="kpi"><span class="kpi-value" id="pay-overdue">–</span><span class="kpi-label">Vencido</span></div>
           <div class="kpi"><span class="kpi-value" id="pay-due7">–</span><span class="kpi-label">Vence en 7 días</span></div>
           <div class="kpi"><span class="kpi-value" id="pay-month">–</span><span class="kpi-label">Recaudado este mes</span></div>
+          <div class="kpi"><span class="kpi-value" id="pay-received">–</span><span class="kpi-label">Total pagado por los clientes</span></div>
         </div>
         <div class="panel">
           <h3 class="panel-title">Edades de la cartera</h3>
@@ -467,8 +468,8 @@
           <button role="tab" data-ptab="recordatorios">Recordatorios enviados</button>
         </div>
         <div class="panel" data-ppanel="cartera"><div class="table-scroll">
-          <table class="data-table"><thead><tr><th>Cliente</th><th class="num">Saldo</th><th class="num">Vencido</th><th>Mora</th><th>Próximo vencimiento</th><th>Último pago</th><th></th></tr></thead><tbody id="pay-cartera"></tbody></table>
-        </div><p id="pay-cartera-empty" class="empty" hidden>No hay saldos. Cree un cobro para empezar a llevar la cartera.</p></div>
+          <table class="data-table"><thead><tr><th>Cliente</th><th class="num">Honorarios</th><th class="num">Total pagado</th><th class="num">Saldo</th><th class="num">Vencido</th><th>Mora</th><th>Próximo vencimiento</th><th>Último pago</th><th></th></tr></thead><tbody id="pay-cartera"></tbody></table>
+        </div><p id="pay-cartera-empty" class="empty" hidden>Aún no hay cobros ni pagos. Cree un cobro o registre un pago.</p></div>
         <div class="panel" data-ppanel="cobros" hidden>
           <div class="toolbar"><label>Ver <select id="pay-state">
             <option value="abiertos">Con saldo</option><option value="vencido">Vencidos</option><option value="pendiente">Pendientes</option>

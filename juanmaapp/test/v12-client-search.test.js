@@ -31,3 +31,15 @@ test("GET /clients searches by field", async () => {
   assert.deepEqual(await names("38555111", "doc"), ["María José Torres de Cifuentes"]);
   assert.deepEqual(await names("cifuentes maria"), ["María José Torres de Cifuentes"]);
 });
+
+test("cartera shows the exact total each client has paid, with or without charges", async () => {
+  const c = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Pago", last_names: "Manual", id_number: "555" })).body;
+  const r = await admin.call("POST", "/payments/receipts", { client_id: c.id, amount: 1500000, paid_on: "2025-03-01", method: "Efectivo", concept: "Pago anterior" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  await admin.call("POST", "/payments/receipts", { client_id: c.id, amount: 500000, paid_on: "2025-04-01", method: "Transferencia", concept: "Abono" });
+  const sum = (await admin.call("GET", "/payments/summary")).body;
+  const row = sum.clients.find((x) => x.client_id === c.id);
+  assert.equal(row.received, 2000000);
+  assert.equal(row.credit, 2000000);
+  assert.ok(sum.received_total >= 2000000);
+});

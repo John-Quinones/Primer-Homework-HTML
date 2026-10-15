@@ -997,8 +997,8 @@
     const { charges, receipts, credit } = ledger(null, +q.officeId || null);
     if (type === "cartera") {
       const rows = LG.clientRows(charges, credit, receipts, s.clients).map((r) => ({ client: r.client_name, doc: r.id_number, phone: r.phone,
-        billed: r.billed, paid: r.paid, balance: r.balance, overdue: r.overdue, max_days: r.max_days, next_due: r.next_due || "", last_payment: r.last_payment || "" }));
-      return { columns: [["client", "Cliente"], ["doc", "Documento"], ["phone", "Teléfono"], ["billed", "Facturado"], ["paid", "Pagado"],
+        billed: r.billed, paid: r.paid, received: r.received, balance: r.balance, overdue: r.overdue, max_days: r.max_days, next_due: r.next_due || "", last_payment: r.last_payment || "" }));
+      return { columns: [["client", "Cliente"], ["doc", "Documento"], ["phone", "Teléfono"], ["billed", "Facturado"], ["paid", "Aplicado a cobros"], ["received", "Total pagado"],
         ["balance", "Saldo"], ["overdue", "Vencido"], ["max_days", "Días de mora"], ["next_due", "Próximo vencimiento"], ["last_payment", "Último pago"]], rows };
     }
     const inRange = (d) => (!DATE.test(q.from || "") || d >= q.from) && (!DATE.test(q.to || "") || d <= q.to);
@@ -1020,6 +1020,7 @@
         collected_month: receipts.filter((x) => !x.voided_at && x.paid_on >= monthStart).reduce((a, x) => a + x.amount, 0),
         due_7d: charges.filter((c) => c.balance > 0 && c.days_overdue === 0 && c.due_date <= LG.addDays(t, 7)).reduce((a, c) => a + c.balance, 0),
         clients: LG.clientRows(charges, credit, receipts, s.clients),
+        received_total: receipts.filter((x) => !x.voided_at).reduce((a, x) => a + x.amount, 0),
       };
     }],
     ["GET", /^\/payments\/charges(?:\?.*)?$/, (m, b, url) => {

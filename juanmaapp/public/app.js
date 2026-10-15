@@ -2743,14 +2743,18 @@ async function renderPagos() {
   $("#pay-overdue").textContent = cop(sum.totals.overdue);
   $("#pay-due7").textContent = cop(sum.due_7d);
   $("#pay-month").textContent = cop(sum.collected_month);
+  $("#pay-received").textContent = cop(sum.received_total ?? 0);
   const max = Math.max(1, ...Object.values(sum.totals.aging));
   $("#pay-aging").innerHTML = L.AGING.map(([k, label], i) => `<div class="hbar" role="listitem"><span class="hbar-label">${label}</span>
     <span class="hbar-track"><span class="hbar-fill ${i >= 3 ? "bad" : i >= 1 ? "late" : ""}" style="width:${(sum.totals.aging[k] / max) * 100}%"></span></span>
     <span class="hbar-value">${cop(sum.totals.aging[k])}</span></div>`).join("");
   const rows = sum.clients.filter((r) => !clientId || r.client_id === Number(clientId));
+  if (clientId) $("#pay-received").textContent = cop(rows[0]?.received ?? 0);
   $("#pay-cartera-empty").hidden = rows.length > 0;
   $("#pay-cartera").innerHTML = rows.map((r) => `<tr>
     <td><strong>${escapeHtml(r.client_name)}</strong><br><span class="muted">${escapeHtml(r.id_number)}${r.phone ? " · " + escapeHtml(r.phone) : ""}</span></td>
+    <td class="num">${r.billed ? cop(r.billed) : '<span class="muted">—</span>'}</td>
+    <td class="num"><strong>${cop(r.received)}</strong></td>
     <td class="num">${cop(r.balance)}${r.credit ? `<br><span class="muted">a favor ${cop(r.credit)}</span>` : ""}</td>
     <td class="num">${r.overdue ? `<strong>${cop(r.overdue)}</strong>` : "—"}</td>
     <td>${r.max_days ? `<span class="pay-state vencido">${r.max_days} días</span>` : '<span class="muted">Al día</span>'}</td>
