@@ -37,6 +37,7 @@
 
   // Bring stored data up to the current structure without losing anything.
   function migrate(st) {
+    st = JSON.parse(JSON.stringify(st)); // never change the loaded objects in place (they can be read-only)
     for (const k of ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks", "notes", "acts", "checks", "log", "templates", "signs"]) st[k] ||= [];
     st.prefs ||= {}; st.blobs ||= {}; st.info ||= {};
     st.matrix ||= JSON.parse(JSON.stringify(AUTH.matrix));
@@ -70,7 +71,7 @@
     if (TPL.feeClause) for (const t of st.templates) if (t.builtin && t.body?.includes(TPL.feeClause[0])) t.body = t.body.replace(TPL.feeClause[0], TPL.feeClause[1]);
     if (TPL.contractHead) for (const t of st.templates) if (t.builtin && t.body?.startsWith(TPL.contractHead[0])) t.body = TPL.contractHead[1] + t.body.slice(TPL.contractHead[0].length);
     // Starter templates added in later versions arrive once (one the firm deleted does not come back).
-    st.info.seededTemplates ||= st.templates.filter((t) => t.builtin).map((t) => t.name);
+    if (!Array.isArray(st.info.seededTemplates)) st.info = { ...st.info, seededTemplates: st.templates.filter((t) => t.builtin).map((t) => t.name) };
     for (const t of TPL.seed) {
       if (st.info.seededTemplates.includes(t.name)) continue;
       if (!st.templates.some((x) => x.name === t.name)) {
@@ -78,7 +79,7 @@
         st.templates.push({ id: nextId(), name: t.name, category: t.category, description: t.description, format: "markdown",
           body: t.body, filename: null, builtin: true, created_at: now, updated_at: now });
       }
-      st.info.seededTemplates.push(t.name);
+      st.info = { ...st.info, seededTemplates: [...st.info.seededTemplates, t.name] };
     }
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;

@@ -24,7 +24,8 @@
 
   async function readCollection(name) {
     const snap = await db.collection(name).limit(1000).get();
-    return snap.docs.filter((d) => d.exists).map((d) => ({ id: d.id, data: d.data() }));
+    // Documents can come back read-only (frozen) on some devices: work on plain copies.
+    return snap.docs.filter((d) => d.exists).map((d) => ({ id: d.id, data: JSON.parse(JSON.stringify(d.data())) }));
   }
 
   async function load() {
