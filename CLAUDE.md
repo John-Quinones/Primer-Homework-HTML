@@ -18,7 +18,7 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 - Deployment: chosen for testing = Azure App Service free F1 (`juanmaapp/AZURE.md`, `.github/workflows/azure-juanmaapp.yml`, DB in `/home/data`). Alternative: Render (`render.yaml`, `Dockerfile`, `DESPLIEGUE.md`). Sign-in with Microsoft 365 via `src/microsoft.js` (MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET).
 - Azure publishes ONLY when the user asks: put [azure] in that commit message (workflow gate). Otherwise publish only the test link (artifact).
 - Every published change is numbered (Cambio N = commits touching juanmaapp/); tell the user the number and add a row to `juanmaapp/CAMBIOS.md` in the same commit. Republish the artifact and let CI deploy to Azure on each change.
-- Firm's server Excel export (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO 1/2, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) is recognized by `public/importer.js` `guessAll`. Open questions to the user: which column holds the client name; whether ESTADO 2 is archivo definitivo or provisional.
+- Firm's server Excel export (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO 1/2, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) is recognized by `public/importer.js` `guessAll`. Status codes: 1 activo, 2 archivo definitivo, 3 archivo provisional. The Excel import is done (user: do not bring it up again).
 - Permissions: `src/auth.js` (`PERMISSIONS`, `DEFAULT_MATRIX`); new permissions reach built-in roles once via `known_permissions`.
 - Only Gerencia deletes (change 24): `GERENCIA_ONLY` perms in `src/auth.js`, every DELETE refused for other roles (server `requireAuth`, demo `request`), delete buttons hidden by the `is-gerencia` body class. Every delete asks with `confirmAsk`.
 - Folder number = custom field "No. Carpeta" (`isFolderField`/`caseFolder` in `public/app.js`), shown on case cards, the case dialog title and the Carpeta column of Expedientes.
@@ -32,6 +32,10 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 - Contract fees = the case's charges in Pagos (`{{honorarios.*}}`, `feeVariables`).
 - Signed PDFs (stamps + certificate) are built by `public/pdf-tools.js`, also on the server via `src/signed-pdf.js`.
 - Certified e-mail keeps the exact .eml with SHA-1/256/512/SHA3-512, every opening/download/acknowledgment in `mail_events`, optional RFC 3161 stamp (`src/tsa.js`, TSA_URL). It is evidence, not an ONAC-accredited certified e-mail service.
+
+- E-mail on Azure goes through Microsoft 365 / Graph (MAIL_TRANSPORT=graph, MAIL_FROM, Exchange RBAC for Applications); WhatsApp uses templates tecjuridicos_aviso (utility) and tecjuridicos_codigo (authentication). SMS is not used (user asked to omit it). Steps in juanmaapp/AZURE.md 6–7.
+- Signed PDFs are generated once and kept with their SHA-256; verification in Firmas and public verificar.html (code on every page).
+- The starter contract is numbered with the case folder ({{expediente.carpeta}}).
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.
