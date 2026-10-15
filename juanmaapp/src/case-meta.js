@@ -174,3 +174,74 @@ export function cleanParties(list) {
   }
   return { parties };
 }
+
+// ----- Audit log (change 50): who changed what, when, from which device -----
+/** "Móvil" / "Tableta" / "PC" plus system and browser, from the User-Agent. */
+export function deviceOf(ua = "") {
+  const u = String(ua);
+  const kind = /iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))/i.test(u) ? "Tableta" : /Mobi|iPhone|iPod|Android|Windows Phone/i.test(u) ? "Móvil" : u ? "PC" : "—";
+  const os = /iPhone|iPad|iPod/.test(u) ? "iOS" : /Android/.test(u) ? "Android" : /Windows/.test(u) ? "Windows" : /Mac OS X|Macintosh/.test(u) ? "macOS" : /Linux/.test(u) ? "Linux" : "";
+  const browser = /Edg\//.test(u) ? "Edge" : /OPR\//.test(u) ? "Opera" : /CriOS|Chrome\//.test(u) ? "Chrome" : /FxiOS|Firefox\//.test(u) ? "Firefox" : /Safari\//.test(u) ? "Safari" : "";
+  return { kind, detail: [os, browser].filter(Boolean).join(" · ") };
+}
+// Module and record for an API path (method + path without /api).
+const AUDIT_ENTITIES = [
+  [/^\/cases\/(\d+)\/documents/, "Expedientes", "documento del expediente", "case"],
+  [/^\/cases(?:\/(\d+))?/, "Expedientes", "expediente", "case"],
+  [/^\/clients(?:\/(\d+))?/, "Clientes", "cliente"],
+  [/^\/tasks(?:\/(\d+))?/, "Agenda", "tarea"],
+  [/^\/payments\/charges(?:\/(\d+))?/, "Pagos", "cobro"],
+  [/^\/payments\/receipts(?:\/(\d+))?/, "Pagos", "recibo"],
+  [/^\/payments/, "Pagos", "pagos"],
+  [/^\/esign(?:\/(\d+))?/, "Firmas", "solicitud de firma"],
+  [/^\/mail(?:\/(\d+))?/, "Correo certificado", "correo"],
+  [/^\/admin\/users(?:\/(\d+))?/, "Usuarios", "usuario"],
+  [/^\/admin\/roles/, "Usuarios", "rol"],
+  [/^\/admin\/(matrix|permissions)/, "Usuarios", "permisos"],
+  [/^\/admin\/offices(?:\/(\d+))?/, "Usuarios", "oficina"],
+  [/^\/admin/, "Configuración", "ajuste"],
+  [/^\/(categories|types|fields|catalog)(?:\/(\d+))?/, "Configuración", "catálogo de procesos"],
+  [/^\/courts/, "Despachos", "despacho"],
+  [/^\/templates/, "Documentos", "plantilla"],
+  [/^\/generate/, "Documentos", "borrador"],
+  [/^\/monitor\/check/, "Consulta de procesos", "consulta en la Rama Judicial"],
+  [/^\/monitor/, "Consulta de procesos", "consulta"],
+  [/^\/jurisprudencia/, "Jurisprudencia", "jurisprudencia"],
+  [/^\/import/, "Importar", "importación"],
+  [/^\/auth/, "Acceso", "cuenta"],
+];
+/** { module, entity, id, isCase } for a path; id is the record number in the path, if any. */
+export function auditTarget(path) {
+  const p = String(path).split("?")[0];
+  for (const [re, module, entity, isCase] of AUDIT_ENTITIES) {
+    const m = p.match(re);
+    if (m) return { module, entity, id: Number(m[1] && /^\d+$/.test(m[1]) ? m[1] : m[2]) || null, isCase: !!isCase };
+  }
+  return { module: "Otros", entity: p.split("/")[1] || "", id: null, isCase: false };
+}
+export const auditVerb = (method, path) => (/^\/monitor\/check/.test(path) ? "Consultó" : /^\/mail$/.test(path) ? "Envió" : /^\/generate/.test(path) ? "Generó"
+  : method === "POST" ? "Creó" : method === "DELETE" ? "Eliminó" : "Modificó");
+/** Spanish names of the fields shown in the change details. */
+export const AUDIT_FIELDS = {
+  title: "Asunto o título", status: "Estado", client_role: "Calidad del cliente", affiliated: "Afiliado", parties: "Partes", radicado: "Radicado",
+  court_name: "Despacho", court_email: "Correo del despacho", department: "Departamento", city: "Ciudad", area: "Área", counterparty: "Contraparte",
+  facts: "Hechos", field_values: "Campos del proceso", office_id: "Oficina", assigned_user_id: "Responsable", process_type_id: "Tipo de proceso",
+  monitor: "Consulta automática", full_name: "Nombre", first_names: "Nombres", last_names: "Apellidos", id_type: "Tipo de documento", id_number: "Documento",
+  email: "Correo", phone: "Teléfono", address: "Dirección", notes: "Notas", legal_rep: "Representante legal", person_type: "Tipo de persona",
+  kind: "Tipo", due_at: "Plazo", location: "Lugar", remind_days: "Avisos", done_notes: "Cumplimiento", delivered_at: "Entregado", response_at: "Respuesta",
+  response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
+  concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",
+  name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", custom_permissions: "Permisos propios",
+};
+/** Field-by-field differences between two rows: [{ field, label, before, after }]. */
+export function auditDiff(before, after) {
+  if (!before || !after) return [];
+  const show = (v) => { const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); return s.length > 300 ? s.slice(0, 300) + "…" : s; };
+  const out = [];
+  for (const k of Object.keys(AUDIT_FIELDS)) {
+    if (!(k in before) && !(k in after)) continue;
+    const a = show(before[k]), b = show(after[k]);
+    if (a !== b) out.push({ field: k, label: AUDIT_FIELDS[k], before: a, after: b });
+  }
+  return out;
+}

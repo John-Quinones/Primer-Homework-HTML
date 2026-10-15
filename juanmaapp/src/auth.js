@@ -2,6 +2,7 @@
 // session is a random token in an HttpOnly cookie whose SHA-256 is stored.
 // Mutating requests must carry the X-JuanMa header, which a cross-site form
 // cannot send, so the cookie alone cannot be used for CSRF.
+import { audit } from "./audit.js";
 import express from "express";
 import { microsoftEnabled } from "./microsoft.js";
 import { VERSION } from "./version.js";
@@ -39,6 +40,7 @@ export const PERMISSIONS = {
   "esign.use": "Envía documentos a firma electrónica",
   "mail.send": "Envía correo electrónico con trazabilidad",
   "payments.manage": "Registra cobros y recibos, maneja cartera y envía recordatorios de pago",
+  "audit.view": "Ve la bitácora de auditoría (quién cambió qué, cuándo y desde qué dispositivo)",
 };
 
 // Starting matrix; Gerencia edits it in Usuarios › Roles.
@@ -174,6 +176,7 @@ export function authRouter(db) {
     const main = db.prepare("SELECT id FROM offices WHERE is_main = 1").get();
     if (main) db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)").run(id, main.id);
     setSession(db, req, res, id);
+    audit(db, req, { user: { id, name }, action: "Configuró", summary: "Creó la cuenta inicial de Gerencia" });
     res.status(201).json({ user: loadUser(db, id) });
   });
 
@@ -181,22 +184,28 @@ export function authRouter(db) {
     const email = str(req.body?.email).toLowerCase();
     const f = failures.get(email);
     if (f && f.n >= 5 && f.until > Date.now()) {
+      audit(db, req, { user: null, action: "Ingreso bloqueado", ok: false, summary: `Demasiados intentos con ${email}` });
       return res.status(429).json({ error: "Demasiados intentos. Espere 10 minutos." });
     }
     const u = db.prepare("SELECT id, password_hash, active FROM users WHERE email = ?").get(email);
     if (!u || !u.active || !checkPassword(req.body?.password ?? "", u.password_hash)) {
       const n = (f && f.until > Date.now() ? f.n : 0) + 1;
       failures.set(email, { n, until: Date.now() + 10 * 60 * 1000 });
+      const who = u && db.prepare("SELECT id, name FROM users WHERE id = ?").get(u.id);
+      audit(db, req, { user: who || null, action: "Ingreso fallido", ok: false, summary: `${u ? (u.active ? "Contraseña incorrecta" : "Usuario inactivo") : "Correo no registrado"}: ${email}` });
       return res.status(401).json({ error: "Correo o contraseña incorrectos." });
     }
     failures.delete(email);
     setSession(db, req, res, u.id);
-    res.json({ user: loadUser(db, u.id) });
+    const user = loadUser(db, u.id);
+    audit(db, req, { user, action: "Ingresó", summary: "Inicio de sesión con contraseña" });
+    res.json({ user });
   });
 
   r.post("/logout", (req, res) => {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha(token));
+    if (req.user) audit(db, req, { action: "Salió", summary: "Cerró sesión" });
     res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
     res.status(204).end();
   });
@@ -213,6 +222,7 @@ export function authRouter(db) {
     resetSent.set(email, Date.now());
     const u = db.prepare("SELECT id, name, active FROM users WHERE email = ?").get(email);
     if (!u?.active) return reply();
+    audit(db, req, { user: u, action: "Pidió restablecer contraseña", summary: `Enlace enviado a ${email}` });
     const token = randomBytes(24).toString("base64url");
     db.prepare("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 minutes'))").run(sha(token), u.id);
     const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
@@ -233,7 +243,9 @@ export function authRouter(db) {
     db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE user_id = ? AND used_at IS NULL").run(row.user_id);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.user_id);
     setSession(db, req, res, row.user_id);
-    res.json({ user: loadUser(db, row.user_id) });
+    const user = loadUser(db, row.user_id);
+    audit(db, req, { user, action: "Creó contraseña", summary: "Contraseña creada con enlace de restablecimiento o invitación" });
+    res.json({ user });
   });
 
   // Change one's own e-mail (confirmed with the current password when the account has one).
@@ -247,6 +259,8 @@ export function authRouter(db) {
     if (email === row.email) return res.status(400).json({ error: "Ese ya es su correo." });
     if (db.prepare("SELECT 1 FROM users WHERE email = ? AND id != ?").get(email, req.user.id)) return res.status(409).json({ error: "Ese correo ya está registrado por otro usuario." });
     db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, req.user.id);
+    audit(db, req, { action: "Cambió su correo", module: "Acceso", entity: "cuenta", record_id: req.user.id, summary: "Cambió el correo de su cuenta",
+      changes: [{ field: "email", label: "Correo", before: row.email, after: email }] });
     sendEmail(row.email, "Su correo en TecjuridicosApp cambió",
       `Hola ${req.user.name}: el correo de su cuenta en TecjuridicosApp cambió a ${email}. Si usted no hizo este cambio, avise de inmediato a Gerencia.`,
       `<p>Hola ${req.user.name.replace(/[<>&]/g, "")}: el correo de su cuenta en TecjuridicosApp cambió a <strong>${email}</strong>. Si usted no hizo este cambio, avise de inmediato a Gerencia.</p>`).catch(() => {});
@@ -259,6 +273,7 @@ export function authRouter(db) {
     if (!validPassword(req.body?.next)) return res.status(400).json({ error: "La nueva contraseña debe tener al menos 10 caracteres." });
     if (req.body?.next === req.body?.current) return res.status(400).json({ error: "La nueva contraseña debe ser distinta de la actual." });
     db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hashPassword(req.body.next), req.user.id);
+    audit(db, req, { action: "Cambió su contraseña", summary: "Cambió su contraseña" });
     res.status(204).end();
   });
 

@@ -120,7 +120,7 @@ const VIEW_PERMS = {
   pagos: "payments.manage",
   consulta: "processes.consult",
   borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
-  importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage",
+  importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage", bitacora: "audit.view",
 };
 
 // Only Gerencia deletes (change 24); every delete button carries data-action="delete-…" or data-jact="delete-…".
@@ -364,7 +364,7 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
@@ -521,7 +521,7 @@ async function renderExpedienteFicha(id) {
   await loadCatalog();
   const k = await api("GET", `/cases/${id}`);
   const quiet = (p) => p.catch(() => null);
-  const [client, tasks, acts, docs, charges, receipts, signs, mails] = await Promise.all([
+  const [client, tasks, acts, docs, charges, receipts, signs, mails, changes] = await Promise.all([
     quiet(api("GET", `/clients/${k.client_id}`)),
     quiet(api("GET", `/tasks?caseId=${id}`)),
     can("processes.consult") && k.radicado ? quiet(api("GET", `/monitor/cases/${id}/actuaciones`)) : null,
@@ -530,6 +530,7 @@ async function renderExpedienteFicha(id) {
     can("payments.manage") ? quiet(api("GET", `/payments/receipts?clientId=${k.client_id}`)) : null,
     can("esign.use") ? quiet(api("GET", "/esign")) : null,
     can("mail.send") ? quiet(api("GET", `/mail?caseId=${id}`)) : null,
+    quiet(api("GET", `/audit?caseId=${id}`)),
   ]);
   if (client && !state.clients.some((x) => x.id === client.id)) state.clients.push(client);
   if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
@@ -544,7 +545,7 @@ async function renderExpedienteFicha(id) {
   const work = (tasks || []).filter((t) => !CMETA.RESPONSE_KINDS.includes(t.kind));
   const answers = (tasks || []).filter((t) => CMETA.RESPONSE_KINDS.includes(t.kind));
   agendaCache = tasks || [];
-  const hist = caseHistory({ k, tasks, acts, docs, charges, receipts: caseReceipts, signs: caseSigns, mails });
+  const hist = caseHistory({ k, tasks, acts, docs, charges, receipts: caseReceipts, signs: caseSigns, mails, changes });
   const panel = (title, count, body, actions = "") => `<section class="panel ficha-panel"><div class="ficha-panel-head"><h3 class="panel-title">${title}${count != null ? ` <span class="count">${count}</span>` : ""}</h3>${actions}</div>${body}</section>`;
   const empty = (t) => `<p class="empty">${t}</p>`;
   box.innerHTML = `
@@ -624,7 +625,7 @@ async function renderExpedienteFicha(id) {
 }
 let ACTS_CACHE = [];
 const CMETA = window.JuanmaCaseMeta;
-const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["expediente", "Expediente"]];
+const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["cambio", "Cambios por funcionario"], ["expediente", "Expediente"]];
 const wide = (html) => html.replace('class="panel ficha-panel"', 'class="panel ficha-panel ficha-wide"');
 const kindButtons = (caseId, kinds) => `<span class="toolbar">${kinds.map((x) => `<button class="mini ${x === kinds[0] ? "primary" : ""}" data-action="new-task" data-case="${caseId}" data-kind="${x}">+ ${KIND_LABEL[x]}</button>`).join("")}</span>`;
 const whoOf = (t) => t.assigned_name || t.case_assigned_name || "Sin responsable";
@@ -671,7 +672,7 @@ function taskTable(list, answers) {
 }
 
 /** Everything that happened in the case, newest first, in Colombia time. */
-function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails }) {
+function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails, changes }) {
   const out = [], at = (utc) => CMETA.utcToBogota(utc), add = (when, type, text, sub = "") => when && out.push({ at: when, type, text, sub });
   add(at(k.created_at), "expediente", "Se creó el expediente", [k.type_name, k.title].filter(Boolean).join(" · "));
   if (k.last_checked_at) add(at(k.last_checked_at), "actuacion", "Última consulta en la Rama Judicial");
@@ -696,6 +697,9 @@ function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails }) 
     if (m.opened_at) add(at(m.opened_at), "correo", `Correo abierto: ${m.subject}`, m.to_addr);
     if (m.confirmed_at) add(at(m.confirmed_at), "correo", `Acuse de recibo: ${m.subject}`, m.confirm_name || m.to_addr);
   }
+  // Who changed what, from the audit log (change 50).
+  for (const e of changes || []) add(at(e.at), "cambio", `${e.user_name || "—"}: ${e.summary}`,
+    [`${e.device}${e.device_detail ? " (" + e.device_detail + ")" : ""}`, ...e.changes.map((c) => `${c.label}: ${c.before || "(vacío)"} → ${c.after || "(vacío)"}`)].join(" · "));
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 $("#ficha-expediente").addEventListener("click", (e) => {
@@ -3063,6 +3067,52 @@ function mailProof(m) {
   return doc.output("blob");
 }
 
+// ---------- Bitácora (change 50): who changed what, when, from which device ----------
+let auditRows = [];
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const AUDIT_MODULES = ["Acceso", "Clientes", "Expedientes", "Agenda", "Pagos", "Firmas", "Correo certificado", "Documentos", "Consulta de procesos", "Despachos", "Usuarios", "Configuración", "Jurisprudencia", "Importar"];
+const deviceIcon = (d) => (d === "Móvil" ? "📱" : d === "Tableta" ? "📲" : d === "PC" ? "💻" : "");
+const changeList = (changes) => (changes || []).map((c) => {
+  const val = (f, v) => (f === "assigned_user_id" || f === "office_id") && v ? (directory.find((u) => String(u.id) === v)?.name || offices.find((o) => String(o.id) === v)?.name || v) : v;
+  return `<li><strong>${escapeHtml(c.label)}:</strong> <span class="before">${escapeHtml(val(c.field, c.before) || "(vacío)")}</span> → <span class="after">${escapeHtml(val(c.field, c.after) || "(vacío)")}</span></li>`;
+}).join("");
+async function renderBitacora(more = false) {
+  const f = $("#audit-filters");
+  if (!more) {
+    const cu = f.elements.userId.value, cm = f.elements.module.value;
+    f.elements.userId.innerHTML = '<option value="">Todos</option>' + directory.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+    f.elements.userId.value = cu;
+    f.elements.module.innerHTML = '<option value="">Todos</option>' + AUDIT_MODULES.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+    f.elements.module.value = cm;
+  }
+  const q = new URLSearchParams(Object.entries(formData(f)).filter(([, v]) => v));
+  if (more && auditRows.length) q.set("before", auditRows.at(-1).id);
+  const rows = await api("GET", `/audit?${q}`);
+  auditRows = more ? [...auditRows, ...rows] : rows;
+  $("#audit-empty").hidden = auditRows.length > 0;
+  $("#audit-more").hidden = rows.length < 300;
+  $("#audit-rows").innerHTML = auditRows.map((e) => `<tr class="${e.ok ? "" : "audit-denied"}">
+    <td class="nowrap">${escapeHtml(CMETA.utcToBogota(e.at))}</td>
+    <td>${escapeHtml(e.user_name || "—")}</td>
+    <td><span title="${escapeHtml(e.user_agent)}">${deviceIcon(e.device)} ${escapeHtml(e.device)}</span><br><span class="muted">${escapeHtml(e.device_detail)}${e.ip ? " · IP " + escapeHtml(e.ip) : ""}</span></td>
+    <td><span class="badge">${escapeHtml(e.module)}</span><br>${escapeHtml(e.summary)}</td>
+    <td>${e.changes.length ? `<ul class="audit-changes">${changeList(e.changes)}</ul>` : '<span class="muted">—</span>'}</td>
+    <td>${e.case_id ? `<button class="mini" data-action="go" data-to="#expediente-${e.case_id}-historial">Ver expediente</button>` : ""}</td></tr>`).join("");
+}
+$("#audit-filters").addEventListener("change", () => guarded(() => renderBitacora()));
+$("#audit-filters").addEventListener("submit", (e) => { e.preventDefault(); guarded(() => renderBitacora()); });
+$("#audit-filters").elements.q.addEventListener("input", debounce(() => guarded(() => renderBitacora()), 350));
+$("#audit-more").addEventListener("click", () => guarded(() => renderBitacora(true)));
+$("#audit-xlsx").addEventListener("click", () => guarded(async () => {
+  const head = ["Fecha y hora (Colombia)", "Funcionario", "Dispositivo", "Sistema y navegador", "IP", "Módulo", "Acción", "Cambios"]
+    .map((value) => ({ value, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
+  const body = auditRows.map((e) => [CMETA.utcToBogota(e.at), e.user_name, e.device, e.device_detail, e.ip, e.module, e.summary,
+    e.changes.map((c) => `${c.label}: ${c.before || "(vacío)"} → ${c.after || "(vacío)"}`).join(" | ")].map((v) => ({ value: String(v ?? ""), type: String })));
+  const blob = await window.writeXlsxFile([[{ value: "Bitácora — TecjuridicosApp", fontWeight: "bold" }], [{ value: `Generada el ${new Date().toLocaleString("es-CO")} por ${me.name}` }], [], head, ...body],
+    { columns: [18, 22, 10, 18, 14, 18, 50, 70].map((width) => ({ width })), sheet: "Bitácora" }).toBlob();
+  await saveFile(`bitacora-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+}));
+
 // ---------- Agenda (tareas, audiencias, términos) ----------
 const KIND_LABEL = window.JuanmaCaseMeta.TASK_KIND_LABEL;
 const bogotaNow = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
@@ -3837,6 +3887,7 @@ const RENDER = {
   borradores: renderBorradores,
   importar: renderImportar,
   configuracion: renderConfiguracion,
+  bitacora: renderBitacora,
 };
 
 guarded(boot);

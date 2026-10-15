@@ -1,5 +1,6 @@
 // Persistence for clients, the process catalog and cases. Uses Node's built-in
 // SQLite (node:sqlite), so there is no native dependency to install.
+import { AUDIT_SCHEMA } from "./audit.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -509,6 +510,7 @@ function migrate(db) {
   for (const [col, def] of [["term_from", "TEXT NOT NULL DEFAULT ''"], ["term_days", "INTEGER"], ["term_unit", "TEXT NOT NULL DEFAULT ''"], ["term_label", "TEXT NOT NULL DEFAULT ''"]]) {
     if (!new Set(db.prepare("PRAGMA table_info(tasks)").all().map((c) => c.name)).has(col)) db.exec(`ALTER TABLE tasks ADD COLUMN ${col} ${def}`);
   }
+  db.exec(AUDIT_SCHEMA); // change 50
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");

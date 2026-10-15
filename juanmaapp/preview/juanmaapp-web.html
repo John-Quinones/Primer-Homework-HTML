@@ -844,6 +844,18 @@ a.chip-stat strong { color: var(--link); }
 .party-row input { min-width: 0; }
 @media (max-width: 760px) { .sec-nav { position: static; } }
 
+/* Change 50: audit log */
+.audit-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
+.audit-filters .audit-q { grid-column: span 2; }
+.audit-table td { vertical-align: top; }
+.audit-table .nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.audit-changes { margin: 0; padding-left: 16px; font-size: .85rem; }
+.audit-changes .before { color: var(--error); text-decoration: line-through; text-decoration-thickness: 1px; }
+.audit-changes .after { color: var(--ok); }
+tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent); }
+.history .h-cambio { background: var(--brand-silver); outline: 2px solid var(--brand-navy); }
+@media (max-width: 760px) { .audit-filters .audit-q { grid-column: auto; } }
+
 </style>
 
 <style>
@@ -961,6 +973,7 @@ a.chip-stat strong { color: var(--link); }
       <a href="#reportes" data-view="reportes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reportes</span></a>
       <a href="#importar" data-view="importar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><span>Importar</span></a>
       <a href="#configuracion" data-view="configuracion"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Configuración</span></a>
+      <a href="#bitacora" data-view="bitacora"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 12h7M9 15.5h7M9 19h4"/></svg><span>Bitácora</span></a>
       <a href="#usuarios" data-view="usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.6-4 3.8-6.5 8-6.5s7.4 2.5 8 6.5"/><path d="M18.5 3.5l1 1.8 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2-1.5-1.4 2-.3z"/></svg><span>Usuarios</span></a>
       <p class="app-version nav-version" data-version></p>
     </nav>
@@ -1537,6 +1550,26 @@ a.chip-stat strong { color: var(--link); }
       </section>
 
       <!-- ============ USUARIOS ============ -->
+      <!-- ============ BITÁCORA (change 50) ============ -->
+      <section id="view-bitacora" class="view" hidden>
+        <div class="view-head">
+          <h2>Bitácora</h2>
+          <div class="toolbar"><button id="audit-xlsx" type="button">Exportar a Excel</button></div>
+        </div>
+        <p class="hint">Cada cambio queda registrado con el funcionario, la fecha y hora (Colombia), el dispositivo (móvil, tableta o PC) y lo que cambió, campo por campo. También los ingresos, los intentos fallidos y las acciones sin permiso. Nadie puede editar ni borrar la bitácora.</p>
+        <form id="audit-filters" class="panel audit-filters">
+          <label>Desde <input type="date" name="from" /></label>
+          <label>Hasta <input type="date" name="to" /></label>
+          <label>Funcionario <select name="userId"><option value="">Todos</option></select></label>
+          <label>Módulo <select name="module"><option value="">Todos</option></select></label>
+          <label>Dispositivo <select name="device"><option value="">Todos</option><option>PC</option><option>Móvil</option><option>Tableta</option></select></label>
+          <label class="audit-q">Buscar <input type="search" name="q" placeholder="Cliente, radicado, campo, valor…" /></label>
+        </form>
+        <div class="panel"><div class="table-scroll"><table class="data-table compact audit-table"><thead><tr><th>Fecha y hora</th><th>Funcionario</th><th>Dispositivo</th><th>Acción</th><th>Qué cambió</th><th></th></tr></thead><tbody id="audit-rows"></tbody></table></div>
+          <p class="empty" id="audit-empty" hidden>No hay registros con este filtro.</p>
+          <button type="button" id="audit-more" hidden>Ver más antiguos</button></div>
+      </section>
+
       <section id="view-usuarios" class="view" hidden>
         <div class="view-head"><h2>Usuarios y oficinas</h2></div>
         <div class="tabs" role="tablist" id="admin-tabs">
@@ -3815,7 +3848,78 @@ function cleanParties(list) {
   return { parties };
 }
 
-return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS, sideOfRole, sideLabels, cleanParties };
+// ----- Audit log (change 50): who changed what, when, from which device -----
+/** "Móvil" / "Tableta" / "PC" plus system and browser, from the User-Agent. */
+function deviceOf(ua = "") {
+  const u = String(ua);
+  const kind = /iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))/i.test(u) ? "Tableta" : /Mobi|iPhone|iPod|Android|Windows Phone/i.test(u) ? "Móvil" : u ? "PC" : "—";
+  const os = /iPhone|iPad|iPod/.test(u) ? "iOS" : /Android/.test(u) ? "Android" : /Windows/.test(u) ? "Windows" : /Mac OS X|Macintosh/.test(u) ? "macOS" : /Linux/.test(u) ? "Linux" : "";
+  const browser = /Edg\//.test(u) ? "Edge" : /OPR\//.test(u) ? "Opera" : /CriOS|Chrome\//.test(u) ? "Chrome" : /FxiOS|Firefox\//.test(u) ? "Firefox" : /Safari\//.test(u) ? "Safari" : "";
+  return { kind, detail: [os, browser].filter(Boolean).join(" · ") };
+}
+// Module and record for an API path (method + path without /api).
+const AUDIT_ENTITIES = [
+  [/^\/cases\/(\d+)\/documents/, "Expedientes", "documento del expediente", "case"],
+  [/^\/cases(?:\/(\d+))?/, "Expedientes", "expediente", "case"],
+  [/^\/clients(?:\/(\d+))?/, "Clientes", "cliente"],
+  [/^\/tasks(?:\/(\d+))?/, "Agenda", "tarea"],
+  [/^\/payments\/charges(?:\/(\d+))?/, "Pagos", "cobro"],
+  [/^\/payments\/receipts(?:\/(\d+))?/, "Pagos", "recibo"],
+  [/^\/payments/, "Pagos", "pagos"],
+  [/^\/esign(?:\/(\d+))?/, "Firmas", "solicitud de firma"],
+  [/^\/mail(?:\/(\d+))?/, "Correo certificado", "correo"],
+  [/^\/admin\/users(?:\/(\d+))?/, "Usuarios", "usuario"],
+  [/^\/admin\/roles/, "Usuarios", "rol"],
+  [/^\/admin\/(matrix|permissions)/, "Usuarios", "permisos"],
+  [/^\/admin\/offices(?:\/(\d+))?/, "Usuarios", "oficina"],
+  [/^\/admin/, "Configuración", "ajuste"],
+  [/^\/(categories|types|fields|catalog)(?:\/(\d+))?/, "Configuración", "catálogo de procesos"],
+  [/^\/courts/, "Despachos", "despacho"],
+  [/^\/templates/, "Documentos", "plantilla"],
+  [/^\/generate/, "Documentos", "borrador"],
+  [/^\/monitor\/check/, "Consulta de procesos", "consulta en la Rama Judicial"],
+  [/^\/monitor/, "Consulta de procesos", "consulta"],
+  [/^\/jurisprudencia/, "Jurisprudencia", "jurisprudencia"],
+  [/^\/import/, "Importar", "importación"],
+  [/^\/auth/, "Acceso", "cuenta"],
+];
+/** { module, entity, id, isCase } for a path; id is the record number in the path, if any. */
+function auditTarget(path) {
+  const p = String(path).split("?")[0];
+  for (const [re, module, entity, isCase] of AUDIT_ENTITIES) {
+    const m = p.match(re);
+    if (m) return { module, entity, id: Number(m[1] && /^\d+$/.test(m[1]) ? m[1] : m[2]) || null, isCase: !!isCase };
+  }
+  return { module: "Otros", entity: p.split("/")[1] || "", id: null, isCase: false };
+}
+const auditVerb = (method, path) => (/^\/monitor\/check/.test(path) ? "Consultó" : /^\/mail$/.test(path) ? "Envió" : /^\/generate/.test(path) ? "Generó"
+  : method === "POST" ? "Creó" : method === "DELETE" ? "Eliminó" : "Modificó");
+/** Spanish names of the fields shown in the change details. */
+const AUDIT_FIELDS = {
+  title: "Asunto o título", status: "Estado", client_role: "Calidad del cliente", affiliated: "Afiliado", parties: "Partes", radicado: "Radicado",
+  court_name: "Despacho", court_email: "Correo del despacho", department: "Departamento", city: "Ciudad", area: "Área", counterparty: "Contraparte",
+  facts: "Hechos", field_values: "Campos del proceso", office_id: "Oficina", assigned_user_id: "Responsable", process_type_id: "Tipo de proceso",
+  monitor: "Consulta automática", full_name: "Nombre", first_names: "Nombres", last_names: "Apellidos", id_type: "Tipo de documento", id_number: "Documento",
+  email: "Correo", phone: "Teléfono", address: "Dirección", notes: "Notas", legal_rep: "Representante legal", person_type: "Tipo de persona",
+  kind: "Tipo", due_at: "Plazo", location: "Lugar", remind_days: "Avisos", done_notes: "Cumplimiento", delivered_at: "Entregado", response_at: "Respuesta",
+  response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
+  concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",
+  name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", custom_permissions: "Permisos propios",
+};
+/** Field-by-field differences between two rows: [{ field, label, before, after }]. */
+function auditDiff(before, after) {
+  if (!before || !after) return [];
+  const show = (v) => { const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); return s.length > 300 ? s.slice(0, 300) + "…" : s; };
+  const out = [];
+  for (const k of Object.keys(AUDIT_FIELDS)) {
+    if (!(k in before) && !(k in after)) continue;
+    const a = show(before[k]), b = show(after[k]);
+    if (a !== b) out.push({ field: k, label: AUDIT_FIELDS[k], before: a, after: b });
+  }
+  return out;
+}
+
+return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS, sideOfRole, sideLabels, cleanParties, deviceOf, auditTarget, auditVerb, AUDIT_FIELDS, auditDiff };
 })();
 
 window.JuanmaLedger = (function () {
@@ -4485,6 +4589,10 @@ return { decisionOf, withDecisions };
       ["Escriba el título con la norma o etapa: «Audiencia inicial art. 77 CPTSS».", "Al asignar a un funcionario, le llega el aviso en la campana con el enlace al expediente.",
         "Marque «Cumplida» cuando se cumpla: queda quién la cumplió y si fue a tiempo o con retraso.", "Oficios y peticiones: registre la fecha de entrega; al llegar la respuesta use «Respuesta». Si vence el plazo sin respuesta, se avisa.",
         "«Seguimiento por funcionario» muestra pendientes, vencidas y el porcentaje de cumplimiento de cada uno."]],
+    bitacora: ["Bitácora", "Registro de auditoría: qué funcionario hizo cada cambio, con fecha y hora de Colombia, y si fue desde un celular, una tableta o un PC.",
+      ["Filtre por fechas, funcionario, módulo o dispositivo, o busque un cliente, un radicado o un valor.", "«Qué cambió» muestra cada campo con el valor anterior (tachado) y el nuevo.",
+        "En rojo: acciones sin permiso e ingresos fallidos.", "La bitácora no se puede editar ni borrar. Solo la ve quien tenga el permiso «Ve la bitácora» (por defecto, Gerencia).",
+        "Cada expediente muestra sus propios cambios en Historial › «Cambios por funcionario»."]],
     consulta: ["Consulta de procesos", "Consulta en la Rama Judicial los expedientes con radicado y avisa de actuaciones nuevas (reportes a las 7, 13 y 17 h).",
       ["Requiere conexión a internet desde el servidor; en el enlace de prueba no está disponible.", "Solo se consultan expedientes con la casilla «Consultar automáticamente» marcada."]],
     despachos: ["Despachos judiciales", "Directorio de juzgados, tribunales y altas cortes con su correo, para elegirlos en los expedientes y en el correo certificado.",
@@ -4716,11 +4824,11 @@ return { decisionOf, withDecisions };
 })();
 </script>
   <script>window.JUANMA_SEED_CATALOG = [["Administrativo",["Medio de Control de Nulidad y Restablecimiento del Derecho","Medio de Control de Reparación Directa","Acción Contractual","Petición"]],["Laboral",["Ordinario Laboral de Primera Instancia","Ejecutivo Laboral","Requerimiento Empleador","Requerimiento Oficina de Trabajo"]],["Penal",["Denuncia Penal","Querella","Representación de Víctima","Defensa Técnica"]],["Familia",["Divorcio","Custodia y Cuidado Personal","Fijación de Cuota Alimentaria","Regulación de Visitas"]],["Derecho de Petición",["Petición de Interés General","Petición de Interés Particular","Solicitud de Información","Consulta"]],["Datacrédito",["Reclamo ante la Fuente","Reclamo ante el Operador","Queja ante la SIC"]]];
-window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contable","Gerente Regional","Abogado","Dependiente Judicial","Asistente"],"permissions":{"scope.all":"Ve todas las oficinas","users.manage":"Gestiona usuarios, roles y oficinas","catalog.manage":"Configura tipos de proceso, subprocesos y campos","clients.write":"Crea y edita clientes","clients.delete":"Elimina clientes (solo Gerencia)","cases.write":"Crea y edita expedientes","cases.delete":"Elimina expedientes (solo Gerencia)","drafts.generate":"Genera borradores","jurisprudence.use":"Usa el buscador de jurisprudencia","import.run":"Importa datos desde Excel","reports.view":"Ve y exporta reportes","processes.consult":"Consulta procesos en la Rama Judicial y recibe reportes","templates.manage":"Crea, carga y edita plantillas de documentos","esign.use":"Envía documentos a firma electrónica","mail.send":"Envía correo electrónico con trazabilidad","payments.manage":"Registra cobros y recibos, maneja cartera y envía recordatorios de pago"},"matrix":{"Gerencia":["scope.all","users.manage","catalog.manage","clients.write","clients.delete","cases.write","cases.delete","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send","payments.manage"],"Director Jurídico":["scope.all","catalog.manage","clients.write","cases.write","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send"],"Director Contable":["scope.all","reports.view","payments.manage"],"Gerente Regional":["clients.write","cases.write","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","esign.use","mail.send","payments.manage"],"Abogado":["clients.write","cases.write","drafts.generate","jurisprudence.use","reports.view","processes.consult","esign.use","mail.send"],"Dependiente Judicial":["cases.write","jurisprudence.use","processes.consult","mail.send"],"Asistente":["clients.write","cases.write","drafts.generate","payments.manage"]},"gerenciaOnly":["clients.delete","cases.delete"]};
+window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contable","Gerente Regional","Abogado","Dependiente Judicial","Asistente"],"permissions":{"scope.all":"Ve todas las oficinas","users.manage":"Gestiona usuarios, roles y oficinas","catalog.manage":"Configura tipos de proceso, subprocesos y campos","clients.write":"Crea y edita clientes","clients.delete":"Elimina clientes (solo Gerencia)","cases.write":"Crea y edita expedientes","cases.delete":"Elimina expedientes (solo Gerencia)","drafts.generate":"Genera borradores","jurisprudence.use":"Usa el buscador de jurisprudencia","import.run":"Importa datos desde Excel","reports.view":"Ve y exporta reportes","processes.consult":"Consulta procesos en la Rama Judicial y recibe reportes","templates.manage":"Crea, carga y edita plantillas de documentos","esign.use":"Envía documentos a firma electrónica","mail.send":"Envía correo electrónico con trazabilidad","payments.manage":"Registra cobros y recibos, maneja cartera y envía recordatorios de pago","audit.view":"Ve la bitácora de auditoría (quién cambió qué, cuándo y desde qué dispositivo)"},"matrix":{"Gerencia":["scope.all","users.manage","catalog.manage","clients.write","clients.delete","cases.write","cases.delete","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send","payments.manage","audit.view"],"Director Jurídico":["scope.all","catalog.manage","clients.write","cases.write","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send"],"Director Contable":["scope.all","reports.view","payments.manage"],"Gerente Regional":["clients.write","cases.write","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","esign.use","mail.send","payments.manage"],"Abogado":["clients.write","cases.write","drafts.generate","jurisprudence.use","reports.view","processes.consult","esign.use","mail.send"],"Dependiente Judicial":["cases.write","jurisprudence.use","processes.consult","mail.send"],"Asistente":["clients.write","cases.write","drafts.generate","payments.manage"]},"gerenciaOnly":["clients.delete","cases.delete"]};
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
-<script>window.JUANMA_VERSION = {"change":49,"sha":"","date":"2026-10-15"};</script>
+<script>window.JUANMA_VERSION = {"change":50,"sha":"","date":"2026-10-15"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -4734,7 +4842,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
   const CHUNK = 180000;
   const LOCAL_KEY = "juanmaapp-data-v1"; // never changes: data is migrated, not reset
   const COLLECTIONS = ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks",
-    "notes", "acts", "checks", "log", "templates", "signs", "charges", "receipts", "reminders", "casedocs"];
+    "notes", "acts", "checks", "log", "templates", "signs", "charges", "receipts", "reminders", "casedocs", "audit"];
   const META = ["roles", "matrix", "prefs", "info", "payset"];
   let db = null, kind = "local";
   const saved = new Map(); // document path -> JSON last written
@@ -4886,7 +4994,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders", "casedocs"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit"]) st[k] ||= [];
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -5031,6 +5139,33 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     if (!u) fail("Inicie sesión para continuar.");
     return userOut(u);
   };
+  // ----- Audit log (change 50), same entries as the server's audit_log -----
+  const AUDIT_MAX = 5000; // the link's database keeps the latest entries
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+    [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
+  const auditSnap = (path) => {
+    const hit = AUDIT_SNAP.find(([re]) => re.test(path));
+    if (!hit) return null;
+    const id = +path.match(hit[0])[1], row = (s[hit[1]] || []).find((x) => x.id === id);
+    return { coll: hit[1], id, before: row ? JSON.parse(JSON.stringify(row)) : null };
+  };
+  const auditName = (x) => x && (x.full_name || x.title || x.name || x.concept || x.subject || (x.number ? `N.º ${x.number}` : "") || x.email || "");
+  function auditAdd(entry, user = (() => { try { return me(); } catch { return null; } })()) {
+    const d = CM.deviceOf(navigator.userAgent);
+    s.audit.push({ id: nextId(), at: stamp(), user_id: user?.id ?? null, user_name: user?.name ?? "", module: "Acceso", entity: "", record_id: null, case_id: null,
+      summary: "", changes: [], ok: true, ip: "", device: d.kind, device_detail: d.detail, user_agent: navigator.userAgent.slice(0, 300), ...entry });
+    if (s.audit.length > AUDIT_MAX) s.audit.splice(0, s.audit.length - AUDIT_MAX);
+  }
+  function auditChange(method, path, body, out, snap, ok = true) {
+    const t = CM.auditTarget(path);
+    const after = ok && snap && method !== "DELETE" ? (s[snap.coll] || []).find((x) => x.id === snap.id) : null;
+    const created = method === "POST" && out && typeof out === "object" && !Array.isArray(out) ? out : null;
+    const caseId = t.isCase ? t.id ?? created?.id ?? null : after?.case_id ?? snap?.before?.case_id ?? created?.case_id ?? (+body?.case_id || null);
+    const name = auditName(after) || auditName(snap?.before) || auditName(created) || "";
+    const verb = ok ? CM.auditVerb(method, path) : "Intentó (sin permiso)";
+    auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
+      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : [] });
+  }
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
   const scope = () => (me().permissions.includes("scope.all") ? null : me().offices.map((o) => o.id));
   const inScope = (officeId) => { const sc = scope(); return sc === null || sc.includes(officeId); };
@@ -5251,9 +5386,22 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     ["POST", /^\/auth\/login$/, (m, b) => {
       const u = s.users.find((x) => x.email === str(b.email).toLowerCase() && x.active) || fail("No hay un usuario activo con ese correo.");
       setCurrent(u.id);
+      auditAdd({ action: "Ingresó", summary: "Inicio de sesión en el enlace de prueba" }, u);
       return { user: userOut(u) };
     }],
-    ["POST", /^\/auth\/logout$/, () => { setCurrent(null); return null; }],
+    ["POST", /^\/auth\/logout$/, () => { try { auditAdd({ action: "Salió", summary: "Cerró sesión" }); } catch {} setCurrent(null); return null; }],
+    ["GET", /^\/audit(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url);
+      if (q.caseId) visibleCase(+q.caseId); else need("audit.view");
+      const from = q.from ? Date.parse(q.from + "T00:00:00-05:00") : null, to = q.to ? Date.parse(q.to + "T23:59:59-05:00") : null;
+      const like = String(q.q || "").toLowerCase();
+      return clone(s.audit.filter((e) => {
+        const t = Date.parse(e.at.replace(" ", "T") + "Z");
+        return (!q.caseId || e.case_id === +q.caseId) && (!from || t >= from) && (!to || t <= to) && (!q.userId || e.user_id === +q.userId)
+          && (!q.module || e.module === q.module) && (!q.device || e.device === q.device) && (!q.before || e.id < +q.before)
+          && (!like || `${e.summary} ${e.user_name} ${JSON.stringify(e.changes)}`.toLowerCase().includes(like));
+      }).sort((a, b) => b.id - a.id).slice(0, 300));
+    }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
     ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
     ["POST", /^\/admin\/test-tsa$/, () => fail("En el enlace de prueba no se piden sellos de tiempo: pruebe desde la app en Azure.")],
@@ -6230,11 +6378,22 @@ Return only a JSON object:
     esignRemote: false,
     async request(method, url, body) {
       await READY;
-      if (method === "DELETE" && me().role !== "Gerencia") fail("Solo Gerencia puede eliminar.");
+      const path = url.split("?")[0];
+      const logged = method !== "GET" && !/^\/(notifications|auth\/|monitor\/report\/preview)/.test(path) && s.users.some((x) => x.id === currentId);
+      if (method === "DELETE" && me().role !== "Gerencia") {
+        auditChange(method, path, body, null, null, false); await save();
+        fail("Solo Gerencia puede eliminar.");
+      }
       for (const [m, re, fn] of routes) {
         const match = m === method && url.match(re);
         if (match) {
-          const out = await fn(match, body || {}, url);
+          const snap = logged ? auditSnap(path) : null;
+          let out;
+          try { out = await fn(match, body || {}, url); } catch (err) {
+            if (logged && /permiso/.test(err.message)) { auditChange(method, path, body, null, snap, false); await save(); }
+            throw err;
+          }
+          if (logged) auditChange(method, path, body, out, snap);
           if (method !== "GET") await save();
           return out;
         }
@@ -6402,7 +6561,7 @@ const VIEW_PERMS = {
   pagos: "payments.manage",
   consulta: "processes.consult",
   borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
-  importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage",
+  importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage", bitacora: "audit.view",
 };
 
 // Only Gerencia deletes (change 24); every delete button carries data-action="delete-…" or data-jact="delete-…".
@@ -6646,7 +6805,7 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
@@ -6803,7 +6962,7 @@ async function renderExpedienteFicha(id) {
   await loadCatalog();
   const k = await api("GET", `/cases/${id}`);
   const quiet = (p) => p.catch(() => null);
-  const [client, tasks, acts, docs, charges, receipts, signs, mails] = await Promise.all([
+  const [client, tasks, acts, docs, charges, receipts, signs, mails, changes] = await Promise.all([
     quiet(api("GET", `/clients/${k.client_id}`)),
     quiet(api("GET", `/tasks?caseId=${id}`)),
     can("processes.consult") && k.radicado ? quiet(api("GET", `/monitor/cases/${id}/actuaciones`)) : null,
@@ -6812,6 +6971,7 @@ async function renderExpedienteFicha(id) {
     can("payments.manage") ? quiet(api("GET", `/payments/receipts?clientId=${k.client_id}`)) : null,
     can("esign.use") ? quiet(api("GET", "/esign")) : null,
     can("mail.send") ? quiet(api("GET", `/mail?caseId=${id}`)) : null,
+    quiet(api("GET", `/audit?caseId=${id}`)),
   ]);
   if (client && !state.clients.some((x) => x.id === client.id)) state.clients.push(client);
   if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
@@ -6826,7 +6986,7 @@ async function renderExpedienteFicha(id) {
   const work = (tasks || []).filter((t) => !CMETA.RESPONSE_KINDS.includes(t.kind));
   const answers = (tasks || []).filter((t) => CMETA.RESPONSE_KINDS.includes(t.kind));
   agendaCache = tasks || [];
-  const hist = caseHistory({ k, tasks, acts, docs, charges, receipts: caseReceipts, signs: caseSigns, mails });
+  const hist = caseHistory({ k, tasks, acts, docs, charges, receipts: caseReceipts, signs: caseSigns, mails, changes });
   const panel = (title, count, body, actions = "") => `<section class="panel ficha-panel"><div class="ficha-panel-head"><h3 class="panel-title">${title}${count != null ? ` <span class="count">${count}</span>` : ""}</h3>${actions}</div>${body}</section>`;
   const empty = (t) => `<p class="empty">${t}</p>`;
   box.innerHTML = `
@@ -6906,7 +7066,7 @@ async function renderExpedienteFicha(id) {
 }
 let ACTS_CACHE = [];
 const CMETA = window.JuanmaCaseMeta;
-const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["expediente", "Expediente"]];
+const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["cambio", "Cambios por funcionario"], ["expediente", "Expediente"]];
 const wide = (html) => html.replace('class="panel ficha-panel"', 'class="panel ficha-panel ficha-wide"');
 const kindButtons = (caseId, kinds) => `<span class="toolbar">${kinds.map((x) => `<button class="mini ${x === kinds[0] ? "primary" : ""}" data-action="new-task" data-case="${caseId}" data-kind="${x}">+ ${KIND_LABEL[x]}</button>`).join("")}</span>`;
 const whoOf = (t) => t.assigned_name || t.case_assigned_name || "Sin responsable";
@@ -6953,7 +7113,7 @@ function taskTable(list, answers) {
 }
 
 /** Everything that happened in the case, newest first, in Colombia time. */
-function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails }) {
+function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails, changes }) {
   const out = [], at = (utc) => CMETA.utcToBogota(utc), add = (when, type, text, sub = "") => when && out.push({ at: when, type, text, sub });
   add(at(k.created_at), "expediente", "Se creó el expediente", [k.type_name, k.title].filter(Boolean).join(" · "));
   if (k.last_checked_at) add(at(k.last_checked_at), "actuacion", "Última consulta en la Rama Judicial");
@@ -6978,6 +7138,9 @@ function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails }) 
     if (m.opened_at) add(at(m.opened_at), "correo", `Correo abierto: ${m.subject}`, m.to_addr);
     if (m.confirmed_at) add(at(m.confirmed_at), "correo", `Acuse de recibo: ${m.subject}`, m.confirm_name || m.to_addr);
   }
+  // Who changed what, from the audit log (change 50).
+  for (const e of changes || []) add(at(e.at), "cambio", `${e.user_name || "—"}: ${e.summary}`,
+    [`${e.device}${e.device_detail ? " (" + e.device_detail + ")" : ""}`, ...e.changes.map((c) => `${c.label}: ${c.before || "(vacío)"} → ${c.after || "(vacío)"}`)].join(" · "));
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 $("#ficha-expediente").addEventListener("click", (e) => {
@@ -9345,6 +9508,52 @@ function mailProof(m) {
   return doc.output("blob");
 }
 
+// ---------- Bitácora (change 50): who changed what, when, from which device ----------
+let auditRows = [];
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const AUDIT_MODULES = ["Acceso", "Clientes", "Expedientes", "Agenda", "Pagos", "Firmas", "Correo certificado", "Documentos", "Consulta de procesos", "Despachos", "Usuarios", "Configuración", "Jurisprudencia", "Importar"];
+const deviceIcon = (d) => (d === "Móvil" ? "📱" : d === "Tableta" ? "📲" : d === "PC" ? "💻" : "");
+const changeList = (changes) => (changes || []).map((c) => {
+  const val = (f, v) => (f === "assigned_user_id" || f === "office_id") && v ? (directory.find((u) => String(u.id) === v)?.name || offices.find((o) => String(o.id) === v)?.name || v) : v;
+  return `<li><strong>${escapeHtml(c.label)}:</strong> <span class="before">${escapeHtml(val(c.field, c.before) || "(vacío)")}</span> → <span class="after">${escapeHtml(val(c.field, c.after) || "(vacío)")}</span></li>`;
+}).join("");
+async function renderBitacora(more = false) {
+  const f = $("#audit-filters");
+  if (!more) {
+    const cu = f.elements.userId.value, cm = f.elements.module.value;
+    f.elements.userId.innerHTML = '<option value="">Todos</option>' + directory.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+    f.elements.userId.value = cu;
+    f.elements.module.innerHTML = '<option value="">Todos</option>' + AUDIT_MODULES.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
+    f.elements.module.value = cm;
+  }
+  const q = new URLSearchParams(Object.entries(formData(f)).filter(([, v]) => v));
+  if (more && auditRows.length) q.set("before", auditRows.at(-1).id);
+  const rows = await api("GET", `/audit?${q}`);
+  auditRows = more ? [...auditRows, ...rows] : rows;
+  $("#audit-empty").hidden = auditRows.length > 0;
+  $("#audit-more").hidden = rows.length < 300;
+  $("#audit-rows").innerHTML = auditRows.map((e) => `<tr class="${e.ok ? "" : "audit-denied"}">
+    <td class="nowrap">${escapeHtml(CMETA.utcToBogota(e.at))}</td>
+    <td>${escapeHtml(e.user_name || "—")}</td>
+    <td><span title="${escapeHtml(e.user_agent)}">${deviceIcon(e.device)} ${escapeHtml(e.device)}</span><br><span class="muted">${escapeHtml(e.device_detail)}${e.ip ? " · IP " + escapeHtml(e.ip) : ""}</span></td>
+    <td><span class="badge">${escapeHtml(e.module)}</span><br>${escapeHtml(e.summary)}</td>
+    <td>${e.changes.length ? `<ul class="audit-changes">${changeList(e.changes)}</ul>` : '<span class="muted">—</span>'}</td>
+    <td>${e.case_id ? `<button class="mini" data-action="go" data-to="#expediente-${e.case_id}-historial">Ver expediente</button>` : ""}</td></tr>`).join("");
+}
+$("#audit-filters").addEventListener("change", () => guarded(() => renderBitacora()));
+$("#audit-filters").addEventListener("submit", (e) => { e.preventDefault(); guarded(() => renderBitacora()); });
+$("#audit-filters").elements.q.addEventListener("input", debounce(() => guarded(() => renderBitacora()), 350));
+$("#audit-more").addEventListener("click", () => guarded(() => renderBitacora(true)));
+$("#audit-xlsx").addEventListener("click", () => guarded(async () => {
+  const head = ["Fecha y hora (Colombia)", "Funcionario", "Dispositivo", "Sistema y navegador", "IP", "Módulo", "Acción", "Cambios"]
+    .map((value) => ({ value, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
+  const body = auditRows.map((e) => [CMETA.utcToBogota(e.at), e.user_name, e.device, e.device_detail, e.ip, e.module, e.summary,
+    e.changes.map((c) => `${c.label}: ${c.before || "(vacío)"} → ${c.after || "(vacío)"}`).join(" | ")].map((v) => ({ value: String(v ?? ""), type: String })));
+  const blob = await window.writeXlsxFile([[{ value: "Bitácora — TecjuridicosApp", fontWeight: "bold" }], [{ value: `Generada el ${new Date().toLocaleString("es-CO")} por ${me.name}` }], [], head, ...body],
+    { columns: [18, 22, 10, 18, 14, 18, 50, 70].map((width) => ({ width })), sheet: "Bitácora" }).toBlob();
+  await saveFile(`bitacora-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+}));
+
 // ---------- Agenda (tareas, audiencias, términos) ----------
 const KIND_LABEL = window.JuanmaCaseMeta.TASK_KIND_LABEL;
 const bogotaNow = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
@@ -10119,6 +10328,7 @@ const RENDER = {
   borradores: renderBorradores,
   importar: renderImportar,
   configuracion: renderConfiguracion,
+  bitacora: renderBitacora,
 };
 
 guarded(boot);

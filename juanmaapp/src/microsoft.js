@@ -5,6 +5,7 @@
 //
 // Settings: MS_TENANT_ID (the firm's directory id), MS_CLIENT_ID and
 // MS_CLIENT_SECRET (from the app registration), PUBLIC_URL (for the redirect).
+import { audit } from "./audit.js";
 import express from "express";
 import { createHash, randomBytes } from "node:crypto";
 import { setSession } from "./auth.js";
@@ -84,9 +85,11 @@ export function microsoftRouter(db) {
         if (main) db.prepare("INSERT INTO user_offices (user_id, office_id) VALUES (?, ?)").run(id, main.id);
         u = { id, active: 1 };
       }
+      if (!u) audit(db, req, { user: null, action: "Ingreso fallido", ok: false, summary: `Microsoft 365: ${email} no está registrado` });
       if (!u) return back(res, `La cuenta ${email} no está registrada en TecjuridicosApp. Pida a Gerencia que cree su usuario con ese mismo correo.`);
       if (!u.active) return back(res, "Su usuario de TecjuridicosApp está inactivo.");
       setSession(db, req, res, u.id);
+      audit(db, req, { user: db.prepare("SELECT id, name FROM users WHERE id = ?").get(u.id), action: "Ingresó", summary: "Inicio de sesión con Microsoft 365" });
       back(res);
     } catch (err) {
       console.error("microsoft sign-in:", err);

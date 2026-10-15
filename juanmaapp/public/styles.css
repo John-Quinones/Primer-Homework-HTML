@@ -738,3 +738,15 @@ a.chip-stat strong { color: var(--link); }
 .party-row.main { grid-template-columns: 1fr auto; padding: 6px 8px; background: var(--surface-muted); border-radius: 8px; }
 .party-row input { min-width: 0; }
 @media (max-width: 760px) { .sec-nav { position: static; } }
+
+/* Change 50: audit log */
+.audit-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
+.audit-filters .audit-q { grid-column: span 2; }
+.audit-table td { vertical-align: top; }
+.audit-table .nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.audit-changes { margin: 0; padding-left: 16px; font-size: .85rem; }
+.audit-changes .before { color: var(--error); text-decoration: line-through; text-decoration-thickness: 1px; }
+.audit-changes .after { color: var(--ok); }
+tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent); }
+.history .h-cambio { background: var(--brand-silver); outline: 2px solid var(--brand-navy); }
+@media (max-width: 760px) { .audit-filters .audit-q { grid-column: auto; } }

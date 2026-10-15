@@ -117,6 +117,7 @@
       <a href="#reportes" data-view="reportes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reportes</span></a>
       <a href="#importar" data-view="importar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><span>Importar</span></a>
       <a href="#configuracion" data-view="configuracion"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>Configuración</span></a>
+      <a href="#bitacora" data-view="bitacora"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 12h7M9 15.5h7M9 19h4"/></svg><span>Bitácora</span></a>
       <a href="#usuarios" data-view="usuarios"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.6-4 3.8-6.5 8-6.5s7.4 2.5 8 6.5"/><path d="M18.5 3.5l1 1.8 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2-1.5-1.4 2-.3z"/></svg><span>Usuarios</span></a>
       <p class="app-version nav-version" data-version></p>
     </nav>
@@ -693,6 +694,26 @@
       </section>
 
       <!-- ============ USUARIOS ============ -->
+      <!-- ============ BITÁCORA (change 50) ============ -->
+      <section id="view-bitacora" class="view" hidden>
+        <div class="view-head">
+          <h2>Bitácora</h2>
+          <div class="toolbar"><button id="audit-xlsx" type="button">Exportar a Excel</button></div>
+        </div>
+        <p class="hint">Cada cambio queda registrado con el funcionario, la fecha y hora (Colombia), el dispositivo (móvil, tableta o PC) y lo que cambió, campo por campo. También los ingresos, los intentos fallidos y las acciones sin permiso. Nadie puede editar ni borrar la bitácora.</p>
+        <form id="audit-filters" class="panel audit-filters">
+          <label>Desde <input type="date" name="from" /></label>
+          <label>Hasta <input type="date" name="to" /></label>
+          <label>Funcionario <select name="userId"><option value="">Todos</option></select></label>
+          <label>Módulo <select name="module"><option value="">Todos</option></select></label>
+          <label>Dispositivo <select name="device"><option value="">Todos</option><option>PC</option><option>Móvil</option><option>Tableta</option></select></label>
+          <label class="audit-q">Buscar <input type="search" name="q" placeholder="Cliente, radicado, campo, valor…" /></label>
+        </form>
+        <div class="panel"><div class="table-scroll"><table class="data-table compact audit-table"><thead><tr><th>Fecha y hora</th><th>Funcionario</th><th>Dispositivo</th><th>Acción</th><th>Qué cambió</th><th></th></tr></thead><tbody id="audit-rows"></tbody></table></div>
+          <p class="empty" id="audit-empty" hidden>No hay registros con este filtro.</p>
+          <button type="button" id="audit-more" hidden>Ver más antiguos</button></div>
+      </section>
+
       <section id="view-usuarios" class="view" hidden>
         <div class="view-head"><h2>Usuarios y oficinas</h2></div>
         <div class="tabs" role="tablist" id="admin-tabs">

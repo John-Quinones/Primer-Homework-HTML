@@ -53,7 +53,7 @@
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders", "casedocs"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit"]) st[k] ||= [];
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -198,6 +198,33 @@
     if (!u) fail("Inicie sesión para continuar.");
     return userOut(u);
   };
+  // ----- Audit log (change 50), same entries as the server's audit_log -----
+  const AUDIT_MAX = 5000; // the link's database keeps the latest entries
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+    [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
+  const auditSnap = (path) => {
+    const hit = AUDIT_SNAP.find(([re]) => re.test(path));
+    if (!hit) return null;
+    const id = +path.match(hit[0])[1], row = (s[hit[1]] || []).find((x) => x.id === id);
+    return { coll: hit[1], id, before: row ? JSON.parse(JSON.stringify(row)) : null };
+  };
+  const auditName = (x) => x && (x.full_name || x.title || x.name || x.concept || x.subject || (x.number ? `N.º ${x.number}` : "") || x.email || "");
+  function auditAdd(entry, user = (() => { try { return me(); } catch { return null; } })()) {
+    const d = CM.deviceOf(navigator.userAgent);
+    s.audit.push({ id: nextId(), at: stamp(), user_id: user?.id ?? null, user_name: user?.name ?? "", module: "Acceso", entity: "", record_id: null, case_id: null,
+      summary: "", changes: [], ok: true, ip: "", device: d.kind, device_detail: d.detail, user_agent: navigator.userAgent.slice(0, 300), ...entry });
+    if (s.audit.length > AUDIT_MAX) s.audit.splice(0, s.audit.length - AUDIT_MAX);
+  }
+  function auditChange(method, path, body, out, snap, ok = true) {
+    const t = CM.auditTarget(path);
+    const after = ok && snap && method !== "DELETE" ? (s[snap.coll] || []).find((x) => x.id === snap.id) : null;
+    const created = method === "POST" && out && typeof out === "object" && !Array.isArray(out) ? out : null;
+    const caseId = t.isCase ? t.id ?? created?.id ?? null : after?.case_id ?? snap?.before?.case_id ?? created?.case_id ?? (+body?.case_id || null);
+    const name = auditName(after) || auditName(snap?.before) || auditName(created) || "";
+    const verb = ok ? CM.auditVerb(method, path) : "Intentó (sin permiso)";
+    auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
+      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : [] });
+  }
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
   const scope = () => (me().permissions.includes("scope.all") ? null : me().offices.map((o) => o.id));
   const inScope = (officeId) => { const sc = scope(); return sc === null || sc.includes(officeId); };
@@ -418,9 +445,22 @@
     ["POST", /^\/auth\/login$/, (m, b) => {
       const u = s.users.find((x) => x.email === str(b.email).toLowerCase() && x.active) || fail("No hay un usuario activo con ese correo.");
       setCurrent(u.id);
+      auditAdd({ action: "Ingresó", summary: "Inicio de sesión en el enlace de prueba" }, u);
       return { user: userOut(u) };
     }],
-    ["POST", /^\/auth\/logout$/, () => { setCurrent(null); return null; }],
+    ["POST", /^\/auth\/logout$/, () => { try { auditAdd({ action: "Salió", summary: "Cerró sesión" }); } catch {} setCurrent(null); return null; }],
+    ["GET", /^\/audit(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url);
+      if (q.caseId) visibleCase(+q.caseId); else need("audit.view");
+      const from = q.from ? Date.parse(q.from + "T00:00:00-05:00") : null, to = q.to ? Date.parse(q.to + "T23:59:59-05:00") : null;
+      const like = String(q.q || "").toLowerCase();
+      return clone(s.audit.filter((e) => {
+        const t = Date.parse(e.at.replace(" ", "T") + "Z");
+        return (!q.caseId || e.case_id === +q.caseId) && (!from || t >= from) && (!to || t <= to) && (!q.userId || e.user_id === +q.userId)
+          && (!q.module || e.module === q.module) && (!q.device || e.device === q.device) && (!q.before || e.id < +q.before)
+          && (!like || `${e.summary} ${e.user_name} ${JSON.stringify(e.changes)}`.toLowerCase().includes(like));
+      }).sort((a, b) => b.id - a.id).slice(0, 300));
+    }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
     ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
     ["POST", /^\/admin\/test-tsa$/, () => fail("En el enlace de prueba no se piden sellos de tiempo: pruebe desde la app en Azure.")],
@@ -1397,11 +1437,22 @@ Return only a JSON object:
     esignRemote: false,
     async request(method, url, body) {
       await READY;
-      if (method === "DELETE" && me().role !== "Gerencia") fail("Solo Gerencia puede eliminar.");
+      const path = url.split("?")[0];
+      const logged = method !== "GET" && !/^\/(notifications|auth\/|monitor\/report\/preview)/.test(path) && s.users.some((x) => x.id === currentId);
+      if (method === "DELETE" && me().role !== "Gerencia") {
+        auditChange(method, path, body, null, null, false); await save();
+        fail("Solo Gerencia puede eliminar.");
+      }
       for (const [m, re, fn] of routes) {
         const match = m === method && url.match(re);
         if (match) {
-          const out = await fn(match, body || {}, url);
+          const snap = logged ? auditSnap(path) : null;
+          let out;
+          try { out = await fn(match, body || {}, url); } catch (err) {
+            if (logged && /permiso/.test(err.message)) { auditChange(method, path, body, null, snap, false); await save(); }
+            throw err;
+          }
+          if (logged) auditChange(method, path, body, out, snap);
           if (method !== "GET") await save();
           return out;
         }

@@ -1,3 +1,4 @@
+import { auditMiddleware, auditRouter } from "./audit.js";
 import express from "express";
 import { typePath } from "./sql.js";
 import Anthropic from "@anthropic-ai/sdk";
@@ -83,7 +84,9 @@ export function createApp(db) {
   app.use("/api/public/sign", esignPublicRouter(db));
   app.use("/api/public/verify", verifyRouter(db));
   app.use("/api/public/mail", mailPublicRouter(db));
+  app.use("/api", auditMiddleware(db)); // before requireAuth so refused deletes are logged too
   app.use("/api", requireAuth);
+  app.use("/api/audit", auditRouter(db));
   app.use("/api/admin", adminRouter(db));
   app.use("/api", recordsRouter(db));
   app.use("/api/jurisprudencia", requirePerm("jurisprudence.use"), jurisprudenceRouter(db));

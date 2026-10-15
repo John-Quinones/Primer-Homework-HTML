@@ -10,7 +10,7 @@
   const CHUNK = 180000;
   const LOCAL_KEY = "juanmaapp-data-v1"; // never changes: data is migrated, not reset
   const COLLECTIONS = ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks",
-    "notes", "acts", "checks", "log", "templates", "signs", "charges", "receipts", "reminders", "casedocs"];
+    "notes", "acts", "checks", "log", "templates", "signs", "charges", "receipts", "reminders", "casedocs", "audit"];
   const META = ["roles", "matrix", "prefs", "info", "payset"];
   let db = null, kind = "local";
   const saved = new Map(); // document path -> JSON last written

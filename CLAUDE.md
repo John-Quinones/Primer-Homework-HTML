@@ -37,6 +37,8 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 - Signed PDFs are generated once and kept with their SHA-256; verification in Firmas and public verificar.html (code on every page).
 - The starter contract is numbered with the case folder ({{expediente.carpeta}}).
 - Client and case screens (`#cliente-ID`, `#expediente-ID`, changes 46–47): the case screen gathers tasks per funcionario with follow-up (`taskFollowUp` in `src/case-meta.js`), oficios/peticiones/requerimientos with delivery and answer, all actuaciones with one-click consult, and the full history. Task kinds: `TASK_KINDS`; petitions 15 business days (`addBusinessDays`).
+- Parties (change 49): `cases.parties` JSON list {side activa|pasiva, name, id_number, ours, client_id}; our clients linked by document see the case. Nothing opens on a stray click: only "Ver …" buttons (`data-action="go"`, routes `#expediente-ID-section`).
+- Audit log (change 50): `src/audit.js` middleware logs every API change (who, Colombia time, device from User-Agent, IP, field diff via `auditDiff`); auth events logged explicitly. View «Bitácora» needs `audit.view`. Never edited or deleted. Demo mirrors it in `s.audit` (last 5000).
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.
