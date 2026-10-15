@@ -26,3 +26,4 @@ Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto.
 | 20 | 14/10/2026 | Ayuda en la app: botón **?** en cada módulo que explica para qué sirve, con sugerencias de uso; los campos muestran un ejemplo y, al escribir, una sugerencia de redacción o contenido. |
 | 21 | 14/10/2026 | Al ver un expediente, desde Clientes o desde Expedientes, se muestra su **número de carpeta**: en la tarjeta del expediente y en el título al abrirlo; el campo "No. Carpeta" aparece de primero en el formulario. |
 | 22 | 14/10/2026 | Las sugerencias que aparecen debajo de los campos se ven en gris claro con transparencia, igual que el ejemplo que aparece dentro de cada recuadro. |
+| 23 | 14/10/2026 | Los campos de correo electrónico sugieren al escribir @gmail.com, @hotmail.com y @outlook.com (por ejemplo, «maria» ofrece maria@gmail.com). |

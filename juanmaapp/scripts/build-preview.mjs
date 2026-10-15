@@ -39,6 +39,7 @@ html = html
   .replace('<script src="shared.js"></script>', () => `<script>${safe(SHARED_MODULES.map(([f, n]) => asGlobal(path.join(root, f), n)).join("\n"))}</script>`)
   .replace('<script src="citations.js"></script>', () => `<script>${safe(read("public/citations.js"))}</script>`)
   .replace('<script src="help.js"></script>', () => `<script>${safe(read("public/help.js"))}</script>`)
+  .replace('<script src="email-suggest.js"></script>', () => `<script>${safe(read("public/email-suggest.js"))}</script>`)
   .replace('<script src="app.js"></script>', () => [
     `<script>window.JUANMA_SEED_CATALOG = ${JSON.stringify(SEED_CATALOG)};
 window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, matrix: DEFAULT_MATRIX })};
