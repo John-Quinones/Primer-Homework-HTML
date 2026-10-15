@@ -52,7 +52,7 @@
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs"]) st[k] ||= [];
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -587,6 +587,10 @@
     ["GET", /^\/monitor\/log$/, () => { need("processes.consult"); return clone(s.log.filter((l) => l.user_id === me().id).reverse()); }],
 
     // ----- clients -----
+    ["GET", /^\/clients\/(\d+)$/, (m) => {
+      const c = s.clients.find((x) => x.id === +m[1] && clientVisible(x)) || fail("El cliente no existe.");
+      return { ...clone(c), office_name: officeName(c.office_id) };
+    }],
     ["GET", /^\/clients(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       return s.clients
@@ -794,7 +798,45 @@
       });
       return caseOut(k);
     }],
-    ["DELETE", /^\/cases\/(\d+)$/, (m) => { need("cases.delete"); visibleCase(+m[1]); s.cases = s.cases.filter((k) => k.id !== +m[1]); return null; }],
+    ["DELETE", /^\/cases\/(\d+)$/, (m) => {
+      need("cases.delete"); visibleCase(+m[1]);
+      s.cases = s.cases.filter((k) => k.id !== +m[1]);
+      for (const d of s.casedocs.filter((x) => x.case_id === +m[1])) delete s.blobs[`doc-${d.id}`];
+      s.casedocs = s.casedocs.filter((x) => x.case_id !== +m[1]);
+      return null;
+    }],
+    // ----- documents saved to a case -----
+    ["GET", /^\/cases\/(\d+)\/documents$/, (m) => {
+      visibleCase(+m[1]);
+      return s.casedocs.filter((d) => d.case_id === +m[1]).sort((a, b) => b.id - a.id).map((d) => ({ ...clone(d), created_by_name: userName(d.created_by) }));
+    }],
+    ["POST", /^\/cases\/(\d+)\/documents$/, async (m, b) => {
+      need("cases.write"); visibleCase(+m[1]);
+      const ext = String(b.filename || "").toLowerCase().match(/\.(docx|pdf)$/)?.[1] || fail("Solo se guardan archivos Word (.docx) o PDF.");
+      const b64 = String(b.file_base64 || "");
+      (!b64 || b64.length > 7000000) && fail("En el enlace de prueba el archivo debe pesar menos de 5 MB.");
+      const head = atob(b64.slice(0, 8));
+      (ext === "pdf" ? !head.startsWith("%PDF-") : !head.startsWith("PK")) && fail("El archivo no corresponde a su formato.");
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((x) => x.toString(16).padStart(2, "0")).join("");
+      const d = { id: nextId(), case_id: +m[1], name: (str(b.name) || str(b.filename)).slice(0, 200), filename: str(b.filename).slice(0, 200),
+        mime: ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size: bytes.length, sha256: hash, created_by: me().id, created_at: stamp() };
+      s.blobs[`doc-${d.id}`] = b64;
+      s.casedocs.push(d);
+      return clone(d);
+    }],
+    ["GET", /^\/cases\/(\d+)\/documents\/(\d+)\/file$/, (m) => {
+      visibleCase(+m[1]);
+      const d = s.casedocs.find((x) => x.id === +m[2] && x.case_id === +m[1]) || fail("El documento no existe.");
+      return { filename: d.filename, mime: d.mime, base64: s.blobs[`doc-${d.id}`] || fail("El archivo no está disponible.") };
+    }],
+    ["DELETE", /^\/cases\/(\d+)\/documents\/(\d+)$/, (m) => {
+      need("cases.write"); visibleCase(+m[1]);
+      s.casedocs = s.casedocs.filter((x) => !(x.id === +m[2] && x.case_id === +m[1]));
+      delete s.blobs[`doc-${m[2]}`];
+      return null;
+    }],
 
     // ----- case law: analysis of a pasted judgment; official-site search needs the server -----
     ["POST", /^\/jurisprudencia\/search$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],

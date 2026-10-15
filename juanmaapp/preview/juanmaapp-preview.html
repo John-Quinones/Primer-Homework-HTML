@@ -737,6 +737,9 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 .case-filters { margin-bottom: 12px; }
 .case-filters .grid4 { align-items: end; }
 #case-count { margin: 0 0 10px; }
+/* Case rows carry several actions: let them wrap inside the cell instead of overflowing the panel. */
+#case-rows .row-actions { white-space: normal; min-width: 180px; }
+#case-rows .row-actions button { margin: 2px 0; }
 
 </style>
 </head>
@@ -1037,11 +1040,13 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
                   <div><span class="pill" id="tpl-cat"></span> <span class="badge" id="tpl-format"></span><h3 id="tpl-name"></h3></div>
                   <div class="actions">
                     <button type="button" data-tpl-out="docx" class="primary">Descargar Word</button>
-                    <button type="button" data-tpl-out="pdf" data-text-only>Descargar PDF</button>
+                    <button type="button" data-tpl-out="pdf">Descargar PDF</button>
+                    <button type="button" data-tpl-out="save" title="Guarda el Word y el PDF en el expediente elegido">Guardar en el expediente</button>
+                    <button type="button" data-tpl-out="mail">Enviar por correo</button>
+                    <button type="button" data-tpl-out="whatsapp">Enviar por WhatsApp</button>
                     <button type="button" data-tpl-out="copy" data-text-only>Copiar texto</button>
                     <button type="button" data-tpl-out="nomos" data-text-only>Completar con NomosAI</button>
-                    <button type="button" data-tpl-out="sign" data-text-only>Enviar a firma</button>
-                    <button type="button" data-tpl-out="mail">Enviar por correo</button>
+                    <button type="button" data-tpl-out="sign">Enviar a firma</button>
                   </div>
                 </div>
                 <label>Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
@@ -1122,7 +1127,11 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
               <div class="actions">
                 <button type="button" data-out="copy-md" disabled>Copiar Markdown</button>
                 <button type="button" data-out="download-md" disabled>Descargar .md</button>
+                <button type="button" data-out="docx" disabled>Descargar Word</button>
                 <button type="button" data-out="pdf" disabled>Descargar PDF</button>
+                <button type="button" data-out="save" disabled>Guardar en el expediente</button>
+                <button type="button" data-out="mail" disabled>Enviar por correo</button>
+                <button type="button" data-out="whatsapp" disabled>Enviar por WhatsApp</button>
                 <button type="button" data-out="copy-json" disabled>Copiar JSON</button>
                 <button type="button" data-out="verify" disabled>Verificar citas</button>
                 <button type="button" data-out="sign" disabled>Enviar a firma</button>
@@ -1684,6 +1693,36 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
   </dialog>
 
   <!-- Tarea / audiencia -->
+  <!-- Enviar un documento por WhatsApp -->
+  <dialog id="wa-dialog">
+    <form method="dialog">
+      <h3>Enviar por WhatsApp</h3>
+      <p class="hint">1. Descargue el archivo. 2. Abra WhatsApp con el mensaje listo. 3. En el chat, adjunte el archivo descargado (clip 📎 → Documento). WhatsApp no permite que otra página adjunte el archivo por usted.</p>
+      <div class="grid2">
+        <label>Celular (WhatsApp) <input name="phone" inputmode="tel" placeholder="300 123 4567" /></label>
+        <label>Archivo <select name="format"><option value="pdf">PDF</option><option value="docx">Word</option></select></label>
+      </div>
+      <label>Mensaje <textarea name="message" rows="4"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cerrar</button>
+        <button type="button" data-wa-download>1. Descargar archivo</button>
+        <a class="button primary" data-wa-open target="_blank" rel="noopener" href="https://wa.me/">2. Abrir WhatsApp</a>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Documentos guardados en un expediente -->
+  <dialog id="casedocs-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>Documentos del expediente</h3>
+      <p class="hint" data-sub></p>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Documento</th><th>Guardado</th><th></th></tr></thead><tbody id="casedocs-rows"></tbody></table></div>
+      <p class="empty" id="casedocs-empty" hidden>Aún no hay documentos guardados. En Documentos, elija este expediente y use «Guardar en el expediente».</p>
+      <div class="dialog-actions"><button value="cancel">Cerrar</button></div>
+    </form>
+  </dialog>
+
   <!-- Minuta de Word: espacios en blanco → datos del cliente -->
   <dialog id="blanks-dialog" class="wide-dialog">
     <form method="dialog">
@@ -2695,7 +2734,18 @@ function a(e,t){return n(e)||r(e,t)||o(e,t)||i()}function o(e,n){if(e){if(typeof
     return "";
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
+  /** Plain text of a .docx (one paragraph per line, blank line between), to build a PDF from a Word form. */
+  function docxText(bytes) {
+    const zip = new window.PizZip(bytes);
+    const body = zip.file("word/document.xml")?.asText() || "";
+    return [...body.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((p) => {
+      const bold = /<w:b\/>|<w:b w:val="(1|true)"\/>/.test((p[0].match(/<w:rPr>[\s\S]*?<\/w:rPr>/) || [""])[0]);
+      const t = [...p[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>/g)].map((m) => (m[0] === "<w:tab/>" ? "    " : m[0] === "<w:br/>" ? "\n" : dec(m[1]))).join("");
+      return t.trim() && bold && t.length < 120 ? `**${t.trim()}**` : t;
+    }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
 })();
 </script>
   <script>// Signature pad: draw with mouse, finger or pen; returns a PNG data URL.
@@ -3872,7 +3922,12 @@ return { decisionOf, withDecisions };
       const el = e.target;
       if (el.matches?.("input, textarea, select") && !["hidden", "checkbox", "radio", "file", "button", "submit"].includes(el.type)) showTip(el);
     });
-    document.addEventListener("focusout", hideTip);
+    // Removing the tip moves the controls below it up; doing it on blur would make a click on
+    // "Guardar" land on empty space. Remove it once the click is over.
+    document.addEventListener("focusout", () => {
+      const shown = tip;
+      setTimeout(() => { if (tip === shown) hideTip(); }, 250);
+    });
     // Forms built later (custom fields, dialogs filled on open) get examples too.
     let queued = false;
     new MutationObserver(() => {
@@ -3920,7 +3975,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}]};</script>
-<script>window.JUANMA_VERSION = {"change":31,"sha":"","date":"2026-10-14"};</script>
+<script>window.JUANMA_VERSION = {"change":32,"sha":"","date":"2026-10-14"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -3934,7 +3989,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
   const CHUNK = 180000;
   const LOCAL_KEY = "juanmaapp-data-v1"; // never changes: data is migrated, not reset
   const COLLECTIONS = ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks",
-    "notes", "acts", "checks", "log", "templates", "signs", "charges", "receipts", "reminders"];
+    "notes", "acts", "checks", "log", "templates", "signs", "charges", "receipts", "reminders", "casedocs"];
   const META = ["roles", "matrix", "prefs", "info", "payset"];
   let db = null, kind = "local";
   const saved = new Map(); // document path -> JSON last written
@@ -4084,7 +4139,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs"]) st[k] ||= [];
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -4619,6 +4674,10 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
     ["GET", /^\/monitor\/log$/, () => { need("processes.consult"); return clone(s.log.filter((l) => l.user_id === me().id).reverse()); }],
 
     // ----- clients -----
+    ["GET", /^\/clients\/(\d+)$/, (m) => {
+      const c = s.clients.find((x) => x.id === +m[1] && clientVisible(x)) || fail("El cliente no existe.");
+      return { ...clone(c), office_name: officeName(c.office_id) };
+    }],
     ["GET", /^\/clients(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       return s.clients
@@ -4826,7 +4885,45 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
       });
       return caseOut(k);
     }],
-    ["DELETE", /^\/cases\/(\d+)$/, (m) => { need("cases.delete"); visibleCase(+m[1]); s.cases = s.cases.filter((k) => k.id !== +m[1]); return null; }],
+    ["DELETE", /^\/cases\/(\d+)$/, (m) => {
+      need("cases.delete"); visibleCase(+m[1]);
+      s.cases = s.cases.filter((k) => k.id !== +m[1]);
+      for (const d of s.casedocs.filter((x) => x.case_id === +m[1])) delete s.blobs[`doc-${d.id}`];
+      s.casedocs = s.casedocs.filter((x) => x.case_id !== +m[1]);
+      return null;
+    }],
+    // ----- documents saved to a case -----
+    ["GET", /^\/cases\/(\d+)\/documents$/, (m) => {
+      visibleCase(+m[1]);
+      return s.casedocs.filter((d) => d.case_id === +m[1]).sort((a, b) => b.id - a.id).map((d) => ({ ...clone(d), created_by_name: userName(d.created_by) }));
+    }],
+    ["POST", /^\/cases\/(\d+)\/documents$/, async (m, b) => {
+      need("cases.write"); visibleCase(+m[1]);
+      const ext = String(b.filename || "").toLowerCase().match(/\.(docx|pdf)$/)?.[1] || fail("Solo se guardan archivos Word (.docx) o PDF.");
+      const b64 = String(b.file_base64 || "");
+      (!b64 || b64.length > 7000000) && fail("En el enlace de prueba el archivo debe pesar menos de 5 MB.");
+      const head = atob(b64.slice(0, 8));
+      (ext === "pdf" ? !head.startsWith("%PDF-") : !head.startsWith("PK")) && fail("El archivo no corresponde a su formato.");
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((x) => x.toString(16).padStart(2, "0")).join("");
+      const d = { id: nextId(), case_id: +m[1], name: (str(b.name) || str(b.filename)).slice(0, 200), filename: str(b.filename).slice(0, 200),
+        mime: ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size: bytes.length, sha256: hash, created_by: me().id, created_at: stamp() };
+      s.blobs[`doc-${d.id}`] = b64;
+      s.casedocs.push(d);
+      return clone(d);
+    }],
+    ["GET", /^\/cases\/(\d+)\/documents\/(\d+)\/file$/, (m) => {
+      visibleCase(+m[1]);
+      const d = s.casedocs.find((x) => x.id === +m[2] && x.case_id === +m[1]) || fail("El documento no existe.");
+      return { filename: d.filename, mime: d.mime, base64: s.blobs[`doc-${d.id}`] || fail("El archivo no está disponible.") };
+    }],
+    ["DELETE", /^\/cases\/(\d+)\/documents\/(\d+)$/, (m) => {
+      need("cases.write"); visibleCase(+m[1]);
+      s.casedocs = s.casedocs.filter((x) => !(x.id === +m[2] && x.case_id === +m[1]));
+      delete s.blobs[`doc-${m[2]}`];
+      return null;
+    }],
 
     // ----- case law: analysis of a pasted judgment; official-site search needs the server -----
     ["POST", /^\/jurisprudencia\/search$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
@@ -5681,6 +5778,7 @@ function caseCard(k) {
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
       ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
       ${can("mail.send") ? `<button data-action="mail-case" data-case="${k.id}">Correo</button>` : ""}
+      <button data-action="case-docs" data-id="${k.id}">Documentos</button>
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
     </div>
   </li>`;
@@ -5836,6 +5934,7 @@ function renderCaseRows() {
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        <button data-action="case-docs" data-id="${k.id}">Documentos</button>
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
@@ -6251,6 +6350,12 @@ document.addEventListener("click", (e) => {
     "new-template": () => openTemplateDialog(null),
     "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
     "prepare-blanks": async () => tplActive?.format === "docx" && openBlanksDialog(tplActive),
+    "case-docs": async () => openCaseDocs(id),
+    "delete-casedoc": async () => {
+      if (!(await ask({ title: "Eliminar documento", message: "El documento se borrará del expediente.", okLabel: "Eliminar", danger: true }))) return;
+      await api("DELETE", `/cases/${casedocsCase.id}/documents/${id}`);
+      await renderCaseDocs();
+    },
     "delete-template": async () => {
       if (!(await confirmAsk("Eliminar plantilla", "La plantilla dejará de estar disponible para todos los usuarios."))) return;
       await api("DELETE", `/templates/${id}`);
@@ -6443,8 +6548,12 @@ $(".actions").addEventListener("click", async (e) => {
     setStatus("JSON copiado.");
   } else if (action === "download-md") {
     await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.md`, new Blob([lastResult.document], { type: "text/markdown" }));
-  } else if (action === "pdf") {
-    await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.pdf`, markdownToPdf(lastResult.document));
+  } else if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
+    const name = lastResult.payload?.document_type ? `Borrador ${lastResult.payload.document_type}` : "Borrador";
+    const caseId = Number(draftForm.caseId.value) || null;
+    const k = caseId ? state.cases.find((x) => x.id === caseId) : null;
+    await guarded(() => exportDocument(action, { name, caseId, base: safeName(k ? `${name} - ${k.client_name}` : name),
+      word: () => D.markdownToDocx(lastResult.document, name), pdf: () => markdownToPdf(lastResult.document) }));
   } else if (action === "sign") {
     await openSignDialog({ title: lastResult.payload?.document_type ? `Borrador ${lastResult.payload.document_type}` : "Documento", text: lastResult.document,
       caseId: Number(draftForm.caseId.value) || null });
@@ -7311,20 +7420,19 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
   const action = e.target.closest("[data-tpl-out]")?.dataset.tplOut;
   if (!action) return;
   guarded(async () => {
-    if (action === "docx") {
-      const blob = tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name);
-      await saveFile(`${tplFileBase()}.docx`, blob);
-    } else if (action === "pdf") {
-      await saveFile(`${tplFileBase()}.pdf`, markdownToPdf(currentText()));
+    if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
+      const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name));
+      await exportDocument(action, {
+        name: tplActive.name, base: tplFileBase(), caseId: Number($("#tpl-case").value) || null, word,
+        // A Word form keeps its layout in the .docx; its PDF carries the same text in the firm's PDF layout.
+        pdf: async () => markdownToPdf(tplActive.format === "docx" ? D.docxText(new Uint8Array(await word().arrayBuffer())) : currentText()),
+      });
     } else if (action === "copy") {
       try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
       catch { toast("No se pudo copiar; active “Editar el texto” y cópielo desde allí.", true); }
     } else if (action === "sign") {
-      await openSignDialog({ title: tplActive.name, text: currentText(), caseId: Number($("#tpl-case").value) || null });
-    } else if (action === "mail") {
-      const blob = tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name);
-      await openMailDialog({ caseId: Number($("#tpl-case").value) || null, subject: tplActive.name,
-        files: [new File([blob], `${tplFileBase()}.docx`, { type: blob.type })] });
+      const text = tplActive.format === "docx" ? D.docxText(new Uint8Array(await D.fillDocx(tplActive.bytes, tplValues()).arrayBuffer())) : currentText();
+      await openSignDialog({ title: tplActive.name, text, caseId: Number($("#tpl-case").value) || null });
     } else if (action === "nomos") {
       setBaseTemplate({ name: tplActive.name, text: currentText() });
       const map = { Contrato: "CONTRACT", Poder: "POWER_OF_ATTORNEY", "Derecho de petición": "PETITION", Demanda: "LAWSUIT" };
@@ -7334,6 +7442,83 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
       await renderNomos();
       toast("Revise los datos y pulse “Generar borrador”.");
     }
+  });
+});
+
+// ----- Exporting a document: Word, PDF, save to the case, e-mail, WhatsApp -----
+const blobToB64 = async (blob) => bytesToB64(new Uint8Array(await blob.arrayBuffer()));
+async function exportDocument(action, doc) {
+  const word = async () => doc.word();
+  const pdf = async () => doc.pdf();
+  if (action === "docx") return saveFile(`${doc.base}.docx`, await word());
+  if (action === "pdf") return saveFile(`${doc.base}.pdf`, await pdf());
+  if (action === "save") {
+    if (!doc.caseId) throw new Error("Elija primero el expediente donde se guardará el documento.");
+    for (const [ext, blob] of [["docx", await word()], ["pdf", await pdf()]]) {
+      await api("POST", `/cases/${doc.caseId}/documents`, { name: doc.name, filename: `${doc.base}.${ext}`, file_base64: await blobToB64(blob) });
+    }
+    toast("Documento guardado en el expediente (Word y PDF). Lo encuentra en Expedientes → Documentos.");
+    return;
+  }
+  if (action === "mail") {
+    const [w, p] = [await word(), await pdf()];
+    return openMailDialog({ caseId: doc.caseId, subject: doc.name, files: [new File([w], `${doc.base}.docx`, { type: w.type }), new File([p], `${doc.base}.pdf`, { type: "application/pdf" })] });
+  }
+  if (action === "whatsapp") return openWhatsappDialog(doc);
+}
+
+// WhatsApp: the page cannot attach a file for the user, so it downloads the file and opens the chat with the message ready.
+let waDoc = null;
+const waForm = $("#wa-dialog form");
+const waNumber = (phone) => { const d = String(phone || "").replace(/\D/g, ""); return d.length === 10 ? "57" + d : d; };
+function refreshWaLink() {
+  const n = waNumber(waForm.elements.phone.value);
+  $("[data-wa-open]", waForm).href = `https://wa.me/${n}?text=${encodeURIComponent(waForm.elements.message.value)}`;
+}
+async function openWhatsappDialog(doc) {
+  waDoc = doc;
+  let phone = "", name = "";
+  if (doc.caseId) {
+    const k = await api("GET", `/cases/${doc.caseId}`).catch(() => null);
+    const c = k && (await api("GET", `/clients/${k.client_id}`).catch(() => null));
+    phone = c?.phone || ""; name = c?.first_names || c?.full_name || "";
+  }
+  waForm.elements.phone.value = phone;
+  waForm.elements.format.value = "pdf";
+  waForm.elements.message.value = `${name ? `Hola ${name}, ` : "Hola, "}le enviamos el documento «${doc.name}». Quedamos atentos.\n\n${me?.name || ""} · TEC Jurídicos`.trim();
+  $(".form-error", waForm).hidden = true;
+  refreshWaLink();
+  $("#wa-dialog").showModal();
+}
+waForm.addEventListener("input", refreshWaLink);
+$("[data-wa-download]", waForm).addEventListener("click", () => guarded(async () => {
+  const ext = waForm.elements.format.value;
+  await saveFile(`${waDoc.base}.${ext}`, await (ext === "pdf" ? waDoc.pdf() : waDoc.word()));
+}));
+
+// Documents saved in a case.
+let casedocsCase = null;
+async function openCaseDocs(caseId) {
+  casedocsCase = await api("GET", `/cases/${caseId}`);
+  $("#casedocs-dialog [data-sub]").textContent = `${casedocsCase.client_name} · ${casedocsCase.type_name}${casedocsCase.title ? " · " + casedocsCase.title : ""}`;
+  await renderCaseDocs();
+  if (!$("#casedocs-dialog").open) $("#casedocs-dialog").showModal();
+}
+async function renderCaseDocs() {
+  const list = await api("GET", `/cases/${casedocsCase.id}/documents`);
+  $("#casedocs-empty").hidden = list.length > 0;
+  $("#casedocs-rows").innerHTML = list.map((d) => `<tr>
+    <td><strong>${escapeHtml(d.name)}</strong><br><span class="muted">${escapeHtml(d.filename)} · ${Math.max(1, Math.round(d.size / 1024))} KB</span></td>
+    <td>${escapeHtml(d.created_at)}${d.created_by_name ? `<br><span class="muted">${escapeHtml(d.created_by_name)}</span>` : ""}</td>
+    <td class="row-actions"><button type="button" class="mini" data-casedoc="${d.id}">Descargar</button>
+      ${can("cases.write") ? `<button type="button" class="mini danger" data-action="delete-casedoc" data-id="${d.id}" aria-label="Eliminar documento">✕</button>` : ""}</td></tr>`).join("");
+}
+$("#casedocs-rows").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-casedoc]");
+  if (!b) return;
+  guarded(async () => {
+    const f = await api("GET", `/cases/${casedocsCase.id}/documents/${b.dataset.casedoc}/file`);
+    await saveFile(f.filename, new Blob([D.b64ToBytes(f.base64)], { type: f.mime }));
   });
 });
 

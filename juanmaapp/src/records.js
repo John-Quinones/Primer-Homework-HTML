@@ -1,6 +1,7 @@
 // REST routes for clients, the process catalog (categories → sub-processes →
 // custom fields) and cases. Mounted under /api by app.js.
 import express from "express";
+import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { normStatus, normPartyRole } from "./case-meta.js";
@@ -429,6 +430,45 @@ export function recordsRouter(db) {
         loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
         "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, id);
     return getCase(req, id);
+  }));
+
+  // ----- Documents saved to a case (Word / PDF generated in Documentos) -----
+  const DOC_TYPES = { docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", pdf: "application/pdf" };
+  r.get("/cases/:id/documents", h((req) => {
+    const k = getCase(req, toInt(req.params.id, "id"));
+    return db.prepare(`SELECT d.id, d.case_id, d.name, d.filename, d.mime, d.size, d.sha256, d.created_at, u.name AS created_by_name
+      FROM case_documents d LEFT JOIN users u ON u.id = d.created_by WHERE d.case_id = ? ORDER BY d.id DESC`).all(k.id).map(plain);
+  }));
+  r.post("/cases/:id/documents", h((req, res) => {
+    checkPerm(req, "cases.write");
+    const k = getCase(req, toInt(req.params.id, "id"));
+    const b = req.body ?? {};
+    const ext = String(b.filename || "").toLowerCase().match(/\.(docx|pdf)$/)?.[1];
+    if (!ext) throw new HttpError(400, "Solo se guardan archivos Word (.docx) o PDF.");
+    const file = Buffer.from(String(b.file_base64 || ""), "base64");
+    if (!file.length || file.length > 10 * 1024 * 1024) throw new HttpError(400, "El archivo debe pesar menos de 10 MB.");
+    const magic = file.subarray(0, 5).toString("latin1");
+    if (ext === "pdf" ? magic !== "%PDF-" : !magic.startsWith("PK")) throw new HttpError(400, "El archivo no corresponde a su formato.");
+    const name = str(b.name) || str(b.filename);
+    const id = db.prepare(`INSERT INTO case_documents (case_id, name, filename, mime, size, sha256, file, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(k.id, name.slice(0, 200), str(b.filename).slice(0, 200), DOC_TYPES[ext], file.length, createHash("sha256").update(file).digest("hex"), file, req.user.id).lastInsertRowid;
+    res.status(201);
+    return plain(db.prepare("SELECT id, case_id, name, filename, mime, size, sha256, created_at FROM case_documents WHERE id = ?").get(id));
+  }));
+  const getDoc = (req) => {
+    const d = db.prepare("SELECT * FROM case_documents WHERE id = ?").get(toInt(req.params.docId, "docId"));
+    if (!d || d.case_id !== toInt(req.params.id, "id")) throw new HttpError(404, "El documento no existe.");
+    getCase(req, d.case_id);
+    return d;
+  };
+  r.get("/cases/:id/documents/:docId/file", h((req) => {
+    const d = getDoc(req);
+    return { filename: d.filename, mime: d.mime, base64: Buffer.from(d.file).toString("base64") };
+  }));
+  r.delete("/cases/:id/documents/:docId", h((req, res) => {
+    checkPerm(req, "cases.write");
+    db.prepare("DELETE FROM case_documents WHERE id = ?").run(getDoc(req).id);
+    res.status(204).end();
   }));
 
   r.delete("/cases/:id", h((req, res) => {

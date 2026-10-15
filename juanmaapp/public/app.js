@@ -364,6 +364,7 @@ function caseCard(k) {
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
       ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
       ${can("mail.send") ? `<button data-action="mail-case" data-case="${k.id}">Correo</button>` : ""}
+      <button data-action="case-docs" data-id="${k.id}">Documentos</button>
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
     </div>
   </li>`;
@@ -519,6 +520,7 @@ function renderCaseRows() {
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        <button data-action="case-docs" data-id="${k.id}">Documentos</button>
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
@@ -934,6 +936,12 @@ document.addEventListener("click", (e) => {
     "new-template": () => openTemplateDialog(null),
     "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
     "prepare-blanks": async () => tplActive?.format === "docx" && openBlanksDialog(tplActive),
+    "case-docs": async () => openCaseDocs(id),
+    "delete-casedoc": async () => {
+      if (!(await ask({ title: "Eliminar documento", message: "El documento se borrará del expediente.", okLabel: "Eliminar", danger: true }))) return;
+      await api("DELETE", `/cases/${casedocsCase.id}/documents/${id}`);
+      await renderCaseDocs();
+    },
     "delete-template": async () => {
       if (!(await confirmAsk("Eliminar plantilla", "La plantilla dejará de estar disponible para todos los usuarios."))) return;
       await api("DELETE", `/templates/${id}`);
@@ -1126,8 +1134,12 @@ $(".actions").addEventListener("click", async (e) => {
     setStatus("JSON copiado.");
   } else if (action === "download-md") {
     await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.md`, new Blob([lastResult.document], { type: "text/markdown" }));
-  } else if (action === "pdf") {
-    await saveFile(`${(lastResult.payload?.document_type || "borrador").toLowerCase()}.pdf`, markdownToPdf(lastResult.document));
+  } else if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
+    const name = lastResult.payload?.document_type ? `Borrador ${lastResult.payload.document_type}` : "Borrador";
+    const caseId = Number(draftForm.caseId.value) || null;
+    const k = caseId ? state.cases.find((x) => x.id === caseId) : null;
+    await guarded(() => exportDocument(action, { name, caseId, base: safeName(k ? `${name} - ${k.client_name}` : name),
+      word: () => D.markdownToDocx(lastResult.document, name), pdf: () => markdownToPdf(lastResult.document) }));
   } else if (action === "sign") {
     await openSignDialog({ title: lastResult.payload?.document_type ? `Borrador ${lastResult.payload.document_type}` : "Documento", text: lastResult.document,
       caseId: Number(draftForm.caseId.value) || null });
@@ -1994,20 +2006,19 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
   const action = e.target.closest("[data-tpl-out]")?.dataset.tplOut;
   if (!action) return;
   guarded(async () => {
-    if (action === "docx") {
-      const blob = tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name);
-      await saveFile(`${tplFileBase()}.docx`, blob);
-    } else if (action === "pdf") {
-      await saveFile(`${tplFileBase()}.pdf`, markdownToPdf(currentText()));
+    if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
+      const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name));
+      await exportDocument(action, {
+        name: tplActive.name, base: tplFileBase(), caseId: Number($("#tpl-case").value) || null, word,
+        // A Word form keeps its layout in the .docx; its PDF carries the same text in the firm's PDF layout.
+        pdf: async () => markdownToPdf(tplActive.format === "docx" ? D.docxText(new Uint8Array(await word().arrayBuffer())) : currentText()),
+      });
     } else if (action === "copy") {
       try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
       catch { toast("No se pudo copiar; active “Editar el texto” y cópielo desde allí.", true); }
     } else if (action === "sign") {
-      await openSignDialog({ title: tplActive.name, text: currentText(), caseId: Number($("#tpl-case").value) || null });
-    } else if (action === "mail") {
-      const blob = tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name);
-      await openMailDialog({ caseId: Number($("#tpl-case").value) || null, subject: tplActive.name,
-        files: [new File([blob], `${tplFileBase()}.docx`, { type: blob.type })] });
+      const text = tplActive.format === "docx" ? D.docxText(new Uint8Array(await D.fillDocx(tplActive.bytes, tplValues()).arrayBuffer())) : currentText();
+      await openSignDialog({ title: tplActive.name, text, caseId: Number($("#tpl-case").value) || null });
     } else if (action === "nomos") {
       setBaseTemplate({ name: tplActive.name, text: currentText() });
       const map = { Contrato: "CONTRACT", Poder: "POWER_OF_ATTORNEY", "Derecho de petición": "PETITION", Demanda: "LAWSUIT" };
@@ -2017,6 +2028,83 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
       await renderNomos();
       toast("Revise los datos y pulse “Generar borrador”.");
     }
+  });
+});
+
+// ----- Exporting a document: Word, PDF, save to the case, e-mail, WhatsApp -----
+const blobToB64 = async (blob) => bytesToB64(new Uint8Array(await blob.arrayBuffer()));
+async function exportDocument(action, doc) {
+  const word = async () => doc.word();
+  const pdf = async () => doc.pdf();
+  if (action === "docx") return saveFile(`${doc.base}.docx`, await word());
+  if (action === "pdf") return saveFile(`${doc.base}.pdf`, await pdf());
+  if (action === "save") {
+    if (!doc.caseId) throw new Error("Elija primero el expediente donde se guardará el documento.");
+    for (const [ext, blob] of [["docx", await word()], ["pdf", await pdf()]]) {
+      await api("POST", `/cases/${doc.caseId}/documents`, { name: doc.name, filename: `${doc.base}.${ext}`, file_base64: await blobToB64(blob) });
+    }
+    toast("Documento guardado en el expediente (Word y PDF). Lo encuentra en Expedientes → Documentos.");
+    return;
+  }
+  if (action === "mail") {
+    const [w, p] = [await word(), await pdf()];
+    return openMailDialog({ caseId: doc.caseId, subject: doc.name, files: [new File([w], `${doc.base}.docx`, { type: w.type }), new File([p], `${doc.base}.pdf`, { type: "application/pdf" })] });
+  }
+  if (action === "whatsapp") return openWhatsappDialog(doc);
+}
+
+// WhatsApp: the page cannot attach a file for the user, so it downloads the file and opens the chat with the message ready.
+let waDoc = null;
+const waForm = $("#wa-dialog form");
+const waNumber = (phone) => { const d = String(phone || "").replace(/\D/g, ""); return d.length === 10 ? "57" + d : d; };
+function refreshWaLink() {
+  const n = waNumber(waForm.elements.phone.value);
+  $("[data-wa-open]", waForm).href = `https://wa.me/${n}?text=${encodeURIComponent(waForm.elements.message.value)}`;
+}
+async function openWhatsappDialog(doc) {
+  waDoc = doc;
+  let phone = "", name = "";
+  if (doc.caseId) {
+    const k = await api("GET", `/cases/${doc.caseId}`).catch(() => null);
+    const c = k && (await api("GET", `/clients/${k.client_id}`).catch(() => null));
+    phone = c?.phone || ""; name = c?.first_names || c?.full_name || "";
+  }
+  waForm.elements.phone.value = phone;
+  waForm.elements.format.value = "pdf";
+  waForm.elements.message.value = `${name ? `Hola ${name}, ` : "Hola, "}le enviamos el documento «${doc.name}». Quedamos atentos.\n\n${me?.name || ""} · TEC Jurídicos`.trim();
+  $(".form-error", waForm).hidden = true;
+  refreshWaLink();
+  $("#wa-dialog").showModal();
+}
+waForm.addEventListener("input", refreshWaLink);
+$("[data-wa-download]", waForm).addEventListener("click", () => guarded(async () => {
+  const ext = waForm.elements.format.value;
+  await saveFile(`${waDoc.base}.${ext}`, await (ext === "pdf" ? waDoc.pdf() : waDoc.word()));
+}));
+
+// Documents saved in a case.
+let casedocsCase = null;
+async function openCaseDocs(caseId) {
+  casedocsCase = await api("GET", `/cases/${caseId}`);
+  $("#casedocs-dialog [data-sub]").textContent = `${casedocsCase.client_name} · ${casedocsCase.type_name}${casedocsCase.title ? " · " + casedocsCase.title : ""}`;
+  await renderCaseDocs();
+  if (!$("#casedocs-dialog").open) $("#casedocs-dialog").showModal();
+}
+async function renderCaseDocs() {
+  const list = await api("GET", `/cases/${casedocsCase.id}/documents`);
+  $("#casedocs-empty").hidden = list.length > 0;
+  $("#casedocs-rows").innerHTML = list.map((d) => `<tr>
+    <td><strong>${escapeHtml(d.name)}</strong><br><span class="muted">${escapeHtml(d.filename)} · ${Math.max(1, Math.round(d.size / 1024))} KB</span></td>
+    <td>${escapeHtml(d.created_at)}${d.created_by_name ? `<br><span class="muted">${escapeHtml(d.created_by_name)}</span>` : ""}</td>
+    <td class="row-actions"><button type="button" class="mini" data-casedoc="${d.id}">Descargar</button>
+      ${can("cases.write") ? `<button type="button" class="mini danger" data-action="delete-casedoc" data-id="${d.id}" aria-label="Eliminar documento">✕</button>` : ""}</td></tr>`).join("");
+}
+$("#casedocs-rows").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-casedoc]");
+  if (!b) return;
+  guarded(async () => {
+    const f = await api("GET", `/cases/${casedocsCase.id}/documents/${b.dataset.casedoc}/file`);
+    await saveFile(f.filename, new Blob([D.b64ToBytes(f.base64)], { type: f.mime }));
   });
 });
 

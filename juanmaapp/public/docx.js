@@ -217,5 +217,16 @@
     return "";
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
+  /** Plain text of a .docx (one paragraph per line, blank line between), to build a PDF from a Word form. */
+  function docxText(bytes) {
+    const zip = new window.PizZip(bytes);
+    const body = zip.file("word/document.xml")?.asText() || "";
+    return [...body.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((p) => {
+      const bold = /<w:b\/>|<w:b w:val="(1|true)"\/>/.test((p[0].match(/<w:rPr>[\s\S]*?<\/w:rPr>/) || [""])[0]);
+      const t = [...p[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>/g)].map((m) => (m[0] === "<w:tab/>" ? "    " : m[0] === "<w:br/>" ? "\n" : dec(m[1]))).join("");
+      return t.trim() && bold && t.length < 120 ? `**${t.trim()}**` : t;
+    }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
 })();

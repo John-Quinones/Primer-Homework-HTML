@@ -192,7 +192,12 @@
       const el = e.target;
       if (el.matches?.("input, textarea, select") && !["hidden", "checkbox", "radio", "file", "button", "submit"].includes(el.type)) showTip(el);
     });
-    document.addEventListener("focusout", hideTip);
+    // Removing the tip moves the controls below it up; doing it on blur would make a click on
+    // "Guardar" land on empty space. Remove it once the click is over.
+    document.addEventListener("focusout", () => {
+      const shown = tip;
+      setTimeout(() => { if (tip === shown) hideTip(); }, 250);
+    });
     // Forms built later (custom fields, dialogs filled on open) get examples too.
     let queued = false;
     new MutationObserver(() => {

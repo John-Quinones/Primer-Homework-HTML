@@ -307,11 +307,13 @@
                   <div><span class="pill" id="tpl-cat"></span> <span class="badge" id="tpl-format"></span><h3 id="tpl-name"></h3></div>
                   <div class="actions">
                     <button type="button" data-tpl-out="docx" class="primary">Descargar Word</button>
-                    <button type="button" data-tpl-out="pdf" data-text-only>Descargar PDF</button>
+                    <button type="button" data-tpl-out="pdf">Descargar PDF</button>
+                    <button type="button" data-tpl-out="save" title="Guarda el Word y el PDF en el expediente elegido">Guardar en el expediente</button>
+                    <button type="button" data-tpl-out="mail">Enviar por correo</button>
+                    <button type="button" data-tpl-out="whatsapp">Enviar por WhatsApp</button>
                     <button type="button" data-tpl-out="copy" data-text-only>Copiar texto</button>
                     <button type="button" data-tpl-out="nomos" data-text-only>Completar con NomosAI</button>
-                    <button type="button" data-tpl-out="sign" data-text-only>Enviar a firma</button>
-                    <button type="button" data-tpl-out="mail">Enviar por correo</button>
+                    <button type="button" data-tpl-out="sign">Enviar a firma</button>
                   </div>
                 </div>
                 <label>Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
@@ -392,7 +394,11 @@
               <div class="actions">
                 <button type="button" data-out="copy-md" disabled>Copiar Markdown</button>
                 <button type="button" data-out="download-md" disabled>Descargar .md</button>
+                <button type="button" data-out="docx" disabled>Descargar Word</button>
                 <button type="button" data-out="pdf" disabled>Descargar PDF</button>
+                <button type="button" data-out="save" disabled>Guardar en el expediente</button>
+                <button type="button" data-out="mail" disabled>Enviar por correo</button>
+                <button type="button" data-out="whatsapp" disabled>Enviar por WhatsApp</button>
                 <button type="button" data-out="copy-json" disabled>Copiar JSON</button>
                 <button type="button" data-out="verify" disabled>Verificar citas</button>
                 <button type="button" data-out="sign" disabled>Enviar a firma</button>
@@ -954,6 +960,36 @@
   </dialog>
 
   <!-- Tarea / audiencia -->
+  <!-- Enviar un documento por WhatsApp -->
+  <dialog id="wa-dialog">
+    <form method="dialog">
+      <h3>Enviar por WhatsApp</h3>
+      <p class="hint">1. Descargue el archivo. 2. Abra WhatsApp con el mensaje listo. 3. En el chat, adjunte el archivo descargado (clip 📎 → Documento). WhatsApp no permite que otra página adjunte el archivo por usted.</p>
+      <div class="grid2">
+        <label>Celular (WhatsApp) <input name="phone" inputmode="tel" placeholder="300 123 4567" /></label>
+        <label>Archivo <select name="format"><option value="pdf">PDF</option><option value="docx">Word</option></select></label>
+      </div>
+      <label>Mensaje <textarea name="message" rows="4"></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cerrar</button>
+        <button type="button" data-wa-download>1. Descargar archivo</button>
+        <a class="button primary" data-wa-open target="_blank" rel="noopener" href="https://wa.me/">2. Abrir WhatsApp</a>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Documentos guardados en un expediente -->
+  <dialog id="casedocs-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>Documentos del expediente</h3>
+      <p class="hint" data-sub></p>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Documento</th><th>Guardado</th><th></th></tr></thead><tbody id="casedocs-rows"></tbody></table></div>
+      <p class="empty" id="casedocs-empty" hidden>Aún no hay documentos guardados. En Documentos, elija este expediente y use «Guardar en el expediente».</p>
+      <div class="dialog-actions"><button value="cancel">Cerrar</button></div>
+    </form>
+  </dialog>
+
   <!-- Minuta de Word: espacios en blanco → datos del cliente -->
   <dialog id="blanks-dialog" class="wide-dialog">
     <form method="dialog">

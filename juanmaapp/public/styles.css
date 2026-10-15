@@ -629,3 +629,6 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 .case-filters { margin-bottom: 12px; }
 .case-filters .grid4 { align-items: end; }
 #case-count { margin: 0 0 10px; }
+/* Case rows carry several actions: let them wrap inside the cell instead of overflowing the panel. */
+#case-rows .row-actions { white-space: normal; min-width: 180px; }
+#case-rows .row-actions button { margin: 2px 0; }

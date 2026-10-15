@@ -155,6 +155,20 @@ CREATE TABLE IF NOT EXISTS report_log (
 );
 
 -- Document templates: markdown text with {{variables}} or an uploaded .docx.
+CREATE TABLE IF NOT EXISTS case_documents (
+  id           INTEGER PRIMARY KEY,
+  case_id      INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  filename     TEXT NOT NULL,
+  mime         TEXT NOT NULL,
+  size         INTEGER NOT NULL,
+  sha256       TEXT NOT NULL,
+  file         BLOB NOT NULL,
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS case_documents_case ON case_documents(case_id);
+
 CREATE TABLE IF NOT EXISTS document_templates (
   id           INTEGER PRIMARY KEY,
   name         TEXT NOT NULL,
