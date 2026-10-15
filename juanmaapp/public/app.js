@@ -365,14 +365,26 @@ async function saveFile(filename, blob) {
 
 // ---------- Navigation ----------
 const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios"];
+// "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
+const FICHAS = { cliente: "clientes", expediente: "expedientes" };
+function route() {
+  const m = location.hash.match(/^#(cliente|expediente)-(\d+)$/);
+  if (m) return { name: m[1], id: Number(m[2]) };
+  const n = location.hash.slice(1);
+  return { name: VIEWS.includes(n) ? n : "inicio" };
+}
 function showView() {
   if (!me) return;
-  let name = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "inicio";
+  let { name, id } = route();
   if (VIEW_PERMS[name] && !can(VIEW_PERMS[name])) name = "inicio";
-  for (const v of VIEWS) $(`#view-${v}`).hidden = v !== name;
-  $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
-  RENDER[name]();
+  for (const v of [...VIEWS, ...Object.keys(FICHAS)]) $(`#view-${v}`).hidden = v !== name;
+  const nav = FICHAS[name] || name;
+  $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === nav));
+  if (FICHAS[name]) { window.scrollTo(0, 0); return name === "cliente" ? renderClienteFicha(id) : renderExpedienteFicha(id); }
+  return RENDER[name]();
 }
+/** Re-render whatever screen is open (after a dialog saves). */
+const refreshView = () => showView();
 window.addEventListener("hashchange", () => guarded(showView));
 
 // ---------- Clientes ----------
@@ -424,6 +436,153 @@ async function renderClientDetail() {
     ${cases.length ? `<ul class="case-cards">${cases.map(caseCard).join("")}</ul>` : '<p class="empty">Este cliente no tiene expedientes.</p>'}`;
 }
 
+// ---------- Client screen: data, totals and the client's cases ----------
+const factRow = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
+async function renderClienteFicha(id) {
+  const box = $("#ficha-cliente");
+  box.innerHTML = '<p class="muted">Cargando…</p>';
+  const [c, cases] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), loadCatalog()]);
+  state.selectedClientId = c.id;
+  if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
+  const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
+  const active = cases.filter((k) => k.status === "Activo").length;
+  box.innerHTML = `
+    <nav class="crumbs"><a href="#clientes">← Clientes</a></nav>
+    <div class="view-head">
+      <h2>${escapeHtml(c.full_name)}</h2>
+      <div class="toolbar">
+        ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
+        ${can("payments.manage") ? `<button data-action="new-receipt" data-client="${c.id}">Registrar pago</button><button data-action="pay-statement" data-id="${c.id}">Estado de cuenta</button>` : ""}
+        ${can("cases.write") ? `<button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>` : ""}
+      </div>
+    </div>
+    <div class="ficha-chips">
+      <span class="chip-stat">Expedientes <strong>${cases.length}</strong></span>
+      <span class="chip-stat">Activos <strong>${active}</strong></span>
+      ${pay ? `<span class="chip-stat">Honorarios <strong>${cop(pay.billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(pay.received)}</strong></span>
+        <span class="chip-stat ${pay.balance > 0 ? "warn" : ""}">Saldo <strong>${cop(pay.balance)}</strong></span>` : ""}
+    </div>
+    <div class="ficha-grid">
+      <section class="panel">
+        <h3 class="panel-title">Datos del cliente</h3>
+        <dl class="facts">
+          ${factRow("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
+          ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
+          ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
+          ${factRow("Correo", c.email)}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
+          ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
+        </dl>
+      </section>
+      <section class="panel ficha-wide">
+        <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)} <span class="muted">· toque uno para abrirlo</span></h3>
+        ${cases.length ? `<ul class="case-open-list">${cases.map((k) => `
+          <li><a class="case-open" href="#expediente-${k.id}">
+            <span class="case-open-top">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : ""}<span class="pill">${escapeHtml(k.category_name)}</span><span class="status-tag">${escapeHtml(k.status)}</span></span>
+            <strong>${escapeHtml(k.type_name)}</strong>
+            ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
+            <span class="muted">${escapeHtml([k.court_name, k.radicado && formatRadicado(k.radicado)].filter(Boolean).join(" · ") || "Sin despacho ni radicado")}</span>
+            <span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")} · ${escapeHtml(k.office_name || "")}</span>
+            <span class="case-open-go">Abrir expediente ›</span></a></li>`).join("")}</ul>`
+          : '<p class="empty">Este cliente no tiene expedientes. Créelo con «+ Nuevo expediente».</p>'}
+      </section>
+    </div>`;
+}
+
+// ---------- Case screen: everything about one case, with the other modules ----------
+const fmtDue = (d) => escapeHtml(String(d || "").replace("T", " ").slice(0, 16));
+async function renderExpedienteFicha(id) {
+  const box = $("#ficha-expediente");
+  box.innerHTML = '<p class="muted">Cargando…</p>';
+  await loadCatalog();
+  const k = await api("GET", `/cases/${id}`);
+  const quiet = (p) => p.catch(() => null);
+  const [client, tasks, acts, docs, charges, receipts, signs, mails] = await Promise.all([
+    quiet(api("GET", `/clients/${k.client_id}`)),
+    quiet(api("GET", `/tasks?caseId=${id}`)),
+    can("processes.consult") && k.radicado ? quiet(api("GET", `/monitor/cases/${id}/actuaciones`)) : null,
+    quiet(api("GET", `/cases/${id}/documents`)),
+    can("payments.manage") ? quiet(api("GET", `/payments/charges?caseId=${id}&state=`)) : null,
+    can("payments.manage") ? quiet(api("GET", `/payments/receipts?clientId=${k.client_id}`)) : null,
+    can("esign.use") ? quiet(api("GET", "/esign")) : null,
+    can("mail.send") ? quiet(api("GET", `/mail?caseId=${id}`)) : null,
+  ]);
+  if (client && !state.clients.some((x) => x.id === client.id)) state.clients.push(client);
+  if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
+  const caseReceipts = (receipts || []).filter((r) => r.case_id === id);
+  payReceiptsCache = caseReceipts;
+  const caseSigns = (signs || []).filter((r) => r.case_id === id);
+  const fields = (categoryOf(k.category_id)?.fields || []).filter((f) => String(k.field_values?.[f.id] ?? "").trim());
+  const billed = (charges || []).filter((c) => c.state !== "anulado").reduce((a, c) => a + c.amount, 0);
+  const balance = (charges || []).filter((c) => c.state !== "anulado").reduce((a, c) => a + c.balance, 0);
+  const paid = caseReceipts.filter((r) => !r.voided_at).reduce((a, r) => a + r.amount, 0);
+  const panel = (title, count, body, actions = "") => `<section class="panel ficha-panel"><div class="ficha-panel-head"><h3 class="panel-title">${title}${count != null ? ` <span class="count">${count}</span>` : ""}</h3>${actions}</div>${body}</section>`;
+  const empty = (t) => `<p class="empty">${t}</p>`;
+  box.innerHTML = `
+    <nav class="crumbs"><a href="#expedientes">Expedientes</a> › <a href="#cliente-${k.client_id}">${escapeHtml(k.client_name)}</a> › <span>${caseFolder(k) ? `Carpeta ${escapeHtml(caseFolder(k))}` : "Expediente"}</span></nav>
+    <div class="view-head">
+      <div><h2>${escapeHtml(k.type_name)}</h2>
+        <p class="ficha-sub">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span>${k.title ? ` · ${escapeHtml(k.title)}` : ""}</p></div>
+      <div class="toolbar">
+        ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+        ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
+      </div>
+    </div>
+    <div class="ficha-chips">
+      <a class="chip-stat" href="#cliente-${k.client_id}">Cliente <strong>${escapeHtml(k.client_name)}</strong></a>
+      ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
+      <span class="chip-stat">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></span>
+      ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
+    </div>
+    <div class="ficha-grid">
+      ${panel("Datos del expediente", null, `<dl class="facts">
+        ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Correo del despacho", k.court_email)}
+        ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
+        ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
+        ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
+        ${factRow("Hechos", k.facts)}
+      </dl>`)}
+      ${panel("Agenda", (tasks || []).length, (tasks || []).length ? `<ul class="ficha-list">${tasks.map((t) => `<li>
+          <span class="badge ${t.status === "hecha" ? "ok" : "warn"}">${escapeHtml(KIND_LABEL[t.kind] || t.kind)}</span> <strong>${escapeHtml(t.title)}</strong>
+          <span class="muted">${fmtDue(t.due_at)}${t.location ? " · " + escapeHtml(t.location) : ""}${t.status === "hecha" ? " · hecha" : ""}</span>
+          ${t.status !== "hecha" && can("cases.write") ? `<button class="mini" data-action="task-done" data-id="${t.id}">Marcar hecha</button>` : ""}</li>`).join("")}</ul>`
+        : empty("Sin audiencias, términos ni tareas."), can("cases.write") ? `<button class="mini primary" data-action="new-task" data-case="${k.id}">+ Tarea o audiencia</button>` : "")}
+      ${acts !== null ? panel("Actuaciones (Rama Judicial)", (acts || []).length, (acts || []).length ? `<ul class="ficha-list">${acts.slice(0, 8).map((a) => `<li>
+          <strong>${escapeHtml(String(a.fecha || "").slice(0, 10))}</strong> ${escapeHtml(a.actuacion || "")}<span class="muted">${a.anotacion ? " · " + escapeHtml(String(a.anotacion).slice(0, 160)) : ""}</span></li>`).join("")}</ul>`
+        : empty("Aún no hay actuaciones consultadas."), `<button class="mini" data-action="view-acts" data-id="${k.id}">Ver todas</button>`) : ""}
+      ${panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
+          <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
+          <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
+        : empty("Genere un documento y use «Guardar en el expediente»."), can("drafts.generate") ? `<button class="mini" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : "")}
+      ${charges ? panel("Pagos", charges.length + caseReceipts.length, `
+        ${charges.length ? `<table class="data-table compact"><thead><tr><th>Cobro</th><th>Vence</th><th class="num">Valor</th><th class="num">Saldo</th><th>Estado</th></tr></thead><tbody>${charges.map((c) => `<tr class="${c.state === "anulado" ? "voided" : ""}">
+          <td>${escapeHtml(c.concept)}${c.plan_label ? `<br><span class="muted">${escapeHtml(c.plan_label)}</span>` : ""}</td><td>${escapeHtml(c.due_date)}</td>
+          <td class="num">${cop(c.amount)}</td><td class="num">${cop(c.balance)}</td><td><span class="pay-state ${c.state}">${escapeHtml(L.STATE_LABELS[c.state] || c.state)}</span></td></tr>`).join("")}</tbody></table>` : empty("Sin cobros para este expediente.")}
+        ${caseReceipts.length ? `<h4>Recibos</h4><ul class="ficha-list">${caseReceipts.map((r) => `<li><strong>${escapeHtml(receiptNo(r.number))}</strong> · ${escapeHtml(r.paid_on)} · ${cop(r.amount)}${r.voided_at ? " · anulado" : ""}
+          <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></li>`).join("")}</ul>` : ""}`,
+        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}">Registrar pago</button></span>`) : ""}
+      ${signs ? panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
+          <span class="badge ${r.status === "completada" ? "ok" : r.status === "enviada" ? "warn" : ""}">${escapeHtml(SIGN_STATUS[r.status][1])}</span> <strong>${escapeHtml(r.title)}</strong>
+          <button class="mini" data-action="open-sign" data-id="${r.id}">Ver</button></li>`).join("")}</ul>` : empty("Sin documentos enviados a firma."),
+        `<button class="mini" data-action="sign-case" data-id="${k.id}">Enviar a firma</button>`) : ""}
+      ${mails ? panel("Correos con trazabilidad", mails.length, mails.length ? `<ul class="ficha-list">${mails.map((m) => `<li>
+          <strong>${escapeHtml(m.subject)}</strong> <span class="muted">${escapeHtml(m.to_addr)} · ${escapeHtml(String(m.sent_at).slice(0, 16))}</span>
+          <span class="badge ${m.confirmed_at ? "ok" : m.opened_at ? "warn" : ""}">${m.confirmed_at ? "Acuse recibido" : m.opened_at ? "Abierto" : m.status === "enviado" ? "Enviado" : "Fallido"}</span>
+          <button class="mini" data-action="mail-proof" data-id="${m.id}">Constancia</button></li>`).join("")}</ul>` : empty("Sin correos enviados desde este expediente."),
+        `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`)
+        : can("mail.send") ? panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba.")) : ""}
+    </div>`;
+}
+$("#ficha-expediente").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-fdoc]");
+  if (!b) return;
+  guarded(async () => {
+    const id = route().id;
+    const f = await api("GET", `/cases/${id}/documents/${b.dataset.fdoc}/file`);
+    await saveFile(f.filename, new Blob([D.b64ToBytes(f.base64)], { type: f.mime }));
+  });
+});
+
 function caseCard(k) {
   return `<li class="case-card">
     <div>${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span></div>
@@ -457,8 +616,7 @@ $("#client-list").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-client]");
   if (!btn) return;
   state.selectedClientId = Number(btn.dataset.client);
-  renderClientList();
-  guarded(renderClientDetail);
+  location.hash = `#cliente-${btn.dataset.client}`;
 });
 
 // ---------- Dialog helpers ----------
@@ -526,7 +684,9 @@ wireDialog($("#client-dialog"), async (form) => {
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
   state.selectedClientId = saved.id;
   toast(id ? "Cliente actualizado." : "Cliente creado.");
-  location.hash === "#clientes" ? await renderClientes() : (location.hash = "#clientes");
+  // The client's own screen opens (or refreshes) with the saved data.
+  const target = `#cliente-${saved.id}`;
+  location.hash === target ? await refreshView() : (location.hash = target);
 });
 
 // ---------- Expedientes ----------
@@ -779,7 +939,7 @@ wireDialog($("#case-dialog"), async (form) => {
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
   toast(d.id ? "Expediente actualizado." : "Expediente creado.");
-  await RENDER[location.hash.slice(1) || "inicio"]?.();
+  await refreshView();
 });
 
 // ---------- Configuración ----------
@@ -970,6 +1130,7 @@ document.addEventListener("click", (e) => {
       openDialog($("#password-dialog"), "Cambiar contraseña");
     },
     "new-sign": () => openSignDialog({}),
+    "sign-case": () => openSignDialog({ caseId: id }),
     "open-sign": () => openSignDetail(id),
     "new-mail": () => openMailDialog({}),
     "mail-case": () => openMailDialog({ caseId: Number(btn.dataset.case) }),
@@ -988,11 +1149,11 @@ document.addEventListener("click", (e) => {
     },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id)),
-    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como hecha."); await renderAgenda(); },
+    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como hecha."); await refreshView(); },
     "delete-task": async () => {
       if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
       await api("DELETE", `/tasks/${id}`);
-      await renderAgenda();
+      await refreshView();
     },
     "read-all": async () => { await api("POST", "/notifications/read", {}); await refreshBell(); },
     "view-acts": () => showActuaciones(id),
@@ -1025,14 +1186,14 @@ document.addEventListener("click", (e) => {
       await renderUsuarios();
     },
     "new-client": () => openClientDialog(null),
-    "edit-client": () => openClientDialog(state.clients.find((c) => c.id === id)),
+    "edit-client": async () => openClientDialog(state.clients.find((c) => c.id === id) || await api("GET", `/clients/${id}`)),
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
       await api("DELETE", `/clients/${id}`);
       state.selectedClientId = null;
       toast("Cliente eliminado.");
-      await renderClientes();
+      location.hash === "#clientes" ? await renderClientes() : (location.hash = "#clientes");
     },
     "new-case": () => openCaseDialog(null, btn.dataset.client ? Number(btn.dataset.client) : state.selectedClientId),
     "edit-case": async () => openCaseDialog(await api("GET", `/cases/${id}`)),
@@ -1042,7 +1203,8 @@ document.addEventListener("click", (e) => {
       if (!(await confirmAsk("¿Eliminar expediente?", `Se eliminará el expediente${which ? ` (${which})` : ""} con sus datos. Esta acción no se puede deshacer.`))) return;
       await api("DELETE", `/cases/${id}`);
       toast("Expediente eliminado.");
-      await renderExpedientes();
+      if (route().name === "expediente") { history.back(); return; }
+      await refreshView();
     },
     "draft-case": () => {
       pendingDraftCase = id;
@@ -2496,7 +2658,8 @@ wireDialog($("#sign-dialog"), async (form) => {
   const r = await api("POST", "/esign", body);
   const failed = (r.delivery || []).filter((d) => !d.ok);
   toast(failed.length ? `Solicitud creada, pero ${failed.length} enlace(s) no se enviaron: ${failed[0].detail}` : body.mode === "presencial" ? "Solicitud creada. Abra “Ver” para firmar en persona." : "Enlaces de firma enviados.", !!failed.length);
-  location.hash === "#firmas" ? await renderFirmas() : (location.hash = "#firmas");
+  if (FICHAS[route().name]) await refreshView();
+  else location.hash === "#firmas" ? await renderFirmas() : (location.hash = "#firmas");
 });
 
 async function openSignDetail(id) {
@@ -2625,7 +2788,8 @@ wireDialog($("#mail-dialog"), async (form) => {
   const d = formData(form);
   const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments, attach_mode: d.attach_mode });
   toast(`Correo enviado a ${m.to_addr}.`);
-  location.hash === "#correo" ? await renderCorreo() : (location.hash = "#correo");
+  if (FICHAS[route().name]) await refreshView();
+  else location.hash === "#correo" ? await renderCorreo() : (location.hash = "#correo");
 });
 
 // Consolidated evidence of a traced e-mail, as a PDF to present to a judge.
@@ -2777,7 +2941,7 @@ wireDialog($("#task-dialog"), async (form) => {
   if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
   toast(d.id ? "Guardado." : `${KIND_LABEL[d.kind]} creada.`);
   refreshBell();
-  await RENDER[location.hash.slice(1) || "inicio"]?.();
+  await refreshView();
 });
 
 // ---------- Consulta de procesos ----------
@@ -3123,7 +3287,7 @@ function chargePreview() {
 chargeForm.addEventListener("input", chargePreview);
 chargeForm.elements.client_id.addEventListener("change", () => guarded(() => fillChargeCases()));
 
-async function openChargeDialog(c = null, clientId = null) {
+async function openChargeDialog(c = null, clientId = null, caseId = null) {
   const dlg = $("#charge-dialog");
   await fillClientSelect(chargeForm.elements.client_id, c?.client_id ?? clientId ?? $("#pay-client").value);
   openDialog(dlg, c ? "Editar cobro" : "Nuevo cobro o plan de cuotas", c ? { id: c.id, concept: c.concept, amount: cop(c.amount), due_date: c.due_date, pay_link: c.pay_link, notes: c.notes }
@@ -3132,7 +3296,7 @@ async function openChargeDialog(c = null, clientId = null) {
   $("[data-plan]", dlg).hidden = !!c;
   $("[data-amount-label]", dlg).textContent = c ? "Valor *" : "Valor total *";
   $("[data-due-label]", dlg).textContent = c ? "Vencimiento *" : "Primer vencimiento *";
-  await fillChargeCases(c?.case_id);
+  await fillChargeCases(c?.case_id ?? caseId);
   chargeForm.elements.case_id.disabled = !!c;
   chargePreview();
 }
@@ -3145,7 +3309,8 @@ wireDialog($("#charge-dialog"), async (form) => {
     toast(out.ids.length > 1 ? `Plan creado: ${out.ids.length} cuotas.` : "Cobro creado.");
   }
   payTab = "cobros";
-  location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
+  if (FICHAS[route().name]) await refreshView();
+  else location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
 });
 
 // ----- Receipt dialog -----
@@ -3177,7 +3342,8 @@ wireDialog($("#receipt-dialog"), async (form) => {
     method: d.method, reference: d.reference, paid_on: d.paid_on, concept: d.concept, notes: d.notes });
   toast(`Recibo ${receiptNo(r.number)} registrado.`);
   payTab = "recibos";
-  location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
+  if (FICHAS[route().name]) await refreshView();
+  else location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
   if (await ask({ title: `Recibo ${receiptNo(r.number)}`, message: "¿Descargar el recibo en PDF para entregarlo al cliente?", okLabel: "Descargar PDF" })) {
     const full = (await api("GET", `/payments/receipts?clientId=${r.client_id}`)).find((x) => x.id === r.id);
     await downloadReceipt(full);
@@ -3316,7 +3482,7 @@ async function downloadStatement(clientId) {
 }
 
 const PAY_ACTIONS = {
-  "new-charge": (b) => openChargeDialog(null, Number(b.dataset.client) || null),
+  "new-charge": (b) => openChargeDialog(null, Number(b.dataset.client) || null, Number(b.dataset.case) || null),
   "new-receipt": (b) => openReceiptDialog(Number(b.dataset.client) || null, Number(b.dataset.charge) || null),
   "pay-settings": () => openPaySettings(),
   "edit-charge": async (b) => openChargeDialog(payChargesCache.find((c) => c.id === Number(b.dataset.id))),
