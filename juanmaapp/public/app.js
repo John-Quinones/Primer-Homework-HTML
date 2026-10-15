@@ -103,6 +103,8 @@ async function guarded(fn) {
 
 // ---------- Session & permissions ----------
 let me = null;
+// PDF building (text → PDF, signature certificate, stamped signed document): public/pdf-tools.js, shared with the signer page.
+const { markdownToPdf, signatureCertificate, signedPdf } = window.JuanmaPdf;
 let offices = [];
 let directory = [];
 const can = (perm) => !!me?.permissions.includes(perm);
@@ -1577,35 +1579,6 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- PDF from Markdown (drafts) ----------
-function markdownToPdf(md, { returnDoc = false } = {}) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const margin = 64, width = doc.internal.pageSize.getWidth() - margin * 2, bottom = doc.internal.pageSize.getHeight() - margin;
-  let y = margin;
-  const write = (text, { size = 11, bold = false, gap = 6, indent = 0 } = {}) => {
-    doc.setFont("times", bold ? "bold" : "normal");
-    doc.setFontSize(size);
-    for (const line of doc.splitTextToSize(text, width - indent)) {
-      if (y > bottom) { doc.addPage(); y = margin; }
-      doc.text(line, margin + indent, y);
-      y += size * 1.35;
-    }
-    y += gap;
-  };
-  const clean = (t) => t.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*(.+?)\*/g, "$1").replace(/`([^`]+)`/g, "$1");
-  for (const raw of md.split("\n")) {
-    const line = raw.trimEnd();
-    if (!line.trim()) { y += 4; continue; }
-    let m;
-    if ((m = line.match(/^(#{1,3})\s+(.*)/))) write(clean(m[2]), { size: [16, 13, 12][m[1].length - 1], bold: true, gap: 8 });
-    else if ((m = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/))) write("• " + clean(m[1]), { indent: 14, gap: 2 });
-    else if (/^\|/.test(line)) { if (!/^\|\s*-/.test(line)) write(clean(line.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).join("   ")), { gap: 2 }); }
-    else if (/^---+$/.test(line)) { doc.line(margin, y, margin + width, y); y += 12; }
-    else if (/^>\s?/.test(line)) write(clean(line.replace(/^>\s?/, "")), { indent: 14, gap: 4 });
-    else write(clean(line));
-  }
-  return returnDoc ? doc : doc.output("blob");
-}
 
 // ---------- Reportes ----------
 const REPORT_TYPES = {
@@ -2243,12 +2216,17 @@ function signerRow(v = {}) {
   div.innerHTML = `<input data-k="name" placeholder="Nombre completo" value="${escapeHtml(v.name || "")}" aria-label="Nombre del firmante" />
     <input data-k="id_number" placeholder="Documento" value="${escapeHtml(v.id_number || "")}" aria-label="Documento del firmante" />
     <input data-k="email" type="email" placeholder="Correo" value="${escapeHtml(v.email || "")}" aria-label="Correo del firmante" />
+    <input data-k="phone" inputmode="tel" placeholder="Celular" value="${escapeHtml(v.phone || "")}" aria-label="Celular del firmante" />
+    <select data-k="otp_channel" aria-label="Medio del código OTP" title="Por dónde recibe el código de verificación">
+      <option value="email">Código por correo</option><option value="sms">Código por SMS</option><option value="whatsapp">Código por WhatsApp</option>
+    </select>
     <button type="button" class="mini danger" data-rm aria-label="Quitar firmante">✕</button>`;
   return div;
 }
 $("#add-signer").addEventListener("click", () => $("#signer-rows").append(signerRow()));
 $("#signer-rows").addEventListener("click", (e) => { if (e.target.closest("[data-rm]")) e.target.closest(".signer-row").remove(); });
 signForm.addEventListener("change", (e) => {
+  if (e.target.name === "stamp_page") $("[data-stamp-num]", signForm).hidden = e.target.value !== "num";
   if (e.target.name === "source") {
     const pdf = e.target.value === "pdf";
     signForm.elements.doc_text.hidden = pdf;
@@ -2268,7 +2246,11 @@ async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   // The case's client is the usual first signer.
   const k = cases.find((x) => x.id === caseId);
   const c = k && (await api("GET", `/clients/${k.client_id}`).catch(() => null));
-  $("#signer-rows").append(signerRow(c ? { name: c.full_name, id_number: c.id_number, email: c.email } : {}));
+  $("#signer-rows").append(signerRow(c ? { name: c.full_name, id_number: c.id_number, email: c.email, phone: c.phone } : {}));
+  signForm.elements.stamp_page.value = "last";
+  signForm.elements.stamp_pos.value = "br";
+  signForm.elements.notify.checked = true;
+  $("[data-stamp-num]", signForm).hidden = true;
   if (window.JuanmaBackend?.esignRemote === false) signForm.elements.mode.value = "presencial";
 }
 
@@ -2280,10 +2262,13 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
 });
 
 wireDialog($("#sign-dialog"), async (form) => {
-  const signers = $$("#signer-rows .signer-row").map((row) => Object.fromEntries($$("input", row).map((i) => [i.dataset.k, i.value.trim()])))
-    .filter((x) => x.name || x.email);
+  const signers = $$("#signer-rows .signer-row").map((row) => Object.fromEntries($$("input, select", row).map((i) => [i.dataset.k, i.value.trim()])))
+    .filter((x) => x.name || x.email || x.phone);
+  const page = form.elements.stamp_page.value;
   const body = { title: form.elements.title.value, case_id: Number(form.elements.case_id.value) || null, signers,
-    message: form.elements.message.value, mode: form.elements.mode.value };
+    message: form.elements.message.value, mode: form.elements.mode.value,
+    stamp_page: page === "num" ? String(Math.max(1, Number(form.elements.stamp_num.value) || 1)) : page,
+    stamp_pos: form.elements.stamp_pos.value, notify: form.elements.notify.checked };
   if (form.elements.source.value === "pdf") {
     const f = form.elements.pdf.files[0];
     if (!f) throw new Error("Elija el archivo PDF.");
@@ -2305,11 +2290,11 @@ async function openSignDetail(id) {
   $("#sign-detail-body").innerHTML = `
     <ul class="signer-list">${r.signers.map((x) => `<li>
       <div><strong>${escapeHtml(x.name)}</strong> <span class="muted">${escapeHtml([x.id_type + " " + x.id_number, x.email].filter((v) => v.trim()).join(" · "))}</span></div>
-      <div>${x.status === "firmado" ? `<span class="badge ok">Firmó ${escapeHtml(x.signed_at)} UTC · ${x.method === "presencial" ? "en persona" : "enlace + código"}</span>
+      <div>${x.status === "firmado" ? `<span class="badge ok">Firmó ${escapeHtml(window.JuanmaPdf.colombiaTime(x.signed_at))} · ${x.method === "presencial" ? "en persona" : `enlace + código por ${({ sms: "SMS", whatsapp: "WhatsApp" })[x.otp_channel] || "correo"}`}</span>
         <img class="sig-img" src="${escapeHtml(x.signature_png)}" alt="Firma de ${escapeHtml(x.name)}" />`
         : x.status === "rechazado" ? `<span class="badge bad">No firmó: ${escapeHtml(x.reject_reason || "")}</span>`
         : `<span class="badge warn">Pendiente</span>${r.status === "enviada" ? `
-          ${x.email && window.JuanmaBackend?.esignRemote !== false ? `<button type="button" class="mini" data-sign-remind="${x.id}">Reenviar enlace</button>` : ""}
+          ${(x.email || x.phone) && window.JuanmaBackend?.esignRemote !== false ? `<button type="button" class="mini" data-sign-remind="${x.id}">Reenviar enlace</button>` : ""}
           <button type="button" class="mini" data-sign-inperson="${x.id}">Firmar en persona</button>` : ""}`}</div>
     </li>`).join("")}</ul>
     <details><summary>Registro de eventos (${r.events.length})</summary>
@@ -2317,6 +2302,7 @@ async function openSignDetail(id) {
     </details>`;
   $('[data-sign-out="cancel"]', dlg).hidden = r.status !== "enviada";
   $('[data-sign-out="doc"]', dlg).hidden = r.status !== "completada";
+  $('[data-sign-out="save"]', dlg).hidden = r.status !== "completada" || !r.case_id || !can("cases.write");
   if (!dlg.open) dlg.showModal();
 }
 
@@ -2341,13 +2327,14 @@ $("#sign-detail").addEventListener("click", (e) => {
       await renderFirmas();
     } else if (out === "cert") {
       await saveFile(`Certificado de firma - ${safeName(signCurrent.title)}.pdf`, signatureCertificate(signCurrent));
-    } else if (out === "doc") {
-      if (signCurrent.doc_kind === "pdf") {
-        const f = await api("GET", `/esign/${signCurrent.id}/pdf`);
-        await saveFile(signCurrent.doc_name || `${safeName(signCurrent.title)}.pdf`, new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
-        toast("El PDF original va junto con el certificado: la huella SHA-256 del certificado prueba que no cambió.");
-      } else {
-        await saveFile(`${safeName(signCurrent.title)} - firmado.pdf`, signedDocumentPdf(signCurrent));
+    } else if (out === "doc" || out === "save") {
+      const original = signCurrent.doc_kind === "pdf" ? D.b64ToBytes((await api("GET", `/esign/${signCurrent.id}/pdf`)).base64) : null;
+      const blob = await signedPdf(signCurrent, original);
+      const filename = `${safeName(signCurrent.title)} - firmado.pdf`;
+      if (out === "doc") await saveFile(filename, blob);
+      else {
+        await api("POST", `/cases/${signCurrent.case_id}/documents`, { name: `${signCurrent.title} (firmado)`, filename, file_base64: await blobToB64(blob) });
+        toast("Documento firmado guardado en el expediente (Expedientes → Documentos).");
       }
     }
   });
@@ -2364,67 +2351,6 @@ wireDialog($("#inperson-dialog"), async (form) => {
 });
 
 const safeName = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").trim().slice(0, 80) || "documento";
-
-// Certificate: document identity + each signature's evidence + audit trail.
-function signatureCertificate(r) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 48;
-  let y = M;
-  const line = (t, { size = 10, bold = false, color = [16, 16, 16], gap = 4 } = {}) => {
-    doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
-    for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > H - M) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.35; }
-    y += gap;
-  };
-  line("CERTIFICADO DE FIRMA ELECTRÓNICA", { size: 16, bold: true, color: [0, 43, 106] });
-  line(`Documento: ${r.title}`, { size: 11, bold: true });
-  line(`Estado: ${SIGN_STATUS[r.status][1]}${r.completed_at ? ` · completado ${r.completed_at} UTC` : ""}`);
-  line(`Huella del documento (SHA-256): ${r.doc_hash}`, { size: 9 });
-  line("La huella identifica el contenido exacto que se firmó: cualquier cambio en el documento produce una huella distinta.", { size: 8, color: [90, 90, 90], gap: 10 });
-  for (const x of r.signers) {
-    if (y > H - 190) { doc.addPage(); y = M; }
-    line(`${x.name} · ${x.id_type} ${x.id_number}`.trim(), { size: 11, bold: true });
-    if (x.status === "firmado") {
-      line(`Firmó: ${x.signed_at} UTC · Método: ${x.method === "presencial" ? "en persona, con testigo" : `enlace privado y código de un solo uso enviado a ${x.email}`}`);
-      line(`Nombre escrito: ${x.typed_name || ""} · IP: ${x.ip || "—"}`);
-      line(`Navegador: ${x.user_agent || "—"}`, { size: 8, color: [90, 90, 90] });
-      try { doc.addImage(x.signature_png, "PNG", M, y, 180, 60); } catch {}
-      doc.setDrawColor(150); doc.line(M, y + 62, M + 200, y + 62);
-      y += 78;
-    } else {
-      line(x.status === "rechazado" ? `No firmó: ${x.reject_reason || ""}` : "Pendiente de firma", { color: [168, 103, 10], gap: 10 });
-    }
-  }
-  if (y > H - 120) { doc.addPage(); y = M; }
-  line("Registro de eventos", { size: 12, bold: true, color: [0, 43, 106] });
-  for (const e of r.events) line(`${e.at} UTC · ${e.event.replace(/_/g, " ")}${e.detail ? " · " + e.detail : ""}${e.ip ? " · IP " + e.ip : ""}`, { size: 8, gap: 1 });
-  y += 8;
-  line("Firma electrónica con verificación de identidad por código de un solo uso, conforme a la Ley 527 de 1999 y el Decreto 2364 de 2012. Generado por TecjuridicosApp.", { size: 8, color: [90, 90, 90] });
-  return doc.output("blob");
-}
-
-// Text documents: the document followed by a signature page.
-function signedDocumentPdf(r) {
-  const { jsPDF } = window.jspdf;
-  const base = markdownToPdf(r.doc_text, { returnDoc: true });
-  const doc = base || new jsPDF({ unit: "pt", format: "letter" });
-  doc.addPage();
-  let y = 60;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(0, 43, 106);
-  doc.text("FIRMAS", 64, y); y += 24;
-  for (const x of r.signers.filter((s) => s.status === "firmado")) {
-    try { doc.addImage(x.signature_png, "PNG", 64, y, 180, 60); } catch {}
-    doc.setDrawColor(150); doc.line(64, y + 62, 280, y + 62);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(16, 16, 16);
-    doc.text(`${x.typed_name || x.name} · ${x.id_type} ${x.id_number}`.trim(), 64, y + 76);
-    doc.setFontSize(8); doc.setTextColor(90, 90, 90);
-    doc.text(`Firmado electrónicamente el ${x.signed_at} UTC`, 64, y + 88);
-    y += 112;
-  }
-  doc.setFontSize(8);
-  doc.text(doc.splitTextToSize(`Huella del documento (SHA-256): ${r.doc_hash}. Ver el certificado de firma para la evidencia completa.`, 480), 64, y);
-  return doc.output("blob");
-}
 
 // ---------- Correo con trazabilidad ----------
 let mailList = [], mailFiles = [];

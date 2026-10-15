@@ -387,8 +387,8 @@ button.mini { padding: 2px 8px; font-size: .74rem; }
 .base-note { background: color-mix(in srgb, var(--brand-blue) 8%, transparent); padding: 8px 10px; border-radius: 8px; }
 
 /* ---------- Signatures and traced e-mail ---------- */
-.signer-row { display: grid; grid-template-columns: 2fr 1fr 2fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
-.signer-row input { margin: 0; }
+.signer-row { display: grid; grid-template-columns: 2fr 1fr 2fr 1.2fr 1.4fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+.signer-row input, .signer-row select { margin: 0; min-width: 0; }
 .signer-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
 .signer-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
 .signer-list li > div:last-child { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

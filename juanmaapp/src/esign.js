@@ -1,11 +1,11 @@
-// Electronic signature with e-mailed one-time codes (OTP). Each signer gets a
+// Electronic signature with one-time codes (OTP) sent by e-mail, SMS or WhatsApp. Each signer gets a
 // private link; signing records the document's SHA-256, time, IP, browser,
 // typed name and drawn signature, and every step goes to an audit trail.
 // Signers can also sign in person on an office device.
 import express from "express";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { can, scopeOf } from "./auth.js";
-import { sendEmail } from "./notify.js";
+import { sendEmail, sendSms, sendWhatsapp, channelReady } from "./notify.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -22,26 +22,72 @@ function event(db, requestId, signerId, name, detail = "", ip = "") {
   db.prepare("INSERT INTO sign_events (request_id, signer_id, event, detail, ip) VALUES (?, ?, ?, ?, ?)").run(requestId, signerId, name, detail, ip);
 }
 
+const CHANNELS = ["email", "sms", "whatsapp"];
+const CHANNEL_LABEL = { email: "correo", sms: "SMS", whatsapp: "WhatsApp" };
+const maskEmail = (e) => String(e || "").replace(/^(.{2}).*(@.*)$/, "$1•••$2");
+const maskPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d ? `•••${d.slice(-4)}` : ""; };
+// Channels a signer can receive codes on: e-mail when they have one, SMS / WhatsApp when they have a phone and the server is set up for it.
+const otpChannels = (s) => CHANNELS.filter((c) => (c === "email" ? !!s.email : !!s.phone && channelReady(c)));
+
+/** Send a short text by the chosen channel (e-mail gets the HTML too). */
+async function deliver(channel, signer, subject, text, html) {
+  if (channel === "sms") return sendSms(signer.phone, text);
+  if (channel === "whatsapp") return sendWhatsapp(signer.phone, text);
+  return sendEmail(signer.email, subject, text, html);
+}
+
 async function sendLink(db, req, request, signer, token) {
   const link = `${publicUrl(req)}/firmar.html#${token}`;
-  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}\n\nAl firmar le enviaremos un código de verificación a este correo.\n\nTecjuridicosApp`;
+  const via = signer.email ? "email" : signer.otp_channel !== "email" ? signer.otp_channel : "email";
+  const codeVia = CHANNEL_LABEL[signer.otp_channel] || "correo";
+  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}\n\nAl firmar le enviaremos un código de verificación por ${codeVia}.\n\nTecjuridicosApp`;
   const html = `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(signer.name)}:</p><p>${esc(request.message || "Le enviamos un documento para su firma electrónica.")}</p>
     <p><strong>Documento:</strong> ${esc(request.title)}</p>
     <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Leer y firmar</a></p>
-    <p style="color:#666;font-size:12px">Al firmar le enviaremos un código de verificación a este correo. Si no esperaba este mensaje, ignórelo.</p></div>`;
-  const r = await sendEmail(signer.email, `Documento para firmar: ${request.title}`, text, html);
-  event(db, request.id, signer.id, r.ok ? "enlace_enviado" : "enlace_no_enviado", r.ok ? signer.email : r.detail);
+    <p style="color:#666;font-size:12px">Al firmar le enviaremos un código de verificación por ${esc(codeVia)}. Si no esperaba este mensaje, ignórelo.</p></div>`;
+  const r = await deliver(via, signer, `Documento para firmar: ${request.title}`, via === "email" ? text : `${request.title}: para leerlo y firmarlo abra ${link}`, html);
+  event(db, request.id, signer.id, r.ok ? "enlace_enviado" : "enlace_no_enviado", r.ok ? `${CHANNEL_LABEL[via]} ${via === "email" ? signer.email : maskPhone(signer.phone)}` : r.detail);
   return r;
+}
+
+// When everybody signed: each signer and whoever sent the document get an e-mail with a
+// fresh private link to download the signed document (stamps + certificate).
+async function notifyCompleted(db, req, requestId) {
+  const x = db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(requestId);
+  if (!x?.notify) return;
+  const subject = `Documento firmado por todos: ${x.title}`;
+  for (const s of db.prepare("SELECT * FROM sign_signers WHERE request_id = ?").all(requestId)) {
+    if (!s.email) continue;
+    const token = randomBytes(24).toString("base64url");
+    db.prepare("UPDATE sign_signers SET token_hash = ? WHERE id = ?").run(sha(token), s.id);
+    const link = `${publicUrl(req)}/firmar.html#${token}`;
+    const r = await sendEmail(s.email, subject,
+      `Hola ${s.name}:\n\nTodos los firmantes firmaron "${x.title}". Descargue el documento firmado, con las firmas estampadas y el certificado, en:\n${link}\n\nTecjuridicosApp`,
+      `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(s.name)}:</p><p>Todos los firmantes firmaron <strong>${esc(x.title)}</strong>.</p>
+       <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Descargar documento firmado</a></p>
+       <p style="color:#666;font-size:12px">El documento trae la estampa de cada firma y el certificado con la huella SHA-256 y el registro de eventos.</p></div>`);
+    event(db, x.id, s.id, r.ok ? "aviso_final_enviado" : "aviso_final_no_enviado", r.ok ? s.email : r.detail);
+  }
+  const owner = x.created_by && db.prepare("SELECT email, name FROM users WHERE id = ?").get(x.created_by);
+  if (owner?.email) await sendEmail(owner.email, subject, `Todos los firmantes firmaron "${x.title}". Descárguelo desde TecjuridicosApp → Firmas.`,
+    `<p>Todos los firmantes firmaron <strong>${esc(x.title)}</strong>. Descárguelo desde TecjuridicosApp → Firmas.</p>`);
+}
+
+async function notifyOwner(db, requestId, subject, text) {
+  const x = db.prepare("SELECT created_by, notify FROM sign_requests WHERE id = ?").get(requestId);
+  const owner = x?.notify && x.created_by && db.prepare("SELECT email FROM users WHERE id = ?").get(x.created_by);
+  if (owner?.email) await sendEmail(owner.email, subject, text, `<p>${esc(text)}</p>`);
 }
 
 const requestOut = (db, r) => {
   const signers = db.prepare(`SELECT id, name, id_type, id_number, email, phone, status, method, signed_at, ip, user_agent, typed_name,
-      signature_png, reject_reason, otp_sent_at FROM sign_signers WHERE request_id = ? ORDER BY id`).all(r.id).map((x) => ({ ...x }));
+      signature_png, reject_reason, otp_sent_at, otp_channel FROM sign_signers WHERE request_id = ? ORDER BY id`).all(r.id).map((x) => ({ ...x }));
   const events = db.prepare("SELECT * FROM sign_events WHERE request_id = ? ORDER BY id").all(r.id).map((x) => ({ ...x }));
   const { doc_file, ...rest } = r;
   return { ...rest, has_pdf: !!doc_file, signers, events };
 };
 
+/** Marks the request complete when nobody is pending; returns true then (the caller sends the e-mail notices). */
 function finishIfDone(db, requestId) {
   const pending = db.prepare("SELECT COUNT(*) AS n FROM sign_signers WHERE request_id = ? AND status != 'firmado'").get(requestId).n;
   if (!pending) {
@@ -52,7 +98,9 @@ function finishIfDone(db, requestId) {
       db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'firma', ?, ?, '#firmas')")
         .run(r.created_by, "Documento firmado por todos", r.title);
     }
+    return true;
   }
+  return false;
 }
 
 /** Staff routes (signed-in users with esign.use). */
@@ -85,12 +133,17 @@ export function esignRouter(db) {
     const b = req.body ?? {};
     const title = str(b.title);
     if (!title) return res.status(400).json({ error: "Escriba el nombre del documento." });
-    const signers = Array.isArray(b.signers) ? b.signers.map((s) => ({ name: str(s.name), id_type: str(s.id_type) || "CC", id_number: str(s.id_number), email: str(s.email).toLowerCase(), phone: str(s.phone) })) : [];
+    const signers = Array.isArray(b.signers) ? b.signers.map((s) => ({ name: str(s.name), id_type: str(s.id_type) || "CC", id_number: str(s.id_number),
+      email: str(s.email).toLowerCase(), phone: str(s.phone), otp_channel: CHANNELS.includes(s.otp_channel) ? s.otp_channel : "email" })) : [];
     if (!signers.length || signers.length > 10) return res.status(400).json({ error: "Agregue entre 1 y 10 firmantes." });
     const remote = b.mode !== "presencial";
     for (const s of signers) {
       if (!s.name) return res.status(400).json({ error: "Cada firmante necesita nombre." });
-      if (remote && !s.email.includes("@")) return res.status(400).json({ error: `Falta un correo válido para ${s.name}.` });
+      if (remote && s.otp_channel === "email" && !s.email.includes("@")) return res.status(400).json({ error: `Falta un correo válido para ${s.name}.` });
+      if (remote && s.otp_channel !== "email" && s.phone.replace(/\D/g, "").length < 10) return res.status(400).json({ error: `Falta el celular de ${s.name} para enviarle el código por ${CHANNEL_LABEL[s.otp_channel]}.` });
+      if (remote && s.otp_channel !== "email" && !channelReady(s.otp_channel)) {
+        return res.status(400).json({ error: `El servidor aún no tiene configurado el envío por ${CHANNEL_LABEL[s.otp_channel]}. Use correo o configure el canal.` });
+      }
     }
     let kind, text = null, file = null;
     if (b.doc_pdf_base64) {
@@ -112,14 +165,17 @@ export function esignRouter(db) {
     }
     officeId ||= req.user.offices[0]?.id ?? null;
     const hash = sha(file || Buffer.from(text, "utf8"));
-    const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id).lastInsertRowid;
+    const stampPage = /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last";
+    const stampPos = ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br";
+    const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by, stamp_page, stamp_pos, notify)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id,
+      stampPage, stampPos, b.notify === false ? 0 : 1).lastInsertRowid;
     event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
-    const ins = db.prepare("INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    const ins = db.prepare("INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, otp_channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     const delivery = [];
     for (const s of signers) {
       const token = randomBytes(24).toString("base64url");
-      const sid = ins.run(id, s.name, s.id_type, s.id_number, s.email, s.phone, sha(token)).lastInsertRowid;
+      const sid = ins.run(id, s.name, s.id_type, s.id_number, s.email, s.phone, sha(token), s.otp_channel).lastInsertRowid;
       if (remote) delivery.push(await sendLink(db, req, { id, title, message: str(b.message) }, { id: sid, ...s }, token));
     }
     res.status(201).json({ ...requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(id)), delivery });
@@ -156,8 +212,9 @@ export function esignRouter(db) {
       typed_name = ?, signature_png = ?, id_number = CASE WHEN ? != '' THEN ? ELSE id_number END WHERE id = ?`)
       .run(clientIp(req), String(req.get("user-agent") || "").slice(0, 300), str(b.typed_name), b.signature_png, str(b.id_number), str(b.id_number), s.id);
     event(db, x.id, s.id, "firmado_presencial", `Testigo: ${req.user.name} · SHA-256 ${x.doc_hash}`, clientIp(req));
-    finishIfDone(db, x.id);
+    const done = finishIfDone(db, x.id);
     res.json(requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(x.id)));
+    if (done) notifyCompleted(db, req, x.id).catch(() => {});
   });
 
   return r;
@@ -171,10 +228,25 @@ export function esignPublicRouter(db) {
     if (!s) return null;
     return { s, x: db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(s.request_id) };
   };
-  const view = ({ s, x }) => ({
-    title: x.title, message: x.message, doc_kind: x.doc_kind, doc_text: x.doc_text, doc_name: x.doc_name, doc_hash: x.doc_hash,
-    request_status: x.status, signer: { name: s.name, id_type: s.id_type, id_number: s.id_number, email: s.email.replace(/^(.{2}).*(@.*)$/, "$1•••$2"), status: s.status, signed_at: s.signed_at },
-  });
+  const view = ({ s, x }) => {
+    const v = {
+      title: x.title, message: x.message, doc_kind: x.doc_kind, doc_text: x.doc_text, doc_name: x.doc_name, doc_hash: x.doc_hash,
+      request_status: x.status,
+      signer: { name: s.name, id_type: s.id_type, id_number: s.id_number, email: maskEmail(s.email), phone: maskPhone(s.phone), status: s.status, signed_at: s.signed_at,
+        otp_channel: s.otp_channel, otp_channels: otpChannels(s) },
+    };
+    // Once everybody signed, the signer can download the signed document (stamps + certificate).
+    if (x.status === "completada") {
+      v.signed = {
+        id: x.id, title: x.title, status: x.status, completed_at: x.completed_at, doc_hash: x.doc_hash, doc_text: x.doc_text, stamp_page: x.stamp_page, stamp_pos: x.stamp_pos,
+        signers: db.prepare("SELECT * FROM sign_signers WHERE request_id = ? ORDER BY id").all(x.id).map((o) => ({
+          name: o.name, id_type: o.id_type, id_number: o.id_number, email: maskEmail(o.email), status: o.status, method: o.method, otp_channel: o.otp_channel,
+          signed_at: o.signed_at, typed_name: o.typed_name, signature_png: o.signature_png, ip: o.ip, user_agent: o.user_agent })),
+        events: db.prepare("SELECT at, event, detail, ip FROM sign_events WHERE request_id = ? ORDER BY id").all(x.id).map((e) => ({ ...e })),
+      };
+    }
+    return v;
+  };
 
   r.get("/:token", (req, res) => {
     const f = bySigner(req.params.token);
@@ -193,15 +265,19 @@ export function esignPublicRouter(db) {
     const f = bySigner(req.params.token);
     if (!f || f.s.status !== "pendiente" || f.x.status !== "enviada") return res.status(400).json({ error: "Este documento ya no está pendiente de su firma." });
     if (f.s.otp_sent_at && Date.parse(f.s.otp_sent_at.replace(" ", "T") + "Z") > Date.now() - 60000) return res.status(429).json({ error: "Espere un minuto antes de pedir otro código." });
+    const allowed = otpChannels(f.s);
+    const channel = allowed.includes(req.body?.channel) ? req.body.channel : allowed.includes(f.s.otp_channel) ? f.s.otp_channel : allowed[0];
+    if (!channel) return res.status(400).json({ error: "No hay un medio disponible para enviarle el código. Avise a quien le envió el documento." });
     const code = String(randomInt(0, 1000000)).padStart(6, "0");
-    db.prepare(`UPDATE sign_signers SET otp_hash = ?, otp_expires_at = datetime('now', '+${OTP_MINUTES} minutes'), otp_sent_at = datetime('now'), otp_attempts = 0 WHERE id = ?`)
-      .run(sha(`${f.s.id}:${code}`), f.s.id);
-    const out = await sendEmail(f.s.email, `Código para firmar: ${code}`,
-      `Su código para firmar "${f.x.title}" es ${code}. Vence en ${OTP_MINUTES} minutos. No lo comparta.`,
+    db.prepare(`UPDATE sign_signers SET otp_hash = ?, otp_expires_at = datetime('now', '+${OTP_MINUTES} minutes'), otp_sent_at = datetime('now'), otp_attempts = 0, otp_channel = ? WHERE id = ?`)
+      .run(sha(`${f.s.id}:${code}`), channel, f.s.id);
+    const text = `TecjuridicosApp: su código para firmar "${f.x.title.slice(0, 60)}" es ${code}. Vence en ${OTP_MINUTES} minutos. No lo comparta.`;
+    const out = await deliver(channel, f.s, `Código para firmar: ${code}`, text,
       `<p>Su código para firmar <strong>${esc(f.x.title)}</strong> es:</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>Vence en ${OTP_MINUTES} minutos. No lo comparta.</p>`);
-    event(db, f.x.id, f.s.id, out.ok ? "codigo_enviado" : "codigo_no_enviado", out.ok ? "" : out.detail, clientIp(req));
-    if (!out.ok) return res.status(502).json({ error: "No se pudo enviar el código. Avise a quien le envió el documento." });
-    res.json({ sent: true, minutes: OTP_MINUTES });
+    const to = channel === "email" ? maskEmail(f.s.email) : maskPhone(f.s.phone);
+    event(db, f.x.id, f.s.id, out.ok ? "codigo_enviado" : "codigo_no_enviado", out.ok ? `${CHANNEL_LABEL[channel]} ${to}` : out.detail, clientIp(req));
+    if (!out.ok) return res.status(502).json({ error: `No se pudo enviar el código por ${CHANNEL_LABEL[channel]}. Pruebe otro medio o avise a quien le envió el documento.` });
+    res.json({ sent: true, minutes: OTP_MINUTES, channel, to });
   });
 
   r.post("/:token/sign", (req, res) => {
@@ -223,9 +299,11 @@ export function esignPublicRouter(db) {
     db.prepare(`UPDATE sign_signers SET status = 'firmado', method = 'enlace_otp', signed_at = datetime('now'), ip = ?, user_agent = ?,
       typed_name = ?, signature_png = ?, otp_hash = NULL WHERE id = ?`)
       .run(clientIp(req), String(req.get("user-agent") || "").slice(0, 300), str(b.typed_name), b.signature_png, s.id);
-    event(db, f.x.id, s.id, "firmado", `OTP verificado en ${s.email} · SHA-256 ${f.x.doc_hash}`, clientIp(req));
-    finishIfDone(db, f.x.id);
+    const via = s.otp_channel === "email" ? `correo ${s.email}` : `${CHANNEL_LABEL[s.otp_channel]} ${maskPhone(s.phone)}`;
+    event(db, f.x.id, s.id, "firmado", `OTP verificado por ${via} · SHA-256 ${f.x.doc_hash}`, clientIp(req));
+    const done = finishIfDone(db, f.x.id);
     res.json(view(bySigner(req.params.token)));
+    if (done) notifyCompleted(db, req, f.x.id).catch(() => {});
   });
 
   r.post("/:token/reject", (req, res) => {
@@ -234,6 +312,7 @@ export function esignPublicRouter(db) {
     db.prepare("UPDATE sign_signers SET status = 'rechazado', reject_reason = ? WHERE id = ?").run(str(req.body?.reason).slice(0, 500), f.s.id);
     db.prepare("UPDATE sign_requests SET status = 'rechazada' WHERE id = ?").run(f.x.id);
     event(db, f.x.id, f.s.id, "rechazado", str(req.body?.reason).slice(0, 500), clientIp(req));
+    notifyOwner(db, f.x.id, `No firmó: ${f.x.title}`, `${f.s.name} decidió no firmar "${f.x.title}"${str(req.body?.reason) ? `: ${str(req.body.reason).slice(0, 300)}` : ""}.`).catch(() => {});
     res.json(view(bySigner(req.params.token)));
   });
 

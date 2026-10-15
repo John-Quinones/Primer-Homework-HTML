@@ -64,6 +64,8 @@
     }
     st.payset ||= null;
     for (const c of st.courts) if (c.circuit === undefined) c.circuit = CM.courtCircuit(c.name);
+    // Signature events carry their time in "at", as on the server.
+    for (const r of st.signs) for (const e of r.events || []) e.at ??= e.created_at;
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
@@ -341,7 +343,7 @@
     rama: "La consulta automática en la Rama Judicial necesita la app instalada en el servidor (este enlace no puede conectarse a sitios externos). Mientras tanto, use el botón «Portales» de cada expediente: copia el radicado y abre la Rama Judicial, Publicaciones Procesales, TYBA o SAMAI.",
     juris: "La búsqueda y verificación en las relatorías oficiales necesita la app instalada en el servidor (este enlace no puede abrir sitios externos). Aquí puede analizar una sentencia pegando su texto.",
     mail: "El envío de correos necesita la app instalada en el servidor con el correo de la firma configurado (SMTP).",
-    remote: "La firma por enlace con código al correo necesita la app instalada en el servidor. En este enlace use la firma presencial.",
+    remote: "La firma por enlace con código OTP (correo, SMS o WhatsApp) necesita la app instalada en el servidor. En este enlace use la firma presencial.",
   };
   const routes = [
     // ----- auth -----
@@ -929,7 +931,7 @@
   });
   const signVisible = (r) => inScope(r.office_id) || r.created_by === me().id;
   const getSign = (id) => s.signs.find((r) => r.id === id && signVisible(r)) || fail("La solicitud no existe.");
-  const signEvent = (r, signerId, event, detail = "") => r.events.push({ id: nextId(), request_id: r.id, signer_id: signerId, event, detail, ip: "", created_at: stamp() });
+  const signEvent = (r, signerId, event, detail = "") => r.events.push({ id: nextId(), request_id: r.id, signer_id: signerId, event, detail, ip: "", at: stamp(), created_at: stamp() });
   const sha256 = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
   const b64bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
@@ -946,7 +948,8 @@
       need("esign.use");
       b.mode !== "presencial" && fail(NEEDS_SERVER.remote);
       const title = str(b.title) || fail("Escriba el nombre del documento.");
-      const signers = (Array.isArray(b.signers) ? b.signers : []).map((x) => ({ name: str(x.name), id_type: str(x.id_type) || "CC", id_number: str(x.id_number), email: str(x.email).toLowerCase(), phone: str(x.phone) }));
+      const signers = (Array.isArray(b.signers) ? b.signers : []).map((x) => ({ name: str(x.name), id_type: str(x.id_type) || "CC", id_number: str(x.id_number),
+        email: str(x.email).toLowerCase(), phone: str(x.phone), otp_channel: ["email", "sms", "whatsapp"].includes(x.otp_channel) ? x.otp_channel : "email" }));
       (!signers.length || signers.length > 10) && fail("Agregue entre 1 y 10 firmantes.");
       signers.some((x) => !x.name) && fail("Cada firmante necesita nombre.");
       let kind, hash, pdf = null, text = null;
@@ -964,7 +967,9 @@
       if (b.case_id) officeId = visibleCase(+b.case_id).office_id;
       officeId ||= me().offices[0]?.id ?? null;
       const r = { id: nextId(), title, case_id: +b.case_id || null, office_id: officeId, doc_kind: kind, doc_name: str(b.doc_name), doc_hash: hash,
-        message: str(b.message), status: "enviada", created_by: me().id, created_at: stamp(), completed_at: null, signers: [], events: [] };
+        message: str(b.message), status: "enviada", created_by: me().id, created_at: stamp(), completed_at: null, signers: [], events: [],
+        stamp_page: /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last",
+        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br", notify: b.notify !== false };
       for (const x of signers) r.signers.push({ id: nextId(), ...x, status: "pendiente", method: null, signed_at: null, ip: "", user_agent: "", typed_name: "", reject_reason: null, otp_sent_at: null });
       if (pdf) s.blobs[`signpdf-${r.id}`] = pdf; else s.blobs[`signtxt-${r.id}`] = text;
       signEvent(r, null, "creada", `${me().name} · SHA-256 ${hash}`);

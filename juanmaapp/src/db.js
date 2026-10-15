@@ -460,6 +460,11 @@ function migrate(db) {
   add("saved_rulings", "created_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
   add("clients", "department", "TEXT NOT NULL DEFAULT ''");
   add("courts", "circuit", "TEXT NOT NULL DEFAULT ''");
+  // E-signature: OTP by e-mail, SMS or WhatsApp; where the signature stamp goes; e-mail notices (change 33).
+  add("sign_signers", "otp_channel", "TEXT NOT NULL DEFAULT 'email'");
+  add("sign_requests", "stamp_page", "TEXT NOT NULL DEFAULT 'last'");
+  add("sign_requests", "stamp_pos", "TEXT NOT NULL DEFAULT 'br'");
+  add("sign_requests", "notify", "INTEGER NOT NULL DEFAULT 1");
   // Circuit courts already loaded take their circuit from the name ("… del Circuito de Ibagué").
   const setCircuit = db.prepare("UPDATE courts SET circuit = ? WHERE id = ?");
   for (const c of db.prepare("SELECT id, name FROM courts WHERE circuit = ''").all()) {

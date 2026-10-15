@@ -862,10 +862,29 @@
       </fieldset>
       <div class="grid2">
         <label>Forma de firma
-          <select name="mode"><option value="remote">Enlace por correo con código OTP</option><option value="presencial">En persona, en este equipo</option></select>
+          <select name="mode"><option value="remote">Enlace privado con código OTP (correo, SMS o WhatsApp)</option><option value="presencial">En persona, en este equipo</option></select>
         </label>
         <label>Mensaje para los firmantes <input name="message" placeholder="Por favor revise y firme el documento." /></label>
       </div>
+      <fieldset><legend>Estampa de firma en el PDF</legend>
+        <div class="grid2">
+          <label>Página
+            <select name="stamp_page">
+              <option value="last">Última página</option><option value="first">Primera página</option><option value="all">Todas las páginas</option>
+              <option value="new">Página nueva al final (no tapa el texto)</option><option value="num">Página número…</option>
+            </select>
+          </label>
+          <label>Posición
+            <select name="stamp_pos">
+              <option value="br">Abajo a la derecha</option><option value="bc">Abajo al centro</option><option value="bl">Abajo a la izquierda</option>
+              <option value="tr">Arriba a la derecha</option><option value="tl">Arriba a la izquierda</option>
+            </select>
+          </label>
+          <label data-stamp-num hidden>Número de página <input name="stamp_num" type="number" min="1" max="999" value="1" /></label>
+        </div>
+        <p class="hint">Cada firmante queda estampado con su firma dibujada, nombre, documento, fecha y hora y el medio con que se verificó. Todas las páginas llevan al pie el número de la solicitud y la huella SHA-256, y al final va el certificado.</p>
+        <label class="inline"><input type="checkbox" name="notify" checked /> Notificar por correo a los firmantes cuando todos firmen (con el enlace para descargar el documento firmado) y avisarme si alguien no firma</label>
+      </fieldset>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -882,7 +901,8 @@
       <div id="sign-detail-body"></div>
       <div class="dialog-actions">
         <button type="button" data-sign-out="cert" class="primary">Descargar certificado (PDF)</button>
-        <button type="button" data-sign-out="doc">Descargar documento firmado</button>
+        <button type="button" data-sign-out="doc">Descargar documento firmado (PDF con estampas)</button>
+        <button type="button" data-sign-out="save">Guardar firmado en el expediente</button>
         <button type="button" data-sign-out="cancel" class="danger">Cancelar solicitud</button>
         <button value="cancel">Cerrar</button>
       </div>
@@ -1218,6 +1238,8 @@
   <script src="sigpad.js"></script>
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script src="pdf-tools.js"></script>
   <script src="shared.js"></script>
   <script src="help.js"></script>
   <script src="email-suggest.js"></script>

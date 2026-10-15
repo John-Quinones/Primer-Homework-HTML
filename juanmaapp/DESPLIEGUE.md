@@ -33,6 +33,10 @@ Esta guía usa Render porque el repositorio ya trae la configuración (`render.y
 
 Requiere una cuenta de WhatsApp Business en Meta con una plantilla aprobada de un parámetro. Agregue en Render `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` y `WHATSAPP_TEMPLATE`. Sin esto, los recordatorios se mandan con el botón "Abrir en WhatsApp", que abre el chat del cliente con el mensaje listo.
 
+### Código de firma por SMS (opcional)
+
+Para que los firmantes reciban el código OTP por mensaje de texto, cree una cuenta en Twilio (servicio pago por mensaje) y agregue `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_FROM` (el número o remitente de envío). El código por WhatsApp usa las mismas variables de WhatsApp de arriba. Sin estas variables, la firma funciona con el código por correo.
+
 ### Dominio propio (opcional)
 
 En Render → Settings → Custom Domains agregue, por ejemplo, `app.tecjuridicos.co` y cree el registro CNAME que Render indique. Luego cambie `PUBLIC_URL`.

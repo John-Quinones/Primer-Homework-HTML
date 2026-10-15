@@ -26,13 +26,21 @@
       <iframe id="doc-pdf" class="pdf-frame" title="Documento" hidden></iframe>
       <p class="hash">Huella del documento (SHA-256): <span id="hash"></span></p>
     </section>
+    <section id="done" class="panel" hidden>
+      <h3 class="panel-title">Documento firmado por todos</h3>
+      <p class="hint">Descargue el PDF con la estampa de cada firma, el pie de verificación en cada página y el certificado de firma al final.</p>
+      <button id="dl-signed" class="primary" type="button">Descargar documento firmado</button>
+    </section>
     <section id="sign" class="panel" hidden>
       <h3 class="panel-title">Firmar</h3>
       <ol class="hint">
-        <li>Pida el código: lo enviamos a <strong id="email"></strong>.</li>
+        <li>Elija por dónde recibir el código de verificación y pídalo.</li>
         <li>Escriba el código, su nombre y dibuje su firma.</li>
       </ol>
-      <button id="otp-btn" type="button">Enviarme el código</button>
+      <div class="toolbar">
+        <label>Recibir el código por <select id="otp-channel"></select></label>
+        <button id="otp-btn" type="button">Enviarme el código</button>
+      </div>
       <form id="sign-form">
         <div class="grid2">
           <label>Código de 6 dígitos <input name="otp" inputmode="numeric" maxlength="6" required autocomplete="one-time-code" /></label>
@@ -50,6 +58,9 @@
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
   <script src="sigpad.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script src="pdf-tools.js"></script>
   <script>
     const token = location.hash.slice(1);
     const $ = (s) => document.querySelector(s);
@@ -60,17 +71,21 @@
       return data;
     };
     const show = (text, err = false) => { const m = $("#msg"); m.hidden = !text; m.textContent = text || ""; m.classList.toggle("error", err); };
-    let pad;
+    let pad, signedData = null, pdfBytes = null;
     function render(v) {
       $("#doc").hidden = false;
       $("#title").textContent = v.title;
       $("#intro").textContent = v.message || `Documento para la firma de ${v.signer.name}.`;
       $("#hash").textContent = v.doc_hash;
-      $("#email").textContent = v.signer.email;
+      const label = { email: `Correo ${v.signer.email}`, sms: `SMS al celular ${v.signer.phone}`, whatsapp: `WhatsApp al celular ${v.signer.phone}` };
+      $("#otp-channel").innerHTML = (v.signer.otp_channels || ["email"]).map((c) => `<option value="${c}">${label[c]}</option>`).join("");
+      if ((v.signer.otp_channels || []).includes(v.signer.otp_channel)) $("#otp-channel").value = v.signer.otp_channel;
+      signedData = v.signed || null;
+      $("#done").hidden = !signedData;
       if (v.doc_kind === "markdown") $("#doc-text").innerHTML = DOMPurify.sanitize(marked.parse(v.doc_text || ""));
       const pending = v.signer.status === "pendiente" && v.request_status === "enviada";
       $("#sign").hidden = !pending;
-      if (!pending) show(v.signer.status === "firmado" ? `Firmado el ${v.signer.signed_at} (UTC). Gracias.` : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
+      if (!pending) show(v.signer.status === "firmado" ? `Firmado el ${JuanmaPdf.colombiaTime(v.signer.signed_at)}. Gracias.` : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
       if (pending && !pad) pad = JuanmaSigPad($("#pad"));
     }
     (async () => {
@@ -81,6 +96,7 @@
         if (v.doc_kind === "pdf") {
           const f = await call("GET", "/pdf");
           const bytes = Uint8Array.from(atob(f.base64), (c) => c.charCodeAt(0));
+          pdfBytes = bytes;
           const frame = $("#doc-pdf");
           frame.src = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
           frame.hidden = false;
@@ -88,9 +104,20 @@
       } catch (e) { show(e.message, true); }
     })();
     $("#otp-btn").addEventListener("click", async () => {
-      try { const r = await call("POST", "/otp", {}); show(`Le enviamos el código. Vence en ${r.minutes} minutos.`); } catch (e) { show(e.message, true); }
+      try {
+        const r = await call("POST", "/otp", { channel: $("#otp-channel").value });
+        const via = { email: "correo", sms: "SMS", whatsapp: "WhatsApp" }[r.channel] || "correo";
+        show(`Le enviamos el código por ${via} (${r.to}). Vence en ${r.minutes} minutos.`);
+      } catch (e) { show(e.message, true); }
     });
     $("#clear").addEventListener("click", () => pad.clear());
+    $("#dl-signed").addEventListener("click", async () => {
+      try {
+        const blob = await JuanmaPdf.signedPdf(signedData, pdfBytes);
+        const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${signedData.title.replace(/[^\w .-]+/g, "").trim() || "documento"} - firmado.pdf` });
+        document.body.append(a); a.click(); a.remove();
+      } catch (e) { show(`No se pudo armar el PDF: ${e.message}`, true); }
+    });
     $("#sign-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target, err = f.querySelector(".form-error");

@@ -67,6 +67,7 @@ export function createApp(db) {
   app.get("/vendor/write-excel-file.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/write-excel-file/bundle/write-excel-file.min.js")));
   app.get("/vendor/jspdf.umd.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf/dist/jspdf.umd.min.js")));
   app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js")));
+  app.get("/vendor/pdf-lib.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pdf-lib/dist/pdf-lib.min.js")));
   app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
   app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
   // Shared logic for the page (statuses, procedural roles, receivables math).

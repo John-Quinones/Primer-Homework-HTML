@@ -38,6 +38,8 @@ html = html
   .replace('<script src="vendor/jspdf.plugin.autotable.min.js"></script>', () => `<script>${safe(read("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js"))}</script>`)
   .replace('<script src="shared.js"></script>', () => `<script>${safe(SHARED_MODULES.map(([f, n]) => asGlobal(path.join(root, f), n)).join("\n"))}</script>`)
   .replace('<script src="citations.js"></script>', () => `<script>${safe(read("public/citations.js"))}</script>`)
+  .replace('<script src="vendor/pdf-lib.min.js"></script>', () => `<script>${safe(read("node_modules/pdf-lib/dist/pdf-lib.min.js"))}</script>`)
+  .replace('<script src="pdf-tools.js"></script>', () => `<script>${safe(read("public/pdf-tools.js"))}</script>`)
   .replace('<script src="help.js"></script>', () => `<script>${safe(read("public/help.js"))}</script>`)
   .replace('<script src="email-suggest.js"></script>', () => `<script>${safe(read("public/email-suggest.js"))}</script>`)
   .replace('<script src="app.js"></script>', () => [

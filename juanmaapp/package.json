@@ -22,6 +22,7 @@
     "jspdf-autotable": "5.0.8",
     "marked": "^12.0.2",
     "nodemailer": "10.0.10",
+    "pdf-lib": "1.17.1",
     "pizzip": "3.2.0",
     "read-excel-file": "9.3.10",
     "write-excel-file": "4.1.1"
