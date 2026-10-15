@@ -572,3 +572,10 @@ tr.voided td:not(:last-child) { text-decoration: line-through; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .ms-button { justify-content: center; gap: 10px; padding: 11px 12px; font-size: .95rem; font-weight: 600; background: var(--surface); }
 .ms-button:hover { border-color: var(--brand-blue); }
+
+/* ---------- Version (numbered change) ---------- */
+.app-version { margin: 6px 0 0; font-size: .72rem; letter-spacing: .04em; color: var(--text-muted); text-align: center; }
+.auth-card .app-version { color: rgba(255, 255, 255, .6); }
+.nav-version { margin-top: auto; padding: 14px 10px 4px; color: rgba(255, 255, 255, .55); text-align: left; }
+.auth-card .app-version { margin: -14px 0 18px; }
+@media (max-width: 760px) { .nav-version { margin: 0; padding: 8px 12px; white-space: nowrap; align-self: center; } }

@@ -10,6 +10,7 @@ import { REPORTS } from "../src/reports.js";
 import { AREAS } from "../src/places.js";
 import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES } from "../src/templates-seed.js";
 import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
+import { readVersion } from "../src/version.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(path.join(root, p), "utf8");
@@ -43,6 +44,7 @@ window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, 
 window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
 window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
 window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES })};</script>`,
+    `<script>window.JUANMA_VERSION = ${JSON.stringify(readVersion())};</script>`,
     `<script>window.JUANMA_PROMPT = ${JSON.stringify(read("prompts/nomosai-system-prompt.md"))};</script>`,
     `<script>${safe(read("public/web-store.js"))}</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,

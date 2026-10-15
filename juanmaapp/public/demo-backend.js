@@ -332,7 +332,7 @@
     // ----- auth -----
     ["GET", /^\/auth\/status$/, () => {
       const u = s.users.find((x) => x.id === currentId && x.active);
-      return { setupNeeded: !s.users.length, user: u ? userOut(u) : null };
+      return { setupNeeded: !s.users.length, user: u ? userOut(u) : null, version: window.JUANMA_VERSION || null };
     }],
     ["POST", /^\/auth\/setup$/, (m, b) => {
       s.users.length && fail("La app ya está configurada.");

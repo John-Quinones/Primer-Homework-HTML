@@ -4,6 +4,7 @@
 // cannot send, so the cookie alone cannot be used for CSRF.
 import express from "express";
 import { microsoftEnabled } from "./microsoft.js";
+import { VERSION } from "./version.js";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { canonicalDepartment, canonicalCity } from "./places.js";
 
@@ -144,7 +145,7 @@ export function authRouter(db) {
 
   r.get("/status", (req, res) => {
     const hasUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0;
-    res.json({ setupNeeded: !hasUsers, user: req.user || null, microsoft: microsoftEnabled() });
+    res.json({ setupNeeded: !hasUsers, user: req.user || null, microsoft: microsoftEnabled(), version: VERSION });
   });
 
   // First run only: create the Gerencia account.

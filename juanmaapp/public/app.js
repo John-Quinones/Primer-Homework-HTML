@@ -164,6 +164,10 @@ let authInfo = {};
 async function boot() {
   const st = await api("GET", "/auth/status");
   authInfo = st;
+  // Which numbered change of the project is running (see CAMBIOS.md).
+  const v = st.version || {};
+  const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
+  $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
   if (st.user) await enterApp(st.user, { fresh: false });
   else showAuth(st);
 }

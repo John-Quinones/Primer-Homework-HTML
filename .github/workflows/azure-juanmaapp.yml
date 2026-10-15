@@ -22,6 +22,8 @@ jobs:
         working-directory: juanmaapp
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history: the change number counts every commit to juanmaapp/
 
       - uses: actions/setup-node@v4
         with:
@@ -34,8 +36,10 @@ jobs:
 
       - name: Package (production dependencies only; the database lives in /home/data, not in the package)
         run: |
+          echo "{\"change\": $(git rev-list --count HEAD -- .), \"sha\": \"$(git rev-parse --short HEAD)\", \"date\": \"$(git log -1 --format=%cs)\"}" > public/version.json
+          cat public/version.json
           npm prune --omit=dev
-          zip -qr ../juanmaapp.zip . -x "preview/*" "test/*" "data/*" "scripts/*" "README.md" "DESPLIEGUE.md" "AZURE.md"
+          zip -qr ../juanmaapp.zip . -x "preview/*" "test/*" "data/*" "scripts/*" "README.md" "DESPLIEGUE.md" "AZURE.md" "CAMBIOS.md"
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
