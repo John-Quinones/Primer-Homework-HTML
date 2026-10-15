@@ -115,6 +115,77 @@ En el App Service (`juanmaapp-tec`):
    - Los roles, oficinas y permisos se manejan en TecjuridicosApp, no en Microsoft.
 4. Pase sus datos del enlace de prueba: en **Reportes** exporte Clientes y Expedientes a Excel, y cárguelos en **Importar**. También puede importar directamente el Excel de su servidor anterior.
 
+## Paso 6. Correo de la app con Microsoft 365
+
+La app envía los correos (correo con trazabilidad, avisos de firma, códigos, recordatorios, recuperar contraseña) desde un buzón de la firma, por ejemplo `notificaciones@tecjuridicos.com`, usando **Microsoft Graph**. No se usa la contraseña del buzón: Microsoft desactiva por defecto el envío por SMTP con contraseña desde diciembre de 2026.
+
+1. **Buzón remitente.** En el Centro de administración de Microsoft 365 cree (o elija) el buzón que enviará, por ejemplo `notificaciones@tecjuridicos.com`. Un buzón compartido sirve y no necesita licencia.
+2. **Permiso de envío solo desde ese buzón** (RBAC para aplicaciones de Exchange Online; así la app no puede enviar desde ningún otro buzón de la firma). No agregue el permiso Mail.Send en Entra ID: lo concede Exchange, limitado al buzón.
+   - En Azure, **Microsoft Entra ID → Aplicaciones empresariales → TecjuridicosApp**: copie el **Id. de objeto** (no el de la aplicación).
+   - En un equipo con Windows abra **PowerShell** y ejecute con una cuenta de administrador (reemplace `ID-DE-OBJETO`):
+
+   ```powershell
+   Install-Module ExchangeOnlineManagement -Scope CurrentUser
+   Connect-ExchangeOnline
+   New-ServicePrincipal -AppId 4ca48475-6f07-4d8d-8978-e57e933884a3 -ObjectId ID-DE-OBJETO -DisplayName "TecjuridicosApp"
+   New-ManagementScope -Name "TecjuridicosApp buzon de envio" -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'notificaciones@tecjuridicos.com'"
+   New-ManagementRoleAssignment -App 4ca48475-6f07-4d8d-8978-e57e933884a3 -Role "Application Mail.Send" -CustomResourceScope "TecjuridicosApp buzon de envio"
+   Test-ServicePrincipalAuthorization -Identity 4ca48475-6f07-4d8d-8978-e57e933884a3 -Resource notificaciones@tecjuridicos.com
+   ```
+
+   La última línea debe mostrar `InScope : True` para el rol Application Mail.Send. El permiso puede tardar hasta una hora en aplicarse.
+3. **Comprobar** que en **Registros de aplicaciones → TecjuridicosApp → Permisos de API** no aparezca Mail.Send de aplicación: si estuviera concedido allí, valdría para todos los buzones.
+4. **Configuración de la aplicación web.** En **juanmaapp-tec → Configuración → Variables de entorno**, agregue:
+
+   | Nombre | Valor |
+   |---|---|
+   | `MAIL_TRANSPORT` | `graph` |
+   | `MAIL_FROM` | `notificaciones@tecjuridicos.com` |
+
+   (`MS_TENANT_ID`, `MS_CLIENT_ID` y `MS_CLIENT_SECRET` ya están del Paso 3.) Pulse **Aplicar** y **Confirmar**; la app se reinicia.
+5. **Probar.** Entre como Gerencia → **Configuración** → **Canales de envío** → escriba su correo → **Enviar correo de prueba**.
+
+Límite: Microsoft 365 recibe mensajes de hasta unos 3 MB con anexos por esta vía. Si un correo con trazabilidad lo supera, la app envía los anexos como enlaces de descarga (y registra cada descarga).
+
+## Paso 7. WhatsApp (avisos, recordatorios y códigos de firma)
+
+Se usa la **API de WhatsApp Business de Meta** (Cloud API). Meta cobra por conversación según la categoría de la plantilla.
+
+1. **Cuenta.** En [business.facebook.com](https://business.facebook.com) cree o use el portafolio comercial de TEC Jurídicos y verifique la empresa. En [developers.facebook.com](https://developers.facebook.com) → **Mis apps → Crear app → Otro → Empresa** → agregue el producto **WhatsApp**.
+2. **Número.** En **WhatsApp → Configuración de la API** agregue el número de la firma (no puede estar activo al mismo tiempo en la app de WhatsApp del celular) y verifíquelo con el código. Copie el **Identificador del número de teléfono** (Phone number ID).
+3. **Token permanente.** En el portafolio comercial → **Configuración → Usuarios del sistema → Agregar** (rol administrador) → **Asignar activos**: la app y la cuenta de WhatsApp → **Generar token** con los permisos `whatsapp_business_messaging` y `whatsapp_business_management`, sin vencimiento. Guárdelo: solo se muestra una vez.
+4. **Plantillas.** En **WhatsApp Manager → Plantillas de mensaje → Crear plantilla**:
+
+   **a) Avisos y recordatorios**
+   - Categoría: **Utilidad**. Nombre: `tecjuridicos_aviso`. Idioma: **Español**.
+   - Cuerpo:
+
+     ```
+     TEC Jurídicos le informa: {{1}}
+
+     Si tiene preguntas, responda a este mensaje.
+     ```
+   - Ejemplo para `{{1}}`: `su cuota de honorarios por $ 500.000 vence el 30 de octubre de 2026.`
+
+   **b) Códigos de firma electrónica**
+   - Categoría: **Autenticación**. Nombre: `tecjuridicos_codigo`. Idioma: **Español**.
+   - Entrega del código: **Copiar código**. Marque «Agregar recomendación de seguridad» y vencimiento de **10 minutos**.
+   - Meta escribe el texto: «*123456* es tu código de verificación…».
+
+   Envíe ambas a revisión; la aprobación suele tardar desde minutos hasta 24 horas.
+5. **Configuración de la aplicación web.** Agregue en **Variables de entorno**:
+
+   | Nombre | Valor |
+   |---|---|
+   | `WHATSAPP_TOKEN` | el token permanente del punto 3 |
+   | `WHATSAPP_PHONE_ID` | el identificador del número del punto 2 |
+   | `WHATSAPP_TEMPLATE` | `tecjuridicos_aviso` |
+   | `WHATSAPP_TEMPLATE_OTP` | `tecjuridicos_codigo` |
+   | `WHATSAPP_LANG` | `es` |
+6. **Probar.** **Configuración → Canales de envío** → escriba un celular → **Enviar WhatsApp de prueba**.
+
+Los SMS no se usan.
+
 ## Datos y copias de seguridad
 
 - La base de datos queda en `/home/data/juanmaapp.db`, en el almacenamiento permanente de la app. No se borra al reiniciar ni al publicar versiones nuevas.

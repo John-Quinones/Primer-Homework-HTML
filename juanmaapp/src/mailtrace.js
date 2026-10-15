@@ -11,7 +11,7 @@ import express from "express";
 import { createHash, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { scopeOf } from "./auth.js";
-import { channelsStatus } from "./notify.js";
+import { mailTransport, GRAPH_MAX_MIME } from "./notify.js";
 import { publicUrl } from "./esign.js";
 import { stamp } from "./tsa.js";
 
@@ -38,12 +38,7 @@ let transportOverride = null;
 /** Tests replace the SMTP transport. */
 export function setMailTransport(t) { transportOverride = t; }
 function transport() {
-  if (transportOverride) return transportOverride;
-  if (!channelsStatus().email) return null;
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 587, secure: process.env.SMTP_SECURE === "1",
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-  });
+  return transportOverride || mailTransport();
 }
 
 const out = (db, m) => ({
@@ -102,7 +97,7 @@ export function mailRouter(db) {
     const token = randomBytes(24).toString("base64url");
     const base = publicUrl(req);
     // "adjunto": files attached and also offered as tracked links; "enlace": only links (every download is recorded).
-    const mode = b.attach_mode === "enlace" && files.length ? "enlace" : "adjunto";
+    let mode = b.attach_mode === "enlace" && files.length ? "enlace" : "adjunto";
     const fileDigests = files.map((f) => digests(f.data));
     const hashes = fileDigests.map((d) => d.sha256);
     const contentHash = sha(JSON.stringify({ to, cc, subject, body, attachments: hashes }));
@@ -122,8 +117,14 @@ export function mailRouter(db) {
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
       attachments: mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [],
     };
-    const built = await composer.sendMail(mail);
-    const raw = Buffer.from(built.message);
+    let raw = Buffer.from((await composer.sendMail(mail)).message);
+    // Microsoft 365 takes about 3 MB per message: larger attachments travel as tracked links.
+    if (t.graph && raw.length > GRAPH_MAX_MIME && mail.attachments.length) {
+      mail.attachments = [];
+      mode = "enlace";
+      mail.html = mail.html.replace("<strong>Anexos:</strong>", "<strong>Anexos (descárguelos con estos enlaces):</strong>");
+      raw = Buffer.from((await composer.sendMail(mail)).message);
+    }
     const rawDigests = digests(raw);
     const messageId = (raw.toString("latin1").match(/^Message-ID:\s*(<[^>]+>)/im) || [])[1] || "";
     let status = "enviado", info = {}, response = "";

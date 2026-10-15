@@ -384,6 +384,8 @@
     }],
     ["POST", /^\/auth\/logout$/, () => { setCurrent(null); return null; }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
+    ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
+    ["POST", /^\/admin\/test-channel$/, () => fail("En el enlace de prueba no se envían mensajes: pruebe desde la app en Azure.")],
     ["POST", /^\/auth\/(forgot|reset)$/, () => fail("En el enlace de prueba no hay contraseñas: se entra eligiendo el usuario. Recuperar la contraseña funciona en la app instalada.")],
     ["POST", /^\/auth\/email$/, (m, b) => {
       const u = s.users.find((x) => x.id === currentId) || fail("Inicie sesión.");

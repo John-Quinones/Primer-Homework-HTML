@@ -5,7 +5,7 @@
 import express from "express";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { can, scopeOf } from "./auth.js";
-import { sendEmail, sendSms, sendWhatsapp, channelReady } from "./notify.js";
+import { sendEmail, sendSms, sendWhatsapp, sendWhatsappCode, channelReady } from "./notify.js";
 import { buildSignedPdf } from "./signed-pdf.js";
 import { newVerifyCode, normVerifyCode } from "./verify-code.js";
 
@@ -32,9 +32,9 @@ const maskPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return 
 const otpChannels = (s) => CHANNELS.filter((c) => (c === "email" ? !!s.email : !!s.phone && channelReady(c)));
 
 /** Send a short text by the chosen channel (e-mail gets the HTML too). */
-async function deliver(channel, signer, subject, text, html) {
+async function deliver(channel, signer, subject, text, html, code = null) {
   if (channel === "sms") return sendSms(signer.phone, text);
-  if (channel === "whatsapp") return sendWhatsapp(signer.phone, text);
+  if (channel === "whatsapp") return code ? sendWhatsappCode(signer.phone, code, text) : sendWhatsapp(signer.phone, text);
   return sendEmail(signer.email, subject, text, html);
 }
 
@@ -341,7 +341,7 @@ export function esignPublicRouter(db) {
       .run(sha(`${f.s.id}:${code}`), channel, f.s.id);
     const text = `TecjuridicosApp: su código para firmar "${f.x.title.slice(0, 60)}" es ${code}. Vence en ${OTP_MINUTES} minutos. No lo comparta.`;
     const out = await deliver(channel, f.s, `Código para firmar: ${code}`, text,
-      `<p>Su código para firmar <strong>${esc(f.x.title)}</strong> es:</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>Vence en ${OTP_MINUTES} minutos. No lo comparta.</p>`);
+      `<p>Su código para firmar <strong>${esc(f.x.title)}</strong> es:</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>Vence en ${OTP_MINUTES} minutos. No lo comparta.</p>`, code);
     const to = channel === "email" ? maskEmail(f.s.email) : maskPhone(f.s.phone);
     event(db, f.x.id, f.s.id, out.ok ? "codigo_enviado" : "codigo_no_enviado", out.ok ? `${CHANNEL_LABEL[channel]} ${to}` : out.detail, clientIp(req));
     if (!out.ok) return res.status(502).json({ error: `No se pudo enviar el código por ${CHANNEL_LABEL[channel]}. Pruebe otro medio o avise a quien le envió el documento.` });

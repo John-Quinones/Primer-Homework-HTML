@@ -7,7 +7,7 @@ import { microsoftEnabled } from "./microsoft.js";
 import { VERSION } from "./version.js";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { canonicalDepartment, canonicalCity } from "./places.js";
-import { sendEmail } from "./notify.js";
+import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 
 // Built-in roles; the firm can add more in Usuarios › Roles y permisos.
 export const ROLES = [
@@ -264,6 +264,23 @@ export function authRouter(db) {
 export function adminRouter(db) {
   const r = express.Router();
   const manage = requirePerm("users.manage");
+
+  // ----- Delivery channels: status and a test message -----
+  r.get("/channels", manage, (req, res) => {
+    const c = channelsStatus();
+    res.json({ ...c, from: process.env.MAIL_FROM || "", whatsapp_template: process.env.WHATSAPP_TEMPLATE || "", whatsapp_template_otp: process.env.WHATSAPP_TEMPLATE_OTP || "",
+      whatsapp_lang: process.env.WHATSAPP_LANG || "es" });
+  });
+  r.post("/test-channel", manage, async (req, res) => {
+    const to = str(req.body?.to);
+    if (req.body?.channel === "whatsapp") {
+      if (to.replace(/\D/g, "").length < 10) return res.status(400).json({ error: "Escriba el celular para la prueba." });
+      return res.json(await sendWhatsapp(to, `Mensaje de prueba de TecjuridicosApp enviado por ${req.user.name}. Si lo recibe, WhatsApp quedó configurado.`));
+    }
+    if (!to.includes("@")) return res.status(400).json({ error: "Escriba el correo para la prueba." });
+    res.json(await sendEmail(to, "Prueba de correo · TecjuridicosApp", `Mensaje de prueba enviado por ${req.user.name}. Si lo recibe, el correo de la app quedó configurado.`,
+      `<p>Mensaje de prueba enviado por <strong>${req.user.name.replace(/[<>&]/g, "")}</strong>. Si lo recibe, el correo de la app quedó configurado.</p>`));
+  });
 
   // ----- Offices -----
   const officeOut = (o) => ({ ...o, is_main: !!o.is_main });

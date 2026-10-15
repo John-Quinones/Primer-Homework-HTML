@@ -771,7 +771,22 @@ wireDialog($("#case-dialog"), async (form) => {
 // ---------- Configuración ----------
 const FIELD_TYPE_LABELS = { text: "Texto", textarea: "Texto largo", number: "Número", date: "Fecha", select: "Lista" };
 
+// Delivery channels: what the server is set up with, and a test message (Gerencia).
+async function renderChannels() {
+  const panel = $("#channels-panel");
+  panel.hidden = !can("users.manage");
+  if (panel.hidden) return;
+  const c = await api("GET", "/admin/channels");
+  const row = (ok, label, detail) => `<li><span class="badge ${ok ? "ok" : "warn"}">${ok ? "Listo" : "Falta configurar"}</span> <strong>${escapeHtml(label)}</strong> <span class="muted">${escapeHtml(detail)}</span></li>`;
+  $("#channels-status").innerHTML = c.web ? "<li class=\"muted\">En el enlace de prueba no se envían correos ni WhatsApp: los canales se configuran en el servidor (Azure).</li>"
+    : [row(c.email, "Correo", c.email ? `${c.email_via} · remitente ${c.from}` : "MAIL_TRANSPORT=graph y MAIL_FROM (Microsoft 365), o SMTP_HOST"),
+      row(c.whatsapp, "WhatsApp: avisos y recordatorios", c.whatsapp ? `plantilla «${c.whatsapp_template}» · idioma ${c.whatsapp_lang}` : "WHATSAPP_TOKEN, WHATSAPP_PHONE_ID y WHATSAPP_TEMPLATE"),
+      row(c.whatsapp_otp, "WhatsApp: códigos de firma", c.whatsapp_otp ? `plantilla de autenticación «${c.whatsapp_template_otp}»` : "WHATSAPP_TEMPLATE_OTP (plantilla de autenticación)")].join("");
+  $$("[data-action=test-email], [data-action=test-whatsapp], #channel-test-to").forEach((el) => (el.disabled = !!c.web));
+}
+
 async function renderConfiguracion() {
+  renderChannels().catch(() => {});
   await loadCatalog();
   const open = new Set($$("#catalog details[open]").map((d) => d.dataset.cat));
   const arrows = (kind, id, first, last) => `<span class="order-btns">
@@ -920,6 +935,14 @@ document.addEventListener("click", (e) => {
       await api("POST", "/auth/logout");
       $(".user-menu").open = false;
       showAuth({});
+    },
+    "test-email": async () => {
+      const r = await api("POST", "/admin/test-channel", { channel: "email", to: $("#channel-test-to").value });
+      $("#channel-test-result").textContent = r.ok ? `Correo de prueba enviado a ${r.detail}. Revise la bandeja (y el correo no deseado).` : `No se envió: ${r.detail}`;
+    },
+    "test-whatsapp": async () => {
+      const r = await api("POST", "/admin/test-channel", { channel: "whatsapp", to: $("#channel-test-to").value });
+      $("#channel-test-result").textContent = r.ok ? `WhatsApp de prueba enviado a ${r.detail}.` : `No se envió: ${r.detail}`;
     },
     "display-prefs": () => openPrefs(),
     "change-email": () => openDialog($("#email-dialog"), "Cambiar correo", { email: me?.email || "" }),
@@ -2361,7 +2384,7 @@ function signerRow(v = {}) {
     <input data-k="email" type="email" placeholder="Correo" value="${escapeHtml(v.email || "")}" aria-label="Correo del firmante" />
     <input data-k="phone" inputmode="tel" placeholder="Celular" value="${escapeHtml(v.phone || "")}" aria-label="Celular del firmante" />
     <select data-k="otp_channel" aria-label="Medio del código OTP" title="Por dónde recibe el código de verificación">
-      <option value="email">Código por correo</option><option value="sms">Código por SMS</option><option value="whatsapp">Código por WhatsApp</option>
+      <option value="email">Código por correo</option><option value="whatsapp">Código por WhatsApp</option>
     </select>
     <button type="button" class="mini danger" data-rm aria-label="Quitar firmante">✕</button>`;
   return div;

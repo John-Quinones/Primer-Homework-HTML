@@ -717,6 +717,16 @@
         </div>
         <p class="hint">Cada tipo de proceso agrupa sus subprocesos y los campos propios que se llenan en cada expediente.</p>
         <div id="catalog" class="catalog"></div>
+        <div class="panel" id="channels-panel" hidden>
+          <h3 class="panel-title">Canales de envío (correo y WhatsApp)</h3>
+          <ul id="channels-status" class="channel-list"></ul>
+          <div class="toolbar">
+            <input id="channel-test-to" placeholder="Correo o celular para la prueba" autocomplete="off" />
+            <button type="button" data-action="test-email">Enviar correo de prueba</button>
+            <button type="button" data-action="test-whatsapp">Enviar WhatsApp de prueba</button>
+          </div>
+          <p class="hint" id="channel-test-result"></p>
+        </div>
       </section>
     </main>
   </div>
