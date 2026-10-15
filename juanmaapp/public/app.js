@@ -933,8 +933,16 @@ document.addEventListener("click", (e) => {
     "mail-case": () => openMailDialog({ caseId: Number(btn.dataset.case) }),
     "mail-court": () => openMailDialog({ to: btn.dataset.to }),
     "mail-proof": async () => {
-      const m = mailList.find((x) => x.id === id);
+      const m = await api("GET", `/mail/${id}`);
       await saveFile(`Constancia de envio - ${safeName(m.subject)}.pdf`, mailProof(m));
+    },
+    "mail-eml": async () => {
+      const f = await api("GET", `/mail/${id}/eml`);
+      await saveFile(`Correo ${id} - mensaje original.eml`, new Blob([D.b64ToBytes(f.base64)], { type: "message/rfc822" }));
+    },
+    "mail-tsr": async () => {
+      const f = await api("GET", `/mail/${id}/tsr`);
+      await saveFile(`Correo ${id} - sello de tiempo.tsr`, new Blob([D.b64ToBytes(f.base64)], { type: "application/timestamp-reply" }));
     },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id)),
@@ -2472,7 +2480,9 @@ async function renderCorreo() {
     <td>${m.status === "enviado" ? `<span class="badge ok">Enviado</span>` : `<span class="badge bad" title="${escapeHtml(m.smtp_response)}">Falló</span>`}<br><span class="muted nowrap">${escapeHtml(m.sent_at.slice(0, 16))} UTC</span></td>
     <td>${m.opened_at ? `<span class="nowrap">${escapeHtml(m.opened_at.slice(0, 16))} UTC</span>` : '<span class="muted">—</span>'}</td>
     <td>${m.confirmed_at ? `<span class="badge ok">Confirmado</span><br><span class="muted nowrap">${escapeHtml(m.confirmed_at.slice(0, 16))} UTC</span>` : '<span class="muted">Pendiente</span>'}</td>
-    <td class="row-actions"><button data-action="mail-proof" data-id="${m.id}">Constancia PDF</button></td>
+    <td class="row-actions"><button data-action="mail-proof" data-id="${m.id}">Constancia PDF</button>
+      ${m.raw_size ? `<button data-action="mail-eml" data-id="${m.id}" title="El mensaje exacto que se envió, para verificar las huellas">Mensaje original (.eml)</button>` : ""}
+      ${m.has_tsa ? `<button data-action="mail-tsr" data-id="${m.id}">Sello de tiempo (.tsr)</button>` : ""}</td>
   </tr>`).join("");
 }
 
@@ -2506,37 +2516,79 @@ wireDialog($("#mail-dialog"), async (form) => {
   const attachments = [];
   for (const f of mailFiles) attachments.push({ filename: f.name, mime: f.type || "application/octet-stream", base64: await fileToBase64(f) });
   const d = formData(form);
-  const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments });
+  const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments, attach_mode: d.attach_mode });
   toast(`Correo enviado a ${m.to_addr}.`);
   location.hash === "#correo" ? await renderCorreo() : (location.hash = "#correo");
 });
 
+// Consolidated evidence of a traced e-mail, as a PDF to present to a judge.
+const EVENT_LABEL = {
+  aceptado_por_servidor_smtp: "Aceptado por el servidor de correo (SMTP) para entrega", envio_fallido: "Envío fallido",
+  sello_de_tiempo: "Sello de tiempo (RFC 3161) sobre la huella del mensaje", sin_sello_de_tiempo: "Sin sello de tiempo",
+  mensaje_abierto: "Mensaje abierto (imagen de rastreo cargada)", anexo_descargado: "Anexo descargado por el enlace",
+  pagina_de_acuse_abierta: "Página de acuse de recibo abierta", acuse_de_recibo: "ACUSE DE RECIBO confirmado por el destinatario",
+};
+const coMs = (utc) => {
+  if (!utc) return "";
+  const d = new Date(Date.parse(String(utc).replace(" ", "T") + (String(utc).endsWith("Z") ? "" : "Z")) - 5 * 3600 * 1000);
+  return d.toISOString().replace("T", " ").replace("Z", "") + " (hora de Colombia)";
+};
+const proxyNote = (ua) => (/GoogleImageProxy|ggpht/i.test(ua || "") ? " · abierto a través del servicio de imágenes de Gmail (la IP es de Google)" : "");
 function mailProof(m) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const W = doc.internal.pageSize.getWidth(), M = 48;
+  const W = doc.internal.pageSize.getWidth(), M = 46;
   let y = M;
-  const line = (t, { size = 10, bold = false, color = [16, 16, 16], gap = 4 } = {}) => {
-    doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
-    for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > 740) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.35; }
+  const line = (t, { size = 9.5, bold = false, color = [16, 16, 16], gap = 3, mono = false } = {}) => {
+    doc.setFont(mono ? "courier" : "helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
+    for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > 748) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.32; }
     y += gap;
   };
-  line("CONSTANCIA DE ENVÍO DE CORREO ELECTRÓNICO", { size: 15, bold: true, color: [0, 43, 106] });
-  line(`Para: ${m.to_addr}${m.cc ? ` · Copia: ${m.cc}` : ""}`);
+  const head = (t) => { y += 6; line(t, { size: 11.5, bold: true, color: [0, 43, 106], gap: 4 }); };
+  const ev = m.events || [];
+  const opens = ev.filter((e) => e.event === "mensaje_abierto"), downloads = ev.filter((e) => e.event === "anexo_descargado");
+  line("CONSTANCIA CONSOLIDADA DE ENVÍO Y RECEPCIÓN DE MENSAJE DE DATOS", { size: 14, bold: true, color: [0, 43, 106] });
+  line(`Generada el ${coMs(new Date().toISOString())} por TecjuridicosApp · Correo N.º ${m.id}`, { size: 8, color: [90, 90, 90] });
+  head("1. Resumen");
+  const yes = (b) => (b ? "SÍ" : "NO");
+  line(`Entregado al servidor de correo para su envío: ${yes(m.status === "enviado")}${m.sent_at_ms ? ` · ${coMs(m.sent_at_ms)}` : ""}`, { bold: true });
+  line(`Mensaje abierto: ${yes(opens.length)}${opens.length ? ` · ${opens.length} vez/veces · primera: ${coMs(opens[0].at)}` : " (o el programa del destinatario bloquea las imágenes)"}`, { bold: true });
+  line(`Anexos descargados por enlace: ${yes(downloads.length)}${downloads.length ? ` · ${downloads.length} descarga(s) · primera: ${coMs(downloads[0].at)}` : ""}`, { bold: true });
+  line(`Acuse de recibo del destinatario: ${yes(m.confirmed_at)}${m.confirmed_at ? ` · ${coMs(m.confirmed_at)} · ${m.confirm_name || ""}` : ""}`, { bold: true });
+  line(`Sello de tiempo de una autoridad (TSA): ${m.has_tsa ? `SÍ · ${m.tsa_time} · ${m.tsa_url}` : `NO${m.tsa_detail ? " · " + m.tsa_detail : ""}`}`);
+  head("2. Datos del envío");
+  line(`Remitente: ${m.from || "correo configurado de la firma"}`);
+  line(`Destinatario(s): ${m.to_addr}${m.cc ? ` · Copia: ${m.cc}` : ""}`);
   line(`Asunto: ${m.subject}`, { bold: true });
-  line(`Envío: ${m.sent_at} UTC · Resultado: ${m.status === "enviado" ? "aceptado por el servidor de correo" : "fallido"}`);
-  line(`Respuesta del servidor: ${m.smtp_response || "—"} · Message-ID: ${m.smtp_message_id || "—"}`, { size: 8, color: [90, 90, 90] });
-  line(`Primera apertura: ${m.opened_at ? `${m.opened_at} UTC · IP ${m.open_ip}` : "sin registro (muchos correos bloquean las imágenes)"}`);
-  line(`Acuse de recibo: ${m.confirmed_at ? `${m.confirmed_at} UTC · ${m.confirm_name || ""} · IP ${m.confirm_ip}` : "pendiente"}`, { bold: !!m.confirmed_at });
-  line(`Huella del contenido (SHA-256): ${m.content_hash}`, { size: 9, gap: 10 });
-  line("Adjuntos", { size: 11, bold: true });
-  for (const a of m.attachments) line(`${a.filename} · ${a.size.toLocaleString("es-CO")} bytes · SHA-256 ${a.sha256}`, { size: 8, gap: 2 });
-  if (!m.attachments.length) line("Sin adjuntos.");
-  y += 6;
-  line("Mensaje", { size: 11, bold: true });
-  line(m.body, { size: 10 });
-  y += 6;
-  line("Constancia generada por TecjuridicosApp a partir de los registros del sistema. No reemplaza la certificación de un proveedor de correo electrónico certificado acreditado.", { size: 8, color: [90, 90, 90] });
+  line(`Message-ID: ${m.smtp_message_id || "—"}`, { mono: true, size: 8 });
+  line(`Respuesta del servidor SMTP: ${m.smtp_response || "—"}`, { size: 8.5 });
+  line(`Forma de entrega de los anexos: ${m.attach_mode === "enlace" ? "solo por enlace de descarga (cada descarga se registra)" : "adjuntos al correo y además por enlace de descarga"}`);
+  head("3. Integridad del mensaje completo (archivo .eml enviado)");
+  line(`Tamaño: ${(m.raw_size || 0).toLocaleString("es-CO")} bytes`);
+  for (const [k, v] of [["SHA-1", m.raw_sha1], ["SHA-256", m.raw_sha256], ["SHA-512", m.raw_sha512], ["SHA3-512", m.raw_sha3_512]]) if (v) line(`${k}: ${v}`, { mono: true, size: 7.2, gap: 1 });
+  line(`Huella del contenido (destinatarios, asunto, texto y anexos), SHA-256: ${m.content_hash}`, { mono: true, size: 7.2 });
+  line("SHA-1 se incluye por compatibilidad; SHA-256, SHA-512 y SHA3-512 son los algoritmos vigentes y resistentes a colisiones. Cualquiera puede recalcularlas sobre el archivo .eml descargado de la app.", { size: 7.5, color: [90, 90, 90] });
+  head("4. Anexos");
+  if (!m.attachments.length) line("Sin anexos.");
+  for (const a of m.attachments) {
+    const n = downloads.filter((d) => d.detail.startsWith(a.filename + " ·")).length;
+    line(`${a.filename} · ${a.mime} · ${a.size.toLocaleString("es-CO")} bytes (${(a.size / 1024).toFixed(1)} KB) · descargas registradas: ${n}`, { bold: true, size: 9 });
+    for (const [k, v] of [["SHA-1", a.sha1], ["SHA-256", a.sha256], ["SHA-512", a.sha512], ["SHA3-512", a.sha3_512]]) if (v) line(`${k}: ${v}`, { mono: true, size: 7.2, gap: 0 });
+    y += 4;
+  }
+  head("5. Registro de actividad (fecha y hora exactas)");
+  for (const e of ev) {
+    line(`${e.at} UTC · ${coMs(e.at)}`, { bold: true, size: 8.5, gap: 0 });
+    line(`${EVENT_LABEL[e.event] || e.event.replace(/_/g, " ")}${e.detail ? " · " + e.detail : ""}`, { size: 8.5, gap: 0 });
+    if (e.ip || e.user_agent) line(`IP ${e.ip || "—"} · ${e.user_agent || ""}${proxyNote(e.user_agent)}`, { size: 7.2, color: [90, 90, 90], gap: 4 });
+    else y += 4;
+  }
+  if (!ev.length) line("Correo enviado antes de este registro detallado: ver los datos de los numerales 1 y 2.");
+  head("6. Texto del mensaje");
+  line(m.body, { size: 9.5 });
+  head("7. Valor probatorio y alcance");
+  line("Mensaje de datos conforme a la Ley 527 de 1999 (arts. 10, 11, 20 y 21: admisibilidad, fuerza probatoria y acuse de recibo) y al art. 8 de la Ley 2213 de 2022 (notificación personal por mensaje de datos), cuya exequibilidad condicionó la Corte Constitucional en la sentencia C-420 de 2020 a que se acredite el acuse de recibo o se pueda constatar por otro medio el acceso del destinatario al mensaje. Los registros de apertura, descarga y acuse sirven para esa constatación; el juez los valora con las reglas de la sana crítica (CGP, arts. 176 y 247).", { size: 8 });
+  line("Limitaciones: la apertura se detecta cuando el programa del destinatario carga imágenes; algunos servicios las cargan por un intermediario o las bloquean. «Aceptado por el servidor de correo» prueba la entrega al servidor de salida, no la lectura. Esta constancia la genera la firma con su propio sistema: no es un servicio de correo electrónico certificado prestado por una entidad acreditada ante ONAC.", { size: 8, color: [90, 90, 90] });
   return doc.output("blob");
 }
 

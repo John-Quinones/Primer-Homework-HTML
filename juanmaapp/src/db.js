@@ -271,6 +271,18 @@ CREATE TABLE IF NOT EXISTS mail_attachments (
   data        BLOB NOT NULL
 );
 
+-- Every traceable activity of a sent e-mail: SMTP acceptance, each opening, each download, the acknowledgment.
+CREATE TABLE IF NOT EXISTS mail_events (
+  id          INTEGER PRIMARY KEY,
+  message_id  INTEGER NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
+  at          TEXT NOT NULL,
+  event       TEXT NOT NULL,
+  detail      TEXT NOT NULL DEFAULT '',
+  ip          TEXT NOT NULL DEFAULT '',
+  user_agent  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS mail_events_message ON mail_events(message_id);
+
 CREATE TABLE IF NOT EXISTS role_permissions (
   role        TEXT NOT NULL,
   permission  TEXT NOT NULL,
@@ -469,6 +481,11 @@ function migrate(db) {
   add("saved_rulings", "created_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
   add("clients", "department", "TEXT NOT NULL DEFAULT ''");
   add("courts", "circuit", "TEXT NOT NULL DEFAULT ''");
+  // Certified e-mail evidence (change 39): the exact message sent (.eml) with several digests, attachment digests, trusted timestamp.
+  for (const [col, def] of [["raw", "BLOB"], ["raw_sha1", "TEXT NOT NULL DEFAULT ''"], ["raw_sha256", "TEXT NOT NULL DEFAULT ''"], ["raw_sha512", "TEXT NOT NULL DEFAULT ''"],
+    ["raw_sha3_512", "TEXT NOT NULL DEFAULT ''"], ["attach_mode", "TEXT NOT NULL DEFAULT 'adjunto'"], ["tsa_url", "TEXT NOT NULL DEFAULT ''"], ["tsa_reply", "TEXT"],
+    ["tsa_time", "TEXT NOT NULL DEFAULT ''"], ["tsa_detail", "TEXT NOT NULL DEFAULT ''"], ["sent_at_ms", "TEXT NOT NULL DEFAULT ''"]]) add("mail_messages", col, def);
+  for (const [col, def] of [["sha1", "TEXT NOT NULL DEFAULT ''"], ["sha512", "TEXT NOT NULL DEFAULT ''"], ["sha3_512", "TEXT NOT NULL DEFAULT ''"]]) add("mail_attachments", col, def);
   // E-signature: OTP by e-mail, SMS or WhatsApp; where the signature stamp goes; e-mail notices (change 33).
   add("sign_signers", "otp_channel", "TEXT NOT NULL DEFAULT 'email'");
   add("sign_requests", "stamp_page", "TEXT NOT NULL DEFAULT 'last'");

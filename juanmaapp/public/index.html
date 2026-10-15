@@ -974,6 +974,13 @@
       <label>Mensaje * <textarea name="body" rows="8" required></textarea></label>
       <label>Adjuntos <input type="file" name="files" multiple /></label>
       <ul id="mail-pending-atts" class="muted"></ul>
+      <label>Entrega de los anexos
+        <select name="attach_mode">
+          <option value="adjunto">Adjuntos al correo y además con enlace de descarga</option>
+          <option value="enlace">Solo con enlace de descarga (cada descarga queda registrada)</option>
+        </select>
+      </label>
+      <p class="hint">Queda registrado: aceptación del servidor de correo, cada apertura, cada descarga de anexos y el acuse de recibo, con fecha y hora exactas, IP y navegador; huellas SHA-1, SHA-256, SHA-512 y SHA3-512 del mensaje completo y de cada anexo.</p>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>

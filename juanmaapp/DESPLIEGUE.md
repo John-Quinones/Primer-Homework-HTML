@@ -33,6 +33,10 @@ Esta guía usa Render porque el repositorio ya trae la configuración (`render.y
 
 Requiere una cuenta de WhatsApp Business en Meta con una plantilla aprobada de un parámetro. Agregue en Render `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` y `WHATSAPP_TEMPLATE`. Sin esto, los recordatorios se mandan con el botón "Abrir en WhatsApp", que abre el chat del cliente con el mensaje listo.
 
+### Sello de tiempo para el correo con trazabilidad (opcional)
+
+Si contrata un sello de tiempo (estampado cronológico) con una entidad acreditada ante ONAC, o usa uno de prueba, agregue `TSA_URL` (y `TSA_USER` / `TSA_PASS` si el proveedor los pide). Cada correo enviado queda sellado sobre su huella SHA-256 y la constancia lo muestra; el archivo `.tsr` se descarga desde Correo.
+
 ### Código de firma por SMS (opcional)
 
 Para que los firmantes reciban el código OTP por mensaje de texto, cree una cuenta en Twilio (servicio pago por mensaje) y agregue `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_FROM` (el número o remitente de envío). El código por WhatsApp usa las mismas variables de WhatsApp de arriba. Sin estas variables, la firma funciona con el código por correo.

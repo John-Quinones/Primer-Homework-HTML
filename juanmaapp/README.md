@@ -80,6 +80,7 @@ Notifications and reports:
 |---|---|
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE=1`, `MAIL_FROM` | E-mail delivery (nodemailer). |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TEMPLATE`, `WHATSAPP_LANG` | WhatsApp Business Cloud API. Business-initiated messages need a template approved by Meta with one body parameter (the report text). |
+| `TSA_URL` (and optional `TSA_USER`, `TSA_PASS`) | RFC 3161 Time Stamping Authority. Each traced e-mail's SHA-256 is stamped and the reply (.tsr) kept. An ONAC-accredited TSA gives the stamp full legal weight. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Text messages (SMS) through Twilio, used for e-signature OTP codes and links. Without them the SMS option says it is not configured. |
 | `RAMA_API_BASE` | Rama Judicial CPNU API base (default `https://consultaprocesos.ramajudicial.gov.co:448/api/v2`). |
 | `SCHEDULER=0` | Turn off reminders and scheduled reports (e.g. on a second instance). |
