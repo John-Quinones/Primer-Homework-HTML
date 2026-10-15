@@ -596,13 +596,13 @@ async function renderExpedienteFicha(id) {
         <p class="ficha-sub">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span>${k.title ? ` · ${escapeHtml(k.title)}` : ""}</p></div>
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
-        ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
         ${k.radicado && can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta ya este radicado en la Rama Judicial y trae las actuaciones nuevas">↻ Consultar ahora</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
     <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
-      ${[["datos", "Datos"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
+      ${[["datos", "Datos"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["portales", "Portales"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
         .map(([x, label]) => `<button type="button" class="mini" data-action="goto-sec" data-sec="${x}">${label}</button>`).join("")}
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
@@ -657,6 +657,10 @@ async function renderExpedienteFicha(id) {
           <button class="mini" data-action="mail-proof" data-id="${m.id}">Constancia</button></li>`).join("")}</ul>` : empty("Sin correos enviados desde este expediente."),
         `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`))
         : can("mail.send") ? secId("correos", panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba."))) : ""}
+      ${secId("portales", wide(panel("Consultar en los portales de la Rama Judicial", null, `<div data-portal-case="${k.id}">
+          ${portalCopyBar(k, client)}
+          <ul class="portal-list">${portalListHtml(k)}</ul>
+          <p class="hint">Al tocar «Abrir» el radicado queda copiado: péguelo en el buscador del portal (en Publicaciones Procesales se copia el despacho). La consulta automática funciona con Justicia Siglo XXI en la versión del servidor; TYBA y SIUGJ piden verificación de seguridad y SAMAI y Publicaciones Procesales no tienen un servicio público para consultar en automático.</p></div>`)))}
       ${secId("historial", wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
           .map(([t, label]) => `<button type="button" class="chip ${t === "" ? "active" : ""}" data-hist="${t}">${label}</button>`).join("")}</div>
         <ol class="history">${hist.map((h) => `<li data-type="${h.type}"><span class="h-when">${escapeHtml(h.at)}</span><span class="h-dot h-${h.type}"></span>
@@ -770,7 +774,7 @@ function caseCard(k) {
     <div class="toolbar">${verCaseButtons(k, ["", "pagos", "correos"])}</div>
     <div class="toolbar">
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
-      ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+      <button data-action="portals" data-id="${k.id}">Portales</button>
       ${can("mail.send") ? `<button data-action="mail-case" data-case="${k.id}">Correo</button>` : ""}
       <button data-action="case-docs" data-id="${k.id}">Documentos</button>
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
@@ -982,7 +986,7 @@ function renderCaseRows() {
         <span class="ver-group">${verCaseButtons(k, ["", "pagos", "correos"])}<button class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></span>
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
-        ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        <button data-action="portals" data-id="${k.id}">Portales</button>
         <button data-action="case-docs" data-id="${k.id}">Documentos</button>
         ${can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
@@ -1426,6 +1430,7 @@ document.addEventListener("click", (e) => {
     },
     "go": () => { location.hash = btn.dataset.to; },
     "goto-sec": () => goToSection(btn.dataset.sec),
+    "go-sec": () => goToSection(btn.dataset.sec),
     "go-back": () => history.back(),
     "go-forward": () => history.forward(),
     "open-case": () => { location.hash = `#expediente-${id}`; },
@@ -3527,25 +3532,48 @@ async function copyText(text) {
   return ok;
 }
 
-function showPortals(k) {
-  if (!k?.radicado) return;
-  const { PORTALS, portalOrder, radicadoDigits } = window.JuanmaPortals;
-  const digits = radicadoDigits(k.radicado) || k.radicado;
-  const order = portalOrder(k.radicado);
-  const dlg = $("#portals-dialog");
-  $("[data-title]", dlg).textContent = `Consultar en los portales${caseFolder(k) ? " · Carpeta " + caseFolder(k) : ""}`;
-  $("[data-sub]", dlg).textContent = [k.client_name, k.court_name || "Despacho sin identificar"].filter(Boolean).join(" · ");
-  $("[data-rad]", dlg).textContent = formatRadicado(k.radicado);
-  $("[data-copy-rad]", dlg).onclick = async () => toast((await copyText(digits)) ? "Radicado copiado." : "No se pudo copiar; selecciónelo y cópielo a mano.", false);
-  $("#portal-list").innerHTML = order.map((id, i) => {
+// Official portals for a case (change 54): Siglo XXI (national query), TYBA, SIUGJ,
+// Publicaciones Procesales and SAMAI, the suggested one first. Opening one copies the radicado.
+function portalListHtml(k) {
+  const { PORTALS, portalOrder } = window.JuanmaPortals;
+  return portalOrder(k.radicado, k.category_name).map((id, i) => {
     const p = PORTALS.find((x) => x.id === id);
     return `<li class="portal-item">
       <div><strong>${escapeHtml(p.name)}</strong>${i === 0 ? ' <span class="badge ok">Sugerido</span>' : ""}${p.auto ? ' <span class="badge">Consulta automática en el servidor</span>' : ""}
         <br><span class="muted">${escapeHtml(p.how)}</span></div>
-      <a class="button" href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" data-portal-open>Abrir</a>
+      <a class="button" href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" data-portal-open data-portal-copy-what="${p.by === "despacho" ? "court" : "rad"}">Abrir</a>
     </li>`;
   }).join("");
-  $$("[data-portal-open]", dlg).forEach((a) => a.addEventListener("click", () => copyText(digits).then((ok) => ok && toast("Radicado copiado: péguelo en el buscador del portal."))));
+}
+function portalCopyBar(k, client) {
+  const doc = client?.id_number || "";
+  return `<div class="portal-rad">
+    ${k.radicado ? `<span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span> <button type="button" class="mini" data-copy-value="${escapeHtml(window.JuanmaPortals.radicadoDigits(k.radicado) || k.radicado)}">Copiar radicado</button>` : '<span class="muted">Sin radicado: busque por documento o nombre (SIUGJ y TYBA lo permiten).</span>'}
+    ${doc ? `<button type="button" class="mini" data-copy-value="${escapeHtml(String(doc).replace(/\D/g, ""))}">Copiar documento del cliente</button>` : ""}
+    <button type="button" class="mini" data-copy-value="${escapeHtml(k.client_name)}">Copiar nombre del cliente</button>
+    ${k.court_name ? `<button type="button" class="mini" data-copy-value="${escapeHtml(k.court_name)}">Copiar despacho</button>` : ""}
+  </div>`;
+}
+// Copy buttons and «Abrir» (which copies the radicado, or the court for Publicaciones Procesales) anywhere.
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-copy-value]");
+  if (c) { copyText(c.dataset.copyValue).then((ok) => toast(ok ? "Copiado: péguelo en el buscador del portal." : "No se pudo copiar; selecciónelo y cópielo a mano.", !ok)); return; }
+  const a = e.target.closest("[data-portal-open]");
+  if (!a) return;
+  const box = a.closest("[data-portal-case]");
+  const k = box && state.cases.find((x) => x.id === Number(box.dataset.portalCase));
+  if (!k) return;
+  const value = a.dataset.portalCopyWhat === "court" ? k.court_name : window.JuanmaPortals.radicadoDigits(k.radicado) || k.radicado;
+  if (value) copyText(value).then((ok) => ok && toast(a.dataset.portalCopyWhat === "court" ? "Despacho copiado: búsquelo en Publicaciones Procesales." : "Radicado copiado: péguelo en el buscador del portal."));
+});
+function showPortals(k) {
+  const dlg = $("#portals-dialog");
+  if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
+  $("[data-title]", dlg).textContent = `Consultar en los portales${caseFolder(k) ? " · Carpeta " + caseFolder(k) : ""}`;
+  $("[data-sub]", dlg).textContent = [k.client_name, k.court_name || "Despacho sin identificar"].filter(Boolean).join(" · ");
+  $("[data-portal-box]", dlg).dataset.portalCase = k.id;
+  $("[data-portal-copy]", dlg).innerHTML = portalCopyBar(k, state.clients.find((c) => c.id === k.client_id));
+  $("#portal-list").innerHTML = portalListHtml(k);
   dlg.showModal();
 }
 

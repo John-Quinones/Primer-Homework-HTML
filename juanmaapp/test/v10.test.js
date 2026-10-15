@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { PORTALS, portalOrder, radicadoDigits } from "../src/portals.js";
 import { asGlobal } from "../src/browser-module.js";
 
-test("portals: the four official sites, each with a how-to", () => {
-  assert.deepEqual(PORTALS.map((p) => p.id), ["cpnu", "publicaciones", "tyba", "samai"]);
+test("portals: the five official sites (Siglo XXI, TYBA, SIUGJ, Publicaciones, SAMAI), each with a how-to", () => {
+  assert.deepEqual(PORTALS.map((p) => p.id), ["cpnu", "tyba", "siugj", "publicaciones", "samai"]);
   for (const p of PORTALS) assert.match(p.url, /^https:\/\/[a-z.]+\.gov\.co\//);
   assert.deepEqual(PORTALS.filter((p) => p.auto).map((p) => p.id), ["cpnu"]);
 });
@@ -17,6 +17,9 @@ test("portals: administrative radicados go to SAMAI first, the rest to the Rama 
   assert.equal(portalOrder("11001031500020211095200")[0], "samai");
   assert.equal(portalOrder("73001310300120190012300")[0], "cpnu");
   assert.equal(portalOrder("")[0], "cpnu");
+  assert.equal(portalOrder("", "Administrativo")[0], "samai", "no radicado: the process type decides");
+  assert.equal(portalOrder("73001310500120250012300")[0], "siugj", "labor case filed in 2025");
+  assert.equal(portalOrder("73001310500120230012300")[0], "cpnu", "older labor case");
 });
 
 test("portals: served to the page as a global", () => {
