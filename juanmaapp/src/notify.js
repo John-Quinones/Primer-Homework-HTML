@@ -35,12 +35,12 @@ function mailer() {
   return transport;
 }
 
-export async function sendEmail(to, subject, text, html) {
+export async function sendEmail(to, subject, text, html, attachments = []) {
   const t = mailer();
   if (!t) return { channel: "email", ok: false, detail: "Correo no configurado en el servidor (SMTP)." };
   if (!to) return { channel: "email", ok: false, detail: "El usuario no tiene correo para reportes." };
   try {
-    await t.sendMail({ from: env.MAIL_FROM, to, subject, text, html });
+    await t.sendMail({ from: env.MAIL_FROM, to, subject, text, html, ...(attachments.length ? { attachments } : {}) });
     return { channel: "email", ok: true, detail: to };
   } catch (err) {
     return { channel: "email", ok: false, detail: `Error SMTP: ${err.message}` };

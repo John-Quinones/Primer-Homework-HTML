@@ -52,7 +52,12 @@ test("OTP by SMS, stamp settings, and an e-mail with the signed document to ever
   const fresh = notice.text.match(/firmar\.html#(\S+)/)[1];
   const after = (await pub("GET", `/public/sign/${fresh}`)).body;
   assert.ok(after.signed?.signers[0].signature_png, "fresh link opens the signed document data");
+  await new Promise((ok) => setTimeout(ok, 300));
+  const copy = mails.find((m) => m.to === "gerencia@firma.co" && /firmado por todos/.test(m.subject));
+  assert.ok(copy?.attachments?.[0]?.content.subarray(0, 5).toString() === "%PDF-", "sender gets the signed PDF");
+  assert.ok(notice.attachments?.length, "signers get it too");
   const detail = (await admin.call("GET", `/esign/${r.body.id}`)).body;
   assert.ok(detail.events.some((e) => e.event === "firmado" && /SMS/.test(e.detail)));
   assert.ok(detail.events.some((e) => e.event === "aviso_final_enviado"));
+  assert.ok(detail.events.some((e) => e.event === "copia_enviada_a_quien_envio"));
 });

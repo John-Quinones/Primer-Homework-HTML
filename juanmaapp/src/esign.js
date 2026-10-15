@@ -6,6 +6,7 @@ import express from "express";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { can, scopeOf } from "./auth.js";
 import { sendEmail, sendSms, sendWhatsapp, channelReady } from "./notify.js";
+import { buildSignedPdf } from "./signed-pdf.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -50,27 +51,58 @@ async function sendLink(db, req, request, signer, token) {
   return r;
 }
 
-// When everybody signed: each signer and whoever sent the document get an e-mail with a
-// fresh private link to download the signed document (stamps + certificate).
+// The signed PDF (stamps on the chosen page + certificate), as an e-mail attachment.
+async function signedAttachment(db, x) {
+  try {
+    const full = requestOut(db, x);
+    const pdf = await buildSignedPdf(full, x.doc_file ? Buffer.from(x.doc_file) : null);
+    const name = `${String(x.title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").trim().slice(0, 80) || "documento"} - firmado.pdf`;
+    return [{ filename: name, content: pdf, contentType: "application/pdf" }];
+  } catch (err) {
+    event(db, x.id, null, "pdf_firmado_no_generado", err.message);
+    return [];
+  }
+}
+
+// Whoever sent the document hears about every signature (e-mail and the bell).
+async function notifySigned(db, requestId, signerName) {
+  const x = db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(requestId);
+  if (!x?.created_by) return;
+  const pending = db.prepare("SELECT COUNT(*) AS n FROM sign_signers WHERE request_id = ? AND status = 'pendiente'").get(requestId).n;
+  if (pending) {
+    db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'firma', ?, ?, '#firmas')")
+      .run(x.created_by, `${signerName} firmó`, `${x.title} · faltan ${pending} firma(s)`);
+    const owner = x.notify && db.prepare("SELECT email FROM users WHERE id = ?").get(x.created_by);
+    if (owner?.email) await sendEmail(owner.email, `${signerName} firmó: ${x.title}`, `${signerName} firmó "${x.title}". Faltan ${pending} firma(s).`,
+      `<p><strong>${esc(signerName)}</strong> firmó <strong>${esc(x.title)}</strong>. Faltan ${pending} firma(s).</p>`);
+  }
+}
+
+// When everybody signed: each signer and whoever sent the document get an e-mail with the
+// signed PDF attached and a fresh private link to download it again.
 async function notifyCompleted(db, req, requestId) {
   const x = db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(requestId);
   if (!x?.notify) return;
   const subject = `Documento firmado por todos: ${x.title}`;
+  const attachments = await signedAttachment(db, x);
   for (const s of db.prepare("SELECT * FROM sign_signers WHERE request_id = ?").all(requestId)) {
     if (!s.email) continue;
     const token = randomBytes(24).toString("base64url");
     db.prepare("UPDATE sign_signers SET token_hash = ? WHERE id = ?").run(sha(token), s.id);
     const link = `${publicUrl(req)}/firmar.html#${token}`;
     const r = await sendEmail(s.email, subject,
-      `Hola ${s.name}:\n\nTodos los firmantes firmaron "${x.title}". Descargue el documento firmado, con las firmas estampadas y el certificado, en:\n${link}\n\nTecjuridicosApp`,
+      `Hola ${s.name}:\n\nTodos los firmantes firmaron "${x.title}". Adjuntamos el documento firmado, con las firmas estampadas y el certificado. También puede descargarlo en:\n${link}\n\nTecjuridicosApp`,
       `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(s.name)}:</p><p>Todos los firmantes firmaron <strong>${esc(x.title)}</strong>.</p>
        <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Descargar documento firmado</a></p>
-       <p style="color:#666;font-size:12px">El documento trae la estampa de cada firma y el certificado con la huella SHA-256 y el registro de eventos.</p></div>`);
+       <p style="color:#666;font-size:12px">Adjuntamos el PDF firmado: trae la estampa de cada firma y el certificado con la huella SHA-256 y el registro de eventos.</p></div>`, attachments);
     event(db, x.id, s.id, r.ok ? "aviso_final_enviado" : "aviso_final_no_enviado", r.ok ? s.email : r.detail);
   }
   const owner = x.created_by && db.prepare("SELECT email, name FROM users WHERE id = ?").get(x.created_by);
-  if (owner?.email) await sendEmail(owner.email, subject, `Todos los firmantes firmaron "${x.title}". Descárguelo desde TecjuridicosApp → Firmas.`,
-    `<p>Todos los firmantes firmaron <strong>${esc(x.title)}</strong>. Descárguelo desde TecjuridicosApp → Firmas.</p>`);
+  if (owner?.email) {
+    const r = await sendEmail(owner.email, subject, `Todos los firmantes firmaron "${x.title}". Adjuntamos una copia del documento firmado; también está en TecjuridicosApp → Firmas.`,
+      `<p>Todos los firmantes firmaron <strong>${esc(x.title)}</strong>. Adjuntamos una copia del documento firmado; también está en TecjuridicosApp → Firmas.</p>`, attachments);
+    event(db, x.id, null, r.ok ? "copia_enviada_a_quien_envio" : "copia_no_enviada", r.ok ? owner.email : r.detail);
+  }
 }
 
 async function notifyOwner(db, requestId, subject, text) {
@@ -214,7 +246,7 @@ export function esignRouter(db) {
     event(db, x.id, s.id, "firmado_presencial", `Testigo: ${req.user.name} · SHA-256 ${x.doc_hash}`, clientIp(req));
     const done = finishIfDone(db, x.id);
     res.json(requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(x.id)));
-    if (done) notifyCompleted(db, req, x.id).catch(() => {});
+    (done ? notifyCompleted(db, req, x.id) : notifySigned(db, x.id, s.name)).catch(() => {});
   });
 
   return r;
@@ -303,7 +335,7 @@ export function esignPublicRouter(db) {
     event(db, f.x.id, s.id, "firmado", `OTP verificado por ${via} · SHA-256 ${f.x.doc_hash}`, clientIp(req));
     const done = finishIfDone(db, f.x.id);
     res.json(view(bySigner(req.params.token)));
-    if (done) notifyCompleted(db, req, f.x.id).catch(() => {});
+    (done ? notifyCompleted(db, req, f.x.id) : notifySigned(db, f.x.id, s.name)).catch(() => {});
   });
 
   r.post("/:token/reject", (req, res) => {
