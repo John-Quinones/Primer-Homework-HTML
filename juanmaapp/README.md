@@ -82,7 +82,7 @@ Notifications and reports:
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_TEMPLATE`, `WHATSAPP_LANG` | WhatsApp Business Cloud API. Business-initiated messages need a template approved by Meta with one body parameter (the report text). |
 | `MAIL_TRANSPORT=graph` + `MAIL_FROM` | E-mail through Microsoft 365 (Microsoft Graph, app-only `Mail.Send` scoped by Exchange RBAC for Applications to the MAIL_FROM mailbox), using the MS_* app registration. Otherwise `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`. |
 | `WHATSAPP_TEMPLATE_OTP` | WhatsApp Authentication template (copy-code button) for e-signature codes. |
-| `TSA_URL` (and optional `TSA_USER`, `TSA_PASS`) | RFC 3161 Time Stamping Authority. Each traced e-mail's SHA-256 is stamped and the reply (.tsr) kept. An ONAC-accredited TSA gives the stamp full legal weight. |
+| `TSA_URL` (and optional `TSA_USER`, `TSA_PASS`) | RFC 3161 Time Stamping Authority. Default: DigiCert's public TSA (`http://timestamp.digicert.com`); `off` disables it. Each traced e-mail's SHA-256 is stamped (the reply must carry that digest and the request nonce) and the reply (.tsr) kept. An ONAC-accredited TSA gives the stamp full legal weight. |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Text messages (SMS) through Twilio, used for e-signature OTP codes and links. Without them the SMS option says it is not configured. |
 | `RAMA_API_BASE` | Rama Judicial CPNU API base (default `https://consultaprocesos.ramajudicial.gov.co:448/api/v2`). |
 | `SCHEDULER=0` | Turn off reminders and scheduled reports (e.g. on a second instance). |

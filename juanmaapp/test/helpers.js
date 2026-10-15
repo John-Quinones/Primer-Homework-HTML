@@ -2,6 +2,9 @@ import { createApp } from "../src/app.js";
 import { openDb } from "../src/db.js";
 
 /** Start the app on an in-memory DB; returns { base, db, close, setup, login }. */
+// Tests never call a real Time Stamping Authority (the stamp tests use a fake one).
+process.env.TSA_URL ??= "off";
+
 export async function startServer() {
   const db = openDb(":memory:");
   const server = createApp(db).listen(0);

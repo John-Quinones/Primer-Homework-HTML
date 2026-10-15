@@ -186,6 +186,12 @@ Se usa la **API de WhatsApp Business de Meta** (Cloud API). Meta cobra por conve
 
 Los SMS no se usan.
 
+## Paso 8. Sello de tiempo del correo con trazabilidad
+
+Viene configurado: cada correo enviado se sella con el servicio público de **DigiCert** (`http://timestamp.digicert.com`, norma RFC 3161). Solo viaja la huella SHA-256 del mensaje. Para comprobarlo: **Configuración → Canales de envío → Probar sello de tiempo**.
+
+Si la firma contrata **estampado cronológico** con una entidad acreditada ante ONAC (por ejemplo, Certicámara o GSE), en **Variables de entorno** agregue `TSA_URL` con la dirección que entregue el proveedor y, si lo pide, `TSA_USER` y `TSA_PASS`. Para apagarlo: `TSA_URL` = `off`.
+
 ## Datos y copias de seguridad
 
 - La base de datos queda en `/home/data/juanmaapp.db`, en el almacenamiento permanente de la app. No se borra al reiniciar ni al publicar versiones nuevas.

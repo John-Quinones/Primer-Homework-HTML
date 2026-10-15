@@ -35,7 +35,7 @@ Requiere una cuenta de WhatsApp Business en Meta con una plantilla aprobada de u
 
 ### Sello de tiempo para el correo con trazabilidad (opcional)
 
-Si contrata un sello de tiempo (estampado cronológico) con una entidad acreditada ante ONAC, o usa uno de prueba, agregue `TSA_URL` (y `TSA_USER` / `TSA_PASS` si el proveedor los pide). Cada correo enviado queda sellado sobre su huella SHA-256 y la constancia lo muestra; el archivo `.tsr` se descarga desde Correo.
+La app sella cada correo enviado con el servicio público de sello de tiempo de **DigiCert** (RFC 3161), sin configurar nada: solo se envía la huella SHA-256, nunca el contenido. La constancia lo muestra y el archivo `.tsr` se descarga desde Correo. Para usar una entidad acreditada ante ONAC en Colombia (estampado cronológico con plena validez), agregue `TSA_URL` con la dirección que le entregue el proveedor (y `TSA_USER` / `TSA_PASS` si los pide). `TSA_URL=off` lo desactiva. Se prueba en Configuración → Canales de envío → «Probar sello de tiempo».
 
 ### Código de firma por SMS (opcional)
 

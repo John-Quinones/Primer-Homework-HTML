@@ -781,8 +781,9 @@ async function renderChannels() {
   $("#channels-status").innerHTML = c.web ? "<li class=\"muted\">En el enlace de prueba no se envían correos ni WhatsApp: los canales se configuran en el servidor (Azure).</li>"
     : [row(c.email, "Correo", c.email ? `${c.email_via} · remitente ${c.from}` : "MAIL_TRANSPORT=graph y MAIL_FROM (Microsoft 365), o SMTP_HOST"),
       row(c.whatsapp, "WhatsApp: avisos y recordatorios", c.whatsapp ? `plantilla «${c.whatsapp_template}» · idioma ${c.whatsapp_lang}` : "WHATSAPP_TOKEN, WHATSAPP_PHONE_ID y WHATSAPP_TEMPLATE"),
-      row(c.whatsapp_otp, "WhatsApp: códigos de firma", c.whatsapp_otp ? `plantilla de autenticación «${c.whatsapp_template_otp}»` : "WHATSAPP_TEMPLATE_OTP (plantilla de autenticación)")].join("");
-  $$("[data-action=test-email], [data-action=test-whatsapp], #channel-test-to").forEach((el) => (el.disabled = !!c.web));
+      row(c.whatsapp_otp, "WhatsApp: códigos de firma", c.whatsapp_otp ? `plantilla de autenticación «${c.whatsapp_template_otp}»` : "WHATSAPP_TEMPLATE_OTP (plantilla de autenticación)"),
+      row(!!c.tsa_url, "Sello de tiempo del correo certificado", c.tsa_url ? `${c.tsa_url} (RFC 3161)` : "desactivado (TSA_URL=off)")].join("");
+  $$("[data-action=test-email], [data-action=test-whatsapp], [data-action=test-tsa], #channel-test-to").forEach((el) => (el.disabled = !!c.web));
 }
 
 async function renderConfiguracion() {
@@ -939,6 +940,10 @@ document.addEventListener("click", (e) => {
     "test-email": async () => {
       const r = await api("POST", "/admin/test-channel", { channel: "email", to: $("#channel-test-to").value });
       $("#channel-test-result").textContent = r.ok ? `Correo de prueba enviado a ${r.detail}. Revise la bandeja (y el correo no deseado).` : `No se envió: ${r.detail}`;
+    },
+    "test-tsa": async () => {
+      const r = await api("POST", "/admin/test-tsa");
+      $("#channel-test-result").textContent = r.ok ? `Sello de tiempo funcionando (${r.url}). ${r.detail}.` : `Sello de tiempo no disponible (${r.url || "sin TSA"}): ${r.detail}`;
     },
     "test-whatsapp": async () => {
       const r = await api("POST", "/admin/test-channel", { channel: "whatsapp", to: $("#channel-test-to").value });

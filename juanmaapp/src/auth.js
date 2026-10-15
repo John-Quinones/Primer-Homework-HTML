@@ -8,6 +8,8 @@ import { VERSION } from "./version.js";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { canonicalDepartment, canonicalCity } from "./places.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
+import { stamp, tsaUrl } from "./tsa.js";
+import { createHash as hashOf } from "node:crypto";
 
 // Built-in roles; the firm can add more in Usuarios › Roles y permisos.
 export const ROLES = [
@@ -269,7 +271,12 @@ export function adminRouter(db) {
   r.get("/channels", manage, (req, res) => {
     const c = channelsStatus();
     res.json({ ...c, from: process.env.MAIL_FROM || "", whatsapp_template: process.env.WHATSAPP_TEMPLATE || "", whatsapp_template_otp: process.env.WHATSAPP_TEMPLATE_OTP || "",
-      whatsapp_lang: process.env.WHATSAPP_LANG || "es" });
+      whatsapp_lang: process.env.WHATSAPP_LANG || "es", tsa_url: tsaUrl() });
+  });
+  r.post("/test-tsa", manage, async (req, res) => {
+    const digest = hashOf("sha256").update(`Prueba de sello de tiempo ${new Date().toISOString()}`).digest("hex");
+    const r2 = await stamp(digest);
+    res.json({ ok: r2.ok, url: r2.url || tsaUrl(), detail: r2.ok ? `Sello concedido: ${r2.genTime || "hora en el sello"}` : r2.detail });
   });
   r.post("/test-channel", manage, async (req, res) => {
     const to = str(req.body?.to);

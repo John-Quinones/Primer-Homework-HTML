@@ -14,13 +14,32 @@ before(async () => {
 });
 after(() => { delete process.env.TSA_URL; srv.close(); });
 
+test("a TSA reply that does not stamp our digest is refused; TSA_URL=off disables stamping", async () => {
+  const { stamp, tsaUrl, DEFAULT_TSA_URL } = await import("../src/tsa.js");
+  const saved = process.env.TSA_URL;
+  delete process.env.TSA_URL;
+  assert.equal(tsaUrl(), DEFAULT_TSA_URL);
+  setTsaFetch(async () => new Response(Buffer.from([0x30, 0x05, 0x30, 0x03, 0x02, 0x01, 0x00]), { status: 200 }));
+  const r = await stamp("cd".repeat(32));
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /no corresponde/);
+  process.env.TSA_URL = "off";
+  assert.equal((await stamp("cd".repeat(32))).ok, false);
+  process.env.TSA_URL = saved ?? "";
+});
+
 test("certified e-mail: exact message digests, attachment digests, openings, downloads, acknowledgment, timestamp", async () => {
   const sent = [];
   setMailTransport({ sendMail: async (m) => { sent.push(m); return { messageId: "<m@test>", accepted: m.to, rejected: [], response: "250 2.0.0 OK queued" }; } });
   // A minimal granted TimeStampResp: status 0 and a GeneralizedTime.
   process.env.TSA_URL = "https://tsa.test/tsr";
-  const reply = Buffer.concat([Buffer.from([0x30, 0x16, 0x30, 0x03, 0x02, 0x01, 0x00, 0x18, 0x0f]), Buffer.from("20261015143000Z")]);
-  setTsaFetch(async (url, opts) => { assert.equal(opts.headers["Content-Type"], "application/timestamp-query"); return new Response(reply, { status: 200 }); });
+  // The fake TSA echoes the request (digest and nonce) inside its token, as a real one does.
+  let reply;
+  setTsaFetch(async (url, opts) => {
+    assert.equal(opts.headers["Content-Type"], "application/timestamp-query");
+    reply = Buffer.concat([Buffer.from([0x30, 0x16, 0x30, 0x03, 0x02, 0x01, 0x00, 0x18, 0x0f]), Buffer.from("20261015143000Z"), Buffer.from(opts.body)]);
+    return new Response(reply, { status: 200 });
+  });
 
   const pdf = Buffer.from("%PDF-1.4 memorial");
   const m = await admin.call("POST", "/mail", { to: "juzgado@cendoj.ramajudicial.gov.co", subject: "Notificación personal Ley 2213", body: "Adjunto demanda y anexos.",
