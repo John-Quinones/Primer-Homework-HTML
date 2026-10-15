@@ -196,7 +196,7 @@
             <button class="primary" id="consulta-all">Consultar todos ahora</button>
           </div>
         </div>
-        <p class="hint">Consulta la Rama Judicial (Consulta Nacional Unificada de Procesos) con el radicado de 23 dígitos de cada expediente y avisa las actuaciones nuevas.</p>
+        <p class="hint">Consulta la Rama Judicial (Consulta Nacional Unificada de Procesos) con el radicado de 23 dígitos de cada expediente y avisa las actuaciones nuevas. El botón «Portales» abre además Publicaciones Procesales, TYBA y SAMAI con el radicado copiado.</p>
         <div id="consulta-status" class="status" hidden></div>
         <div class="consulta-grid">
           <div class="panel min0">
@@ -976,6 +976,18 @@
       <h3 data-title>Actuaciones</h3>
       <p class="hint" data-sub></p>
       <div class="table-scroll"><table class="data-table"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th>Términos</th></tr></thead><tbody id="acts-rows"></tbody></table></div>
+      <div class="dialog-actions"><button value="cancel">Cerrar</button></div>
+    </form>
+  </dialog>
+
+  <!-- Portales oficiales -->
+  <dialog id="portals-dialog">
+    <form method="dialog">
+      <h3 data-title>Consultar en los portales</h3>
+      <p class="hint" data-sub></p>
+      <div class="portal-rad"><span class="mono" data-rad></span> <button type="button" data-copy-rad>Copiar radicado</button></div>
+      <ul class="portal-list" id="portal-list"></ul>
+      <p class="hint">Al abrir un portal, el radicado queda copiado: péguelo en el buscador. La consulta automática diaria funciona con la Rama Judicial en la versión del servidor; TYBA pide verificación de seguridad y SAMAI y Publicaciones Procesales no tienen un servicio público para consultar en automático.</p>
       <div class="dialog-actions"><button value="cancel">Cerrar</button></div>
     </form>
   </dialog>

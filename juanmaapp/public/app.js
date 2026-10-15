@@ -358,6 +358,7 @@ function caseCard(k) {
     ${k.court_name ? `<span class="court-line">${escapeHtml(k.court_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : ""}</span>` : ""}
     <div class="toolbar">
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
+      ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
       ${can("mail.send") ? `<button data-action="mail-case" data-case="${k.id}">Correo</button>` : ""}
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
     </div>
@@ -483,6 +484,7 @@ function renderCaseRows() {
       <td class="row-actions">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
+        ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
@@ -827,6 +829,7 @@ document.addEventListener("click", (e) => {
     },
     "read-all": async () => { await api("POST", "/notifications/read", {}); await refreshBell(); },
     "view-acts": () => showActuaciones(id),
+    "portals": async () => showPortals(state.cases.find((k) => k.id === id) || await api("GET", `/cases/${id}`)),
     "add-radicado": () => openCaseDialog(null, null),
     "new-role": () => openRoleDialog(),
     "rename-role": async () => {
@@ -2418,7 +2421,7 @@ async function renderConsulta() {
         ${k.last_error ? `<br><span class="badge bad" title="${escapeHtml(k.last_error)}">Error en la última consulta</span>` : ""}</td>
       <td>${k.new_7d ? `<span class="badge ok">${k.new_7d} nueva(s)</span>` : '<span class="muted">—</span>'}</td>
       <td><label class="switch"><input type="checkbox" data-monitor="${k.id}" ${k.monitor ? "checked" : ""} /> <span>${k.monitor ? "Activo" : "Pausado"}</span></label></td>
-      <td class="row-actions"><button data-action="view-acts" data-id="${k.id}">Actuaciones</button></td>
+      <td class="row-actions"><button data-action="view-acts" data-id="${k.id}">Actuaciones</button> <button data-action="portals" data-id="${k.id}">Portales</button></td>
     </tr>`).join("");
   updateConsultaButtons();
   const f = $("#prefs-form");
@@ -2511,6 +2514,40 @@ async function showActuaciones(id) {
   $("#acts-rows").innerHTML = acts.map((a) => `<tr><td class="nowrap">${escapeHtml(a.fecha)}</td><td><strong>${escapeHtml(a.actuacion)}</strong></td>
     <td>${escapeHtml(a.anotacion)}</td><td class="nowrap">${a.fecha_inicial ? escapeHtml(a.fecha_inicial + " a " + a.fecha_final) : ""}</td></tr>`).join("")
     || '<tr><td colspan="4" class="muted">Sin actuaciones registradas. Use “Consultar” para traerlas.</td></tr>';
+  dlg.showModal();
+}
+
+// ---------- Official portals ----------
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  const ta = Object.assign(document.createElement("textarea"), { value: text });
+  document.body.append(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch {}
+  ta.remove();
+  return ok;
+}
+
+function showPortals(k) {
+  if (!k?.radicado) return;
+  const { PORTALS, portalOrder, radicadoDigits } = window.JuanmaPortals;
+  const digits = radicadoDigits(k.radicado) || k.radicado;
+  const order = portalOrder(k.radicado);
+  const dlg = $("#portals-dialog");
+  $("[data-title]", dlg).textContent = `Consultar en los portales${caseFolder(k) ? " · Carpeta " + caseFolder(k) : ""}`;
+  $("[data-sub]", dlg).textContent = [k.client_name, k.court_name || "Despacho sin identificar"].filter(Boolean).join(" · ");
+  $("[data-rad]", dlg).textContent = formatRadicado(k.radicado);
+  $("[data-copy-rad]", dlg).onclick = async () => toast((await copyText(digits)) ? "Radicado copiado." : "No se pudo copiar; selecciónelo y cópielo a mano.", false);
+  $("#portal-list").innerHTML = order.map((id, i) => {
+    const p = PORTALS.find((x) => x.id === id);
+    return `<li class="portal-item">
+      <div><strong>${escapeHtml(p.name)}</strong>${i === 0 ? ' <span class="badge ok">Sugerido</span>' : ""}${p.auto ? ' <span class="badge">Consulta automática en el servidor</span>' : ""}
+        <br><span class="muted">${escapeHtml(p.how)}</span></div>
+      <a class="button" href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" data-portal-open>Abrir</a>
+    </li>`;
+  }).join("");
+  $$("[data-portal-open]", dlg).forEach((a) => a.addEventListener("click", () => copyText(digits).then((ok) => ok && toast("Radicado copiado: péguelo en el buscador del portal."))));
   dlg.showModal();
 }
 

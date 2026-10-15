@@ -613,3 +613,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: .
 
 /* Only Gerencia deletes (change 24): delete buttons are hidden for every other role. */
 body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-jact^="delete-"] { display: none !important; }
+
+/* Official portals dialog */
+.portal-rad { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 12px; }
+.portal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.portal-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border, #c4c8cb); border-radius: 8px; }
+.portal-item .muted { font-size: .85rem; }
+.portal-item a.button { flex-shrink: 0; }
