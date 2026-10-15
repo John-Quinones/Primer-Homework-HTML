@@ -28,3 +28,4 @@ Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto.
 | 22 | 14/10/2026 | Las sugerencias que aparecen debajo de los campos se ven en gris claro con transparencia, igual que el ejemplo que aparece dentro de cada recuadro. |
 | 23 | 14/10/2026 | Los campos de correo electrónico sugieren al escribir @gmail.com, @hotmail.com y @outlook.com (por ejemplo, «maria» ofrece maria@gmail.com). |
 | 24 | 14/10/2026 | Solo **Gerencia** puede borrar (clientes, expedientes, tareas, plantillas, catálogo, sentencias guardadas, oficinas y roles); a los demás roles no les aparece el botón y el servidor lo rechaza. Cada borrado pide confirmación y dice qué se va a eliminar (nombre del cliente, carpeta del expediente). |
+| 25 | 14/10/2026 | Módulo Expedientes: nueva columna **Carpeta** con el número de carpeta de cada expediente y casilla para buscar por carpeta, cliente o radicado. |

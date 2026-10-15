@@ -365,7 +365,7 @@ function caseCard(k) {
 }
 
 async function renderClientes() {
-  await Promise.all([loadClients($("#client-search").value), state.catalog.length ? null : loadCatalog()]);
+  await Promise.all([loadClients($("#client-search").value), loadCatalog()]);
   renderClientList();
   await renderClientDetail();
 }
@@ -464,11 +464,17 @@ function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
   const mine = $("#case-mine").checked;
+  const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const q = flat($("#case-search").value.trim());
+  const qDigits = q.replace(/\D/g, "");
+  const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name].some((x) => flat(x).includes(q))
+    || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const rows = state.cases.filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
-    && (!mine || k.assigned_user_id === me.id));
+    && (!mine || k.assigned_user_id === me.id) && matches(k));
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
+      <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
       <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
       <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
@@ -496,6 +502,7 @@ async function renderExpedientes() {
 $("#case-filter").addEventListener("change", renderCaseRows);
 $("#case-office-filter").addEventListener("change", renderCaseRows);
 $("#case-mine").addEventListener("change", renderCaseRows);
+$("#case-search").addEventListener("input", renderCaseRows);
 
 const caseForm = $("#case-dialog form");
 
