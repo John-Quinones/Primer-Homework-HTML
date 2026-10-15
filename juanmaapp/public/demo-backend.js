@@ -1011,7 +1011,7 @@
   );
 
   // ----- payments: charges, receipts, portfolio, reminders (same rules as src/payments.js) -----
-  const PAY_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "TEC Jurídicos", firm_nit: "", channels: ["email"] };
+  const PAY_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "TEC Jurídicos", firm_nit: "", channels: ["email"], receipt_start: LG.RECEIPT_START };
   const DATE = /^\d{4}-\d{2}-\d{2}$/;
   const money = (v) => (typeof v === "number" ? Math.round(v) : Number(String(v ?? "").replace(/[^\d]/g, "")));
   const todayCO = () => bogotaNow().slice(0, 10);
@@ -1050,7 +1050,7 @@
     }
     const inRange = (d) => (!DATE.test(q.from || "") || d >= q.from) && (!DATE.test(q.to || "") || d <= q.to);
     const rows = receipts.filter((r) => inRange(r.paid_on)).sort((a, b) => a.number - b.number).map((r) => ({
-      number: `RC-${String(r.number).padStart(6, "0")}`, date: r.paid_on, client: s.clients.find((c) => c.id === r.client_id)?.full_name || "",
+      number: LG.receiptLabel(r.number), date: r.paid_on, client: s.clients.find((c) => c.id === r.client_id)?.full_name || "",
       concept: r.concept, method: r.method, reference: r.reference, amount: r.voided_at ? 0 : r.amount, status: r.voided_at ? `Anulado: ${r.void_reason}` : "Vigente" }));
     return { columns: [["number", "Recibo"], ["date", "Fecha"], ["client", "Cliente"], ["concept", "Concepto"], ["method", "Medio"],
       ["reference", "Referencia"], ["amount", "Valor"], ["status", "Estado"]], rows };
@@ -1159,7 +1159,7 @@
         charge.status === "anulado" && fail("El cobro está anulado.");
       }
       const caseId = charge?.case_id || +b.case_id || null;
-      const r = { id: nextId(), number: s.receipts.reduce((a, x) => Math.max(a, x.number), 0) + 1, client_id: client.id, charge_id: charge?.id ?? null,
+      const r = { id: nextId(), number: LG.nextReceiptNumber(s.receipts.reduce((a, x) => Math.max(a, x.number), 0), paySettings().receipt_start), client_id: client.id, charge_id: charge?.id ?? null,
         case_id: caseId, office_id: charge?.office_id ?? payOffice(client, caseId), amount, method: b.method, reference: str(b.reference), paid_on: paidOn,
         concept: str(b.concept) || (charge ? [charge.concept, charge.plan_label].filter(Boolean).join(" · ") : "Abono a cuenta"), notes: str(b.notes),
         voided_at: null, void_reason: "", created_by: me().id, created_at: stamp() };
@@ -1182,12 +1182,16 @@
           return { ...clone(x), client_name: s.clients.find((y) => y.id === x.client_id)?.full_name || "", concept: c.concept, plan_label: c.plan_label, created_by_name: userName(x.created_by) };
         });
     }],
-    ["GET", /^\/payments\/settings$/, () => { need("payments.manage"); return paySettings(); }],
+    ["GET", /^\/payments\/settings$/, () => {
+      need("payments.manage");
+      return { ...paySettings(), receipt_next: LG.nextReceiptNumber(s.receipts.reduce((a, x) => Math.max(a, x.number), 0), paySettings().receipt_start) };
+    }],
     ["PUT", /^\/payments\/settings$/, (m, b) => {
       need("payments.manage");
       s.payset = { auto: !!b.auto, days_before: Math.min(30, Math.max(0, Number(b.days_before) || 0)), repeat_days: Math.min(60, Math.max(1, Number(b.repeat_days) || 7)),
         pay_info: str(b.pay_info).slice(0, 1500), firm_name: str(b.firm_name) || PAY_DEFAULTS.firm_name, firm_nit: str(b.firm_nit),
-        channels: (b.channels || ["email"]).filter((x) => ["email", "whatsapp"].includes(x)) };
+        channels: (b.channels || ["email"]).filter((x) => ["email", "whatsapp"].includes(x)),
+        receipt_start: Math.max(1, Math.round(Number(b.receipt_start) || paySettings().receipt_start)) };
       return paySettings();
     }],
   );

@@ -2,11 +2,13 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 import { setTransports } from "../src/notify.js";
-import { paymentReminders } from "../src/payments.js";
+import { paymentReminders, setPaymentsClock } from "../src/payments.js";
 import { addDays } from "../src/ledger.js";
 import { bogota } from "../src/monitor.js";
 
 let srv, admin, client, caseId, typeId;
+// A Thursday at 9:00 a.m. Colombia time: inside the Ley 2300 de 2023 window.
+setPaymentsClock(() => new Date("2026-10-15T14:00:00Z"));
 const mails = [];
 before(async () => {
   process.env.SMTP_HOST = "smtp.test"; process.env.MAIL_FROM = "cobros@firma.co";
@@ -50,9 +52,9 @@ test("charges in installments, receipts, portfolio and aging", async () => {
 
   const p1 = await admin.call("POST", "/payments/receipts", { client_id: client.id, charge_id: charges[0].id, amount: 1200000, method: "Transferencia", reference: "TR-1" });
   assert.equal(p1.status, 201);
-  assert.equal(p1.body.number, 1);
+  assert.equal(p1.body.number, 1155);
   const p2 = await admin.call("POST", "/payments/receipts", { client_id: client.id, amount: 100000, method: "Efectivo" });
-  assert.equal(p2.body.number, 2);
+  assert.equal(p2.body.number, 1156);
   assert.equal((await admin.call("POST", "/payments/receipts", { client_id: client.id, amount: 5, method: "Trueque" })).status, 400);
 
   charges = (await admin.call("GET", `/payments/charges?clientId=${client.id}`)).body;
@@ -67,7 +69,7 @@ test("charges in installments, receipts, portfolio and aging", async () => {
   const cart = await admin.call("GET", "/reports/cartera");
   assert.equal(cart.body.rows[0].balance, 1800000);
   const rec = await admin.call("GET", "/reports/recibos");
-  assert.equal(rec.body.rows[0].number, "RC-000001");
+  assert.equal(rec.body.rows[0].number, "N.º 1155");
 });
 
 test("payment reminders: manual and daily automatic", async () => {

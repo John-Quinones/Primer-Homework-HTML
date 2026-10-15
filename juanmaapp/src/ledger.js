@@ -115,3 +115,43 @@ export function reminderMessage({ clientName, charge, firmName, payInfo, today }
   lines.push("", "Si ya realizó el pago, por favor envíenos el soporte y omita este mensaje.", "", firmName || "TEC Jurídicos");
   return { subject: `Recordatorio de pago: ${charge.concept}`, text: lines.join("\n") };
 }
+
+// ----- Receipt numbers: consecutive, starting where the firm's paper series ends -----
+export const RECEIPT_START = 1155;
+/** Next receipt number: one after the highest issued, never below the configured start. */
+export const nextReceiptNumber = (maxIssued, start = RECEIPT_START) => Math.max((Number(maxIssued) || 0) + 1, Number(start) || 1);
+export const receiptLabel = (n) => `N.º ${n}`;
+
+// ----- Colombian public holidays (Ley 51 de 1983 moves most of them to Monday) -----
+const iso = (d) => d.toISOString().slice(0, 10);
+const utc = (y, m, d) => new Date(Date.UTC(y, m - 1, d));
+const nextMonday = (d) => { const x = new Date(d); while (x.getUTCDay() !== 1) x.setUTCDate(x.getUTCDate() + 1); return x; };
+const plusDays = (d, n) => new Date(d.getTime() + n * 86400000);
+function easter(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  return utc(y, Math.floor((h + l - 7 * m + 114) / 31), ((h + l - 7 * m + 114) % 31) + 1);
+}
+export function colombianHolidays(y) {
+  const e = easter(y);
+  const fixed = [[1, 1], [5, 1], [7, 20], [8, 7], [12, 8], [12, 25]].map(([m, d]) => utc(y, m, d));
+  const moved = [[1, 6], [3, 19], [6, 29], [8, 15], [10, 12], [11, 1], [11, 11]].map(([m, d]) => nextMonday(utc(y, m, d)));
+  const easterBased = [plusDays(e, -3), plusDays(e, -2), nextMonday(plusDays(e, 39)), nextMonday(plusDays(e, 60)), nextMonday(plusDays(e, 68))];
+  return new Set([...fixed, ...moved, ...easterBased].map(iso));
+}
+
+/**
+ * Ley 2300 de 2023: collection contacts only Monday to Friday 7:00–19:00 and
+ * Saturday 8:00–15:00 (Colombia time), never on Sundays or holidays.
+ * `when` is "YYYY-MM-DD HH:MM" in Colombia time. Returns { ok, reason }.
+ */
+export function collectionWindow(when) {
+  const [date, time = "00:00"] = String(when).split(" ");
+  const d = new Date(date + "T00:00:00Z");
+  const dow = d.getUTCDay(), hm = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  if (dow === 0) return { ok: false, reason: "Es domingo: la Ley 2300 de 2023 no permite gestiones de cobranza." };
+  if (colombianHolidays(d.getUTCFullYear()).has(date)) return { ok: false, reason: "Es festivo: la Ley 2300 de 2023 no permite gestiones de cobranza." };
+  if (dow === 6 && (hm < 480 || hm >= 900)) return { ok: false, reason: "Los sábados solo se permite cobrar de 8:00 a. m. a 3:00 p. m. (Ley 2300 de 2023)." };
+  if (dow !== 6 && (hm < 420 || hm >= 1140)) return { ok: false, reason: "Entre semana solo se permite cobrar de 7:00 a. m. a 7:00 p. m. (Ley 2300 de 2023)." };
+  return { ok: true, reason: "" };
+}

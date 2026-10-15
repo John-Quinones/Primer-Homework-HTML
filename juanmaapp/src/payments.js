@@ -5,19 +5,25 @@ import express from "express";
 import { scopeOf } from "./auth.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 import { bogota } from "./monitor.js";
-import { METHODS, AGING, STATE_LABELS, applyPayments, portfolio, clientRows, reminderMessage, splitAmount, addMonths, addDays, fmtCOP } from "./ledger.js";
+import { METHODS, AGING, STATE_LABELS, applyPayments, portfolio, clientRows, reminderMessage, splitAmount, addMonths, addDays, fmtCOP,
+  RECEIPT_START, nextReceiptNumber, receiptLabel, collectionWindow } from "./ledger.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (v) => (typeof v === "number" ? Math.round(v) : Number(String(v ?? "").replace(/[^\d]/g, "")));
 const today = (now = new Date()) => bogota(now).slice(0, 10);
 
-export const PAYMENT_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "TEC Jurídicos", firm_nit: "", channels: ["email"] };
+export const PAYMENT_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "TEC Jurídicos", firm_nit: "", channels: ["email"], receipt_start: RECEIPT_START };
 
 export function paymentSettings(db) {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'payments'").get();
   return { ...PAYMENT_DEFAULTS, ...(row ? JSON.parse(row.value) : {}) };
 }
+
+// Current time for the Ley 2300 window; tests fix it.
+let clock = () => new Date();
+export const setPaymentsClock = (fn) => { clock = fn || (() => new Date()); };
+const colombiaNow = (d) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -69,7 +75,7 @@ export function paymentsReport(db, user, type, q) {
   const inRange = (d) => (!DATE.test(q.from || "") || d >= q.from) && (!DATE.test(q.to || "") || d <= q.to);
   const names = clientsById(db, [...new Set(receipts.map((r) => r.client_id))]);
   const rows = receipts.filter((r) => inRange(r.paid_on)).sort((a, b) => a.number - b.number).map((r) => ({
-    number: `RC-${String(r.number).padStart(6, "0")}`, date: r.paid_on, client: names.find((c) => c.id === r.client_id)?.full_name || "",
+    number: receiptLabel(r.number), date: r.paid_on, client: names.find((c) => c.id === r.client_id)?.full_name || "",
     concept: r.concept, method: r.method, reference: r.reference, amount: r.voided_at ? 0 : r.amount, status: r.voided_at ? `Anulado: ${r.void_reason}` : "Vigente" }));
   return { columns: [["number", "Recibo"], ["date", "Fecha"], ["client", "Cliente"], ["concept", "Concepto"], ["method", "Medio"],
     ["reference", "Referencia"], ["amount", "Valor"], ["status", "Estado"]], rows };
@@ -96,6 +102,8 @@ async function remind(db, charge, client, { channels, trigger, userId, settings,
 export async function paymentReminders(db, now = new Date()) {
   const settings = paymentSettings(db);
   if (!settings.auto) return 0;
+  // Ley 2300 de 2023: no collection contacts on Sundays, holidays or outside the allowed hours.
+  if (!collectionWindow(colombiaNow(clock())).ok) return 0;
   const system = { permissions: ["scope.all"], offices: [] };
   const { charges } = loadLedger(db, system, {}, now);
   const t = today(now);
@@ -225,6 +233,10 @@ export function paymentsRouter(db) {
     const client = db.prepare("SELECT * FROM clients WHERE id = ?").get(c.client_id);
     const channels = (Array.isArray(req.body?.channels) ? req.body.channels : ["email"]).filter((x) => ["email", "whatsapp", "manual"].includes(x));
     if (!channels.length) throw new HttpError(400, "Elija cómo enviar el recordatorio.");
+    if (channels.some((x) => x !== "manual")) {
+      const w = collectionWindow(colombiaNow(clock()));
+      if (!w.ok) throw new HttpError(400, `${w.reason} Programe el envío para un horario permitido.`);
+    }
     return remind(db, c, client, { channels, trigger: "manual", userId: req.user.id, settings: paymentSettings(db) });
   }));
 
@@ -258,7 +270,7 @@ export function paymentsRouter(db) {
     const concept = str(b.concept) || (charge ? [charge.concept, charge.plan_label].filter(Boolean).join(" · ") : "Abono a cuenta");
     db.exec("BEGIN IMMEDIATE");
     try {
-      const number = db.prepare("SELECT COALESCE(MAX(number), 0) + 1 AS n FROM receipts").get().n;
+      const number = nextReceiptNumber(db.prepare("SELECT MAX(number) AS n FROM receipts").get().n, paymentSettings(db).receipt_start);
       const id = db.prepare(`INSERT INTO receipts (number, client_id, charge_id, case_id, office_id, amount, method, reference, paid_on, concept, notes, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(number, client.id, charge?.id ?? null, caseId, officeId, amount, b.method, str(b.reference),
         paidOn, concept, str(b.notes), req.user.id).lastInsertRowid;
@@ -282,7 +294,10 @@ export function paymentsRouter(db) {
       WHERE ${officeSql(req.user, "ch.office_id")} ${req.query.clientId ? `AND pr.client_id = ${Number(req.query.clientId)}` : ""}
       ORDER BY pr.id DESC LIMIT 500`).all().map((x) => ({ ...x, ok: !!x.ok }))));
 
-  r.get("/settings", h(() => paymentSettings(db)));
+  r.get("/settings", h(() => {
+    const v = paymentSettings(db);
+    return { ...v, receipt_next: nextReceiptNumber(db.prepare("SELECT MAX(number) AS n FROM receipts").get().n, v.receipt_start) };
+  }));
   r.put("/settings", h((req) => {
     const b = req.body ?? {};
     const v = {
@@ -291,6 +306,7 @@ export function paymentsRouter(db) {
       repeat_days: Math.min(60, Math.max(1, Number(b.repeat_days) || 7)),
       pay_info: str(b.pay_info).slice(0, 1500), firm_name: str(b.firm_name) || PAYMENT_DEFAULTS.firm_name, firm_nit: str(b.firm_nit),
       channels: (Array.isArray(b.channels) ? b.channels : ["email"]).filter((x) => ["email", "whatsapp"].includes(x)),
+      receipt_start: Math.max(1, Math.round(Number(b.receipt_start) || paymentSettings(db).receipt_start)),
     };
     db.prepare("INSERT INTO settings (key, value) VALUES ('payments', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(v));
     return v;

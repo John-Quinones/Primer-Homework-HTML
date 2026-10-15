@@ -2824,7 +2824,7 @@ async function renderPayTab() {
   }
 }
 let payChargesCache = [], payReceiptsCache = [];
-const receiptNo = (n) => `RC-${String(n).padStart(6, "0")}`;
+const receiptNo = (n) => L.receiptLabel(n);
 
 $("#pay-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("[data-ptab]");
@@ -2967,16 +2967,18 @@ const paySetForm = $("#pay-settings-dialog form");
 async function openPaySettings() {
   paySettings = await api("GET", "/payments/settings");
   openDialog($("#pay-settings-dialog"), "Ajustes de cobro", { firm_name: paySettings.firm_name, firm_nit: paySettings.firm_nit, pay_info: paySettings.pay_info,
-    days_before: paySettings.days_before, repeat_days: paySettings.repeat_days });
+    days_before: paySettings.days_before, repeat_days: paySettings.repeat_days, receipt_start: paySettings.receipt_next });
+  $("#receipt-next-note").textContent = `El próximo recibo saldrá con el ${receiptNo(paySettings.receipt_next)}; los siguientes siguen en orden (consecutivo).`;
   paySetForm.elements.auto.checked = paySettings.auto;
   paySetForm.elements.ch_email.checked = paySettings.channels.includes("email");
   paySetForm.elements.ch_whatsapp.checked = paySettings.channels.includes("whatsapp");
-  $("#pay-settings-note").textContent = window.JuanmaBackend?.web ? "Los recordatorios automáticos se envían con la app instalada en el servidor; aquí quedan guardados los ajustes." : "";
+  $("#pay-settings-note").textContent = (window.JuanmaBackend?.web ? "Los recordatorios automáticos se envían con la app instalada en el servidor; aquí quedan guardados los ajustes. " : "")
+    + "Por la Ley 2300 de 2023 solo se envían de lunes a viernes de 7:00 a. m. a 7:00 p. m. y sábados de 8:00 a. m. a 3:00 p. m.; nunca domingos ni festivos.";
 }
 wireDialog($("#pay-settings-dialog"), async (form) => {
   const d = formData(form);
   await api("PUT", "/payments/settings", { firm_name: d.firm_name, firm_nit: d.firm_nit, pay_info: d.pay_info, auto: form.elements.auto.checked,
-    days_before: Number(d.days_before), repeat_days: Number(d.repeat_days),
+    days_before: Number(d.days_before), repeat_days: Number(d.repeat_days), receipt_start: Number(d.receipt_start),
     channels: ["email", "whatsapp"].filter((c) => form.elements["ch_" + c].checked) });
   toast("Ajustes guardados.");
 });
