@@ -15,6 +15,7 @@ export const PORTALS = [
     how: "Procesos de los despachos que usan Justicia Siglo XXI. Pegue el radicado de 23 dígitos en «Número de radicación» y pulse Consultar; también busca por nombre de las partes.",
     by: "radicado",
     auto: true,
+    manual: "",
   },
   {
     id: "tyba",
@@ -23,6 +24,7 @@ export const PORTALS = [
     how: "Despachos que trabajan en TYBA (Justicia XXI Web). Busque por número de proceso (radicado de 23 dígitos) o por documento de la parte; el portal pide una verificación de seguridad.",
     by: "radicado",
     auto: false,
+    manual: "Pide una verificación de seguridad (captcha) que solo una persona puede resolver.",
   },
   {
     id: "siugj",
@@ -31,6 +33,7 @@ export const PORTALS = [
     how: "Sistema nuevo de la Rama Judicial (empezó con la especialidad laboral en 2025). Busque por CUP (el radicado), por número de documento o por el nombre completo exacto de la parte.",
     by: "radicado o documento",
     auto: false,
+    manual: "No ofrece un servicio público para consulta automática (en evaluación con la prueba de conexión).",
   },
   {
     id: "publicaciones",
@@ -39,6 +42,7 @@ export const PORTALS = [
     how: "Estados, edictos y traslados publicados por despacho y fecha: busque el despacho del expediente y revise las publicaciones recientes.",
     by: "despacho",
     auto: false,
+    manual: "Publica estados y traslados por despacho y fecha, no por radicado.",
   },
   {
     id: "samai",
@@ -47,6 +51,7 @@ export const PORTALS = [
     how: "Procesos administrativos: juzgados administrativos, tribunales administrativos y Consejo de Estado. Pegue el radicado en la búsqueda por número de proceso.",
     by: "radicado",
     auto: false,
+    manual: "No ofrece un servicio público para consulta automática (en evaluación con la prueba de conexión).",
   },
 ];
 

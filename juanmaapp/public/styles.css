@@ -770,3 +770,9 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
 .cm-cases li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .cm-cases li:last-child { border-bottom: 0; }
 .cm-cases li > span { min-width: 0; overflow-wrap: anywhere; }
+/* Change 55: one consult for every platform */
+.portal-check { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-muted); }
+.portal-check ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.portal-check li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; }
+.portal-check li > span:nth-child(2) { min-width: 0; }
+@media (max-width: 760px) { .portal-check li { grid-template-columns: 1fr; } }

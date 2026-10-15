@@ -253,6 +253,12 @@
         </div>
         <p class="hint">Consulta la Rama Judicial (Consulta Nacional Unificada de Procesos) con el radicado de 23 dígitos de cada expediente y avisa las actuaciones nuevas. El botón «Portales» abre además Publicaciones Procesales, TYBA y SAMAI con el radicado copiado.</p>
         <div id="consulta-status" class="status" hidden></div>
+        <details id="portal-probe" class="panel follow-panel" hidden>
+          <summary><strong>Prueba de conexión con los portales</strong> <span class="muted">· desde el servidor: qué responde cada portal (Gerencia)</span></summary>
+          <p class="hint">Sirve para ampliar la consulta automática: muestra si cada portal responde al servidor, si pide verificación de seguridad (captcha) y qué servicios usa su página. Envíe el resultado a soporte para habilitar SAMAI y SIUGJ en la consulta automática.</p>
+          <button type="button" id="portal-probe-run">Probar ahora</button>
+          <div id="portal-probe-out" class="table-scroll"></div>
+        </details>
         <div class="consulta-grid">
           <div class="panel min0">
             <div class="table-scroll">

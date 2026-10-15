@@ -5,6 +5,7 @@ import { scopeOf } from "./auth.js";
 import { checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS } from "./monitor.js";
 import { channelsStatus } from "./notify.js";
 import { withDecisions } from "./decision.js";
+import { checkAllPortals, probePortals } from "./portal-check.js";
 
 export function monitorRouter(db) {
   const r = express.Router();
@@ -52,6 +53,19 @@ export function monitorRouter(db) {
     if (rows.length > 100) return res.status(400).json({ error: "Máximo 100 procesos por consulta manual." });
     const results = await checkCases(db, rows.map((x) => x.id), { pauseMs: Number(process.env.RAMA_PAUSE_MS ?? 800) });
     res.json({ results, checked: results.length, ok: results.filter((x) => x.ok).length, newCount: results.reduce((a, x) => a + x.newCount, 0) });
+  });
+
+  // One request, every platform (change 55).
+  r.post("/cases/:id/check-all", async (req, res) => {
+    const k = db.prepare(`SELECT k.id FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(Number(req.params.id));
+    if (!k) return res.status(404).json({ error: "El expediente no existe." });
+    res.json(await checkAllPortals(db, k.id));
+  });
+
+  // Connection test with the portals, from the server (Gerencia).
+  r.get("/portal-probe", async (req, res) => {
+    if (!req.user.permissions.includes("users.manage")) return res.status(403).json({ error: "Solo Gerencia." });
+    res.json(await probePortals());
   });
 
   r.get("/prefs", (req, res) => res.json(prefsOf(db, req.user.id)));

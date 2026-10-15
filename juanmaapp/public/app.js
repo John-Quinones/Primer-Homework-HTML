@@ -164,6 +164,7 @@ function applyPermissions() {
   $("#user-role").textContent = me.role;
   $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   $("#courts-import-btn").hidden = !can("catalog.manage");
+  $("#portal-probe").hidden = !can("users.manage");
   $("#tpl-manage-bar").hidden = !can("templates.manage");
   $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
   $$('[data-tpl-out="mail"]').forEach((b) => (b.hidden = !can("mail.send")));
@@ -597,7 +598,7 @@ async function renderExpedienteFicha(id) {
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
-        ${k.radicado && can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta ya este radicado en la Rama Judicial y trae las actuaciones nuevas">↻ Consultar ahora</button>` : ""}
+        ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
@@ -626,7 +627,7 @@ async function renderExpedienteFicha(id) {
       ${secId("oficios", wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
         : empty("Sin oficios, peticiones ni requerimientos. Registre la entrega y la app controla la respuesta y su plazo."),
         canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : "")))}
-      ${acts !== null ? secId("actuaciones", wide(panel("Actuaciones (consulta automática)", acts.length, `
+      ${acts !== null ? secId("actuaciones", wide(panel("Actuaciones (consulta automática)", acts.length, `${portalCheckBox(k.id)}
           <p class="hint">${WEB ? "En este enlace de prueba no se puede consultar la Rama Judicial (no se conecta a sitios externos); en la versión del servidor (Azure) se consulta en automático y con «Consultar ahora»." : k.monitor ? "Se consulta en automático a las 7, 13 y 17 h." : "La consulta automática está desactivada para este expediente (actívela en Expedientes, columna «Consulta»)."}
             ${k.last_checked_at ? `Última consulta: ${escapeHtml(CMETA.utcToBogota(k.last_checked_at))}.` : "Aún no se ha consultado."} Con «Recordatorio» crea un término o tarea a partir de la actuación.</p>
           ${acts.length ? `<div class="acts-scroll"><table class="data-table compact"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th></th></tr></thead><tbody>${acts.map((a, i) => `<tr>
@@ -634,8 +635,8 @@ async function renderExpedienteFicha(id) {
             <td>${escapeHtml(String(a.anotacion || "").slice(0, 300))}</td>
             <td>${canWrite ? `<button class="mini" data-action="act-remind" data-case="${k.id}" data-act="${i}">Recordatorio</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
           : empty(k.last_checked_at ? "La consulta no ha encontrado actuaciones." : "Use «↻ Consultar ahora» para traer las actuaciones de la Rama Judicial.")}`,
-        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`)))
-        : !k.radicado ? secId("actuaciones", wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial.")))) : ""}
+        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar en todas las plataformas</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`)))
+        : !k.radicado ? secId("actuaciones", wide(panel("Actuaciones", null, `${portalCheckBox(k.id)}${empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en automático.")}`))) : ""}
       ${secId("documentos", panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
           <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
           <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
@@ -1442,14 +1443,18 @@ document.addEventListener("click", (e) => {
       return openTaskDialog(null, Number(btn.dataset.case), "termino", { title: `Actuación: ${a.actuacion || ""}`.slice(0, 140), notes: `${String(a.fecha || "").slice(0, 10)} · ${a.anotacion || ""}`.trim() });
     },
     "consult-case": async () => {
+      // One request, every platform (change 55): the automatic ones are consulted now, the rest are listed to open.
       btn.disabled = true;
-      toast("Consultando en la Rama Judicial…");
+      toast("Consultando en todas las plataformas…");
       try {
-        const r = await api("POST", "/monitor/check", { case_ids: [id] });
-        const x = r.results?.[0];
-        toast(!x ? "No se pudo consultar." : x.ok ? (x.newCount ? `${x.newCount} actuación(es) nueva(s).` : "Consultado: sin actuaciones nuevas.") : x.error, !x?.ok);
+        const r = await api("POST", `/monitor/cases/${id}/check-all`);
+        lastPortalCheck.set(id, { ...r, at: bogotaNow() });
+        const auto = r.portals.filter((p) => p.mode === "auto");
+        const failed = auto.filter((p) => !p.ok);
+        toast(failed.length ? `No se pudo consultar: ${failed.map((p) => p.detail).join(" · ")}` : r.newCount ? `${r.newCount} actuación(es) nueva(s).` : "Consultado: sin actuaciones nuevas.", failed.length > 0);
       } finally { btn.disabled = false; }
       await refreshView();
+      goToSection("actuaciones");
     },
     "delete-task": async () => {
       if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
@@ -3406,6 +3411,15 @@ wireDialog($("#task-dialog"), async (form) => {
 });
 
 // ---------- Consulta de procesos ----------
+$("#portal-probe-run").addEventListener("click", () => guarded(async () => {
+  $("#portal-probe-out").innerHTML = '<p class="muted">Probando… (puede tardar hasta un minuto)</p>';
+  const rows = await api("GET", "/monitor/portal-probe");
+  $("#portal-probe-out").innerHTML = `<table class="data-table compact"><thead><tr><th>Portal</th><th>Respuesta</th><th>Verificación de seguridad</th><th>Detalle</th></tr></thead><tbody>${rows.map((r) => `<tr>
+    <td><strong>${escapeHtml(r.name)}</strong><br><span class="muted">${escapeHtml(r.url)}</span></td>
+    <td>${r.status ? `HTTP ${r.status} · ${r.ms} ms · ${Math.round((r.bytes || 0) / 1024)} KB` : `<span class="follow bad">Sin conexión</span><br><span class="muted">${escapeHtml(r.error || "")}</span>`}</td>
+    <td>${r.status ? (r.captcha ? '<span class="follow warn">Sí (captcha)</span>' : '<span class="follow ok">No detectada</span>') : "—"}</td>
+    <td><span class="muted">${escapeHtml([r.title, r.forms != null ? `${r.forms} formulario(s)` : "", (r.apiHints || []).join(", ")].filter(Boolean).join(" · "))}</span></td></tr>`).join("")}</tbody></table>`;
+}));
 let monitorRows = [];
 async function renderConsulta() {
   const [rows, prefs, status, log] = await Promise.all([
@@ -3534,6 +3548,16 @@ async function copyText(text) {
 
 // Official portals for a case (change 54): Siglo XXI (national query), TYBA, SIUGJ,
 // Publicaciones Procesales and SAMAI, the suggested one first. Opening one copies the radicado.
+// Result of «Consultar en todas las plataformas», per portal (kept for this session).
+const lastPortalCheck = new Map();
+function portalCheckBox(caseId) {
+  const r = lastPortalCheck.get(caseId);
+  if (!r) return "";
+  return `<div class="portal-check" data-portal-case="${caseId}"><strong>Resultado de la consulta en todas las plataformas</strong> <span class="muted">· ${escapeHtml(r.at)}</span>
+    <ul>${r.portals.map((p) => `<li><span class="follow ${p.mode === "auto" ? (p.ok ? "ok" : "bad") : "muted"}">${p.mode === "auto" ? (p.ok ? "Consultado" : "Error") : "Revisar a mano"}</span>
+      <span><strong>${escapeHtml(p.name)}</strong>${p.suggested ? ' <span class="badge ok">Sugerido</span>' : ""}<br><span class="muted">${escapeHtml(p.detail || "")}</span></span>
+      ${p.mode === "manual" ? `<a class="button mini" href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" data-portal-open data-portal-copy-what="${p.id === "publicaciones" ? "court" : "rad"}">Abrir</a>` : "<span></span>"}</li>`).join("")}</ul></div>`;
+}
 function portalListHtml(k) {
   const { PORTALS, portalOrder } = window.JuanmaPortals;
   return portalOrder(k.radicado, k.category_name).map((id, i) => {
