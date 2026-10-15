@@ -4,7 +4,7 @@ import express from "express";
 import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
-import { normStatus, normPartyRole } from "./case-meta.js";
+import { normStatus, normPartyRole, cleanParties } from "./case-meta.js";
 import { personFields, clientMatches } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
@@ -123,7 +123,8 @@ export function recordsRouter(db) {
     const [sw, sp] = scopeSql(req, "office_id");
     return db.prepare(`
       SELECT c.*, o.name AS office_name,
-        (SELECT COUNT(*) FROM cases k WHERE k.client_id = c.id AND ${kw}) AS case_count
+        (SELECT COUNT(*) FROM cases k WHERE (k.client_id = c.id OR EXISTS (SELECT 1 FROM json_each(k.parties) j
+          WHERE json_extract(j.value, '$.client_id') = c.id AND json_extract(j.value, '$.ours') = 1)) AND ${kw}) AS case_count
       FROM clients c LEFT JOIN offices o ON o.id = c.office_id
       WHERE (${cw} OR c.id IN (SELECT client_id FROM cases WHERE ${sw}))
       ORDER BY c.full_name COLLATE NOCASE`).all(...kp, ...cp, ...sp).map(plain).filter((c) => clientMatches(c, q, by));
@@ -312,7 +313,23 @@ export function recordsRouter(db) {
     LEFT JOIN offices o ON o.id = k.office_id
     LEFT JOIN users u ON u.id = k.assigned_user_id`;
 
-  const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated });
+  const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated, parties: JSON.parse(row.parties || "[]") });
+  // Our clients among the parties are linked to their client record (given, or found by document number).
+  const PARTY_CLIENT = "EXISTS (SELECT 1 FROM json_each(k.parties) j WHERE json_extract(j.value, '$.client_id') = ? AND json_extract(j.value, '$.ours') = 1)";
+  function caseParties(req, list, mainClientId) {
+    const { parties, error } = cleanParties(list);
+    if (error) throw new HttpError(400, error);
+    const digits = (x) => String(x || "").replace(/\D/g, "");
+    for (const p of parties) {
+      if (p.client_id && !clientVisible(req, p.client_id)) p.client_id = null;
+      if (p.ours && !p.client_id && digits(p.id_number).length >= 5) {
+        const found = db.prepare("SELECT id, id_number FROM clients").all().find((c) => digits(c.id_number) === digits(p.id_number));
+        if (found && clientVisible(req, found.id)) p.client_id = found.id;
+      }
+      if (!p.ours) p.client_id = null;
+    }
+    return JSON.stringify(parties.filter((p) => p.client_id !== mainClientId));
+  }
   const partyRole = (x) => {
     const r = normPartyRole(x);
     if (r === null) throw new HttpError(400, `Calidad del cliente no válida: ${x}`);
@@ -378,7 +395,7 @@ export function recordsRouter(db) {
     const [w, p] = scopeSql(req, "k.office_id");
     const where = [w];
     const params = [...p];
-    if (req.query.clientId) { where.push("k.client_id = ?"); params.push(toInt(req.query.clientId, "clientId")); }
+    if (req.query.clientId) { const cid = toInt(req.query.clientId, "clientId"); where.push(`(k.client_id = ? OR ${PARTY_CLIENT})`); params.push(cid, cid); }
     if (req.query.officeId) { where.push("k.office_id = ?"); params.push(toInt(req.query.officeId, "officeId")); }
     if (req.query.mine === "1") { where.push("k.assigned_user_id = ?"); params.push(req.user.id); }
     return db.prepare(`${CASE_SELECT} WHERE ${where.join(" AND ")} ORDER BY k.updated_at DESC`).all(...params).map(caseOut);
@@ -398,11 +415,11 @@ export function recordsRouter(db) {
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);
     const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
-        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
+        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
       .run(clientId, typeId, str(b.title), normStatus(b.status), str(b.counterparty), str(b.facts),
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
-        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0,
+        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId),
         // Imported cases keep the date they were opened in the previous system.
         /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : null).lastInsertRowid;
     res.status(201);
@@ -423,12 +440,12 @@ export function recordsRouter(db) {
     const loc = caseLocation(b, cur);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
       field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
-      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, updated_at = datetime('now') WHERE id = ?`)
+      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) ? normStatus(b.status) : cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
         loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
-        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, id);
+        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), id);
     return getCase(req, id);
   }));
 

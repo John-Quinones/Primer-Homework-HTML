@@ -816,11 +816,19 @@
         </label>
       </div>
       <div class="grid2">
-        <label>Calidad del cliente <select name="client_role"></select></label>
+        <label>Calidad del cliente principal <select name="client_role"></select></label>
         <label>Cliente afiliado
           <select name="affiliated"><option value="0">No</option><option value="1">Sí</option></select>
         </label>
       </div>
+      <fieldset class="parties-box"><legend>Partes del proceso</legend>
+        <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
+        <div class="parties-grid">
+          <div class="party-side" data-side="activa"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="activa">+ Agregar</button></div>
+          <div class="party-side" data-side="pasiva"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="pasiva">+ Agregar</button></div>
+        </div>
+        <datalist id="party-clients"></datalist>
+      </fieldset>
       <fieldset class="court-fields"><legend>Despacho judicial</legend>
         <p class="hint">Elija departamento, ciudad y área: la lista de despachos muestra solo los de esa ciudad o de su circuito en esa área (más los promiscuos que también la atienden).</p>
         <div class="grid2">

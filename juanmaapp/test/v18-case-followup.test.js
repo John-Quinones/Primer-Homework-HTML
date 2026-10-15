@@ -84,3 +84,25 @@ test("terms set by the user: business days skip holidays and, for court terms, t
   assert.equal(cleared.term_days, null);
   assert.equal(cleared.term_from, "", "no days, no term");
 });
+
+test("several plaintiffs and defendants; our clients among them see the case in their own file", async () => {
+  const ana = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Ana", last_names: "Rojas", id_type: "CC", id_number: "38.555.111" })).body;
+  const type = (await admin.call("GET", "/catalog")).body.flatMap((x) => x.types)[0].id;
+  const main = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Luis", last_names: "Rojas", id_number: "93111222" })).body;
+  const k = (await admin.call("POST", "/cases", { client_id: main.id, process_type_id: type, client_role: "Demandante", parties: [
+    { side: "activa", name: "Ana Rojas", id_number: "38555111", ours: true },
+    { side: "activa", name: "Pedro Rojas", id_number: "1", ours: false },
+    { side: "pasiva", name: "Constructora XYZ S.A.S.", id_number: "900123456", ours: false },
+  ] })).body;
+  assert.equal(k.parties.length, 3);
+  assert.equal(k.parties[0].client_id, ana.id, "linked by document number");
+  assert.equal(k.parties[1].client_id, null);
+  const anaCases = (await admin.call("GET", `/cases?clientId=${ana.id}`)).body;
+  assert.deepEqual(anaCases.map((x) => x.id), [k.id]);
+  const listed = (await admin.call("GET", "/clients")).body.find((c) => c.id === ana.id);
+  assert.equal(listed.case_count, 1);
+  const bad = await admin.call("PUT", `/cases/${k.id}`, { parties: [{ side: "x", name: "Y" }] });
+  assert.equal(bad.status, 400);
+  const cleared = (await admin.call("PUT", `/cases/${k.id}`, { parties: [] })).body;
+  assert.equal(cleared.parties.length, 0);
+});

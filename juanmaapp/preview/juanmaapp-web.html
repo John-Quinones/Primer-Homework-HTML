@@ -828,6 +828,22 @@ a.chip-stat strong { color: var(--link); }
 .term-result { margin: 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--brand-blue) 9%, transparent); font-size: .9rem; }
 .term-result:empty { display: none; }
 
+/* Change 49: parties, "Ver …" buttons, section bar */
+.sec-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 10px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding: 6px 0; }
+.case-open-list > li.case-open:hover { border-color: var(--border); box-shadow: none; }
+.case-open-actions { margin-top: 6px; flex-wrap: wrap; gap: 4px; }
+.ver-group { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; width: 100%; }
+.parties-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.parties-grid, .parties-view { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.parties-grid > *, .parties-view > * { min-width: 0; }
+.party-side h4, .parties-view h4 { margin: 4px 0 6px; font-size: .9rem; }
+.party-rows { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
+.party-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: 8px; }
+.party-row [data-p=name] { grid-column: 1 / -1; }
+.party-row.main { grid-template-columns: 1fr auto; padding: 6px 8px; background: var(--surface-muted); border-radius: 8px; }
+.party-row input { min-width: 0; }
+@media (max-width: 760px) { .sec-nav { position: static; } }
+
 </style>
 
 <style>
@@ -1644,11 +1660,19 @@ a.chip-stat strong { color: var(--link); }
         </label>
       </div>
       <div class="grid2">
-        <label>Calidad del cliente <select name="client_role"></select></label>
+        <label>Calidad del cliente principal <select name="client_role"></select></label>
         <label>Cliente afiliado
           <select name="affiliated"><option value="0">No</option><option value="1">Sí</option></select>
         </label>
       </div>
+      <fieldset class="parties-box"><legend>Partes del proceso</legend>
+        <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
+        <div class="parties-grid">
+          <div class="party-side" data-side="activa"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="activa">+ Agregar</button></div>
+          <div class="party-side" data-side="pasiva"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="pasiva">+ Agregar</button></div>
+        </div>
+        <datalist id="party-clients"></datalist>
+      </fieldset>
       <fieldset class="court-fields"><legend>Despacho judicial</legend>
         <p class="hint">Elija departamento, ciudad y área: la lista de despachos muestra solo los de esa ciudad o de su circuito en esa área (más los promiscuos que también la atienden).</p>
         <div class="grid2">
@@ -3765,7 +3789,33 @@ const LEGAL_TERMS = [
   ]],
 ].map(([area, items]) => [area, items.map(([name, days, unit, norm, kind, judicial = true]) => ({ area, name, days, unit, norm, kind, judicial }))]);
 
-return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS };
+// ----- Parties of the case (change 49): several plaintiffs / defendants, marking which are our clients -----
+const ACTIVE_ROLES = ["Demandante", "Ejecutante", "Querellante", "Denunciante", "Víctima", "Peticionario", "Reclamante"];
+/** "activa" for the side that sues (demandante, ejecutante…), "pasiva" for the other; "" when unknown. */
+const sideOfRole = (role) => (!role ? "" : ACTIVE_ROLES.includes(role) ? "activa" : "pasiva");
+/** Plural names of each side for a process: { activa: "Demandantes", pasiva: "Demandados" }. */
+function sideLabels(category, type = "") {
+  const roles = partyRolesFor(category, type);
+  if (roles === PARTY_ROLES.penal) return { activa: "Víctimas o denunciantes", pasiva: "Procesados o denunciados" };
+  if (roles.length < 2) return { activa: `${roles[0]}s`, pasiva: "Entidades o contrapartes" };
+  return { activa: `${roles[0]}s`, pasiva: `${roles[1]}s` };
+}
+/** Validated list of parties; returns { parties } or { error }. */
+function cleanParties(list) {
+  if (list == null) return { parties: [] };
+  if (!Array.isArray(list) || list.length > 40) return { error: "Lista de partes no válida (máximo 40)." };
+  const parties = [];
+  for (const p of list) {
+    const name = String(p?.name ?? "").trim().replace(/\s+/g, " ").slice(0, 160);
+    if (!name) continue;
+    if (!["activa", "pasiva"].includes(p.side)) return { error: "Indique si cada parte es demandante o demandada." };
+    parties.push({ side: p.side, name, id_type: String(p.id_type ?? "").trim().slice(0, 10), id_number: String(p.id_number ?? "").trim().slice(0, 30),
+      ours: !!p.ours, client_id: Number.isInteger(Number(p.client_id)) && Number(p.client_id) > 0 ? Number(p.client_id) : null });
+  }
+  return { parties };
+}
+
+return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS, sideOfRole, sideLabels, cleanParties };
 })();
 
 window.JuanmaLedger = (function () {
@@ -4670,7 +4720,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
-<script>window.JUANMA_VERSION = {"change":48,"sha":"","date":"2026-10-15"};</script>
+<script>window.JUANMA_VERSION = {"change":49,"sha":"","date":"2026-10-15"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -5004,8 +5054,21 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     const c = s.categories.find((c) => c.id === t.category_id);
     const cl = s.clients.find((x) => x.id === k.client_id);
     const u = s.users.find((x) => x.id === k.assigned_user_id);
-    return clone({ ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
+    return clone({ parties: [], ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
       office_name: officeName(k.office_id), assigned_name: u?.name ?? null });
+  };
+  // Same as the server: our clients among the parties are linked to their client record.
+  const isPartyClient = (k, clientId) => (k.parties || []).some((p) => p.ours && p.client_id === clientId);
+  const caseParties = (list, mainClientId) => {
+    const { parties, error } = CM.cleanParties(list);
+    if (error) fail(error);
+    const digits = (x) => String(x || "").replace(/\D/g, "");
+    for (const p of parties) {
+      if (p.client_id && !s.clients.some((c) => c.id === p.client_id && clientVisible(c))) p.client_id = null;
+      if (p.ours && !p.client_id && digits(p.id_number).length >= 5) p.client_id = s.clients.find((c) => clientVisible(c) && digits(c.id_number) === digits(p.id_number))?.id ?? null;
+      if (!p.ours) p.client_id = null;
+    }
+    return parties.filter((p) => p.client_id !== mainClientId);
   };
   const typePath = (t) => { const p = t.parent_id && s.types.find((x) => x.id === t.parent_id); return p ? `${p.name} › ${t.name}` : t.name; };
   const typeUses = (t) => s.cases.filter((k) => k.process_type_id === t.id || s.types.some((x) => x.parent_id === t.id && x.id === k.process_type_id)).length;
@@ -5440,7 +5503,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       return s.clients
         .filter((c) => clientVisible(c) && window.JuanmaPerson.clientMatches(c, q.q || "", q.by || ""))
         .sort((a, b) => a.full_name.localeCompare(b.full_name, "es"))
-        .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => k.client_id === c.id && inScope(k.office_id)).length }));
+        .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => (k.client_id === c.id || isPartyClient(k, c.id)) && inScope(k.office_id)).length }));
     }],
     ["POST", /^\/clients$/, (m, b) => {
       need("clients.write");
@@ -5605,7 +5668,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     ["GET", /^\/cases(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       return s.cases
-        .filter((k) => inScope(k.office_id) && (!q.clientId || k.client_id === +q.clientId) && (!q.officeId || k.office_id === +q.officeId)
+        .filter((k) => inScope(k.office_id) && (!q.clientId || k.client_id === +q.clientId || isPartyClient(k, +q.clientId)) && (!q.officeId || k.office_id === +q.officeId)
           && (q.mine !== "1" || k.assigned_user_id === me().id))
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
         .map(caseOut);
@@ -5622,7 +5685,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
         assigned_user_id: checkAssignee(b.assigned_user_id, officeId), updated_at: stamp(),
         created_at: /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : stamp(),
-        last_checked_at: null, last_action_date: null, ...caseLocation(b),
+        last_checked_at: null, last_action_date: null, ...caseLocation(b), parties: caseParties(b.parties, c.id),
       };
       s.cases.push(k);
       return caseOut(k);
@@ -5638,7 +5701,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
         counterparty: str(b.counterparty ?? k.counterparty), facts: str(b.facts ?? k.facts),
         field_values: cleanValues(typeId, b.field_values ?? k.field_values), office_id: officeId,
         assigned_user_id: "assigned_user_id" in b ? checkAssignee(b.assigned_user_id, officeId) : k.assigned_user_id,
-        updated_at: stamp(), ...caseLocation(b, k),
+        updated_at: stamp(), ...caseLocation(b, k), parties: "parties" in b ? caseParties(b.parties, k.client_id) : k.parties || [],
       });
       return caseOut(k);
     }],
@@ -6587,8 +6650,8 @@ const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despa
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
-  const m = location.hash.match(/^#(cliente|expediente)-(\d+)$/);
-  if (m) return { name: m[1], id: Number(m[2]) };
+  const m = location.hash.match(/^#(cliente|expediente)-(\d+)(?:-([a-z]+))?$/);
+  if (m) return { name: m[1], id: Number(m[2]), sec: m[3] || "" };
   const n = location.hash.slice(1);
   return { name: VIEWS.includes(n) ? n : "inicio" };
 }
@@ -6599,7 +6662,11 @@ function showView() {
   for (const v of [...VIEWS, ...Object.keys(FICHAS)]) $(`#view-${v}`).hidden = v !== name;
   const nav = FICHAS[name] || name;
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === nav));
-  if (FICHAS[name]) { window.scrollTo(0, 0); return name === "cliente" ? renderClienteFicha(id) : renderExpedienteFicha(id); }
+  if (FICHAS[name]) {
+    window.scrollTo(0, 0);
+    const { sec } = route();
+    return (name === "cliente" ? renderClienteFicha(id) : renderExpedienteFicha(id)).then(() => sec && goToSection(sec));
+  }
   return RENDER[name]();
 }
 /** Re-render whatever screen is open (after a dialog saves). */
@@ -6633,6 +6700,9 @@ async function renderClientDetail() {
     <div class="detail-head">
       <h3>${escapeHtml(c.full_name)}</h3>
       <div class="toolbar">
+        <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
+        <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
+        ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
@@ -6671,7 +6741,8 @@ async function renderClienteFicha(id) {
       <h2>${escapeHtml(c.full_name)}</h2>
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
-        ${can("payments.manage") ? `<button data-action="new-receipt" data-client="${c.id}">Registrar pago</button><button data-action="pay-statement" data-id="${c.id}">Estado de cuenta</button>` : ""}
+        <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
+        ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
         ${can("cases.write") ? `<button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>` : ""}
       </div>
     </div>
@@ -6692,16 +6763,17 @@ async function renderClienteFicha(id) {
           ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
-      <section class="panel ficha-wide">
-        <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)} <span class="muted">· toque uno para abrirlo</span></h3>
+      <section id="sec-expedientes" class="panel ficha-wide">
+        <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)}</h3>
         ${cases.length ? `<ul class="case-open-list">${cases.map((k) => `
-          <li><a class="case-open" href="#expediente-${k.id}">
+          <li class="case-open">
             <span class="case-open-top">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : ""}<span class="pill">${escapeHtml(k.category_name)}</span><span class="status-tag">${escapeHtml(k.status)}</span></span>
             <strong>${escapeHtml(k.type_name)}</strong>
             ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
+            ${k.client_id !== c.id ? `<span class="muted">Cliente principal: ${escapeHtml(k.client_name)}</span>` : ""}
             <span class="muted">${escapeHtml([k.court_name, k.radicado && formatRadicado(k.radicado)].filter(Boolean).join(" · ") || "Sin despacho ni radicado")}</span>
             <span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")} · ${escapeHtml(k.office_name || "")}</span>
-            <span class="case-open-go">Abrir expediente ›</span></a></li>`).join("")}</ul>`
+            <span class="toolbar case-open-actions">${verCaseButtons(k)}</span></li>`).join("")}</ul>`
           : '<p class="empty">Este cliente no tiene expedientes. Créelo con «+ Nuevo expediente».</p>'}
       </section>
     </div>`;
@@ -6709,6 +6781,22 @@ async function renderClienteFicha(id) {
 
 // ---------- Case screen: everything about one case, with the other modules ----------
 const fmtDue = (d) => escapeHtml(String(d || "").replace("T", " ").slice(0, 16));
+const goToSection = (sec) => document.getElementById(`sec-${sec}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+const secId = (key, html) => html.replace('<section class="', `<section id="sec-${key}" class="`);
+/** "Ver …" buttons: each one opens a screen or a section of it; nothing opens by clicking elsewhere. */
+const VER_CASE = [["", "Ver expediente"], ["tareas", "Ver tareas"], ["actuaciones", "Ver actuaciones"], ["pagos", "Ver pagos"], ["correos", "Ver correos"], ["historial", "Ver historial"]];
+const verCaseButtons = (k, keys = ["", "tareas", "actuaciones", "pagos", "correos"]) => VER_CASE.filter(([x]) => keys.includes(x))
+  .map(([x, label]) => `<button class="mini ${x === "" ? "primary" : ""}" data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}">${label}</button>`).join("");
+/** Parties by side, our clients marked (main client included). */
+function partiesView(k) {
+  const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
+  const mainSide = CMETA.sideOfRole(k.client_role);
+  const list = [...(mainSide ? [{ side: mainSide, name: k.client_name, ours: true, client_id: k.client_id, main: true }] : []), ...(k.parties || [])];
+  if (!list.length) return "";
+  const col = (side) => `<div><h4>${escapeHtml(labels[side])}</h4><ul class="ficha-list">${list.filter((p) => p.side === side).map((p) => `<li><span><strong>${escapeHtml(p.name)}</strong>${p.id_number ? ` <span class="muted">${escapeHtml(p.id_number)}</span>` : ""}${p.main ? ' <span class="muted">· cliente principal</span>' : ""}</span>
+      <span>${p.ours ? '<span class="follow ok">Nuestro cliente</span>' : ""}${p.client_id && !p.main ? ` <button class="mini" data-action="go" data-to="#cliente-${p.client_id}">Ver cliente</button>` : ""}</span></li>`).join("") || '<li class="muted">Sin registrar</li>'}</ul></div>`;
+  return `<div class="parties-view">${col("activa")}${col("pasiva")}</div>`;
+}
 async function renderExpedienteFicha(id) {
   const box = $("#ficha-expediente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
@@ -6753,27 +6841,32 @@ async function renderExpedienteFicha(id) {
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
+    <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
+      ${[["datos", "Datos"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
+        .map(([x, label]) => `<button type="button" class="mini" data-action="goto-sec" data-sec="${x}">${label}</button>`).join("")}
+      <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
-      <a class="chip-stat" href="#cliente-${k.client_id}">Cliente <strong>${escapeHtml(k.client_name)}</strong></a>
+      <span class="chip-stat">Cliente <strong>${escapeHtml(k.client_name)}</strong></span>
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <span class="chip-stat">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></span>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
-      ${wide(panel("Datos del expediente", null, `<dl class="facts">
+      ${secId("datos", wide(panel("Datos del expediente", null, `<dl class="facts">
         ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
         ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
         ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
-      </dl>`))}
-      ${wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
-        canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : ""))}
-      ${wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
+      </dl>`)))}
+      ${secId("partes", wide(panel("Partes del proceso", null, partiesView(k) || '<p class="empty">Registre las partes con «Editar» (sección «Partes del proceso»).</p>')))}
+      ${secId("tareas", wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
+        canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : "")))}
+      ${secId("oficios", wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
         : empty("Sin oficios, peticiones ni requerimientos. Registre la entrega y la app controla la respuesta y su plazo."),
-        canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : ""))}
-      ${acts !== null ? wide(panel("Actuaciones (consulta automática)", acts.length, `
+        canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : "")))}
+      ${acts !== null ? secId("actuaciones", wide(panel("Actuaciones (consulta automática)", acts.length, `
           <p class="hint">${WEB ? "En este enlace de prueba no se puede consultar la Rama Judicial (no se conecta a sitios externos); en la versión del servidor (Azure) se consulta en automático y con «Consultar ahora»." : k.monitor ? "Se consulta en automático a las 7, 13 y 17 h." : "La consulta automática está desactivada para este expediente (actívela en Expedientes, columna «Consulta»)."}
             ${k.last_checked_at ? `Última consulta: ${escapeHtml(CMETA.utcToBogota(k.last_checked_at))}.` : "Aún no se ha consultado."} Con «Recordatorio» crea un término o tarea a partir de la actuación.</p>
           ${acts.length ? `<div class="acts-scroll"><table class="data-table compact"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th></th></tr></thead><tbody>${acts.map((a, i) => `<tr>
@@ -6781,33 +6874,33 @@ async function renderExpedienteFicha(id) {
             <td>${escapeHtml(String(a.anotacion || "").slice(0, 300))}</td>
             <td>${canWrite ? `<button class="mini" data-action="act-remind" data-case="${k.id}" data-act="${i}">Recordatorio</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
           : empty(k.last_checked_at ? "La consulta no ha encontrado actuaciones." : "Use «↻ Consultar ahora» para traer las actuaciones de la Rama Judicial.")}`,
-        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`))
-        : !k.radicado ? wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial."))) : ""}
-      ${panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
+        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`)))
+        : !k.radicado ? secId("actuaciones", wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial.")))) : ""}
+      ${secId("documentos", panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
           <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
           <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
-        : empty("Genere un documento y use «Guardar en el expediente»."), can("drafts.generate") ? `<button class="mini" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : "")}
-      ${charges ? panel("Pagos", charges.length + caseReceipts.length, `
+        : empty("Genere un documento y use «Guardar en el expediente»."), can("drafts.generate") ? `<button class="mini" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""))}
+      ${charges ? secId("pagos", panel("Pagos", charges.length + caseReceipts.length, `
         ${charges.length ? `<table class="data-table compact"><thead><tr><th>Cobro</th><th>Vence</th><th class="num">Valor</th><th class="num">Saldo</th><th>Estado</th></tr></thead><tbody>${charges.map((c) => `<tr class="${c.state === "anulado" ? "voided" : ""}">
           <td>${escapeHtml(c.concept)}${c.plan_label ? `<br><span class="muted">${escapeHtml(c.plan_label)}</span>` : ""}</td><td>${escapeHtml(c.due_date)}</td>
           <td class="num">${cop(c.amount)}</td><td class="num">${cop(c.balance)}</td><td><span class="pay-state ${c.state}">${escapeHtml(L.STATE_LABELS[c.state] || c.state)}</span></td></tr>`).join("")}</tbody></table>` : empty("Sin cobros para este expediente.")}
         ${caseReceipts.length ? `<h4>Recibos</h4><ul class="ficha-list">${caseReceipts.map((r) => `<li><strong>${escapeHtml(receiptNo(r.number))}</strong> · ${escapeHtml(r.paid_on)} · ${cop(r.amount)}${r.voided_at ? " · anulado" : ""}
           <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></li>`).join("")}</ul>` : ""}`,
-        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}">Registrar pago</button></span>`) : ""}
-      ${signs ? panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
+        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}">Registrar pago</button></span>`)) : ""}
+      ${signs ? secId("firmas", panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
           <span class="badge ${r.status === "completada" ? "ok" : r.status === "enviada" ? "warn" : ""}">${escapeHtml(SIGN_STATUS[r.status][1])}</span> <strong>${escapeHtml(r.title)}</strong>
           <button class="mini" data-action="open-sign" data-id="${r.id}">Ver</button></li>`).join("")}</ul>` : empty("Sin documentos enviados a firma."),
-        `<button class="mini" data-action="sign-case" data-id="${k.id}">Enviar a firma</button>`) : ""}
-      ${mails ? panel("Correos con trazabilidad", mails.length, mails.length ? `<ul class="ficha-list">${mails.map((m) => `<li>
+        `<button class="mini" data-action="sign-case" data-id="${k.id}">Enviar a firma</button>`)) : ""}
+      ${mails ? secId("correos", panel("Correos con trazabilidad", mails.length, mails.length ? `<ul class="ficha-list">${mails.map((m) => `<li>
           <strong>${escapeHtml(m.subject)}</strong> <span class="muted">${escapeHtml(m.to_addr)} · ${escapeHtml(String(m.sent_at).slice(0, 16))}</span>
           <span class="badge ${m.confirmed_at ? "ok" : m.opened_at ? "warn" : ""}">${m.confirmed_at ? "Acuse recibido" : m.opened_at ? "Abierto" : m.status === "enviado" ? "Enviado" : "Fallido"}</span>
           <button class="mini" data-action="mail-proof" data-id="${m.id}">Constancia</button></li>`).join("")}</ul>` : empty("Sin correos enviados desde este expediente."),
-        `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`)
-        : can("mail.send") ? panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba.")) : ""}
-      ${wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
+        `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`))
+        : can("mail.send") ? secId("correos", panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba."))) : ""}
+      ${secId("historial", wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
           .map(([t, label]) => `<button type="button" class="chip ${t === "" ? "active" : ""}" data-hist="${t}">${label}</button>`).join("")}</div>
         <ol class="history">${hist.map((h) => `<li data-type="${h.type}"><span class="h-when">${escapeHtml(h.at)}</span><span class="h-dot h-${h.type}"></span>
-          <div><strong>${escapeHtml(h.text)}</strong>${h.sub ? `<br><span class="muted">${escapeHtml(h.sub)}</span>` : ""}</div></li>`).join("")}</ol>`))}
+          <div><strong>${escapeHtml(h.text)}</strong>${h.sub ? `<br><span class="muted">${escapeHtml(h.sub)}</span>` : ""}</div></li>`).join("")}</ol>`)))}
     </div>`;
   ACTS_CACHE = acts || [];
 }
@@ -6911,6 +7004,7 @@ function caseCard(k) {
     ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
     <span>${escapeHtml(k.office_name || "")}${k.assigned_name ? " · " + escapeHtml(k.assigned_name) : " · Sin responsable"}</span>
     ${k.court_name ? `<span class="court-line">${escapeHtml(k.court_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : ""}</span>` : ""}
+    <div class="toolbar">${verCaseButtons(k, ["", "pagos", "correos"])}</div>
     <div class="toolbar">
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
       ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
@@ -6935,8 +7029,10 @@ for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "chan
 $("#client-list").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-client]");
   if (!btn) return;
+  // Selecting shows the summary at the side; the screen opens only with «Ver cliente».
   state.selectedClientId = Number(btn.dataset.client);
-  location.hash = `#cliente-${btn.dataset.client}`;
+  renderClientList();
+  guarded(renderClientDetail);
 });
 
 // ---------- Dialog helpers ----------
@@ -7048,7 +7144,7 @@ function renderCaseRows() {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const q = flat($("#case-search").value.trim());
   const qDigits = q.replace(/\D/g, "");
-  const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name].some((x) => flat(x).includes(q))
+  const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const court = $("#case-court").value, status = $("#case-status").value;
   const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
@@ -7058,9 +7154,9 @@ function renderCaseRows() {
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
-    <tr class="row-link" data-open="${k.id}" title="Abrir el expediente">
+    <tr>
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
-      <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
+      <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}${(k.parties || []).some((p) => p.ours) ? `<br><span class="muted">+ ${(k.parties || []).filter((p) => p.ours).map((p) => escapeHtml(p.name)).join(", ")}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
       <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
@@ -7069,7 +7165,7 @@ function renderCaseRows() {
         ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
         : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
       <td class="row-actions">
-        <button class="primary" data-action="open-case" data-id="${k.id}">Abrir</button>
+        <span class="ver-group">${verCaseButtons(k, ["", "pagos", "correos"])}<button class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></span>
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
@@ -7096,12 +7192,6 @@ $("#case-mine").addEventListener("change", renderCaseRows);
 for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
 for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
-// A click anywhere on the row (not on its buttons or switches) opens the case.
-$("#case-rows").addEventListener("click", (e) => {
-  if (e.target.closest("button, a, input, label, select")) return;
-  const tr = e.target.closest("tr[data-open]");
-  if (tr) location.hash = `#expediente-${tr.dataset.open}`;
-});
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
   const box = e.target.closest("[data-case-monitor]");
   if (!box) return;
@@ -7216,6 +7306,48 @@ caseForm.elements.radicado.addEventListener("input", async (e) => {
   }
 });
 
+// ----- Parties of the case (change 49) -----
+let partyRows = [];
+const partyBox = $(".parties-box", caseForm);
+function renderParties() {
+  const cat = categoryOf(caseForm.elements.category_id.value);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
+  const main = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value));
+  const mainSide = CMETA.sideOfRole(caseForm.elements.client_role.value);
+  for (const side of ["activa", "pasiva"]) {
+    const box = $(`[data-side="${side}"]`, partyBox);
+    $("[data-side-title]", box).textContent = labels[side];
+    $(".party-rows", box).innerHTML = (main && mainSide === side ? `<li class="party-row main"><span><strong>${escapeHtml(main.full_name)}</strong>
+        <span class="muted">${escapeHtml([main.id_type, main.id_number].filter(Boolean).join(" "))} · cliente principal</span></span><span class="follow ok">Nuestro cliente</span></li>` : "") +
+      partyRows.map((p, i) => p.side !== side ? "" : `<li class="party-row" data-i="${i}">
+        <input data-p="name" list="party-clients" value="${escapeHtml(p.name)}" placeholder="Nombre o razón social" aria-label="Nombre" />
+        <input data-p="id_number" value="${escapeHtml(p.id_number)}" placeholder="Cédula o NIT" aria-label="Documento" inputmode="numeric" />
+        <label class="inline"><input type="checkbox" data-p="ours" ${p.ours ? "checked" : ""} /> Nuestro cliente</label>
+        <button type="button" class="mini danger" data-del-party="${i}" aria-label="Quitar">✕</button></li>`).join("");
+  }
+  $(".hint", partyBox).hidden = false;
+}
+partyBox.addEventListener("click", (e) => {
+  const add = e.target.closest("[data-add-party]");
+  if (add) { partyRows.push({ side: add.dataset.addParty, name: "", id_number: "", ours: false, client_id: null }); renderParties(); $$(`[data-side="${add.dataset.addParty}"] .party-row:last-child input`, partyBox)[0]?.focus(); }
+  const del = e.target.closest("[data-del-party]");
+  if (del) { partyRows.splice(Number(del.dataset.delParty), 1); renderParties(); }
+});
+partyBox.addEventListener("input", (e) => {
+  const row = e.target.closest(".party-row[data-i]");
+  if (!row) return;
+  const p = partyRows[Number(row.dataset.i)], key = e.target.dataset.p;
+  p[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  if (key === "name") {
+    // Picking a registered client fills the document and marks it as ours.
+    const c = state.clients.find((x) => x.full_name === p.name);
+    p.client_id = c?.id ?? null;
+    if (c) { p.id_number = c.id_number || ""; p.ours = true; $("[data-p=id_number]", row).value = p.id_number; $("[data-p=ours]", row).checked = true; }
+  }
+});
+for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => renderParties());
+
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
   if (!state.clients.length) {
@@ -7248,6 +7380,9 @@ async function openCaseDialog(k = null, clientId = null) {
   fillTypeSelect(catId, k?.process_type_id);
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
+  partyRows = (k?.parties || []).map((p) => ({ ...p }));
+  $("#party-clients").innerHTML = state.clients.map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
+  renderParties();
 }
 
 wireDialog($("#case-dialog"), async (form) => {
@@ -7262,6 +7397,7 @@ wireDialog($("#case-dialog"), async (form) => {
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, monitor: form.elements.monitor.checked,
+    parties: partyRows.filter((p) => p.name.trim()).map(({ side, name, id_number, ours, client_id }) => ({ side, name, id_number, ours, client_id })),
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
@@ -7474,6 +7610,8 @@ document.addEventListener("click", (e) => {
       const f = await api("GET", `/mail/${id}/tsr`);
       await saveFile(`Correo ${id} - sello de tiempo.tsr`, new Blob([D.b64ToBytes(f.base64)], { type: "application/timestamp-reply" }));
     },
+    "go": () => { location.hash = btn.dataset.to; },
+    "goto-sec": () => goToSection(btn.dataset.sec),
     "go-back": () => history.back(),
     "go-forward": () => history.forward(),
     "open-case": () => { location.hash = `#expediente-${id}`; },
@@ -9245,16 +9383,17 @@ async function renderAgenda() {
           <span class="time">${escapeHtml(key === "vencidas" ? t.due_at : t.due_at.slice(11))}</span>
           <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
           <div class="agenda-body">
-            <span><strong><a href="#expediente-${t.case_id}" title="Abrir el expediente">${escapeHtml(t.title)}</a></strong> ${followBadge(t)}</span>
+            <span><strong>${escapeHtml(t.title)}</strong> ${followBadge(t)}</span>
             <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
             ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
-          ${can("cases.write") ? `<span class="toolbar">
+          <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
+          ${can("cases.write") ? `
             ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
-            <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button></span>` : ""}
+            <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>
         </li>`).join("")}</ul>
     </section>`).join("") || '<p class="empty panel">No hay tareas ni audiencias con este filtro. Cree una con “+ Tarea o audiencia” o desde un expediente.</p>';
   agendaCache = tasks;

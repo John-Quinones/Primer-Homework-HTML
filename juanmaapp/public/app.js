@@ -368,8 +368,8 @@ const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despa
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
-  const m = location.hash.match(/^#(cliente|expediente)-(\d+)$/);
-  if (m) return { name: m[1], id: Number(m[2]) };
+  const m = location.hash.match(/^#(cliente|expediente)-(\d+)(?:-([a-z]+))?$/);
+  if (m) return { name: m[1], id: Number(m[2]), sec: m[3] || "" };
   const n = location.hash.slice(1);
   return { name: VIEWS.includes(n) ? n : "inicio" };
 }
@@ -380,7 +380,11 @@ function showView() {
   for (const v of [...VIEWS, ...Object.keys(FICHAS)]) $(`#view-${v}`).hidden = v !== name;
   const nav = FICHAS[name] || name;
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === nav));
-  if (FICHAS[name]) { window.scrollTo(0, 0); return name === "cliente" ? renderClienteFicha(id) : renderExpedienteFicha(id); }
+  if (FICHAS[name]) {
+    window.scrollTo(0, 0);
+    const { sec } = route();
+    return (name === "cliente" ? renderClienteFicha(id) : renderExpedienteFicha(id)).then(() => sec && goToSection(sec));
+  }
   return RENDER[name]();
 }
 /** Re-render whatever screen is open (after a dialog saves). */
@@ -414,6 +418,9 @@ async function renderClientDetail() {
     <div class="detail-head">
       <h3>${escapeHtml(c.full_name)}</h3>
       <div class="toolbar">
+        <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
+        <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
+        ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
@@ -452,7 +459,8 @@ async function renderClienteFicha(id) {
       <h2>${escapeHtml(c.full_name)}</h2>
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
-        ${can("payments.manage") ? `<button data-action="new-receipt" data-client="${c.id}">Registrar pago</button><button data-action="pay-statement" data-id="${c.id}">Estado de cuenta</button>` : ""}
+        <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
+        ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
         ${can("cases.write") ? `<button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>` : ""}
       </div>
     </div>
@@ -473,16 +481,17 @@ async function renderClienteFicha(id) {
           ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
-      <section class="panel ficha-wide">
-        <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)} <span class="muted">· toque uno para abrirlo</span></h3>
+      <section id="sec-expedientes" class="panel ficha-wide">
+        <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)}</h3>
         ${cases.length ? `<ul class="case-open-list">${cases.map((k) => `
-          <li><a class="case-open" href="#expediente-${k.id}">
+          <li class="case-open">
             <span class="case-open-top">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : ""}<span class="pill">${escapeHtml(k.category_name)}</span><span class="status-tag">${escapeHtml(k.status)}</span></span>
             <strong>${escapeHtml(k.type_name)}</strong>
             ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
+            ${k.client_id !== c.id ? `<span class="muted">Cliente principal: ${escapeHtml(k.client_name)}</span>` : ""}
             <span class="muted">${escapeHtml([k.court_name, k.radicado && formatRadicado(k.radicado)].filter(Boolean).join(" · ") || "Sin despacho ni radicado")}</span>
             <span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")} · ${escapeHtml(k.office_name || "")}</span>
-            <span class="case-open-go">Abrir expediente ›</span></a></li>`).join("")}</ul>`
+            <span class="toolbar case-open-actions">${verCaseButtons(k)}</span></li>`).join("")}</ul>`
           : '<p class="empty">Este cliente no tiene expedientes. Créelo con «+ Nuevo expediente».</p>'}
       </section>
     </div>`;
@@ -490,6 +499,22 @@ async function renderClienteFicha(id) {
 
 // ---------- Case screen: everything about one case, with the other modules ----------
 const fmtDue = (d) => escapeHtml(String(d || "").replace("T", " ").slice(0, 16));
+const goToSection = (sec) => document.getElementById(`sec-${sec}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+const secId = (key, html) => html.replace('<section class="', `<section id="sec-${key}" class="`);
+/** "Ver …" buttons: each one opens a screen or a section of it; nothing opens by clicking elsewhere. */
+const VER_CASE = [["", "Ver expediente"], ["tareas", "Ver tareas"], ["actuaciones", "Ver actuaciones"], ["pagos", "Ver pagos"], ["correos", "Ver correos"], ["historial", "Ver historial"]];
+const verCaseButtons = (k, keys = ["", "tareas", "actuaciones", "pagos", "correos"]) => VER_CASE.filter(([x]) => keys.includes(x))
+  .map(([x, label]) => `<button class="mini ${x === "" ? "primary" : ""}" data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}">${label}</button>`).join("");
+/** Parties by side, our clients marked (main client included). */
+function partiesView(k) {
+  const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
+  const mainSide = CMETA.sideOfRole(k.client_role);
+  const list = [...(mainSide ? [{ side: mainSide, name: k.client_name, ours: true, client_id: k.client_id, main: true }] : []), ...(k.parties || [])];
+  if (!list.length) return "";
+  const col = (side) => `<div><h4>${escapeHtml(labels[side])}</h4><ul class="ficha-list">${list.filter((p) => p.side === side).map((p) => `<li><span><strong>${escapeHtml(p.name)}</strong>${p.id_number ? ` <span class="muted">${escapeHtml(p.id_number)}</span>` : ""}${p.main ? ' <span class="muted">· cliente principal</span>' : ""}</span>
+      <span>${p.ours ? '<span class="follow ok">Nuestro cliente</span>' : ""}${p.client_id && !p.main ? ` <button class="mini" data-action="go" data-to="#cliente-${p.client_id}">Ver cliente</button>` : ""}</span></li>`).join("") || '<li class="muted">Sin registrar</li>'}</ul></div>`;
+  return `<div class="parties-view">${col("activa")}${col("pasiva")}</div>`;
+}
 async function renderExpedienteFicha(id) {
   const box = $("#ficha-expediente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
@@ -534,27 +559,32 @@ async function renderExpedienteFicha(id) {
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
+    <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
+      ${[["datos", "Datos"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
+        .map(([x, label]) => `<button type="button" class="mini" data-action="goto-sec" data-sec="${x}">${label}</button>`).join("")}
+      <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
-      <a class="chip-stat" href="#cliente-${k.client_id}">Cliente <strong>${escapeHtml(k.client_name)}</strong></a>
+      <span class="chip-stat">Cliente <strong>${escapeHtml(k.client_name)}</strong></span>
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <span class="chip-stat">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></span>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
-      ${wide(panel("Datos del expediente", null, `<dl class="facts">
+      ${secId("datos", wide(panel("Datos del expediente", null, `<dl class="facts">
         ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
         ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
         ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
-      </dl>`))}
-      ${wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
-        canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : ""))}
-      ${wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
+      </dl>`)))}
+      ${secId("partes", wide(panel("Partes del proceso", null, partiesView(k) || '<p class="empty">Registre las partes con «Editar» (sección «Partes del proceso»).</p>')))}
+      ${secId("tareas", wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
+        canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : "")))}
+      ${secId("oficios", wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
         : empty("Sin oficios, peticiones ni requerimientos. Registre la entrega y la app controla la respuesta y su plazo."),
-        canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : ""))}
-      ${acts !== null ? wide(panel("Actuaciones (consulta automática)", acts.length, `
+        canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : "")))}
+      ${acts !== null ? secId("actuaciones", wide(panel("Actuaciones (consulta automática)", acts.length, `
           <p class="hint">${WEB ? "En este enlace de prueba no se puede consultar la Rama Judicial (no se conecta a sitios externos); en la versión del servidor (Azure) se consulta en automático y con «Consultar ahora»." : k.monitor ? "Se consulta en automático a las 7, 13 y 17 h." : "La consulta automática está desactivada para este expediente (actívela en Expedientes, columna «Consulta»)."}
             ${k.last_checked_at ? `Última consulta: ${escapeHtml(CMETA.utcToBogota(k.last_checked_at))}.` : "Aún no se ha consultado."} Con «Recordatorio» crea un término o tarea a partir de la actuación.</p>
           ${acts.length ? `<div class="acts-scroll"><table class="data-table compact"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th></th></tr></thead><tbody>${acts.map((a, i) => `<tr>
@@ -562,33 +592,33 @@ async function renderExpedienteFicha(id) {
             <td>${escapeHtml(String(a.anotacion || "").slice(0, 300))}</td>
             <td>${canWrite ? `<button class="mini" data-action="act-remind" data-case="${k.id}" data-act="${i}">Recordatorio</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
           : empty(k.last_checked_at ? "La consulta no ha encontrado actuaciones." : "Use «↻ Consultar ahora» para traer las actuaciones de la Rama Judicial.")}`,
-        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`))
-        : !k.radicado ? wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial."))) : ""}
-      ${panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
+        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`)))
+        : !k.radicado ? secId("actuaciones", wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial.")))) : ""}
+      ${secId("documentos", panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
           <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
           <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
-        : empty("Genere un documento y use «Guardar en el expediente»."), can("drafts.generate") ? `<button class="mini" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : "")}
-      ${charges ? panel("Pagos", charges.length + caseReceipts.length, `
+        : empty("Genere un documento y use «Guardar en el expediente»."), can("drafts.generate") ? `<button class="mini" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""))}
+      ${charges ? secId("pagos", panel("Pagos", charges.length + caseReceipts.length, `
         ${charges.length ? `<table class="data-table compact"><thead><tr><th>Cobro</th><th>Vence</th><th class="num">Valor</th><th class="num">Saldo</th><th>Estado</th></tr></thead><tbody>${charges.map((c) => `<tr class="${c.state === "anulado" ? "voided" : ""}">
           <td>${escapeHtml(c.concept)}${c.plan_label ? `<br><span class="muted">${escapeHtml(c.plan_label)}</span>` : ""}</td><td>${escapeHtml(c.due_date)}</td>
           <td class="num">${cop(c.amount)}</td><td class="num">${cop(c.balance)}</td><td><span class="pay-state ${c.state}">${escapeHtml(L.STATE_LABELS[c.state] || c.state)}</span></td></tr>`).join("")}</tbody></table>` : empty("Sin cobros para este expediente.")}
         ${caseReceipts.length ? `<h4>Recibos</h4><ul class="ficha-list">${caseReceipts.map((r) => `<li><strong>${escapeHtml(receiptNo(r.number))}</strong> · ${escapeHtml(r.paid_on)} · ${cop(r.amount)}${r.voided_at ? " · anulado" : ""}
           <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></li>`).join("")}</ul>` : ""}`,
-        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}">Registrar pago</button></span>`) : ""}
-      ${signs ? panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
+        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}">Registrar pago</button></span>`)) : ""}
+      ${signs ? secId("firmas", panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
           <span class="badge ${r.status === "completada" ? "ok" : r.status === "enviada" ? "warn" : ""}">${escapeHtml(SIGN_STATUS[r.status][1])}</span> <strong>${escapeHtml(r.title)}</strong>
           <button class="mini" data-action="open-sign" data-id="${r.id}">Ver</button></li>`).join("")}</ul>` : empty("Sin documentos enviados a firma."),
-        `<button class="mini" data-action="sign-case" data-id="${k.id}">Enviar a firma</button>`) : ""}
-      ${mails ? panel("Correos con trazabilidad", mails.length, mails.length ? `<ul class="ficha-list">${mails.map((m) => `<li>
+        `<button class="mini" data-action="sign-case" data-id="${k.id}">Enviar a firma</button>`)) : ""}
+      ${mails ? secId("correos", panel("Correos con trazabilidad", mails.length, mails.length ? `<ul class="ficha-list">${mails.map((m) => `<li>
           <strong>${escapeHtml(m.subject)}</strong> <span class="muted">${escapeHtml(m.to_addr)} · ${escapeHtml(String(m.sent_at).slice(0, 16))}</span>
           <span class="badge ${m.confirmed_at ? "ok" : m.opened_at ? "warn" : ""}">${m.confirmed_at ? "Acuse recibido" : m.opened_at ? "Abierto" : m.status === "enviado" ? "Enviado" : "Fallido"}</span>
           <button class="mini" data-action="mail-proof" data-id="${m.id}">Constancia</button></li>`).join("")}</ul>` : empty("Sin correos enviados desde este expediente."),
-        `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`)
-        : can("mail.send") ? panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba.")) : ""}
-      ${wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
+        `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`))
+        : can("mail.send") ? secId("correos", panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba."))) : ""}
+      ${secId("historial", wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
           .map(([t, label]) => `<button type="button" class="chip ${t === "" ? "active" : ""}" data-hist="${t}">${label}</button>`).join("")}</div>
         <ol class="history">${hist.map((h) => `<li data-type="${h.type}"><span class="h-when">${escapeHtml(h.at)}</span><span class="h-dot h-${h.type}"></span>
-          <div><strong>${escapeHtml(h.text)}</strong>${h.sub ? `<br><span class="muted">${escapeHtml(h.sub)}</span>` : ""}</div></li>`).join("")}</ol>`))}
+          <div><strong>${escapeHtml(h.text)}</strong>${h.sub ? `<br><span class="muted">${escapeHtml(h.sub)}</span>` : ""}</div></li>`).join("")}</ol>`)))}
     </div>`;
   ACTS_CACHE = acts || [];
 }
@@ -692,6 +722,7 @@ function caseCard(k) {
     ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
     <span>${escapeHtml(k.office_name || "")}${k.assigned_name ? " · " + escapeHtml(k.assigned_name) : " · Sin responsable"}</span>
     ${k.court_name ? `<span class="court-line">${escapeHtml(k.court_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : ""}</span>` : ""}
+    <div class="toolbar">${verCaseButtons(k, ["", "pagos", "correos"])}</div>
     <div class="toolbar">
       ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button><button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
       ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
@@ -716,8 +747,10 @@ for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "chan
 $("#client-list").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-client]");
   if (!btn) return;
+  // Selecting shows the summary at the side; the screen opens only with «Ver cliente».
   state.selectedClientId = Number(btn.dataset.client);
-  location.hash = `#cliente-${btn.dataset.client}`;
+  renderClientList();
+  guarded(renderClientDetail);
 });
 
 // ---------- Dialog helpers ----------
@@ -829,7 +862,7 @@ function renderCaseRows() {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const q = flat($("#case-search").value.trim());
   const qDigits = q.replace(/\D/g, "");
-  const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name].some((x) => flat(x).includes(q))
+  const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const court = $("#case-court").value, status = $("#case-status").value;
   const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
@@ -839,9 +872,9 @@ function renderCaseRows() {
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
-    <tr class="row-link" data-open="${k.id}" title="Abrir el expediente">
+    <tr>
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
-      <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
+      <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}${(k.parties || []).some((p) => p.ours) ? `<br><span class="muted">+ ${(k.parties || []).filter((p) => p.ours).map((p) => escapeHtml(p.name)).join(", ")}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
       <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
@@ -850,7 +883,7 @@ function renderCaseRows() {
         ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
         : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
       <td class="row-actions">
-        <button class="primary" data-action="open-case" data-id="${k.id}">Abrir</button>
+        <span class="ver-group">${verCaseButtons(k, ["", "pagos", "correos"])}<button class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></span>
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
@@ -877,12 +910,6 @@ $("#case-mine").addEventListener("change", renderCaseRows);
 for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
 for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
-// A click anywhere on the row (not on its buttons or switches) opens the case.
-$("#case-rows").addEventListener("click", (e) => {
-  if (e.target.closest("button, a, input, label, select")) return;
-  const tr = e.target.closest("tr[data-open]");
-  if (tr) location.hash = `#expediente-${tr.dataset.open}`;
-});
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
   const box = e.target.closest("[data-case-monitor]");
   if (!box) return;
@@ -997,6 +1024,48 @@ caseForm.elements.radicado.addEventListener("input", async (e) => {
   }
 });
 
+// ----- Parties of the case (change 49) -----
+let partyRows = [];
+const partyBox = $(".parties-box", caseForm);
+function renderParties() {
+  const cat = categoryOf(caseForm.elements.category_id.value);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
+  const main = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value));
+  const mainSide = CMETA.sideOfRole(caseForm.elements.client_role.value);
+  for (const side of ["activa", "pasiva"]) {
+    const box = $(`[data-side="${side}"]`, partyBox);
+    $("[data-side-title]", box).textContent = labels[side];
+    $(".party-rows", box).innerHTML = (main && mainSide === side ? `<li class="party-row main"><span><strong>${escapeHtml(main.full_name)}</strong>
+        <span class="muted">${escapeHtml([main.id_type, main.id_number].filter(Boolean).join(" "))} · cliente principal</span></span><span class="follow ok">Nuestro cliente</span></li>` : "") +
+      partyRows.map((p, i) => p.side !== side ? "" : `<li class="party-row" data-i="${i}">
+        <input data-p="name" list="party-clients" value="${escapeHtml(p.name)}" placeholder="Nombre o razón social" aria-label="Nombre" />
+        <input data-p="id_number" value="${escapeHtml(p.id_number)}" placeholder="Cédula o NIT" aria-label="Documento" inputmode="numeric" />
+        <label class="inline"><input type="checkbox" data-p="ours" ${p.ours ? "checked" : ""} /> Nuestro cliente</label>
+        <button type="button" class="mini danger" data-del-party="${i}" aria-label="Quitar">✕</button></li>`).join("");
+  }
+  $(".hint", partyBox).hidden = false;
+}
+partyBox.addEventListener("click", (e) => {
+  const add = e.target.closest("[data-add-party]");
+  if (add) { partyRows.push({ side: add.dataset.addParty, name: "", id_number: "", ours: false, client_id: null }); renderParties(); $$(`[data-side="${add.dataset.addParty}"] .party-row:last-child input`, partyBox)[0]?.focus(); }
+  const del = e.target.closest("[data-del-party]");
+  if (del) { partyRows.splice(Number(del.dataset.delParty), 1); renderParties(); }
+});
+partyBox.addEventListener("input", (e) => {
+  const row = e.target.closest(".party-row[data-i]");
+  if (!row) return;
+  const p = partyRows[Number(row.dataset.i)], key = e.target.dataset.p;
+  p[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  if (key === "name") {
+    // Picking a registered client fills the document and marks it as ours.
+    const c = state.clients.find((x) => x.full_name === p.name);
+    p.client_id = c?.id ?? null;
+    if (c) { p.id_number = c.id_number || ""; p.ours = true; $("[data-p=id_number]", row).value = p.id_number; $("[data-p=ours]", row).checked = true; }
+  }
+});
+for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => renderParties());
+
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
   if (!state.clients.length) {
@@ -1029,6 +1098,9 @@ async function openCaseDialog(k = null, clientId = null) {
   fillTypeSelect(catId, k?.process_type_id);
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
+  partyRows = (k?.parties || []).map((p) => ({ ...p }));
+  $("#party-clients").innerHTML = state.clients.map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
+  renderParties();
 }
 
 wireDialog($("#case-dialog"), async (form) => {
@@ -1043,6 +1115,7 @@ wireDialog($("#case-dialog"), async (form) => {
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, monitor: form.elements.monitor.checked,
+    parties: partyRows.filter((p) => p.name.trim()).map(({ side, name, id_number, ours, client_id }) => ({ side, name, id_number, ours, client_id })),
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);
@@ -1255,6 +1328,8 @@ document.addEventListener("click", (e) => {
       const f = await api("GET", `/mail/${id}/tsr`);
       await saveFile(`Correo ${id} - sello de tiempo.tsr`, new Blob([D.b64ToBytes(f.base64)], { type: "application/timestamp-reply" }));
     },
+    "go": () => { location.hash = btn.dataset.to; },
+    "goto-sec": () => goToSection(btn.dataset.sec),
     "go-back": () => history.back(),
     "go-forward": () => history.forward(),
     "open-case": () => { location.hash = `#expediente-${id}`; },
@@ -3026,16 +3101,17 @@ async function renderAgenda() {
           <span class="time">${escapeHtml(key === "vencidas" ? t.due_at : t.due_at.slice(11))}</span>
           <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
           <div class="agenda-body">
-            <span><strong><a href="#expediente-${t.case_id}" title="Abrir el expediente">${escapeHtml(t.title)}</a></strong> ${followBadge(t)}</span>
+            <span><strong>${escapeHtml(t.title)}</strong> ${followBadge(t)}</span>
             <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
             ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
-          ${can("cases.write") ? `<span class="toolbar">
+          <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
+          ${can("cases.write") ? `
             ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
-            <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button></span>` : ""}
+            <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>
         </li>`).join("")}</ul>
     </section>`).join("") || '<p class="empty panel">No hay tareas ni audiencias con este filtro. Cree una con “+ Tarea o audiencia” o desde un expediente.</p>';
   agendaCache = tasks;

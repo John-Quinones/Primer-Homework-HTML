@@ -148,3 +148,29 @@ export const LEGAL_TERMS = [
     ["Consulta a una autoridad", 30, "habiles", "Ley 1755 art. 14", "peticion", false],
   ]],
 ].map(([area, items]) => [area, items.map(([name, days, unit, norm, kind, judicial = true]) => ({ area, name, days, unit, norm, kind, judicial }))]);
+
+// ----- Parties of the case (change 49): several plaintiffs / defendants, marking which are our clients -----
+const ACTIVE_ROLES = ["Demandante", "Ejecutante", "Querellante", "Denunciante", "Víctima", "Peticionario", "Reclamante"];
+/** "activa" for the side that sues (demandante, ejecutante…), "pasiva" for the other; "" when unknown. */
+export const sideOfRole = (role) => (!role ? "" : ACTIVE_ROLES.includes(role) ? "activa" : "pasiva");
+/** Plural names of each side for a process: { activa: "Demandantes", pasiva: "Demandados" }. */
+export function sideLabels(category, type = "") {
+  const roles = partyRolesFor(category, type);
+  if (roles === PARTY_ROLES.penal) return { activa: "Víctimas o denunciantes", pasiva: "Procesados o denunciados" };
+  if (roles.length < 2) return { activa: `${roles[0]}s`, pasiva: "Entidades o contrapartes" };
+  return { activa: `${roles[0]}s`, pasiva: `${roles[1]}s` };
+}
+/** Validated list of parties; returns { parties } or { error }. */
+export function cleanParties(list) {
+  if (list == null) return { parties: [] };
+  if (!Array.isArray(list) || list.length > 40) return { error: "Lista de partes no válida (máximo 40)." };
+  const parties = [];
+  for (const p of list) {
+    const name = String(p?.name ?? "").trim().replace(/\s+/g, " ").slice(0, 160);
+    if (!name) continue;
+    if (!["activa", "pasiva"].includes(p.side)) return { error: "Indique si cada parte es demandante o demandada." };
+    parties.push({ side: p.side, name, id_type: String(p.id_type ?? "").trim().slice(0, 10), id_number: String(p.id_number ?? "").trim().slice(0, 30),
+      ours: !!p.ours, client_id: Number.isInteger(Number(p.client_id)) && Number(p.client_id) > 0 ? Number(p.client_id) : null });
+  }
+  return { parties };
+}

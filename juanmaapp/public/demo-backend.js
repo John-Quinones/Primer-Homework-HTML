@@ -221,8 +221,21 @@
     const c = s.categories.find((c) => c.id === t.category_id);
     const cl = s.clients.find((x) => x.id === k.client_id);
     const u = s.users.find((x) => x.id === k.assigned_user_id);
-    return clone({ ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
+    return clone({ parties: [], ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
       office_name: officeName(k.office_id), assigned_name: u?.name ?? null });
+  };
+  // Same as the server: our clients among the parties are linked to their client record.
+  const isPartyClient = (k, clientId) => (k.parties || []).some((p) => p.ours && p.client_id === clientId);
+  const caseParties = (list, mainClientId) => {
+    const { parties, error } = CM.cleanParties(list);
+    if (error) fail(error);
+    const digits = (x) => String(x || "").replace(/\D/g, "");
+    for (const p of parties) {
+      if (p.client_id && !s.clients.some((c) => c.id === p.client_id && clientVisible(c))) p.client_id = null;
+      if (p.ours && !p.client_id && digits(p.id_number).length >= 5) p.client_id = s.clients.find((c) => clientVisible(c) && digits(c.id_number) === digits(p.id_number))?.id ?? null;
+      if (!p.ours) p.client_id = null;
+    }
+    return parties.filter((p) => p.client_id !== mainClientId);
   };
   const typePath = (t) => { const p = t.parent_id && s.types.find((x) => x.id === t.parent_id); return p ? `${p.name} › ${t.name}` : t.name; };
   const typeUses = (t) => s.cases.filter((k) => k.process_type_id === t.id || s.types.some((x) => x.parent_id === t.id && x.id === k.process_type_id)).length;
@@ -657,7 +670,7 @@
       return s.clients
         .filter((c) => clientVisible(c) && window.JuanmaPerson.clientMatches(c, q.q || "", q.by || ""))
         .sort((a, b) => a.full_name.localeCompare(b.full_name, "es"))
-        .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => k.client_id === c.id && inScope(k.office_id)).length }));
+        .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => (k.client_id === c.id || isPartyClient(k, c.id)) && inScope(k.office_id)).length }));
     }],
     ["POST", /^\/clients$/, (m, b) => {
       need("clients.write");
@@ -822,7 +835,7 @@
     ["GET", /^\/cases(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       return s.cases
-        .filter((k) => inScope(k.office_id) && (!q.clientId || k.client_id === +q.clientId) && (!q.officeId || k.office_id === +q.officeId)
+        .filter((k) => inScope(k.office_id) && (!q.clientId || k.client_id === +q.clientId || isPartyClient(k, +q.clientId)) && (!q.officeId || k.office_id === +q.officeId)
           && (q.mine !== "1" || k.assigned_user_id === me().id))
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
         .map(caseOut);
@@ -839,7 +852,7 @@
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
         assigned_user_id: checkAssignee(b.assigned_user_id, officeId), updated_at: stamp(),
         created_at: /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : stamp(),
-        last_checked_at: null, last_action_date: null, ...caseLocation(b),
+        last_checked_at: null, last_action_date: null, ...caseLocation(b), parties: caseParties(b.parties, c.id),
       };
       s.cases.push(k);
       return caseOut(k);
@@ -855,7 +868,7 @@
         counterparty: str(b.counterparty ?? k.counterparty), facts: str(b.facts ?? k.facts),
         field_values: cleanValues(typeId, b.field_values ?? k.field_values), office_id: officeId,
         assigned_user_id: "assigned_user_id" in b ? checkAssignee(b.assigned_user_id, officeId) : k.assigned_user_id,
-        updated_at: stamp(), ...caseLocation(b, k),
+        updated_at: stamp(), ...caseLocation(b, k), parties: "parties" in b ? caseParties(b.parties, k.client_id) : k.parties || [],
       });
       return caseOut(k);
     }],
