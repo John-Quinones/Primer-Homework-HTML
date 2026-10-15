@@ -64,7 +64,9 @@ if (WEB) {
 const state = { catalog: [], clients: [], cases: [], selectedClientId: null };
 
 async function loadCatalog() { state.catalog = await api("GET", "/catalog"); }
-async function loadClients(q = "") { state.clients = await api("GET", `/clients?q=${encodeURIComponent(q)}`); }
+async function loadClients(q = "", by = $("#client-search-by")?.value || "") {
+  state.clients = await api("GET", `/clients?${new URLSearchParams({ q, by })}`);
+}
 async function loadCases() { state.cases = await api("GET", "/cases"); }
 
 const categoryOf = (catId) => state.catalog.find((c) => c.id === Number(catId));
@@ -373,7 +375,7 @@ async function renderClientes() {
   await renderClientDetail();
 }
 
-$("#client-search").addEventListener("input", () => guarded(async () => {
+for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
   renderClientList();
 }));

@@ -587,10 +587,10 @@
     ["GET", /^\/monitor\/log$/, () => { need("processes.consult"); return clone(s.log.filter((l) => l.user_id === me().id).reverse()); }],
 
     // ----- clients -----
-    ["GET", /^\/clients(?:\?q=(.*))?$/, (m) => {
-      const q = decodeURIComponent(m[1] || "").toLowerCase();
+    ["GET", /^\/clients(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url);
       return s.clients
-        .filter((c) => clientVisible(c) && (!q || c.full_name.toLowerCase().includes(q) || c.id_number.includes(q)))
+        .filter((c) => clientVisible(c) && window.JuanmaPerson.clientMatches(c, q.q || "", q.by || ""))
         .sort((a, b) => a.full_name.localeCompare(b.full_name, "es"))
         .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => k.client_id === c.id && inScope(k.office_id)).length }));
     }],

@@ -4,7 +4,7 @@ import express from "express";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { normStatus, normPartyRole } from "./case-meta.js";
-import { personFields } from "./person.js";
+import { personFields, clientMatches } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
@@ -116,7 +116,7 @@ export function recordsRouter(db) {
   };
 
   r.get("/clients", h((req) => {
-    const q = `%${str(req.query.q)}%`;
+    const q = str(req.query.q), by = str(req.query.by);
     const [kw, kp] = scopeSql(req, "k.office_id");
     const [cw, cp] = scopeSql(req, "c.office_id");
     const [sw, sp] = scopeSql(req, "office_id");
@@ -124,9 +124,8 @@ export function recordsRouter(db) {
       SELECT c.*, o.name AS office_name,
         (SELECT COUNT(*) FROM cases k WHERE k.client_id = c.id AND ${kw}) AS case_count
       FROM clients c LEFT JOIN offices o ON o.id = c.office_id
-      WHERE (c.full_name LIKE ? OR c.id_number LIKE ?)
-        AND (${cw} OR c.id IN (SELECT client_id FROM cases WHERE ${sw}))
-      ORDER BY c.full_name COLLATE NOCASE`).all(...kp, q, q, ...cp, ...sp).map(plain);
+      WHERE (${cw} OR c.id IN (SELECT client_id FROM cases WHERE ${sw}))
+      ORDER BY c.full_name COLLATE NOCASE`).all(...kp, ...cp, ...sp).map(plain).filter((c) => clientMatches(c, q, by));
   }));
 
   r.get("/clients/:id", h((req) => getClient(req, toInt(req.params.id, "id"))));

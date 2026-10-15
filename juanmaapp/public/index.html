@@ -137,7 +137,11 @@
         <div class="view-head">
           <h2>Clientes</h2>
           <div class="toolbar">
-            <input id="client-search" type="search" placeholder="Buscar por nombre o documento" />
+            <select id="client-search-by" aria-label="Buscar por">
+              <option value="">Buscar en todo</option><option value="first">Nombres</option><option value="last">Apellidos</option>
+              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
+            </select>
+            <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
         </div>
