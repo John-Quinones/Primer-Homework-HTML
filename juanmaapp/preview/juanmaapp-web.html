@@ -691,6 +691,20 @@ fieldset.person-type legend { font-size: .8rem; color: var(--text-muted); paddin
 .span2 { grid-column: 1 / -1; }
 .hint.span2 { margin: -4px 0 4px; }
 
+/* In-app help: "?" per module and a writing tip under the focused field */
+.help-btn {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; margin: 0 0 0 8px; padding: 0;
+  border-radius: 50%; border: 1.5px solid var(--brand-blue); background: transparent; color: var(--brand-blue);
+  font: 700 .8rem/1 var(--font-body, inherit); letter-spacing: 0; vertical-align: middle; cursor: pointer;
+}
+.help-btn:hover, .help-btn:focus-visible { background: var(--brand-blue); color: #fff; }
+.command-head .help-btn { border-color: #fff; color: #fff; margin: 6px 0 0; }
+.command-head .help-btn:hover { background: #fff; color: var(--brand-navy); }
+.help-dialog { max-width: 560px; }
+.help-dialog h4 { margin: 14px 0 6px; font-size: .95rem; }
+.help-dialog ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.field-tip { display: block; margin-top: 4px; color: var(--text-muted); font-size: .8rem; font-weight: 400; line-height: 1.35; }
+
 </style>
 
 <style>
@@ -3294,12 +3308,221 @@ function personFields(b, existing = {}) {
 return { PARTICLES, properName, looksLikeCompany, splitFullName, personFields };
 })();
 </script>
+  <script>// In-app help: a "?" button on every module explains what it does, and every
+// field shows an example (placeholder) and a writing tip while it has focus.
+(() => {
+  const MODULES = {
+    inicio: ["Panel general", "Resumen del día: procesos activos, clientes, vencimientos de los próximos 7 días, audiencias de los próximos 14 días y actuaciones nuevas de la Rama Judicial.",
+      ["Toque cualquier recuadro para ir al módulo correspondiente.", "Las cifras salen solo de los datos guardados; si no hay datos, el recuadro queda en cero."]],
+    clientes: ["Clientes", "Registro de las personas naturales y jurídicas que representa la firma, con sus datos de contacto y sus expedientes.",
+      ["Persona natural: nombres y apellidos por separado; se corrigen solos a mayúscula inicial (JOHN → John).", "Persona jurídica: razón social, NIT con dígito de verificación y representante legal.", "Busque por nombre o número de documento en la casilla superior.", "Escriba el documento sin puntos ni espacios."]],
+    expedientes: ["Expedientes", "Cada proceso o asunto de un cliente: tipo y subproceso, calidad del cliente (demandante, demandado, ejecutante…), estado, despacho, radicado y responsable.",
+      ["El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior."]],
+    agenda: ["Agenda", "Audiencias, términos y tareas de cada expediente, con recordatorios por correo o WhatsApp.",
+      ["Escriba el título con la norma o etapa: «Audiencia inicial art. 77 CPTSS».", "Marque la tarea como hecha cuando se cumpla para que salga de pendientes."]],
+    consulta: ["Consulta de procesos", "Consulta en la Rama Judicial los expedientes con radicado y avisa de actuaciones nuevas (reportes a las 7, 13 y 17 h).",
+      ["Requiere conexión a internet desde el servidor; en el enlace de prueba no está disponible.", "Solo se consultan expedientes con la casilla «Consultar automáticamente» marcada."]],
+    despachos: ["Despachos judiciales", "Directorio de juzgados, tribunales y altas cortes con su correo, para elegirlos en los expedientes y en el correo certificado.",
+      ["Filtre por departamento, ciudad y área.", "Busque por nombre, correo o código del despacho."]],
+    borradores: ["Documentos", "Plantillas de la firma y borradores con NomosAI: poderes, demandas, derechos de petición, tutelas, contratos y más.",
+      ["Elija un expediente para llenar los datos del cliente y del proceso automáticamente.", "Los datos que falten quedan marcados como [FILL: …] para completarlos antes de firmar.", "Revise siempre el borrador: NomosAI no inventa datos, pero un abogado debe aprobarlo."]],
+    firmas: ["Firma electrónica", "Envía documentos a firmar por enlace con código de verificación o firma presencial en pantalla, con constancia y huella del documento.",
+      ["Revise el texto antes de enviarlo: después de firmado no se puede cambiar.", "En el enlace de prueba solo funciona la firma presencial."]],
+    pagos: ["Pagos y cartera", "Cobros (honorarios, cuotas), recibos de caja, cartera por edades y recordatorios de pago a los clientes.",
+      ["Cree el cobro con el concepto y las cuotas; luego registre cada pago como recibo.", "La cartera muestra lo vencido por días: 1–30, 31–60, 61–90 y más de 90.", "Configure los datos bancarios para que salgan en los recordatorios."]],
+    correo: ["Correo con trazabilidad", "Envío de memoriales y comunicaciones con constancia de envío y lectura, vinculados al expediente.",
+      ["Escriba el correo oficial del despacho; puede tomarlo del directorio.", "Requiere el servidor de correo de la firma; en el enlace de prueba no se envía."]],
+    jurisprudencia: ["Jurisprudencia", "Búsqueda de sentencias solo en sitios oficiales (Corte Constitucional, Corte Suprema, Consejo de Estado) y verificación de citas.",
+      ["Describa el problema jurídico con palabras clave: «estabilidad laboral reforzada debilidad manifiesta».", "Guarde las sentencias útiles y vincúlelas al expediente."]],
+    importar: ["Importar desde Excel", "Carga clientes y expedientes desde un archivo de Excel (Access o el servidor de la firma), sin duplicar los que ya existen.",
+      ["Revise la columna que la app asignó a cada campo antes de importar.", "Los radicados que no tienen 23 dígitos se guardan tal como vienen.", "Honorarios y pagos del archivo quedan como cobros y recibos."]],
+    reportes: ["Reportes", "Informes de expedientes, agenda, actuaciones, cartera y recibos en Excel o PDF.",
+      ["Elija el reporte, la oficina y el rango de fechas.", "Los reportes de pagos requieren el permiso de pagos."]],
+    usuarios: ["Usuarios y oficinas", "Personas que usan la app, sus roles, oficinas y permisos.",
+      ["Cada usuario ve solo las oficinas que tenga asignadas.", "Puede dar permisos específicos a un usuario en lugar de los de su rol."]],
+    configuracion: ["Configuración", "Catálogo de tipos de proceso, subprocesos (dos niveles) y campos propios de cada uno.",
+      ["Use nombres cortos: «Laboral», «Ordinario laboral de primera instancia».", "Los campos propios aparecen en el expediente según su subproceso."]],
+  };
+
+  // [example placeholder, writing tip]. Keys: "form.name", "name" or "#id".
+  const FIELDS = {
+    "#client-search": ["", "Escriba parte del nombre, apellido, razón social o número de documento."],
+    "#login-email": ["usuario@tecjuridicos.com", "El correo con el que fue registrado."],
+    "#setup-name": ["Ej. Juan Manuel Quiñones", "Nombre y apellidos de quien administra la app."],
+    "#setup-email": ["gerencia@tecjuridicos.com", "Correo institucional de la firma."],
+    "client.first_names": ["", "Solo los nombres. Ej. «María José». Se corrige a mayúscula inicial al salir."],
+    "client.last_names": ["", "Primer y segundo apellido. Las partículas quedan en minúscula: «Torres de Cifuentes»."],
+    "client.id_number": ["", "Solo números, sin puntos ni espacios."],
+    "client.business_name": ["", "Razón social exacta como aparece en el certificado de Cámara de Comercio."],
+    "client.nit": ["", "NIT con guion y dígito de verificación: 900123456-7."],
+    "client.legal_rep": ["", "Nombre completo del representante legal según el certificado de existencia."],
+    "client.email": ["cliente@correo.com", "Correo donde el cliente recibe notificaciones, recibos y recordatorios."],
+    "client.phone": ["300 123 4567", "Celular con WhatsApp de preferencia, sin indicativo +57."],
+    "client.city": ["Escriba: I… Ibagué", "Elija de la lista para que quede el municipio oficial (DIVIPOLA)."],
+    "client.address": ["Ej. Calle 10 # 3-45, barrio Centro", "Dirección de notificación física."],
+    "client.notes": ["Ej. Prefiere contacto por WhatsApp en la tarde", "Datos útiles para atender al cliente; no escriba información reservada del proceso."],
+    "case.title": ["", "Qué se busca en pocas palabras: «Reconocimiento de pensión de vejez»."],
+    "case.radicado": ["", "Los 23 dígitos del radicado judicial; puede pegarlo con guiones o espacios."],
+    "case.client_role": ["", "Posición del cliente en el proceso: demandante, demandado, ejecutante, víctima…"],
+    "case.counterparty": ["Ej. Colpensiones", "Nombre de la parte contraria o entidad accionada."],
+    "case.facts": ["1. El 3 de marzo de 2024 el cliente…", "Hechos en orden cronológico, con fechas y cifras; NomosAI los usa para los borradores."],
+    "case.court_search": ["", "Escriba ciudad y especialidad: «Ibagué laboral 3»."],
+    "user.name": ["Ej. Laura Gómez Rojas", "Nombres y apellidos completos."],
+    "user.email": ["nombre@tecjuridicos.com", "Correo de Microsoft 365 si va a entrar con Microsoft."],
+    "user.password": ["Mínimo 10 caracteres", "Mezcle letras, números y signos. Puede dejarla vacía si entra con Microsoft."],
+    "user.phone": ["300 123 4567", "Para avisos de agenda por WhatsApp."],
+    "user.professional_card": ["Ej. 123456", "Número de tarjeta profesional del Consejo Superior de la Judicatura."],
+    "office.name": ["Ej. Sede Ibagué", "Nombre corto con la ciudad."],
+    "office.address": ["Ej. Carrera 3 # 12-30, oficina 401", ""],
+    "office.phone": ["Ej. 608 261 0000", ""],
+    "office.email": ["ibague@tecjuridicos.com", ""],
+    "sign.title": ["Ej. Poder especial — proceso laboral", "Nombre con que el firmante verá el documento."],
+    "inperson.typed_name": ["Ej. María José Torres", "Tal como aparece en el documento de identidad."],
+    "inperson.id_number": ["Solo números", ""],
+    "mail.cc": ["cliente@correo.com", "Varios correos separados por coma."],
+    "mail.subject": ["Ej. Memorial radicado 73001310500120230012300", "Incluya el radicado para que el despacho lo ubique."],
+    "mail.body": ["Señor Juez…", "Saludo, objeto del correo, anexos y firma del apoderado."],
+    "template.name": ["Ej. Poder especial laboral", ""],
+    "template.description": ["Ej. Poder para demanda ordinaria laboral", "Para qué sirve la plantilla."],
+    "template.body": ["", "Use las variables entre llaves, por ejemplo {cliente_nombre} o {radicado}."],
+    "task.notes": ["Ej. Llevar pruebas documentales y testigos", ""],
+    "charge.notes": ["Ej. Pago acordado en contrato del 1 de octubre", ""],
+    "charge.amount": ["", "Valor en pesos, sin puntos: se formatea solo."],
+    "receipt.amount": ["", "Valor en pesos que efectivamente recibió."],
+    "receipt.notes": ["", "Observaciones del pago que no van en el concepto."],
+    "pay-settings.firm_name": ["Ej. TEC Jurídicos S.A.S.", "Aparece en el encabezado de los recibos."],
+    "pay-settings.firm_nit": ["Ej. 900123456-7", ""],
+    "password.current": ["", "La contraseña con la que entró hoy."],
+    "password.next": ["Mínimo 10 caracteres", "Mezcle letras, números y signos."],
+    fullName: ["Ej. María José Torres de Cifuentes", "Tal como aparece en el documento de identidad."],
+    idNumber: ["Ej. CC 1110456789", "Tipo y número del documento."],
+    address: ["Ej. Calle 10 # 3-45, Ibagué", "Dirección de notificación."],
+    email: ["correo@ejemplo.com", ""],
+    phone: ["300 123 4567", ""],
+    department: ["Escriba: T… Tolima", "Elija de la lista."],
+    city: ["Escriba: I… Ibagué", "Elija de la lista; la ciudad depende del departamento."],
+    yearFrom: ["Ej. 2015", ""],
+    yearTo: ["Ej. 2026", ""],
+    notes: ["", "Información adicional, breve y sin datos reservados."],
+    jurisdiction: ["", "País cuyas normas aplica el documento."],
+    query: ["", "Use palabras clave del problema jurídico, no preguntas largas."],
+  };
+
+  const SELECT_TIPS = {
+    office_id: "Oficina que lleva el asunto; define quién puede verlo.",
+    assigned_user_id: "Abogado o auxiliar responsable.",
+    category_id: "Área del proceso: Laboral, Civil, Familia, Penal…",
+    process_type_id: "Clase concreta de proceso dentro del tipo.",
+    status: "Activo mientras haya trámite; Archivo provisional si está suspendido; Archivo definitivo si terminó.",
+    affiliated: "Marque Sí si el cliente pertenece a un convenio o afiliación de la firma.",
+    id_type: "Cédula de ciudadanía para colombianos mayores de edad.",
+    client_id: "Escriba las primeras letras para saltar al cliente.",
+    case_id: "Expediente al que se vincula el registro.",
+    method: "Transferencia, consignación, efectivo, Bold…",
+    every: "Cada cuánto vence la siguiente cuota.",
+  };
+
+  const TEXTUAL = /^(text|email|search|tel|url|number|password|)$/;
+  const keyOf = (el) => {
+    const form = el.closest("[data-form]")?.dataset.form;
+    const out = [];
+    if (el.id) out.push("#" + el.id);
+    if (el.name && form) out.push(`${form}.${el.name}`);
+    if (el.name) out.push(el.name);
+    return out;
+  };
+  const lookup = (el) => {
+    for (const k of keyOf(el)) if (FIELDS[k]) return FIELDS[k];
+    if (el.tagName === "SELECT" && SELECT_TIPS[el.name]) return ["", SELECT_TIPS[el.name]];
+    return null;
+  };
+
+  function applyPlaceholders(root = document) {
+    for (const el of root.querySelectorAll("input, textarea")) {
+      if (el.placeholder || el.readOnly || el.hidden) continue;
+      if (el.tagName === "INPUT" && !TEXTUAL.test(el.type)) continue;
+      const h = lookup(el);
+      if (h?.[0]) el.placeholder = h[0];
+    }
+  }
+
+  let tip = null;
+  function showTip(el) {
+    hideTip();
+    const h = lookup(el);
+    const text = h?.[1];
+    if (!text) return;
+    tip = document.createElement("small");
+    tip.className = "field-tip";
+    tip.setAttribute("role", "note");
+    tip.textContent = "💡 " + text;
+    const label = el.closest("label");
+    (label || el).insertAdjacentElement(label ? "beforeend" : "afterend", tip);
+  }
+  function hideTip() { tip?.remove(); tip = null; }
+
+  let dialog = null;
+  function openHelp(view) {
+    const [title, what, tips] = MODULES[view];
+    if (!dialog) {
+      dialog = document.createElement("dialog");
+      dialog.className = "help-dialog";
+      dialog.innerHTML = '<form method="dialog"><h3></h3><p class="help-what"></p><h4>Sugerencias</h4><ul></ul><div class="dialog-actions"><button class="primary" value="ok">Entendido</button></div></form>';
+      document.body.append(dialog);
+    }
+    dialog.querySelector("h3").textContent = "¿Para qué sirve? · " + title;
+    dialog.querySelector(".help-what").textContent = what;
+    const ul = dialog.querySelector("ul");
+    ul.replaceChildren(...tips.map((t) => Object.assign(document.createElement("li"), { textContent: t })));
+    dialog.showModal();
+  }
+
+  function addButtons() {
+    for (const view of Object.keys(MODULES)) {
+      const h2 = document.querySelector(`#view-${view} h2`);
+      if (!h2 || h2.parentElement.querySelector(".help-btn")) continue;
+      // Headings whose text the app rewrites (the greeting) keep the button beside them.
+      const beside = Boolean(h2.id);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "help-btn";
+      b.textContent = "?";
+      b.title = "¿Para qué sirve este módulo?";
+      b.setAttribute("aria-label", "Ayuda: " + MODULES[view][0]);
+      b.addEventListener("click", () => openHelp(view));
+      if (beside) h2.insertAdjacentElement("afterend", b);
+      else h2.append(b);
+    }
+  }
+
+  function init() {
+    addButtons();
+    applyPlaceholders();
+    document.addEventListener("focusin", (e) => {
+      const el = e.target;
+      if (el.matches?.("input, textarea, select") && !["hidden", "checkbox", "radio", "file", "button", "submit"].includes(el.type)) showTip(el);
+    });
+    document.addEventListener("focusout", hideTip);
+    // Forms built later (custom fields, dialogs filled on open) get examples too.
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; applyPlaceholders(); });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  window.JuanmaHelp = { MODULES, FIELDS, lookup, openHelp };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
   <script>window.JUANMA_SEED_CATALOG = [["Administrativo",["Medio de Control de Nulidad y Restablecimiento del Derecho","Medio de Control de Reparación Directa","Acción Contractual","Petición"]],["Laboral",["Ordinario Laboral de Primera Instancia","Ejecutivo Laboral","Requerimiento Empleador","Requerimiento Oficina de Trabajo"]],["Penal",["Denuncia Penal","Querella","Representación de Víctima","Defensa Técnica"]],["Familia",["Divorcio","Custodia y Cuidado Personal","Fijación de Cuota Alimentaria","Regulación de Visitas"]],["Derecho de Petición",["Petición de Interés General","Petición de Interés Particular","Solicitud de Información","Consulta"]],["Datacrédito",["Reclamo ante la Fuente","Reclamo ante el Operador","Queja ante la SIC"]]];
 window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contable","Gerente Regional","Abogado","Dependiente Judicial","Asistente"],"permissions":{"scope.all":"Ve todas las oficinas","users.manage":"Gestiona usuarios, roles y oficinas","catalog.manage":"Configura tipos de proceso, subprocesos y campos","clients.write":"Crea y edita clientes","clients.delete":"Elimina clientes","cases.write":"Crea y edita expedientes","cases.delete":"Elimina expedientes","drafts.generate":"Genera borradores","jurisprudence.use":"Usa el buscador de jurisprudencia","import.run":"Importa datos desde Excel","reports.view":"Ve y exporta reportes","processes.consult":"Consulta procesos en la Rama Judicial y recibe reportes","templates.manage":"Crea, carga y edita plantillas de documentos","esign.use":"Envía documentos a firma electrónica","mail.send":"Envía correo electrónico con trazabilidad","payments.manage":"Registra cobros y recibos, maneja cartera y envía recordatorios de pago"},"matrix":{"Gerencia":["scope.all","users.manage","catalog.manage","clients.write","clients.delete","cases.write","cases.delete","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send","payments.manage"],"Director Jurídico":["scope.all","catalog.manage","clients.write","clients.delete","cases.write","cases.delete","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","templates.manage","esign.use","mail.send"],"Director Contable":["scope.all","reports.view","payments.manage"],"Gerente Regional":["clients.write","cases.write","cases.delete","drafts.generate","jurisprudence.use","import.run","reports.view","processes.consult","esign.use","mail.send","payments.manage"],"Abogado":["clients.write","cases.write","drafts.generate","jurisprudence.use","reports.view","processes.consult","esign.use","mail.send"],"Dependiente Judicial":["cases.write","jurisprudence.use","processes.consult","mail.send"],"Asistente":["clients.write","cases.write","drafts.generate","payments.manage"]}};
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}]};</script>
-<script>window.JUANMA_VERSION = {"change":19,"sha":"","date":"2026-10-14"};</script>
+<script>window.JUANMA_VERSION = {"change":20,"sha":"","date":"2026-10-14"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives

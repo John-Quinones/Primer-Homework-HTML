@@ -23,3 +23,4 @@ Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto.
 | 17 | 14/10/2026 | La app muestra el número de cambio publicado; este registro de cambios. |
 | 18 | 14/10/2026 | La app pasa a llamarse **TecjuridicosApp**: pantallas, PDF, correos, reportes y documentos de Word. Los datos y la dirección de Azure no cambian. |
 | 19 | 14/10/2026 | Clientes: persona natural o jurídica. Natural: nombres y apellidos por separado, corregidos solos a mayúscula inicial (JoHN → John). Jurídica: razón social, NIT y representante legal. Los clientes existentes se separan solos en nombres y apellidos. Azure publica solo cuando se indique. |
+| 20 | 14/10/2026 | Ayuda en la app: botón **?** en cada módulo que explica para qué sirve, con sugerencias de uso; los campos muestran un ejemplo y, al escribir, una sugerencia de redacción o contenido. |

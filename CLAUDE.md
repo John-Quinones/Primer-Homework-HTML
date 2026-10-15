@@ -22,7 +22,7 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 - Permissions: `src/auth.js` (`PERMISSIONS`, `DEFAULT_MATRIX`); new permissions reach built-in roles once via `known_permissions`.
 
 ## Modules done
-Clients, cases (status Activo / Archivo provisional / Archivo definitivo; client's procedural role; affiliated yes/no), process catalog with two levels of sub-processes and custom fields, users/roles/offices with per-user permissions, Excel import from Access, DIVIPOLA type-ahead, court directory, agenda with reminders, Rama Judicial consultation with reports at 7/13/17 h, documents (templates + NomosAI), case law (official sites only), reports to Excel/PDF, e-signature, traced e-mail, payments (charges, installments, receipts, portfolio aging, reminders).
+In-app help (`public/help.js`: "?" per module, examples and tips per field). Clients, cases (status Activo / Archivo provisional / Archivo definitivo; client's procedural role; affiliated yes/no), process catalog with two levels of sub-processes and custom fields, users/roles/offices with per-user permissions, Excel import from Access, DIVIPOLA type-ahead, court directory, agenda with reminders, Rama Judicial consultation with reports at 7/13/17 h, documents (templates + NomosAI), case law (official sites only), reports to Excel/PDF, e-signature, traced e-mail, payments (charges, installments, receipts, portfolio aging, reminders).
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.
