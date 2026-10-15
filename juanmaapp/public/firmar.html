@@ -28,7 +28,7 @@
     </section>
     <section id="done" class="panel" hidden>
       <h3 class="panel-title">Documento firmado por todos</h3>
-      <p class="hint">Descargue el PDF con la estampa de cada firma, el pie de verificación en cada página y el certificado de firma al final.</p>
+      <p class="hint">Descargue el PDF con la estampa de cada firma, el pie de verificación en cada página y el certificado de firma al final. Cualquiera puede comprobar que no fue alterado en <a href="verificar.html">verificar.html</a>.</p>
       <button id="dl-signed" class="primary" type="button">Descargar documento firmado</button>
     </section>
     <section id="sign" class="panel" hidden>
@@ -58,8 +58,6 @@
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
   <script src="sigpad.js"></script>
-  <script src="vendor/jspdf.umd.min.js"></script>
-  <script src="vendor/pdf-lib.min.js"></script>
   <script src="pdf-tools.js"></script>
   <script>
     const token = location.hash.slice(1);
@@ -113,8 +111,10 @@
     $("#clear").addEventListener("click", () => pad.clear());
     $("#dl-signed").addEventListener("click", async () => {
       try {
-        const blob = await JuanmaPdf.signedPdf(signedData, pdfBytes);
-        const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${signedData.title.replace(/[^\w .-]+/g, "").trim() || "documento"} - firmado.pdf` });
+        // The signed PDF kept on the server: the same bytes everyone gets, so it passes verification.
+        const f = await call("GET", "/signed");
+        const blob = new Blob([Uint8Array.from(atob(f.base64), (c) => c.charCodeAt(0))], { type: "application/pdf" });
+        const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: f.filename });
         document.body.append(a); a.click(); a.remove();
       } catch (e) { show(`No se pudo armar el PDF: ${e.message}`, true); }
     });

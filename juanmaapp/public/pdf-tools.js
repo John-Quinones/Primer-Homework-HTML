@@ -55,8 +55,9 @@
     line("CERTIFICADO DE FIRMA ELECTRÓNICA", { size: 16, bold: true, color: [0, 43, 106] });
     line(`Documento: ${r.title}`, { size: 11, bold: true });
     line(`Solicitud N.º ${r.id} · Estado: ${STATUS[r.status] || r.status}${r.completed_at ? ` · completado ${co(r.completed_at)}` : ""}`);
+    if (r.verify_code) line(`Código de verificación: ${r.verify_code}${r.verify_url ? ` · ${r.verify_url}` : ""}`, { bold: true });
     line(`Huella del documento original (SHA-256): ${r.doc_hash}`, { size: 9 });
-    line("La huella identifica el contenido exacto que se firmó: cualquier cambio en el documento produce una huella distinta.", { size: 8, color: [90, 90, 90], gap: 10 });
+    line("La huella identifica el contenido exacto que se firmó: cualquier cambio en el documento produce una huella distinta. Para comprobar este PDF firmado, cárguelo en la página de verificación: la app calcula su huella y la compara con la que quedó registrada al completarse las firmas.", { size: 8, color: [90, 90, 90], gap: 10 });
     for (const x of r.signers) {
       if (y > H - 190) { doc.addPage(); y = M; }
       line(`${x.name} · ${x.id_type} ${x.id_number}`.trim(), { size: 11, bold: true });
@@ -99,8 +100,10 @@
     const signed = r.signers.filter((s) => s.status === "firmado");
     const images = await Promise.all(signed.map((s) => pdf.embedPng(s.signature_png).catch(() => null)));
     const pages = pdf.getPages();
+    const verifyLine = r.verify_code ? ` · Verifique en ${r.verify_url || "TecjuridicosApp → Firmas → Verificar"} con el código ${r.verify_code}` : "";
     for (const page of pages) {
-      page.drawText(ansi(`Firmado electrónicamente en TecjuridicosApp · Solicitud N.º ${r.id} · SHA-256 del original ${r.doc_hash.slice(0, 32)}…`), { x: 24, y: 10, size: 6.5, font, color: gray });
+      page.drawText(ansi(`Firmado electrónicamente en TecjuridicosApp · Solicitud N.º ${r.id}${verifyLine}`), { x: 24, y: 18, size: 6.5, font, color: gray });
+      page.drawText(ansi(`SHA-256 del documento original: ${r.doc_hash}`), { x: 24, y: 9, size: 5.6, font, color: gray });
     }
     const where = String(r.stamp_page || "last");
     let targets, pos = r.stamp_pos || "br";

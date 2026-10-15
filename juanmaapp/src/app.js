@@ -13,7 +13,7 @@ import { courtsRouter } from "./courts.js";
 import { agendaRouter } from "./agenda-routes.js";
 import { monitorRouter } from "./monitor-routes.js";
 import { templatesRouter } from "./templates.js";
-import { esignRouter, esignPublicRouter } from "./esign.js";
+import { esignRouter, esignPublicRouter, verifyRouter } from "./esign.js";
 import { mailRouter, mailPublicRouter } from "./mailtrace.js";
 import { paymentsRouter } from "./payments.js";
 import { microsoftRouter } from "./microsoft.js";
@@ -81,6 +81,7 @@ export function createApp(db) {
   app.use("/api/auth", authRouter(db));
   // Signer and recipient pages: the link token is the credential, no session.
   app.use("/api/public/sign", esignPublicRouter(db));
+  app.use("/api/public/verify", verifyRouter(db));
   app.use("/api/public/mail", mailPublicRouter(db));
   app.use("/api", requireAuth);
   app.use("/api/admin", adminRouter(db));

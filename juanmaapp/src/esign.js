@@ -7,6 +7,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import { can, scopeOf } from "./auth.js";
 import { sendEmail, sendSms, sendWhatsapp, channelReady } from "./notify.js";
 import { buildSignedPdf } from "./signed-pdf.js";
+import { newVerifyCode, normVerifyCode } from "./verify-code.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -52,12 +53,10 @@ async function sendLink(db, req, request, signer, token) {
 }
 
 // The signed PDF (stamps on the chosen page + certificate), as an e-mail attachment.
-async function signedAttachment(db, x) {
+async function signedAttachment(db, req, x) {
   try {
-    const full = requestOut(db, x);
-    const pdf = await buildSignedPdf(full, x.doc_file ? Buffer.from(x.doc_file) : null);
-    const name = `${String(x.title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").trim().slice(0, 80) || "documento"} - firmado.pdf`;
-    return [{ filename: name, content: pdf, contentType: "application/pdf" }];
+    const out = await ensureSignedPdf(db, req, x.id);
+    return out ? [{ filename: signedName(x.title), content: out.pdf, contentType: "application/pdf" }] : [];
   } catch (err) {
     event(db, x.id, null, "pdf_firmado_no_generado", err.message);
     return [];
@@ -84,7 +83,7 @@ async function notifyCompleted(db, req, requestId) {
   const x = db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(requestId);
   if (!x?.notify) return;
   const subject = `Documento firmado por todos: ${x.title}`;
-  const attachments = await signedAttachment(db, x);
+  const attachments = await signedAttachment(db, req, x);
   for (const s of db.prepare("SELECT * FROM sign_signers WHERE request_id = ?").all(requestId)) {
     if (!s.email) continue;
     const token = randomBytes(24).toString("base64url");
@@ -115,9 +114,32 @@ const requestOut = (db, r) => {
   const signers = db.prepare(`SELECT id, name, id_type, id_number, email, phone, status, method, signed_at, ip, user_agent, typed_name,
       signature_png, reject_reason, otp_sent_at, otp_channel FROM sign_signers WHERE request_id = ? ORDER BY id`).all(r.id).map((x) => ({ ...x }));
   const events = db.prepare("SELECT * FROM sign_events WHERE request_id = ? ORDER BY id").all(r.id).map((x) => ({ ...x }));
-  const { doc_file, ...rest } = r;
-  return { ...rest, has_pdf: !!doc_file, signers, events };
+  const { doc_file, signed_pdf, ...rest } = r;
+  return { ...rest, has_pdf: !!doc_file, has_signed_pdf: !!signed_pdf, signers, events };
 };
+
+/**
+ * The signed PDF is built once, when everybody has signed, and kept with its
+ * SHA-256: every copy (e-mail, app, signer page) is byte-for-byte the same, so
+ * the verification page can tell whether a file is exactly the signed one.
+ */
+async function ensureSignedPdf(db, req, requestId) {
+  let x = db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(requestId);
+  if (!x || x.status !== "completada") return null;
+  if (x.signed_pdf) return { pdf: Buffer.from(x.signed_pdf), sha256: x.signed_sha256 };
+  if (!x.verify_code) {
+    db.prepare("UPDATE sign_requests SET verify_code = ? WHERE id = ?").run(newVerifyCode(), x.id);
+    x = db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(requestId);
+  }
+  const full = { ...requestOut(db, x), doc_text: x.doc_text, verify_url: `${publicUrl(req)}/verificar.html` };
+  const pdf = await buildSignedPdf(full, x.doc_file ? Buffer.from(x.doc_file) : null);
+  const hash = sha(pdf);
+  db.prepare("UPDATE sign_requests SET signed_pdf = ?, signed_sha256 = ? WHERE id = ? AND signed_pdf IS NULL").run(pdf, hash, x.id);
+  event(db, x.id, null, "pdf_firmado_generado", `SHA-256 ${hash}`);
+  const kept = db.prepare("SELECT signed_pdf, signed_sha256 FROM sign_requests WHERE id = ?").get(x.id);
+  return { pdf: Buffer.from(kept.signed_pdf), sha256: kept.signed_sha256 };
+}
+const signedName = (title) => `${String(title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").trim().slice(0, 80) || "documento"} - firmado.pdf`;
 
 /** Marks the request complete when nobody is pending; returns true then (the caller sends the e-mail notices). */
 function finishIfDone(db, requestId) {
@@ -199,9 +221,9 @@ export function esignRouter(db) {
     const hash = sha(file || Buffer.from(text, "utf8"));
     const stampPage = /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last";
     const stampPos = ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br";
-    const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by, stamp_page, stamp_pos, notify)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id,
-      stampPage, stampPos, b.notify === false ? 0 : 1).lastInsertRowid;
+    const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by, stamp_page, stamp_pos, notify, verify_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id,
+      stampPage, stampPos, b.notify === false ? 0 : 1, newVerifyCode()).lastInsertRowid;
     event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
     const ins = db.prepare("INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, otp_channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     const delivery = [];
@@ -211,6 +233,13 @@ export function esignRouter(db) {
       if (remote) delivery.push(await sendLink(db, req, { id, title, message: str(b.message) }, { id: sid, ...s }, token));
     }
     res.status(201).json({ ...requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(id)), delivery });
+  });
+
+  r.get("/:id/signed", async (req, res) => {
+    const x = get(req, Number(req.params.id));
+    if (!x || x.status !== "completada") return res.status(400).json({ error: "El documento aún no está firmado por todos." });
+    const out = await ensureSignedPdf(db, req, x.id);
+    res.json({ filename: signedName(x.title), sha256: out.sha256, base64: out.pdf.toString("base64") });
   });
 
   r.post("/:id/remind/:signerId", async (req, res) => {
@@ -293,6 +322,13 @@ export function esignPublicRouter(db) {
     res.json({ name: f.x.doc_name, base64: Buffer.from(f.x.doc_file).toString("base64") });
   });
 
+  r.get("/:token/signed", async (req, res) => {
+    const f = bySigner(req.params.token);
+    if (!f || f.x.status !== "completada") return res.status(400).json({ error: "El documento aún no está firmado por todos." });
+    const out = await ensureSignedPdf(db, req, f.x.id);
+    res.json({ filename: signedName(f.x.title), sha256: out.sha256, base64: out.pdf.toString("base64") });
+  });
+
   r.post("/:token/otp", async (req, res) => {
     const f = bySigner(req.params.token);
     if (!f || f.s.status !== "pendiente" || f.x.status !== "enviada") return res.status(400).json({ error: "Este documento ya no está pendiente de su firma." });
@@ -348,6 +384,45 @@ export function esignPublicRouter(db) {
     res.json(view(bySigner(req.params.token)));
   });
 
+  return r;
+}
+
+/**
+ * Public verification (no session). The page computes the SHA-256 of the file in the
+ * visitor's browser (the file is never uploaded) and asks whether it matches:
+ * the signed PDF kept here, or the original document that was signed. The code
+ * printed at the foot of every page finds the request without the file.
+ */
+export function verifyRouter(db) {
+  const r = express.Router();
+  const describe = (x, match) => ({
+    match, title: x.title, status: x.status, created_at: x.created_at, completed_at: x.completed_at, verify_code: x.verify_code,
+    doc_hash: x.doc_hash, signed_sha256: x.signed_sha256 || null,
+    signers: db.prepare("SELECT name, id_type, id_number, status, method, otp_channel, signed_at FROM sign_signers WHERE request_id = ? ORDER BY id").all(x.id)
+      .map((s) => ({ ...s, id_number: s.id_number ? `•••${String(s.id_number).replace(/\D/g, "").slice(-3)}` : "" })),
+  });
+  const tries = new Map();
+  r.post("/", (req, res) => {
+    // A few lookups per minute per address: codes cannot be guessed by brute force.
+    const ip = clientIp(req), now = Date.now();
+    const t = (tries.get(ip) || []).filter((x) => x > now - 60000);
+    if (t.length >= 20) return res.status(429).json({ error: "Demasiadas consultas. Espere un minuto." });
+    tries.set(ip, [...t, now]);
+    const hash = String(req.body?.sha256 || "").toLowerCase();
+    const code = normVerifyCode(req.body?.code);
+    if (/^[0-9a-f]{64}$/.test(hash)) {
+      const signed = db.prepare("SELECT * FROM sign_requests WHERE signed_sha256 = ?").get(hash);
+      if (signed) return res.json(describe(signed, "firmado"));
+      const original = db.prepare("SELECT * FROM sign_requests WHERE doc_hash = ? ORDER BY id DESC").get(hash);
+      if (original) return res.json(describe(original, "original"));
+      return res.json({ match: "ninguno" });
+    }
+    if (/^[0-9A-Z]{5}-[0-9A-Z]{5}$/.test(code)) {
+      const x = db.prepare("SELECT * FROM sign_requests WHERE verify_code = ?").get(code);
+      return x ? res.json(describe(x, "codigo")) : res.json({ match: "ninguno" });
+    }
+    res.status(400).json({ error: "Cargue el archivo o escriba el código de verificación." });
+  });
   return r;
 }
 

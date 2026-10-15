@@ -7,6 +7,7 @@ import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 import { seedTemplates } from "./templates.js";
 import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW } from "./templates-seed.js";
 import { normStatus, courtCircuit } from "./case-meta.js";
+import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 
 export const MAIN_OFFICE = "Ibagué";
@@ -491,6 +492,13 @@ function migrate(db) {
   add("sign_requests", "stamp_page", "TEXT NOT NULL DEFAULT 'last'");
   add("sign_requests", "stamp_pos", "TEXT NOT NULL DEFAULT 'br'");
   add("sign_requests", "notify", "INTEGER NOT NULL DEFAULT 1");
+  // Verification (change 41): a public code printed on every page and the signed PDF kept once, with its SHA-256.
+  add("sign_requests", "verify_code", "TEXT");
+  add("sign_requests", "signed_pdf", "BLOB");
+  add("sign_requests", "signed_sha256", "TEXT");
+  for (const r of db.prepare("SELECT id FROM sign_requests WHERE verify_code IS NULL").all()) {
+    db.prepare("UPDATE sign_requests SET verify_code = ? WHERE id = ?").run(newVerifyCode(), r.id);
+  }
   // Circuit courts already loaded take their circuit from the name ("… del Circuito de Ibagué").
   const setCircuit = db.prepare("UPDATE courts SET circuit = ? WHERE id = ?");
   for (const c of db.prepare("SELECT id, name FROM courts WHERE circuit = ''").all()) {

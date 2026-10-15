@@ -61,3 +61,25 @@ test("OTP by SMS, stamp settings, and an e-mail with the signed document to ever
   assert.ok(detail.events.some((e) => e.event === "aviso_final_enviado"));
   assert.ok(detail.events.some((e) => e.event === "copia_enviada_a_quien_envio"));
 });
+
+test("verification: the signed PDF kept once, found by its SHA-256 or by the printed code; altered files do not match", async () => {
+  const { createHash } = await import("node:crypto");
+  const sha = (b) => createHash("sha256").update(b).digest("hex");
+  const r = (await admin.call("POST", "/esign", { title: "Pagaré", doc_text: "# PAGARÉ\n\nPagaré a la orden.", mode: "presencial", signers: [{ name: "Luis Rojas" }] })).body;
+  assert.match(r.verify_code, /^[2-9A-Z]{5}-[2-9A-Z]{5}$/);
+  assert.equal((await admin.call("GET", `/esign/${r.id}/signed`)).status, 400, "not signed yet");
+  await admin.call("POST", `/esign/${r.id}/in-person/${r.signers[0].id}`, { typed_name: "Luis Rojas", accept: true, signature_png: PNG });
+  const a = (await admin.call("GET", `/esign/${r.id}/signed`)).body;
+  const b = (await admin.call("GET", `/esign/${r.id}/signed`)).body;
+  assert.equal(a.base64, b.base64, "same bytes every time");
+  const pdf = Buffer.from(a.base64, "base64");
+  assert.equal(sha(pdf), a.sha256);
+  const ok = await pub("POST", "/public/verify", { sha256: a.sha256 });
+  assert.equal(ok.body.match, "firmado");
+  assert.equal(ok.body.signers[0].status, "firmado");
+  const altered = Buffer.from(pdf); altered[altered.length - 20] ^= 1;
+  assert.equal((await pub("POST", "/public/verify", { sha256: sha(altered) })).body.match, "ninguno");
+  assert.equal((await pub("POST", "/public/verify", { sha256: sha("# PAGARÉ\n\nPagaré a la orden.") })).body.match, "original");
+  assert.equal((await pub("POST", "/public/verify", { code: r.verify_code.toLowerCase().replace("-", " ") })).body.match, "codigo");
+  assert.ok(pdf.toString("latin1").includes(r.verify_code), "the code is printed on the pages");
+});

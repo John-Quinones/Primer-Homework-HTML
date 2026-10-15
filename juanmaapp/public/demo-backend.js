@@ -959,11 +959,52 @@
   const getSign = (id) => s.signs.find((r) => r.id === id && signVisible(r)) || fail("La solicitud no existe.");
   const signEvent = (r, signerId, event, detail = "") => r.events.push({ id: nextId(), request_id: r.id, signer_id: signerId, event, detail, ip: "", at: stamp(), created_at: stamp() });
   const sha256 = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  // Same 10-character codes as src/verify-code.js.
+  const newVerifyCode = () => {
+    const A = "23456789ABCDEFGHJKMNPQRSTUVWXYZ", v = crypto.getRandomValues(new Uint32Array(10));
+    const c = [...v].map((x) => A[x % A.length]).join("");
+    return `${c.slice(0, 5)}-${c.slice(5)}`;
+  };
+  const signedName = (title) => `${String(title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").trim().slice(0, 80) || "documento"} - firmado.pdf`;
+  // The signed PDF is built once and kept, so every copy has the same SHA-256 and can be verified.
+  async function ensureSignedPdf(r) {
+    if (r.status !== "completada") fail("El documento aún no está firmado por todos.");
+    if (!s.blobs[`signedpdf-${r.id}`]) {
+      r.verify_code ||= newVerifyCode();
+      const original = s.blobs[`signpdf-${r.id}`] ? b64bytes(s.blobs[`signpdf-${r.id}`]) : null;
+      const blob = await window.JuanmaPdf.signedPdf({ ...signOut(r) }, original);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      s.blobs[`signedpdf-${r.id}`] = btoa(bin);
+      r.signed_sha256 = await sha256(bytes);
+      signEvent(r, null, "pdf_firmado_generado", `SHA-256 ${r.signed_sha256}`);
+      await save();
+    }
+    return { filename: signedName(r.title), sha256: r.signed_sha256, base64: s.blobs[`signedpdf-${r.id}`] };
+  }
   const b64bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
   routes.push(
     ["GET", /^\/esign$/, () => { need("esign.use"); return s.signs.filter(signVisible).slice().reverse().map(signOut); }],
     ["GET", /^\/esign\/(\d+)$/, (m) => { need("esign.use"); return signOut(getSign(+m[1])); }],
+    ["GET", /^\/esign\/(\d+)\/signed$/, async (m) => { need("esign.use"); return ensureSignedPdf(getSign(+m[1])); }],
+    ["POST", /^\/public\/verify$/, (m, b) => {
+      const hash = String(b.sha256 || "").toLowerCase();
+      const code = String(b.code || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^(.{5})(.{5})$/, "$1-$2");
+      const describe = (r, match) => ({ match, title: r.title, status: r.status, created_at: r.created_at, completed_at: r.completed_at, verify_code: r.verify_code,
+        doc_hash: r.doc_hash, signed_sha256: r.signed_sha256 || null,
+        signers: r.signers.map((x) => ({ name: x.name, id_type: x.id_type, id_number: x.id_number ? `•••${String(x.id_number).replace(/\D/g, "").slice(-3)}` : "",
+          status: x.status, method: x.method, otp_channel: x.otp_channel, signed_at: x.signed_at })) });
+      if (/^[0-9a-f]{64}$/.test(hash)) {
+        const signed = s.signs.find((r) => r.signed_sha256 === hash);
+        if (signed) return describe(signed, "firmado");
+        const original = s.signs.find((r) => r.doc_hash === hash);
+        return original ? describe(original, "original") : { match: "ninguno" };
+      }
+      if (/^[0-9A-Z]{5}-[0-9A-Z]{5}$/.test(code)) { const r = s.signs.find((x) => x.verify_code === code); return r ? describe(r, "codigo") : { match: "ninguno" }; }
+      fail("Cargue el archivo o escriba el código de verificación.");
+    }],
     ["GET", /^\/esign\/(\d+)\/pdf$/, (m) => {
       need("esign.use");
       const r = getSign(+m[1]);
@@ -995,7 +1036,7 @@
       const r = { id: nextId(), title, case_id: +b.case_id || null, office_id: officeId, doc_kind: kind, doc_name: str(b.doc_name), doc_hash: hash,
         message: str(b.message), status: "enviada", created_by: me().id, created_at: stamp(), completed_at: null, signers: [], events: [],
         stamp_page: /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last",
-        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br", notify: b.notify !== false };
+        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br", notify: b.notify !== false, verify_code: newVerifyCode() };
       for (const x of signers) r.signers.push({ id: nextId(), ...x, status: "pendiente", method: null, signed_at: null, ip: "", user_agent: "", typed_name: "", reject_reason: null, otp_sent_at: null });
       if (pdf) s.blobs[`signpdf-${r.id}`] = pdf; else s.blobs[`signtxt-${r.id}`] = text;
       signEvent(r, null, "creada", `${me().name} · SHA-256 ${hash}`);

@@ -645,3 +645,4 @@ html[data-view="mobile"] body { max-width: 480px; margin: 0 auto; box-shadow: 0 
 .auth-links { margin: 10px 0 0; text-align: center; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--link, var(--brand-blue)); text-decoration: underline; cursor: pointer; font: inherit; }
 .auth-card .form-error.ok { color: #b8f5c8; }
+.verdict-badge { display: block; padding: 10px 12px; font-size: .9rem; white-space: normal; }

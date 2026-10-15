@@ -1003,6 +1003,13 @@ document.addEventListener("click", (e) => {
     },
     "new-template": () => openTemplateDialog(null),
     "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
+    "verify-sign": async () => {
+      const dlg = $("#verify-dialog");
+      $("form", dlg).reset();
+      $("#verify-result").innerHTML = "";
+      $("#verify-public").textContent = WEB ? "" : `Cualquier persona puede verificar sin entrar a la app en ${location.origin}/verificar.html (el código va al pie de cada página del PDF firmado).`;
+      dlg.showModal();
+    },
     "prepare-blanks": async () => tplActive?.format === "docx" && openBlanksDialog(tplActive),
     "case-docs": async () => openCaseDocs(id),
     "delete-casedoc": async () => {
@@ -2168,6 +2175,29 @@ $("[data-wa-download]", waForm).addEventListener("click", () => guarded(async ()
   await saveFile(`${waDoc.base}.${ext}`, await (ext === "pdf" ? waDoc.pdf() : waDoc.word()));
 }));
 
+// Verification of a signed document: SHA-256 computed here, compared with the registry.
+async function showVerification(body, hash = "") {
+  const r = await api("POST", "/public/verify", body);
+  const VERDICT = {
+    firmado: ["ok", "AUTÉNTICO Y SIN ALTERACIONES: es exactamente el documento firmado registrado."],
+    original: ["warn", "Es el documento ORIGINAL enviado a firma (sin estampas). Para el firmado, cargue el PDF firmado."],
+    codigo: ["warn", "El código corresponde a esta solicitud. Cargue el archivo para comprobar que no fue alterado."],
+    ninguno: ["bad", hash ? "NO COINCIDE: el archivo no corresponde a ningún documento firmado registrado; pudo ser modificado o no se firmó aquí." : "No hay ningún documento con ese código."],
+  };
+  const [cls, text] = VERDICT[r.match];
+  $("#verify-result").innerHTML = `<p class="badge ${cls === "ok" ? "ok" : cls === "warn" ? "warn" : "bad"} verdict-badge">${escapeHtml(text)}</p>
+    ${hash ? `<p class="muted mono small">SHA-256 del archivo: ${escapeHtml(hash)}</p>` : ""}
+    ${r.title ? `<p><strong>${escapeHtml(r.title)}</strong> · ${r.status === "completada" ? "Firmado por todos" : escapeHtml(r.status)}${r.completed_at ? " · " + escapeHtml(window.JuanmaPdf.colombiaTime(r.completed_at)) : ""} · Código ${escapeHtml(r.verify_code || "")}</p>
+      <ul>${r.signers.map((x) => `<li>${escapeHtml(x.name)} · ${x.status === "firmado" ? `firmó ${escapeHtml(window.JuanmaPdf.colombiaTime(x.signed_at))}` : escapeHtml(x.status)}</li>`).join("")}</ul>` : ""}`;
+}
+$("#verify-dialog [name=file]").addEventListener("change", (e) => guarded(async () => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", await f.arrayBuffer()))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await showVerification({ sha256: hash }, hash);
+}));
+$("[data-verify-code]").addEventListener("click", () => guarded(() => showVerification({ code: $("#verify-dialog [name=code]").value })));
+
 // Documents saved in a case.
 let casedocsCase = null;
 async function openCaseDocs(caseId) {
@@ -2399,7 +2429,7 @@ async function openSignDetail(id) {
   const r = signCurrent;
   const dlg = $("#sign-detail");
   $("[data-title]", dlg).textContent = r.title;
-  $("[data-sub]", dlg).textContent = `${SIGN_STATUS[r.status][1]} · Huella del documento (SHA-256): ${r.doc_hash}`;
+  $("[data-sub]", dlg).textContent = `${SIGN_STATUS[r.status][1]} · Código de verificación ${r.verify_code || "—"} · Huella del documento original (SHA-256): ${r.doc_hash}${r.signed_sha256 ? ` · Huella del PDF firmado: ${r.signed_sha256}` : ""}`;
   $("#sign-detail-body").innerHTML = `
     <ul class="signer-list">${r.signers.map((x) => `<li>
       <div><strong>${escapeHtml(x.name)}</strong> <span class="muted">${escapeHtml([x.id_type + " " + x.id_number, x.email].filter((v) => v.trim()).join(" · "))}</span></div>
@@ -2441,9 +2471,10 @@ $("#sign-detail").addEventListener("click", (e) => {
     } else if (out === "cert") {
       await saveFile(`Certificado de firma - ${safeName(signCurrent.title)}.pdf`, signatureCertificate(signCurrent));
     } else if (out === "doc" || out === "save") {
-      const original = signCurrent.doc_kind === "pdf" ? D.b64ToBytes((await api("GET", `/esign/${signCurrent.id}/pdf`)).base64) : null;
-      const blob = await signedPdf(signCurrent, original);
-      const filename = `${safeName(signCurrent.title)} - firmado.pdf`;
+      // The signed PDF is generated once and kept: every copy has the same SHA-256 and passes verification.
+      const f = await api("GET", `/esign/${signCurrent.id}/signed`);
+      const blob = new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" });
+      const filename = f.filename;
       if (out === "doc") await saveFile(filename, blob);
       else {
         await api("POST", `/cases/${signCurrent.case_id}/documents`, { name: `${signCurrent.title} (firmado)`, filename, file_base64: await blobToB64(blob) });

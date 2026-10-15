@@ -453,7 +453,7 @@
       <section id="view-firmas" class="view" hidden>
         <div class="view-head">
           <h2>Firma electrónica</h2>
-          <div class="toolbar"><button class="primary" data-action="new-sign">+ Enviar documento a firma</button></div>
+          <div class="toolbar"><button data-action="verify-sign">Verificar documento</button><button class="primary" data-action="new-sign">+ Enviar documento a firma</button></div>
         </div>
         <p class="hint" id="sign-note">Cada firmante recibe un enlace por correo, confirma su identidad con un código de un solo uso enviado a su correo y firma en pantalla. Queda registrada la huella SHA-256 del documento, la fecha y hora, la IP y el navegador. También puede firmar en persona en este equipo.</p>
         <div class="panel"><div class="table-scroll">
@@ -1223,6 +1223,19 @@
       <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button class="primary" value="save">Guardar</button></div>
     </form>
   </dialog>
+  <!-- Verificar un documento firmado -->
+  <dialog id="verify-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>Verificar documento firmado</h3>
+      <p class="hint">Cargue el PDF firmado (o el documento original). La app calcula su huella SHA-256 en este equipo y la compara con la registrada al completarse las firmas: si alguien cambió algo, aunque sea una coma, no coincide.</p>
+      <label>Archivo <input type="file" name="file" accept="application/pdf,.pdf,.txt,.md" /></label>
+      <div class="toolbar"><label>…o código de verificación <input name="code" placeholder="Ej. 7KQ2M-X9FHT" maxlength="11" autocomplete="off" /></label><button type="button" data-verify-code>Consultar</button></div>
+      <div id="verify-result"></div>
+      <p class="hint" id="verify-public"></p>
+      <div class="dialog-actions"><button value="cancel">Cerrar</button></div>
+    </form>
+  </dialog>
+
   <!-- Preferencias de pantalla (de este equipo) -->
   <dialog id="prefs-dialog">
     <form method="dialog">
