@@ -68,6 +68,16 @@ async function loadClients(q = "") { state.clients = await api("GET", `/clients?
 async function loadCases() { state.cases = await api("GET", "/cases"); }
 
 const categoryOf = (catId) => state.catalog.find((c) => c.id === Number(catId));
+// Folder number of a case: the "No. Carpeta" custom field of its process type
+// (also spelled "Carpeta", "N° de carpeta", "Número de carpeta").
+const isFolderField = (f) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(f.label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, ""));
+const caseFolder = (k) => {
+  for (const f of categoryOf(k.category_id)?.fields ?? []) {
+    const v = isFolderField(f) && String(k.field_values?.[f.id] ?? "").trim();
+    if (v) return v;
+  }
+  return "";
+};
 const typeById = (typeId) => {
   for (const c of state.catalog) {
     const t = c.types.find((t) => t.id === Number(typeId));
@@ -335,7 +345,7 @@ async function renderClientDetail() {
 
 function caseCard(k) {
   return `<li class="case-card">
-    <div><span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span></div>
+    <div>${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span></div>
     ${partyLine(k) ? `<span class="muted">Cliente: ${escapeHtml(partyLine(k))}</span>` : ""}
     <strong>${escapeHtml(k.type_name)}</strong>
     ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
@@ -350,7 +360,7 @@ function caseCard(k) {
 }
 
 async function renderClientes() {
-  await loadClients($("#client-search").value);
+  await Promise.all([loadClients($("#client-search").value), state.catalog.length ? null : loadCatalog()]);
   renderClientList();
   await renderClientDetail();
 }
@@ -509,7 +519,8 @@ const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : ""].filter(
 
 function renderCustomFields(cat, values) {
   const box = $("#custom-fields");
-  box.innerHTML = (cat?.fields ?? []).map((f) => {
+  const fields = [...(cat?.fields ?? [])].sort((a, b) => isFolderField(b) - isFolderField(a));
+  box.innerHTML = fields.map((f) => {
     const name = `cf_${f.id}`;
     const v = escapeHtml(values[f.id] ?? "");
     const req = f.required ? "required" : "";
@@ -587,7 +598,7 @@ async function openCaseDialog(k = null, clientId = null) {
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
-  openDialog($("#case-dialog"), k ? "Editar expediente" : "Nuevo expediente", k ? {
+  openDialog($("#case-dialog"), k ? `Editar expediente${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}` : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
     radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
     court_search: k.court_name, court_id: k.court_id ?? "", affiliated: k.affiliated ? "1" : "0",
