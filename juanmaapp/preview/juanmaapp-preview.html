@@ -729,6 +729,15 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 .portal-item .muted { font-size: .85rem; }
 .portal-item a.button { flex-shrink: 0; }
 
+/* Word forms (minutas) and case-list filters */
+.blanks-table td { vertical-align: top; }
+.blank-ctx { font-size: .88rem; max-width: 520px; }
+.blank-ctx mark { background: #fff3a3; color: #1a1a1a; padding: 0 2px; border-radius: 3px; font-weight: 600; }
+.blanks-table select { min-width: 220px; }
+.case-filters { margin-bottom: 12px; }
+.case-filters .grid4 { align-items: end; }
+#case-count { margin: 0 0 10px; }
+
 </style>
 </head>
 <body>
@@ -884,6 +893,16 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
             <button class="primary" data-action="new-case">+ Nuevo expediente</button>
           </div>
         </div>
+        <div class="panel case-filters">
+          <div class="grid4">
+            <label>Departamento <input id="case-dep" class="combo" data-combo="dep" placeholder="Escriba: T… Tolima" autocomplete="off" /></label>
+            <label>Ciudad o circuito <input id="case-city" class="combo" data-combo="city" data-dep="#case-dep" placeholder="Escriba: I… Ibagué" autocomplete="off" /></label>
+            <label>Área <select id="case-area"><option value="">Todas</option></select></label>
+            <label class="span2">Despacho judicial <select id="case-court"><option value="">Todos los despachos</option></select></label>
+            <label>Estado <select id="case-status"><option value="">Todos</option><option>Activo</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+            <p class="muted" id="case-count"></p>
+          </div>
+        </div>
         <div class="panel">
           <table class="data-table">
             <thead><tr><th>Carpeta</th><th>Cliente</th><th>Proceso</th><th>Asunto</th><th>Oficina · Responsable</th><th>Estado</th><th title="Marque los procesos que se consultan en automático en la Rama Judicial">Consulta</th><th></th></tr></thead>
@@ -972,7 +991,7 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
         <div class="panel">
           <div class="grid4">
             <label>Departamento <input id="courts-dep" class="combo" data-combo="dep" placeholder="Escriba: T… Tolima" autocomplete="off" /></label>
-            <label>Ciudad o municipio <input id="courts-city" class="combo" data-combo="city" data-dep="#courts-dep" placeholder="Escriba: I… Ibagué" autocomplete="off" /></label>
+            <label>Ciudad o circuito <input id="courts-city" class="combo" data-combo="city" data-dep="#courts-dep" placeholder="Escriba: I… Ibagué" autocomplete="off" /></label>
             <label>Área <select id="courts-area"><option value="">Todas</option></select></label>
             <label>Buscar <input id="courts-q" type="search" placeholder="Nombre, correo o código" /></label>
           </div>
@@ -989,7 +1008,7 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
           <h2>Documentos</h2>
           <div class="toolbar" id="tpl-manage-bar">
             <button data-action="new-template">+ Nueva plantilla</button>
-            <label class="file-btn">Cargar mi plantilla (.docx, .md, .txt)<input type="file" id="tpl-file" accept=".docx,.md,.txt" hidden /></label>
+            <label class="file-btn" title="Suba sus minutas de Word: la app encuentra los espacios en blanco y los llena con los datos del cliente">Cargar minuta de Word o plantilla (.docx, .md, .txt)<input type="file" id="tpl-file" accept=".docx,.md,.txt" hidden /></label>
           </div>
         </div>
         <div class="tabs" role="tablist" id="doc-tabs">
@@ -1032,7 +1051,7 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
                 </div>
                 <textarea id="tpl-text" rows="22" hidden aria-label="Texto del documento"></textarea>
                 <article id="tpl-preview" class="document"></article>
-                <p id="tpl-docx-note" class="hint" hidden>Plantilla de Word: se conserva su formato original. Al descargar, cada <code>{{variable}}</code> se reemplaza por el dato del expediente.</p>
+                <p id="tpl-docx-note" class="hint" hidden>Plantilla de Word: se conserva su formato original. Al descargar, cada <code>{{variable}}</code> se reemplaza por el dato del expediente. <button type="button" class="mini" data-action="prepare-blanks" id="tpl-blanks-btn">Preparar campos de la minuta</button></p>
               </div>
             </section>
           </div>
@@ -1464,12 +1483,13 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
         </label>
       </div>
       <fieldset class="court-fields"><legend>Despacho judicial</legend>
+        <p class="hint">Elija departamento, ciudad y área: la lista de despachos muestra solo los de esa ciudad o de su circuito en esa área (más los promiscuos que también la atienden).</p>
         <div class="grid2">
-          <label>Radicado (23 dígitos) <input name="radicado" inputmode="numeric" placeholder="73001-31-05-001-2023-00123-00" /></label>
-          <label>Área <select name="area"><option value="">—</option></select></label>
           <label>Departamento <input name="department" class="combo" data-combo="dep" autocomplete="off" /></label>
-          <label>Ciudad o municipio <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
-          <label class="span2">Despacho <input name="court_search" class="combo" data-combo="court" autocomplete="off" placeholder="Escriba para buscar en el directorio" /></label>
+          <label>Ciudad o circuito <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
+          <label>Área <select name="area"><option value="">—</option></select></label>
+          <label>Radicado (23 dígitos) <input name="radicado" inputmode="numeric" placeholder="73001-31-05-001-2023-00123-00" /></label>
+          <label class="span2">Despacho <input name="court_search" class="combo" data-combo="court" autocomplete="off" placeholder="Toque para ver los despachos del filtro, o escriba para buscar" /></label>
         </div>
         <input type="hidden" name="court_id" />
         <p class="hint" id="court-email"></p>
@@ -1659,6 +1679,23 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
   </dialog>
 
   <!-- Tarea / audiencia -->
+  <!-- Minuta de Word: espacios en blanco → datos del cliente -->
+  <dialog id="blanks-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>Preparar minuta para llenar</h3>
+      <p class="hint" data-sub></p>
+      <div class="table-scroll">
+        <table class="data-table blanks-table"><thead><tr><th>Dónde está el espacio</th><th>Dato que va ahí</th></tr></thead><tbody></tbody></table>
+      </div>
+      <p class="empty" data-none hidden>No se encontraron espacios para llenar. Marque en Word los datos con resaltado amarillo, con líneas ( ____ ) o entre corchetes ( [NOMBRE] ) y vuelva a cargarla.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar campos</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="task-dialog">
     <form method="dialog" data-form="task">
       <h3 data-title>Nueva tarea</h3>
@@ -2537,7 +2574,123 @@ function a(e,t){return n(e)||r(e,t)||o(e,t)||i()}function o(e,n){if(e){if(typeof
   }
   const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => m[1].trim()))];
 
-  window.JuanmaDocx = { b64ToBytes, docxVariables, fillDocx, markdownToDocx, fillText, textVariables };
+  // ----- Firm's own Word forms (minutas): find the blanks and turn them into {{variables}} -----
+  const dec = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  // ____ / ...... / XXXX / [NOMBRE] / «nombre» / <<nombre>>
+  const BLANK = /_{4,}|\.{6,}|…{2,}|X{3,}|\[[^\[\]{}]{2,80}\]|«[^«»]{2,80}»|<<[^<>]{2,80}>>/g;
+  const PARTS = /^word\/(document|header\d*|footer\d*)\.xml$/;
+  const T_RE = /<w:t(\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
+  const runText = (run) => [...run.matchAll(T_RE)].map((m) => dec(m[2])).join("");
+  function setRun(run, text) {
+    let first = true;
+    return run.replace(/<w:highlight\s[^>]*\/>/g, "").replace(T_RE, () => {
+      const out = `<w:t xml:space="preserve">${first ? xml(text) : ""}</w:t>`;
+      first = false;
+      return out;
+    });
+  }
+
+  /**
+   * Walk the blanks of a .docx in a fixed order. Without `assign` it returns
+   * [{id, kind, text, before, after}]; with `assign` (Map id → variable key)
+   * it returns the new file bytes with those blanks replaced by {{key}}.
+   * Highlighted text and underlined empty space count as blanks too.
+   */
+  function walkBlanks(bytes, assign = null) {
+    const zip = new window.PizZip(bytes);
+    const found = [];
+    const names = Object.keys(zip.files).filter((n) => PARTS.test(n))
+      .sort((a, b) => (a === "word/document.xml" ? -1 : b === "word/document.xml" ? 1 : a.localeCompare(b)));
+    for (const name of names) {
+      const xmlIn = zip.file(name).asText();
+      const xmlOut = xmlIn.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
+        const ptext = runText(para);
+        const ctx = (a, z) => ({ before: ptext.slice(Math.max(0, a - 70), a), after: ptext.slice(z, z + 50) });
+        let off = 0, prevHl = null;
+        return para.replace(/<w:r[ >][\s\S]*?<\/w:r>/g, (run) => {
+          const rPr = (run.match(/<w:rPr>[\s\S]*?<\/w:rPr>/) || [""])[0];
+          const text = runText(run);
+          if (!text) return run;
+          const start = off;
+          off += text.length;
+          if (/<w:highlight w:val="(?!none)/.test(rPr) && text.trim()) {
+            if (prevHl) { // Word splits one highlighted phrase into several runs
+              prevHl.text += text;
+              prevHl.after = ptext.slice(off, off + 50);
+              return assign?.get(prevHl.id) ? setRun(run, "") : run;
+            }
+            const c = { id: found.length, kind: "resaltado", text, ...ctx(start, off) };
+            found.push(c);
+            prevHl = c;
+            const k = assign?.get(c.id);
+            return k ? setRun(run, `{{${k}}}`) : run;
+          }
+          prevHl = null;
+          if (/<w:u w:val="(?!none)/.test(rPr) && !text.trim() && text.length >= 3) {
+            const c = { id: found.length, kind: "subrayado", text, ...ctx(start, off) };
+            found.push(c);
+            const k = assign?.get(c.id);
+            return k ? setRun(run, `{{${k}}}`) : run;
+          }
+          let tOff = start;
+          return run.replace(T_RE, (whole, attrs, raw) => {
+            const t = dec(raw);
+            const base = tOff;
+            tOff += t.length;
+            let changed = false;
+            const nt = t.replace(BLANK, (m, i) => {
+              const c = { id: found.length, kind: "espacio", text: m, ...ctx(base + i, base + i + m.length) };
+              found.push(c);
+              const k = assign?.get(c.id);
+              if (!k) return m;
+              changed = true;
+              return `{{${k}}}`;
+            });
+            return changed ? `<w:t xml:space="preserve">${xml(nt)}</w:t>` : whole;
+          });
+        });
+      });
+      if (assign && xmlOut !== xmlIn) zip.file(name, xmlOut);
+    }
+    return assign ? zip.generate({ type: "uint8array" }) : found;
+  }
+  const docxBlanks = (bytes) => walkBlanks(bytes);
+  const applyBlanks = (bytes, assign) => walkBlanks(bytes, assign);
+
+  // Which client/case datum a blank most likely asks for, from the words around it.
+  const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const GUESS = [
+    [/(c\.?\s?c\.?|cedula( de ciudadania)?|identificad[oa] con( la)?( cedula)?|documento( de identidad)?|nit)\s*(no\.?|n\.?o|numero|#)?\s*[:.]?\s*$/, "cliente.documento"],
+    [/(tarjeta profesional|t\.\s?p\.)\s*(no\.?|numero)?\s*$/, "abogado.tarjeta_profesional"],
+    [/radicad[oa]\s*(no\.?|numero)?\s*[:.]?\s*$/, "expediente.radicado"],
+    [/(correo( electronico)?|e-?mail)\s*[:.]?\s*$/, "cliente.correo"],
+    [/(telefono|celular|movil|whatsapp)\s*(no\.?)?\s*[:.]?\s*$/, "cliente.telefono"],
+    [/(direccion|domicilio en la)\s*[:.]?\s*$/, "cliente.direccion"],
+    [/(domiciliad[oa]|residente|vecin[oa]|con domicilio)\s+(en|de)\s+(la ciudad de\s+|el municipio de\s+)?$/, "cliente.ciudad"],
+    [/(juez|juzgado|despacho|magistrad[oa])\s*[:.]?\s*$/, "expediente.despacho"],
+    [/(contra|demandad[oa]|accionad[oa]|convocad[oa])\s*[:.]?\s*$/, "expediente.contraparte"],
+    [/(ciudad y fecha|lugar y fecha)\s*[:.]?\s*$/, "fecha.ciudad_y_fecha"],
+    [/(fecha|a los)\s*[:.]?\s*$/, "fecha.hoy"],
+    [/(apoderad[oa]|abogad[oa])\s*(judicial)?\s*(al doctor|a la doctora|doctor|doctora|dr\.?|dra\.?)?\s*$/, "abogado.nombre"],
+    [/(senor(a|es)?|sr\.?|sra\.?|yo,?|suscrito,?|nombre( completo)?|poderdante|otorgante|cliente|contratante|mandante|accionante|demandante|peticionari[oa])\s*[:.]?\s*$/, "cliente.nombre"],
+  ];
+  const BY_TEXT = [
+    [/cedula|\bc\.?c\b|documento|identificacion|\bnit\b/, "cliente.documento"], [/radicado/, "expediente.radicado"],
+    [/correo|e-?mail/, "cliente.correo"], [/telefono|celular/, "cliente.telefono"], [/direccion/, "cliente.direccion"],
+    [/juzgado|despacho|juez/, "expediente.despacho"], [/demandad|contraparte|entidad/, "expediente.contraparte"],
+    [/apoderad|abogad/, "abogado.nombre"], [/tarjeta/, "abogado.tarjeta_profesional"], [/fecha/, "fecha.hoy"],
+    [/ciudad|municipio/, "cliente.ciudad"], [/nombre|cliente|poderdante|demandante|otorgante/, "cliente.nombre"],
+  ];
+  function guessVariable({ text, before, after }) {
+    const t = plain(text);
+    if (/[a-z]{3}/.test(t)) for (const [re, key] of BY_TEXT) if (re.test(t)) return key;
+    const b = plain(before);
+    for (const [re, key] of GUESS) if (re.test(b)) return key;
+    if (/^\s*,?\s*(mayor de edad|identificad[oa]|domiciliad[oa]|vecin[oa])/.test(plain(after))) return "cliente.nombre";
+    return "";
+  }
+
+  window.JuanmaDocx = { b64ToBytes, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
 })();
 </script>
   <script>// Signature pad: draw with mouse, finger or pen; returns a PNG data URL.
@@ -3009,7 +3162,38 @@ function normPartyRole(x) {
   return ALL_PARTY_ROLES.find((r) => nrm(r) === n) || ALL_PARTY_ROLES.find((r) => n.startsWith(nrm(r).slice(0, -1))) || null;
 }
 
-return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole };
+// ----- Court directory segmentation (department → city/circuit → area) -----
+const plain = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+
+/**
+ * The judicial circuit a court belongs to: the file's own column when it has
+ * one, else the city named in "… del Circuito de Ibagué". Municipal courts
+ * without that information keep "" and are found by their own city.
+ */
+function courtCircuit(name, given = "") {
+  const g = String(given ?? "").trim().replace(/^circuito( judicial)?( de)?\s+/i, "");
+  if (g) return g;
+  const m = String(name ?? "").match(/circuito(?:\s+judicial)?\s+de\s+([^,;()\-–]+?)\s*(?:[,;()\-–]|$)/i);
+  return m ? m[1].trim() : "";
+}
+
+// Courts that also hear an area's cases: promiscuous courts hear every area,
+// small-claims courts hear minor civil cases.
+const AREA_ALSO = {
+  Civil: ["Promiscuo", "Pequeñas Causas y Competencia Múltiple"],
+  Familia: ["Promiscuo"], Laboral: ["Promiscuo"], Penal: ["Promiscuo"],
+};
+const areaIncludes = (area) => (area ? [area, ...(AREA_ALSO[area] || [])] : []);
+
+/** True when a court is in the department, sits in the city or belongs to its circuit, and hears the area. */
+function courtMatches(c, { department = "", city = "", area = "" } = {}) {
+  if (department && plain(c.department) !== plain(department)) return false;
+  if (city && plain(c.city) !== plain(city) && plain(c.circuit) !== plain(city)) return false;
+  if (area && !areaIncludes(area).includes(c.area)) return false;
+  return true;
+}
+
+return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches };
 })();
 
 window.JuanmaLedger = (function () {
@@ -3468,15 +3652,15 @@ return { decisionOf, withDecisions };
     clientes: ["Clientes", "Registro de las personas naturales y jurídicas que representa la firma, con sus datos de contacto y sus expedientes.",
       ["Persona natural: nombres y apellidos por separado; se corrigen solos a mayúscula inicial (JOHN → John).", "Persona jurídica: razón social, NIT con dígito de verificación y representante legal.", "Busque por nombre o número de documento en la casilla superior.", "Escriba el documento sin puntos ni espacios."]],
     expedientes: ["Expedientes", "Cada proceso o asunto de un cliente: tipo y subproceso, calidad del cliente (demandante, demandado, ejecutante…), estado, despacho, radicado y responsable.",
-      ["El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior.", "La columna Carpeta muestra el número de carpeta física; búsquelo en la casilla «Buscar carpeta, cliente o radicado»."]],
+      ["Filtre por departamento, ciudad o circuito, área y despacho: si marca Ibagué y Civil, ve los expedientes de los despachos civiles del circuito de Ibagué.", "El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior.", "La columna Carpeta muestra el número de carpeta física; búsquelo en la casilla «Buscar carpeta, cliente o radicado»."]],
     agenda: ["Agenda", "Audiencias, términos y tareas de cada expediente, con recordatorios por correo o WhatsApp.",
       ["Escriba el título con la norma o etapa: «Audiencia inicial art. 77 CPTSS».", "Marque la tarea como hecha cuando se cumpla para que salga de pendientes."]],
     consulta: ["Consulta de procesos", "Consulta en la Rama Judicial los expedientes con radicado y avisa de actuaciones nuevas (reportes a las 7, 13 y 17 h).",
       ["Requiere conexión a internet desde el servidor; en el enlace de prueba no está disponible.", "Solo se consultan expedientes con la casilla «Consultar automáticamente» marcada."]],
     despachos: ["Despachos judiciales", "Directorio de juzgados, tribunales y altas cortes con su correo, para elegirlos en los expedientes y en el correo certificado.",
-      ["Filtre por departamento, ciudad y área.", "Busque por nombre, correo o código del despacho."]],
+      ["Cargue primero el directorio oficial de la Rama Judicial (Excel o CSV).", "Filtre por departamento, ciudad o circuito y área; en área Civil también aparecen los juzgados promiscuos y de pequeñas causas.", "Busque por nombre, correo o código del despacho."]],
     borradores: ["Documentos", "Plantillas de la firma y borradores con NomosAI: poderes, demandas, derechos de petición, tutelas, contratos y más.",
-      ["Elija un expediente para llenar los datos del cliente y del proceso automáticamente.", "Los datos que falten quedan marcados como [FILL: …] para completarlos antes de firmar.", "Revise siempre el borrador: NomosAI no inventa datos, pero un abogado debe aprobarlo."]],
+      ["Cargue sus minutas de Word: la app encuentra los espacios en blanco (____, XXXX, [NOMBRE] o texto resaltado) y le sugiere qué dato del cliente va en cada uno.", "Elija un expediente para llenar los datos del cliente y del proceso automáticamente.", "Los datos que falten quedan marcados como [FILL: …] para completarlos antes de firmar.", "Revise siempre el borrador: NomosAI no inventa datos, pero un abogado debe aprobarlo."]],
     firmas: ["Firma electrónica", "Envía documentos a firmar por enlace con código de verificación o firma presencial en pantalla, con constancia y huella del documento.",
       ["Revise el texto antes de enviarlo: después de firmado no se puede cambiar.", "En el enlace de prueba solo funciona la firma presencial."]],
     pagos: ["Pagos y cartera", "Cobros (honorarios, cuotas), recibos de caja, cartera por edades y recordatorios de pago a los clientes.",
@@ -3701,7 +3885,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}]};</script>
-<script>window.JUANMA_VERSION = {"change":28,"sha":"","date":"2026-10-14"};</script>
+<script>window.JUANMA_VERSION = {"change":29,"sha":"","date":"2026-10-14"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -3876,6 +4060,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
       }
     }
     st.payset ||= null;
+    for (const c of st.courts) if (c.circuit === undefined) c.circuit = CM.courtCircuit(c.name);
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
@@ -4295,7 +4480,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
     ["GET", /^\/courts(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       const text = nrm(q.q || "");
-      return s.courts.filter((c) => (!q.department || c.department === q.department) && (!q.city || c.city === q.city) && (!q.area || c.area === q.area)
+      return s.courts.filter((c) => CM.courtMatches(c, { department: q.department, city: q.city, area: q.area })
         && (!text || nrm(c.name + " " + c.email + " " + c.code).includes(text)))
         .sort((a, b) => (a.department + a.city + a.area + a.name).localeCompare(b.department + b.city + b.area + b.name, "es")).slice(0, Number(q.limit) || 500).map(clone);
     }],
@@ -4306,7 +4491,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
         const name = str(row.name), department = canonDep(row.department);
         if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
         const city = canonCity(row.city, department);
-        const v = { code: str(row.code), name, department, city, area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), updated_at: stamp() };
+        const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city);
         if (hit) { Object.assign(hit, v); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
       });
@@ -4542,6 +4727,11 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Contrato de prestación de servicios
       if ("category" in b) { TPL.categories.includes(b.category) || fail("Categoría no válida."); t.category = b.category; }
       if ("description" in b) t.description = str(b.description);
       if ("body" in b && t.format === "markdown") t.body = String(b.body).trim() ? String(b.body) : fail("La plantilla está vacía.");
+      if (b.file_base64 && t.format === "docx") {
+        atob(String(b.file_base64).slice(0, 8)).slice(0, 2) !== "PK" && fail("El archivo no es un documento de Word (.docx) válido.");
+        b.file_base64.length > 11200000 && fail("El archivo debe pesar menos de 8 MB.");
+        s.blobs[`tpl-${t.id}`] = b.file_base64;
+      }
       t.updated_at = stamp();
       return { ...tplMetaOut(t), body: t.body };
     }],
@@ -5298,12 +5488,14 @@ $("#demo-logins").addEventListener("click", (e) => {
   if (b) guarded(async () => enterApp((await api("POST", "/auth/login", { email: b.dataset.demoLogin, password: "demo" })).user));
 });
 
-let AREAS = [];
+let AREAS = [], courtsTotal = 0;
 async function loadAreas() {
   const meta = await api("GET", "/courts/meta");
   AREAS = meta.areas;
+  courtsTotal = meta.total;
   const opts = AREAS.map((a) => `<option>${escapeHtml(a)}</option>`).join("");
   $("#courts-area").innerHTML = '<option value="">Todas</option>' + opts;
+  $("#case-area").innerHTML = '<option value="">Todas</option>' + opts;
   caseForm.elements.area.innerHTML = '<option value="">—</option>' + opts;
 }
 
@@ -5552,6 +5744,29 @@ function fillCaseFilter() {
   sel.value = cur;
 }
 
+// Case list filters: text, department → city (or its circuit) → area → court.
+let caseCourtIds = null; // courts of the chosen place and area, from the directory
+async function refreshCaseCourts() {
+  const dep = $("#case-dep").value, city = $("#case-city").value, area = $("#case-area").value;
+  const sel = $("#case-court");
+  const cur = sel.value;
+  const courts = dep || city || area ? await courtsFor(dep, city, area) : [];
+  caseCourtIds = city || area ? new Set(courts.map((c) => c.id)) : null;
+  // Courts named in the cases count too, so a case whose court is not in the directory can still be found.
+  const named = new Map(courts.map((c) => [`id:${c.id}`, c.name]));
+  for (const k of casesByPlace()) if (k.court_name && !(k.court_id && named.has(`id:${k.court_id}`))) named.set(k.court_id ? `id:${k.court_id}` : `n:${k.court_name}`, k.court_name);
+  sel.innerHTML = '<option value="">Todos los despachos</option>' + [...named].sort((a, b) => a[1].localeCompare(b[1], "es"))
+    .map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join("");
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : "";
+  renderCaseRows();
+}
+const plainText = (x) => window.JuanmaCombo.norm(x || "");
+function casesByPlace() {
+  const dep = plainText($("#case-dep").value), city = plainText($("#case-city").value), area = $("#case-area").value;
+  return state.cases.filter((k) => (!dep || plainText(k.department) === dep)
+    && (!city || plainText(k.city) === city || (caseCourtIds && k.court_id && caseCourtIds.has(k.court_id)))
+    && (!area || k.area === area || (!k.area && caseCourtIds && k.court_id && caseCourtIds.has(k.court_id))));
+}
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
@@ -5561,8 +5776,12 @@ function renderCaseRows() {
   const qDigits = q.replace(/\D/g, "");
   const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
-  const rows = state.cases.filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
-    && (!mine || k.assigned_user_id === me.id) && matches(k));
+  const court = $("#case-court").value, status = $("#case-status").value;
+  const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
+    && (!mine || k.assigned_user_id === me.id) && (!status || k.status === status)
+    && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) : k.court_name === court.slice(2)))
+    && matches(k));
+  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
@@ -5593,11 +5812,13 @@ async function renderExpedientes() {
   of.innerHTML = '<option value="">Todas mis oficinas</option>' + myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   of.value = cur;
   of.hidden = myOffices().length < 2;
-  renderCaseRows();
+  await refreshCaseCourts();
 }
 $("#case-filter").addEventListener("change", renderCaseRows);
 $("#case-office-filter").addEventListener("change", renderCaseRows);
 $("#case-mine").addEventListener("change", renderCaseRows);
+for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
+for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
   const box = e.target.closest("[data-case-monitor]");
@@ -5689,9 +5910,13 @@ function showCourtEmail(court) {
     : court ? "El directorio no trae correo para este despacho." : "";
 }
 window.JuanmaCombo.attach(caseForm.elements.court_search, {
-  limit: 30, emptyText: "Sin despachos para este filtro. Cargue el directorio oficial en Despachos.",
+  limit: 200,
+  get emptyText() {
+    return courtsTotal ? "Ningún despacho del directorio coincide con este departamento, ciudad y área."
+      : "El directorio de despachos está vacío: cárguelo en Despachos con el archivo oficial de la Rama Judicial.";
+  },
   items: async () => (await courtsFor(caseForm.elements.department.value, caseForm.elements.city.value, caseForm.elements.area.value))
-    .map((c) => ({ label: c.name, sub: [c.area, c.city, c.email].filter(Boolean).join(" · "), court: c })),
+    .map((c) => ({ label: c.name, sub: [c.area, c.city !== caseForm.elements.city.value ? c.city : "", c.circuit && `Circuito de ${c.circuit}`, c.email].filter(Boolean).join(" · "), court: c })),
   onPick: (it) => {
     caseForm.elements.court_id.value = it.court.id;
     if (!caseForm.elements.area.value) caseForm.elements.area.value = it.court.area;
@@ -5987,6 +6212,7 @@ document.addEventListener("click", (e) => {
     },
     "new-template": () => openTemplateDialog(null),
     "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
+    "prepare-blanks": async () => tplActive?.format === "docx" && openBlanksDialog(tplActive),
     "delete-template": async () => {
       if (!(await confirmAsk("Eliminar plantilla", "La plantilla dejará de estar disponible para todos los usuarios."))) return;
       await api("DELETE", `/templates/${id}`);
@@ -6978,6 +7204,7 @@ async function openTemplate(id) {
   $("#tpl-format").textContent = t.format === "docx" ? "Word" : "Texto";
   $$("[data-text-only]").forEach((el) => (el.hidden = t.format === "docx"));
   $("#tpl-docx-note").hidden = t.format !== "docx";
+  $("#tpl-blanks-btn").hidden = !can("templates.manage");
   $("#tpl-edit-mode").checked = false;
   $("#tpl-text").hidden = true;
   renderTplList();
@@ -7125,7 +7352,49 @@ $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
   toast(`Plantilla “${name}” cargada en ${category}. Puede cambiar la categoría con Editar.`);
   await renderBorradores();
   await openTemplate(created.id);
+  // A firm's own form usually has blanks instead of {{variables}}: offer to map them.
+  if (tplActive?.format === "docx" && !tplActive.vars.length) await openBlanksDialog(tplActive);
 }));
+// Word forms (minutas): each blank (____, XXXX, [NOMBRE], highlighted text) gets a client or case datum.
+const bytesToB64 = (bytes) => {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+let blanksFor = null;
+async function openBlanksDialog(t) {
+  if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
+  const blanks = D.docxBlanks(t.bytes);
+  blanksFor = { t, blanks };
+  const dlg = $("#blanks-dialog");
+  const opts = (sel) => '<option value="">— Dejar como está —</option>' + Object.entries(tplMeta.variables.reduce((g, v) => ((g[v.group] ||= []).push(v), g), {}))
+    .map(([g, vs]) => `<optgroup label="${escapeHtml(g)}">${vs.map((v) => `<option value="${escapeHtml(v.key)}" ${v.key === sel ? "selected" : ""}>${escapeHtml(v.label)}</option>`).join("")}</optgroup>`).join("");
+  const shown = (x) => (x.kind === "subrayado" ? "línea subrayada" : x.text.length > 40 ? x.text.slice(0, 40) + "…" : x.text);
+  $("tbody", dlg).innerHTML = blanks.map((b) => `<tr>
+    <td class="blank-ctx">…${escapeHtml(b.before.slice(-60))}<mark>${escapeHtml(shown(b))}</mark>${escapeHtml(b.after.slice(0, 40))}…</td>
+    <td><select data-blank="${b.id}" aria-label="Dato para el espacio ${b.id + 1}">${opts(D.guessVariable(b))}</select></td></tr>`).join("");
+  $("[data-sub]", dlg).textContent = blanks.length
+    ? `“${t.name}”: ${blanks.length} espacio(s) encontrado(s). La app ya sugirió el dato más probable según el texto de alrededor; revise cada uno y cambie lo que no corresponda. El formato del documento no cambia.`
+    : `“${t.name}”`;
+  $("[data-none]", dlg).hidden = blanks.length > 0;
+  $(".blanks-table", dlg).hidden = !blanks.length;
+  $(".form-error", dlg).hidden = true;
+  dlg.showModal();
+}
+wireDialog($("#blanks-dialog"), async (form) => {
+  const { t, blanks } = blanksFor;
+  const assign = new Map();
+  for (const sel of $$("select[data-blank]", form)) if (sel.value) assign.set(Number(sel.dataset.blank), sel.value);
+  if (!blanks.length) return;
+  if (!assign.size) throw new Error("Elija el dato de al menos un espacio, o cancele.");
+  const bytes = D.applyBlanks(t.bytes, assign);
+  const vars = D.docxVariables(bytes);
+  await api("PUT", `/templates/${t.id}`, { file_base64: bytesToB64(bytes), description: `Minuta de Word · ${vars.length} dato(s) del cliente o del expediente` });
+  toast(`Minuta lista: ${assign.size} espacio(s) se llenarán con los datos del expediente.`);
+  await renderBorradores();
+  await openTemplate(t.id);
+});
+
 function guessCategory(name) {
   const n = window.JuanmaCombo.norm(name);
   if (/contrato/.test(n)) return "Contrato";
@@ -7681,7 +7950,7 @@ async function searchCourts() {
   $("#courts-count").textContent = `${rows.length}${rows.length === 500 ? "+" : ""} despacho(s)`;
   $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
     <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
-    <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml(c.department)}</span></td>
+    <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml([c.circuit && c.circuit !== c.city ? "Circuito de " + c.circuit : "", c.department].filter(Boolean).join(" · "))}</span></td>
     <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}">Escribir</button>` : ""}` : ""}</td>
     <td>${escapeHtml(c.phone)}</td></tr>`).join("");
 }
@@ -7698,7 +7967,7 @@ document.addEventListener("click", async (e) => {
 const COURT_COLS = {
   department: ["departamento", "depto", "distrito"], city: ["ciudad", "municipio", "ciudad municipio", "sede"],
   name: ["despacho", "nombre despacho", "nombre del despacho", "juzgado", "dependencia", "nombre"],
-  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
+  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
   code: ["codigo", "codigo despacho", "cod despacho"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
 };
 $("#courts-file").addEventListener("change", (e) => guarded(async () => {
@@ -7722,6 +7991,7 @@ $("#courts-file").addEventListener("change", (e) => guarded(async () => {
   if (!(await ask({ title: "Cargar directorio de despachos", message: `Se cargarán ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen se actualizan.`, okLabel: "Cargar" }))) return;
   const out = await api("POST", "/courts/import", { rows });
   courtCache.clear();
+  courtsTotal += out.created;
   toast(`Directorio cargado: ${out.created} nuevos, ${out.updated} actualizados${out.skipped.length ? `, ${out.skipped.length} omitidos` : ""}.`);
   await renderDespachos();
 }));

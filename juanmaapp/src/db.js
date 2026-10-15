@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 import { seedTemplates } from "./templates.js";
-import { normStatus } from "./case-meta.js";
+import { normStatus, courtCircuit } from "./case-meta.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 
 export const MAIN_OFFICE = "Ibagué";
@@ -445,6 +445,13 @@ function migrate(db) {
   add("cases", "assigned_user_id", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
   add("saved_rulings", "created_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
   add("clients", "department", "TEXT NOT NULL DEFAULT ''");
+  add("courts", "circuit", "TEXT NOT NULL DEFAULT ''");
+  // Circuit courts already loaded take their circuit from the name ("… del Circuito de Ibagué").
+  const setCircuit = db.prepare("UPDATE courts SET circuit = ? WHERE id = ?");
+  for (const c of db.prepare("SELECT id, name FROM courts WHERE circuit = ''").all()) {
+    const circuit = courtCircuit(c.name);
+    if (circuit) setCircuit.run(circuit, c.id);
+  }
   add("offices", "department", "TEXT NOT NULL DEFAULT ''");
   add("users", "custom_permissions", "INTEGER NOT NULL DEFAULT 0");
   add("users", "phone", "TEXT NOT NULL DEFAULT ''");

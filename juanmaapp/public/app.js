@@ -207,12 +207,14 @@ $("#demo-logins").addEventListener("click", (e) => {
   if (b) guarded(async () => enterApp((await api("POST", "/auth/login", { email: b.dataset.demoLogin, password: "demo" })).user));
 });
 
-let AREAS = [];
+let AREAS = [], courtsTotal = 0;
 async function loadAreas() {
   const meta = await api("GET", "/courts/meta");
   AREAS = meta.areas;
+  courtsTotal = meta.total;
   const opts = AREAS.map((a) => `<option>${escapeHtml(a)}</option>`).join("");
   $("#courts-area").innerHTML = '<option value="">Todas</option>' + opts;
+  $("#case-area").innerHTML = '<option value="">Todas</option>' + opts;
   caseForm.elements.area.innerHTML = '<option value="">—</option>' + opts;
 }
 
@@ -461,6 +463,29 @@ function fillCaseFilter() {
   sel.value = cur;
 }
 
+// Case list filters: text, department → city (or its circuit) → area → court.
+let caseCourtIds = null; // courts of the chosen place and area, from the directory
+async function refreshCaseCourts() {
+  const dep = $("#case-dep").value, city = $("#case-city").value, area = $("#case-area").value;
+  const sel = $("#case-court");
+  const cur = sel.value;
+  const courts = dep || city || area ? await courtsFor(dep, city, area) : [];
+  caseCourtIds = city || area ? new Set(courts.map((c) => c.id)) : null;
+  // Courts named in the cases count too, so a case whose court is not in the directory can still be found.
+  const named = new Map(courts.map((c) => [`id:${c.id}`, c.name]));
+  for (const k of casesByPlace()) if (k.court_name && !(k.court_id && named.has(`id:${k.court_id}`))) named.set(k.court_id ? `id:${k.court_id}` : `n:${k.court_name}`, k.court_name);
+  sel.innerHTML = '<option value="">Todos los despachos</option>' + [...named].sort((a, b) => a[1].localeCompare(b[1], "es"))
+    .map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join("");
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : "";
+  renderCaseRows();
+}
+const plainText = (x) => window.JuanmaCombo.norm(x || "");
+function casesByPlace() {
+  const dep = plainText($("#case-dep").value), city = plainText($("#case-city").value), area = $("#case-area").value;
+  return state.cases.filter((k) => (!dep || plainText(k.department) === dep)
+    && (!city || plainText(k.city) === city || (caseCourtIds && k.court_id && caseCourtIds.has(k.court_id)))
+    && (!area || k.area === area || (!k.area && caseCourtIds && k.court_id && caseCourtIds.has(k.court_id))));
+}
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
@@ -470,8 +495,12 @@ function renderCaseRows() {
   const qDigits = q.replace(/\D/g, "");
   const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
-  const rows = state.cases.filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
-    && (!mine || k.assigned_user_id === me.id) && matches(k));
+  const court = $("#case-court").value, status = $("#case-status").value;
+  const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
+    && (!mine || k.assigned_user_id === me.id) && (!status || k.status === status)
+    && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) : k.court_name === court.slice(2)))
+    && matches(k));
+  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
@@ -502,11 +531,13 @@ async function renderExpedientes() {
   of.innerHTML = '<option value="">Todas mis oficinas</option>' + myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   of.value = cur;
   of.hidden = myOffices().length < 2;
-  renderCaseRows();
+  await refreshCaseCourts();
 }
 $("#case-filter").addEventListener("change", renderCaseRows);
 $("#case-office-filter").addEventListener("change", renderCaseRows);
 $("#case-mine").addEventListener("change", renderCaseRows);
+for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
+for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
   const box = e.target.closest("[data-case-monitor]");
@@ -598,9 +629,13 @@ function showCourtEmail(court) {
     : court ? "El directorio no trae correo para este despacho." : "";
 }
 window.JuanmaCombo.attach(caseForm.elements.court_search, {
-  limit: 30, emptyText: "Sin despachos para este filtro. Cargue el directorio oficial en Despachos.",
+  limit: 200,
+  get emptyText() {
+    return courtsTotal ? "Ningún despacho del directorio coincide con este departamento, ciudad y área."
+      : "El directorio de despachos está vacío: cárguelo en Despachos con el archivo oficial de la Rama Judicial.";
+  },
   items: async () => (await courtsFor(caseForm.elements.department.value, caseForm.elements.city.value, caseForm.elements.area.value))
-    .map((c) => ({ label: c.name, sub: [c.area, c.city, c.email].filter(Boolean).join(" · "), court: c })),
+    .map((c) => ({ label: c.name, sub: [c.area, c.city !== caseForm.elements.city.value ? c.city : "", c.circuit && `Circuito de ${c.circuit}`, c.email].filter(Boolean).join(" · "), court: c })),
   onPick: (it) => {
     caseForm.elements.court_id.value = it.court.id;
     if (!caseForm.elements.area.value) caseForm.elements.area.value = it.court.area;
@@ -896,6 +931,7 @@ document.addEventListener("click", (e) => {
     },
     "new-template": () => openTemplateDialog(null),
     "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
+    "prepare-blanks": async () => tplActive?.format === "docx" && openBlanksDialog(tplActive),
     "delete-template": async () => {
       if (!(await confirmAsk("Eliminar plantilla", "La plantilla dejará de estar disponible para todos los usuarios."))) return;
       await api("DELETE", `/templates/${id}`);
@@ -1887,6 +1923,7 @@ async function openTemplate(id) {
   $("#tpl-format").textContent = t.format === "docx" ? "Word" : "Texto";
   $$("[data-text-only]").forEach((el) => (el.hidden = t.format === "docx"));
   $("#tpl-docx-note").hidden = t.format !== "docx";
+  $("#tpl-blanks-btn").hidden = !can("templates.manage");
   $("#tpl-edit-mode").checked = false;
   $("#tpl-text").hidden = true;
   renderTplList();
@@ -2034,7 +2071,49 @@ $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
   toast(`Plantilla “${name}” cargada en ${category}. Puede cambiar la categoría con Editar.`);
   await renderBorradores();
   await openTemplate(created.id);
+  // A firm's own form usually has blanks instead of {{variables}}: offer to map them.
+  if (tplActive?.format === "docx" && !tplActive.vars.length) await openBlanksDialog(tplActive);
 }));
+// Word forms (minutas): each blank (____, XXXX, [NOMBRE], highlighted text) gets a client or case datum.
+const bytesToB64 = (bytes) => {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+let blanksFor = null;
+async function openBlanksDialog(t) {
+  if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
+  const blanks = D.docxBlanks(t.bytes);
+  blanksFor = { t, blanks };
+  const dlg = $("#blanks-dialog");
+  const opts = (sel) => '<option value="">— Dejar como está —</option>' + Object.entries(tplMeta.variables.reduce((g, v) => ((g[v.group] ||= []).push(v), g), {}))
+    .map(([g, vs]) => `<optgroup label="${escapeHtml(g)}">${vs.map((v) => `<option value="${escapeHtml(v.key)}" ${v.key === sel ? "selected" : ""}>${escapeHtml(v.label)}</option>`).join("")}</optgroup>`).join("");
+  const shown = (x) => (x.kind === "subrayado" ? "línea subrayada" : x.text.length > 40 ? x.text.slice(0, 40) + "…" : x.text);
+  $("tbody", dlg).innerHTML = blanks.map((b) => `<tr>
+    <td class="blank-ctx">…${escapeHtml(b.before.slice(-60))}<mark>${escapeHtml(shown(b))}</mark>${escapeHtml(b.after.slice(0, 40))}…</td>
+    <td><select data-blank="${b.id}" aria-label="Dato para el espacio ${b.id + 1}">${opts(D.guessVariable(b))}</select></td></tr>`).join("");
+  $("[data-sub]", dlg).textContent = blanks.length
+    ? `“${t.name}”: ${blanks.length} espacio(s) encontrado(s). La app ya sugirió el dato más probable según el texto de alrededor; revise cada uno y cambie lo que no corresponda. El formato del documento no cambia.`
+    : `“${t.name}”`;
+  $("[data-none]", dlg).hidden = blanks.length > 0;
+  $(".blanks-table", dlg).hidden = !blanks.length;
+  $(".form-error", dlg).hidden = true;
+  dlg.showModal();
+}
+wireDialog($("#blanks-dialog"), async (form) => {
+  const { t, blanks } = blanksFor;
+  const assign = new Map();
+  for (const sel of $$("select[data-blank]", form)) if (sel.value) assign.set(Number(sel.dataset.blank), sel.value);
+  if (!blanks.length) return;
+  if (!assign.size) throw new Error("Elija el dato de al menos un espacio, o cancele.");
+  const bytes = D.applyBlanks(t.bytes, assign);
+  const vars = D.docxVariables(bytes);
+  await api("PUT", `/templates/${t.id}`, { file_base64: bytesToB64(bytes), description: `Minuta de Word · ${vars.length} dato(s) del cliente o del expediente` });
+  toast(`Minuta lista: ${assign.size} espacio(s) se llenarán con los datos del expediente.`);
+  await renderBorradores();
+  await openTemplate(t.id);
+});
+
 function guessCategory(name) {
   const n = window.JuanmaCombo.norm(name);
   if (/contrato/.test(n)) return "Contrato";
@@ -2590,7 +2669,7 @@ async function searchCourts() {
   $("#courts-count").textContent = `${rows.length}${rows.length === 500 ? "+" : ""} despacho(s)`;
   $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
     <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
-    <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml(c.department)}</span></td>
+    <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml([c.circuit && c.circuit !== c.city ? "Circuito de " + c.circuit : "", c.department].filter(Boolean).join(" · "))}</span></td>
     <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}">Escribir</button>` : ""}` : ""}</td>
     <td>${escapeHtml(c.phone)}</td></tr>`).join("");
 }
@@ -2607,7 +2686,7 @@ document.addEventListener("click", async (e) => {
 const COURT_COLS = {
   department: ["departamento", "depto", "distrito"], city: ["ciudad", "municipio", "ciudad municipio", "sede"],
   name: ["despacho", "nombre despacho", "nombre del despacho", "juzgado", "dependencia", "nombre"],
-  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
+  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
   code: ["codigo", "codigo despacho", "cod despacho"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
 };
 $("#courts-file").addEventListener("change", (e) => guarded(async () => {
@@ -2631,6 +2710,7 @@ $("#courts-file").addEventListener("change", (e) => guarded(async () => {
   if (!(await ask({ title: "Cargar directorio de despachos", message: `Se cargarán ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen se actualizan.`, okLabel: "Cargar" }))) return;
   const out = await api("POST", "/courts/import", { rows });
   courtCache.clear();
+  courtsTotal += out.created;
   toast(`Directorio cargado: ${out.created} nuevos, ${out.updated} actualizados${out.skipped.length ? `, ${out.skipped.length} omitidos` : ""}.`);
   await renderDespachos();
 }));

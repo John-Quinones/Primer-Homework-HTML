@@ -2,6 +2,7 @@
 // official directory file, filtered by department, city and area.
 import express from "express";
 import { can } from "./auth.js";
+import { courtCircuit, courtMatches } from "./case-meta.js";
 import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -22,10 +23,10 @@ export function courtsRouter(db) {
   });
 
   r.get("/", (req, res) => {
+    // Department in SQL; city (or its circuit) and area (with the courts that
+    // also hear it, e.g. promiscuous ones) through the shared rule.
     const where = [], params = [];
-    for (const [col, val] of [["department", req.query.department], ["city", req.query.city], ["area", req.query.area]]) {
-      if (str(val)) { where.push(`${col} = ?`); params.push(str(val)); }
-    }
+    if (str(req.query.department)) { where.push("department = ?"); params.push(str(req.query.department)); }
     if (str(req.query.q)) {
       where.push("(name LIKE ? OR email LIKE ? OR code LIKE ?)");
       const q = `%${str(req.query.q)}%`;
@@ -33,8 +34,9 @@ export function courtsRouter(db) {
     }
     const limit = Math.min(Number(req.query.limit) || 500, 2000);
     const rows = db.prepare(`SELECT * FROM courts ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ORDER BY department, city, area, name LIMIT ${limit}`).all(...params);
-    res.json(rows.map((x) => ({ ...x })));
+      ORDER BY department, city, area, name`).all(...params);
+    const want = { city: str(req.query.city), area: str(req.query.area) };
+    res.json(rows.filter((c) => courtMatches(c, want)).slice(0, limit).map((x) => ({ ...x })));
   });
 
   // Rows come from the page, already mapped to our fields from the official file.
@@ -45,9 +47,9 @@ export function courtsRouter(db) {
     if (rows.length > 20000) return res.status(400).json({ error: "Máximo 20.000 despachos por carga." });
     const out = { created: 0, updated: 0, skipped: [] };
     const find = db.prepare("SELECT id FROM courts WHERE name = ? AND city = ?");
-    const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, area, email, phone, address)
-      VALUES (:code, :name, :department, :city, :city_code, :area, :email, :phone, :address)`);
-    const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city_code = :city_code, area = :area,
+    const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, circuit, area, email, phone, address)
+      VALUES (:code, :name, :department, :city, :city_code, :circuit, :area, :email, :phone, :address)`);
+    const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city_code = :city_code, circuit = :circuit, area = :area,
       email = CASE WHEN :email != '' THEN :email ELSE email END, phone = CASE WHEN :phone != '' THEN :phone ELSE phone END,
       address = CASE WHEN :address != '' THEN :address ELSE address END, updated_at = datetime('now') WHERE id = :id`);
     db.exec("BEGIN");
@@ -62,7 +64,7 @@ export function courtsRouter(db) {
         }
         const city = canonicalCity(row.city, department);
         const v = {
-          code: str(row.code), name, department, city, city_code: cityCode(city, department),
+          code: str(row.code), name, department, city, city_code: cityCode(city, department), circuit: courtCircuit(name, row.circuit),
           area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address),
         };
         const hit = find.get(name, city);

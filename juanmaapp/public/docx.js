@@ -101,5 +101,121 @@
   }
   const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => m[1].trim()))];
 
-  window.JuanmaDocx = { b64ToBytes, docxVariables, fillDocx, markdownToDocx, fillText, textVariables };
+  // ----- Firm's own Word forms (minutas): find the blanks and turn them into {{variables}} -----
+  const dec = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  // ____ / ...... / XXXX / [NOMBRE] / «nombre» / <<nombre>>
+  const BLANK = /_{4,}|\.{6,}|…{2,}|X{3,}|\[[^\[\]{}]{2,80}\]|«[^«»]{2,80}»|<<[^<>]{2,80}>>/g;
+  const PARTS = /^word\/(document|header\d*|footer\d*)\.xml$/;
+  const T_RE = /<w:t(\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
+  const runText = (run) => [...run.matchAll(T_RE)].map((m) => dec(m[2])).join("");
+  function setRun(run, text) {
+    let first = true;
+    return run.replace(/<w:highlight\s[^>]*\/>/g, "").replace(T_RE, () => {
+      const out = `<w:t xml:space="preserve">${first ? xml(text) : ""}</w:t>`;
+      first = false;
+      return out;
+    });
+  }
+
+  /**
+   * Walk the blanks of a .docx in a fixed order. Without `assign` it returns
+   * [{id, kind, text, before, after}]; with `assign` (Map id → variable key)
+   * it returns the new file bytes with those blanks replaced by {{key}}.
+   * Highlighted text and underlined empty space count as blanks too.
+   */
+  function walkBlanks(bytes, assign = null) {
+    const zip = new window.PizZip(bytes);
+    const found = [];
+    const names = Object.keys(zip.files).filter((n) => PARTS.test(n))
+      .sort((a, b) => (a === "word/document.xml" ? -1 : b === "word/document.xml" ? 1 : a.localeCompare(b)));
+    for (const name of names) {
+      const xmlIn = zip.file(name).asText();
+      const xmlOut = xmlIn.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
+        const ptext = runText(para);
+        const ctx = (a, z) => ({ before: ptext.slice(Math.max(0, a - 70), a), after: ptext.slice(z, z + 50) });
+        let off = 0, prevHl = null;
+        return para.replace(/<w:r[ >][\s\S]*?<\/w:r>/g, (run) => {
+          const rPr = (run.match(/<w:rPr>[\s\S]*?<\/w:rPr>/) || [""])[0];
+          const text = runText(run);
+          if (!text) return run;
+          const start = off;
+          off += text.length;
+          if (/<w:highlight w:val="(?!none)/.test(rPr) && text.trim()) {
+            if (prevHl) { // Word splits one highlighted phrase into several runs
+              prevHl.text += text;
+              prevHl.after = ptext.slice(off, off + 50);
+              return assign?.get(prevHl.id) ? setRun(run, "") : run;
+            }
+            const c = { id: found.length, kind: "resaltado", text, ...ctx(start, off) };
+            found.push(c);
+            prevHl = c;
+            const k = assign?.get(c.id);
+            return k ? setRun(run, `{{${k}}}`) : run;
+          }
+          prevHl = null;
+          if (/<w:u w:val="(?!none)/.test(rPr) && !text.trim() && text.length >= 3) {
+            const c = { id: found.length, kind: "subrayado", text, ...ctx(start, off) };
+            found.push(c);
+            const k = assign?.get(c.id);
+            return k ? setRun(run, `{{${k}}}`) : run;
+          }
+          let tOff = start;
+          return run.replace(T_RE, (whole, attrs, raw) => {
+            const t = dec(raw);
+            const base = tOff;
+            tOff += t.length;
+            let changed = false;
+            const nt = t.replace(BLANK, (m, i) => {
+              const c = { id: found.length, kind: "espacio", text: m, ...ctx(base + i, base + i + m.length) };
+              found.push(c);
+              const k = assign?.get(c.id);
+              if (!k) return m;
+              changed = true;
+              return `{{${k}}}`;
+            });
+            return changed ? `<w:t xml:space="preserve">${xml(nt)}</w:t>` : whole;
+          });
+        });
+      });
+      if (assign && xmlOut !== xmlIn) zip.file(name, xmlOut);
+    }
+    return assign ? zip.generate({ type: "uint8array" }) : found;
+  }
+  const docxBlanks = (bytes) => walkBlanks(bytes);
+  const applyBlanks = (bytes, assign) => walkBlanks(bytes, assign);
+
+  // Which client/case datum a blank most likely asks for, from the words around it.
+  const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const GUESS = [
+    [/(c\.?\s?c\.?|cedula( de ciudadania)?|identificad[oa] con( la)?( cedula)?|documento( de identidad)?|nit)\s*(no\.?|n\.?o|numero|#)?\s*[:.]?\s*$/, "cliente.documento"],
+    [/(tarjeta profesional|t\.\s?p\.)\s*(no\.?|numero)?\s*$/, "abogado.tarjeta_profesional"],
+    [/radicad[oa]\s*(no\.?|numero)?\s*[:.]?\s*$/, "expediente.radicado"],
+    [/(correo( electronico)?|e-?mail)\s*[:.]?\s*$/, "cliente.correo"],
+    [/(telefono|celular|movil|whatsapp)\s*(no\.?)?\s*[:.]?\s*$/, "cliente.telefono"],
+    [/(direccion|domicilio en la)\s*[:.]?\s*$/, "cliente.direccion"],
+    [/(domiciliad[oa]|residente|vecin[oa]|con domicilio)\s+(en|de)\s+(la ciudad de\s+|el municipio de\s+)?$/, "cliente.ciudad"],
+    [/(juez|juzgado|despacho|magistrad[oa])\s*[:.]?\s*$/, "expediente.despacho"],
+    [/(contra|demandad[oa]|accionad[oa]|convocad[oa])\s*[:.]?\s*$/, "expediente.contraparte"],
+    [/(ciudad y fecha|lugar y fecha)\s*[:.]?\s*$/, "fecha.ciudad_y_fecha"],
+    [/(fecha|a los)\s*[:.]?\s*$/, "fecha.hoy"],
+    [/(apoderad[oa]|abogad[oa])\s*(judicial)?\s*(al doctor|a la doctora|doctor|doctora|dr\.?|dra\.?)?\s*$/, "abogado.nombre"],
+    [/(senor(a|es)?|sr\.?|sra\.?|yo,?|suscrito,?|nombre( completo)?|poderdante|otorgante|cliente|contratante|mandante|accionante|demandante|peticionari[oa])\s*[:.]?\s*$/, "cliente.nombre"],
+  ];
+  const BY_TEXT = [
+    [/cedula|\bc\.?c\b|documento|identificacion|\bnit\b/, "cliente.documento"], [/radicado/, "expediente.radicado"],
+    [/correo|e-?mail/, "cliente.correo"], [/telefono|celular/, "cliente.telefono"], [/direccion/, "cliente.direccion"],
+    [/juzgado|despacho|juez/, "expediente.despacho"], [/demandad|contraparte|entidad/, "expediente.contraparte"],
+    [/apoderad|abogad/, "abogado.nombre"], [/tarjeta/, "abogado.tarjeta_profesional"], [/fecha/, "fecha.hoy"],
+    [/ciudad|municipio/, "cliente.ciudad"], [/nombre|cliente|poderdante|demandante|otorgante/, "cliente.nombre"],
+  ];
+  function guessVariable({ text, before, after }) {
+    const t = plain(text);
+    if (/[a-z]{3}/.test(t)) for (const [re, key] of BY_TEXT) if (re.test(t)) return key;
+    const b = plain(before);
+    for (const [re, key] of GUESS) if (re.test(b)) return key;
+    if (/^\s*,?\s*(mayor de edad|identificad[oa]|domiciliad[oa]|vecin[oa])/.test(plain(after))) return "cliente.nombre";
+    return "";
+  }
+
+  window.JuanmaDocx = { b64ToBytes, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
 })();

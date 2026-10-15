@@ -163,6 +163,16 @@
             <button class="primary" data-action="new-case">+ Nuevo expediente</button>
           </div>
         </div>
+        <div class="panel case-filters">
+          <div class="grid4">
+            <label>Departamento <input id="case-dep" class="combo" data-combo="dep" placeholder="Escriba: T… Tolima" autocomplete="off" /></label>
+            <label>Ciudad o circuito <input id="case-city" class="combo" data-combo="city" data-dep="#case-dep" placeholder="Escriba: I… Ibagué" autocomplete="off" /></label>
+            <label>Área <select id="case-area"><option value="">Todas</option></select></label>
+            <label class="span2">Despacho judicial <select id="case-court"><option value="">Todos los despachos</option></select></label>
+            <label>Estado <select id="case-status"><option value="">Todos</option><option>Activo</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+            <p class="muted" id="case-count"></p>
+          </div>
+        </div>
         <div class="panel">
           <table class="data-table">
             <thead><tr><th>Carpeta</th><th>Cliente</th><th>Proceso</th><th>Asunto</th><th>Oficina · Responsable</th><th>Estado</th><th title="Marque los procesos que se consultan en automático en la Rama Judicial">Consulta</th><th></th></tr></thead>
@@ -251,7 +261,7 @@
         <div class="panel">
           <div class="grid4">
             <label>Departamento <input id="courts-dep" class="combo" data-combo="dep" placeholder="Escriba: T… Tolima" autocomplete="off" /></label>
-            <label>Ciudad o municipio <input id="courts-city" class="combo" data-combo="city" data-dep="#courts-dep" placeholder="Escriba: I… Ibagué" autocomplete="off" /></label>
+            <label>Ciudad o circuito <input id="courts-city" class="combo" data-combo="city" data-dep="#courts-dep" placeholder="Escriba: I… Ibagué" autocomplete="off" /></label>
             <label>Área <select id="courts-area"><option value="">Todas</option></select></label>
             <label>Buscar <input id="courts-q" type="search" placeholder="Nombre, correo o código" /></label>
           </div>
@@ -268,7 +278,7 @@
           <h2>Documentos</h2>
           <div class="toolbar" id="tpl-manage-bar">
             <button data-action="new-template">+ Nueva plantilla</button>
-            <label class="file-btn">Cargar mi plantilla (.docx, .md, .txt)<input type="file" id="tpl-file" accept=".docx,.md,.txt" hidden /></label>
+            <label class="file-btn" title="Suba sus minutas de Word: la app encuentra los espacios en blanco y los llena con los datos del cliente">Cargar minuta de Word o plantilla (.docx, .md, .txt)<input type="file" id="tpl-file" accept=".docx,.md,.txt" hidden /></label>
           </div>
         </div>
         <div class="tabs" role="tablist" id="doc-tabs">
@@ -311,7 +321,7 @@
                 </div>
                 <textarea id="tpl-text" rows="22" hidden aria-label="Texto del documento"></textarea>
                 <article id="tpl-preview" class="document"></article>
-                <p id="tpl-docx-note" class="hint" hidden>Plantilla de Word: se conserva su formato original. Al descargar, cada <code>{{variable}}</code> se reemplaza por el dato del expediente.</p>
+                <p id="tpl-docx-note" class="hint" hidden>Plantilla de Word: se conserva su formato original. Al descargar, cada <code>{{variable}}</code> se reemplaza por el dato del expediente. <button type="button" class="mini" data-action="prepare-blanks" id="tpl-blanks-btn">Preparar campos de la minuta</button></p>
               </div>
             </section>
           </div>
@@ -743,12 +753,13 @@
         </label>
       </div>
       <fieldset class="court-fields"><legend>Despacho judicial</legend>
+        <p class="hint">Elija departamento, ciudad y área: la lista de despachos muestra solo los de esa ciudad o de su circuito en esa área (más los promiscuos que también la atienden).</p>
         <div class="grid2">
-          <label>Radicado (23 dígitos) <input name="radicado" inputmode="numeric" placeholder="73001-31-05-001-2023-00123-00" /></label>
-          <label>Área <select name="area"><option value="">—</option></select></label>
           <label>Departamento <input name="department" class="combo" data-combo="dep" autocomplete="off" /></label>
-          <label>Ciudad o municipio <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
-          <label class="span2">Despacho <input name="court_search" class="combo" data-combo="court" autocomplete="off" placeholder="Escriba para buscar en el directorio" /></label>
+          <label>Ciudad o circuito <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
+          <label>Área <select name="area"><option value="">—</option></select></label>
+          <label>Radicado (23 dígitos) <input name="radicado" inputmode="numeric" placeholder="73001-31-05-001-2023-00123-00" /></label>
+          <label class="span2">Despacho <input name="court_search" class="combo" data-combo="court" autocomplete="off" placeholder="Toque para ver los despachos del filtro, o escriba para buscar" /></label>
         </div>
         <input type="hidden" name="court_id" />
         <p class="hint" id="court-email"></p>
@@ -938,6 +949,23 @@
   </dialog>
 
   <!-- Tarea / audiencia -->
+  <!-- Minuta de Word: espacios en blanco → datos del cliente -->
+  <dialog id="blanks-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>Preparar minuta para llenar</h3>
+      <p class="hint" data-sub></p>
+      <div class="table-scroll">
+        <table class="data-table blanks-table"><thead><tr><th>Dónde está el espacio</th><th>Dato que va ahí</th></tr></thead><tbody></tbody></table>
+      </div>
+      <p class="empty" data-none hidden>No se encontraron espacios para llenar. Marque en Word los datos con resaltado amarillo, con líneas ( ____ ) o entre corchetes ( [NOMBRE] ) y vuelva a cargarla.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar campos</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="task-dialog">
     <form method="dialog" data-form="task">
       <h3 data-title>Nueva tarea</h3>

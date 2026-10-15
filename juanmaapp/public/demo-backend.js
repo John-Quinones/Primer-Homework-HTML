@@ -63,6 +63,7 @@
       }
     }
     st.payset ||= null;
+    for (const c of st.courts) if (c.circuit === undefined) c.circuit = CM.courtCircuit(c.name);
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
@@ -482,7 +483,7 @@
     ["GET", /^\/courts(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       const text = nrm(q.q || "");
-      return s.courts.filter((c) => (!q.department || c.department === q.department) && (!q.city || c.city === q.city) && (!q.area || c.area === q.area)
+      return s.courts.filter((c) => CM.courtMatches(c, { department: q.department, city: q.city, area: q.area })
         && (!text || nrm(c.name + " " + c.email + " " + c.code).includes(text)))
         .sort((a, b) => (a.department + a.city + a.area + a.name).localeCompare(b.department + b.city + b.area + b.name, "es")).slice(0, Number(q.limit) || 500).map(clone);
     }],
@@ -493,7 +494,7 @@
         const name = str(row.name), department = canonDep(row.department);
         if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
         const city = canonCity(row.city, department);
-        const v = { code: str(row.code), name, department, city, area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), updated_at: stamp() };
+        const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city);
         if (hit) { Object.assign(hit, v); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
       });
@@ -729,6 +730,11 @@
       if ("category" in b) { TPL.categories.includes(b.category) || fail("Categoría no válida."); t.category = b.category; }
       if ("description" in b) t.description = str(b.description);
       if ("body" in b && t.format === "markdown") t.body = String(b.body).trim() ? String(b.body) : fail("La plantilla está vacía.");
+      if (b.file_base64 && t.format === "docx") {
+        atob(String(b.file_base64).slice(0, 8)).slice(0, 2) !== "PK" && fail("El archivo no es un documento de Word (.docx) válido.");
+        b.file_base64.length > 11200000 && fail("El archivo debe pesar menos de 8 MB.");
+        s.blobs[`tpl-${t.id}`] = b.file_base64;
+      }
       t.updated_at = stamp();
       return { ...tplMetaOut(t), body: t.body };
     }],

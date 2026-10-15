@@ -133,8 +133,15 @@ export function templatesRouter(db) {
     if (typeof v === "string") return res.status(400).json({ error: v });
     const body = cur.format === "markdown" && "body" in (req.body ?? {}) ? String(req.body.body) : cur.body;
     if (cur.format === "markdown" && !String(body || "").trim()) return res.status(400).json({ error: "La plantilla está vacía." });
-    db.prepare("UPDATE document_templates SET name = ?, category = ?, description = ?, body = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(v.name, v.category, v.description, body, cur.id);
+    // A Word template can get a new file (its blanks turned into {{variables}}).
+    let file = cur.file;
+    if (cur.format === "docx" && req.body?.file_base64) {
+      file = Buffer.from(String(req.body.file_base64), "base64");
+      if (!file.length || file.length > MAX_FILE) return res.status(400).json({ error: "El archivo debe pesar menos de 8 MB." });
+      if (file.subarray(0, 2).toString("latin1") !== "PK") return res.status(400).json({ error: "El archivo no es un documento de Word (.docx) válido." });
+    }
+    db.prepare("UPDATE document_templates SET name = ?, category = ?, description = ?, body = ?, file = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(v.name, v.category, v.description, body, file, cur.id);
     res.json(out(db.prepare(`SELECT ${META}, body FROM document_templates WHERE id = ?`).get(cur.id)));
   });
 

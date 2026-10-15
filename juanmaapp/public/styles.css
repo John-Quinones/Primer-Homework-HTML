@@ -620,3 +620,12 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 .portal-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border, #c4c8cb); border-radius: 8px; }
 .portal-item .muted { font-size: .85rem; }
 .portal-item a.button { flex-shrink: 0; }
+
+/* Word forms (minutas) and case-list filters */
+.blanks-table td { vertical-align: top; }
+.blank-ctx { font-size: .88rem; max-width: 520px; }
+.blank-ctx mark { background: #fff3a3; color: #1a1a1a; padding: 0 2px; border-radius: 3px; font-weight: 600; }
+.blanks-table select { min-width: 220px; }
+.case-filters { margin-bottom: 12px; }
+.case-filters .grid4 { align-items: end; }
+#case-count { margin: 0 0 10px; }

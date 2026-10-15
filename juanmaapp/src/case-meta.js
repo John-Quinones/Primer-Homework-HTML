@@ -44,3 +44,34 @@ export function normPartyRole(x) {
   if (!n) return "";
   return ALL_PARTY_ROLES.find((r) => nrm(r) === n) || ALL_PARTY_ROLES.find((r) => n.startsWith(nrm(r).slice(0, -1))) || null;
 }
+
+// ----- Court directory segmentation (department → city/circuit → area) -----
+const plain = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+
+/**
+ * The judicial circuit a court belongs to: the file's own column when it has
+ * one, else the city named in "… del Circuito de Ibagué". Municipal courts
+ * without that information keep "" and are found by their own city.
+ */
+export function courtCircuit(name, given = "") {
+  const g = String(given ?? "").trim().replace(/^circuito( judicial)?( de)?\s+/i, "");
+  if (g) return g;
+  const m = String(name ?? "").match(/circuito(?:\s+judicial)?\s+de\s+([^,;()\-–]+?)\s*(?:[,;()\-–]|$)/i);
+  return m ? m[1].trim() : "";
+}
+
+// Courts that also hear an area's cases: promiscuous courts hear every area,
+// small-claims courts hear minor civil cases.
+const AREA_ALSO = {
+  Civil: ["Promiscuo", "Pequeñas Causas y Competencia Múltiple"],
+  Familia: ["Promiscuo"], Laboral: ["Promiscuo"], Penal: ["Promiscuo"],
+};
+export const areaIncludes = (area) => (area ? [area, ...(AREA_ALSO[area] || [])] : []);
+
+/** True when a court is in the department, sits in the city or belongs to its circuit, and hears the area. */
+export function courtMatches(c, { department = "", city = "", area = "" } = {}) {
+  if (department && plain(c.department) !== plain(department)) return false;
+  if (city && plain(c.city) !== plain(city) && plain(c.circuit) !== plain(city)) return false;
+  if (area && !areaIncludes(area).includes(c.area)) return false;
+  return true;
+}
