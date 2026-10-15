@@ -68,6 +68,18 @@
     for (const r of st.signs) for (const e of r.events || []) e.at ??= e.created_at;
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     if (TPL.feeClause) for (const t of st.templates) if (t.builtin && t.body?.includes(TPL.feeClause[0])) t.body = t.body.replace(TPL.feeClause[0], TPL.feeClause[1]);
+    if (TPL.contractHead) for (const t of st.templates) if (t.builtin && t.body?.startsWith(TPL.contractHead[0])) t.body = TPL.contractHead[1] + t.body.slice(TPL.contractHead[0].length);
+    // Starter templates added in later versions arrive once (one the firm deleted does not come back).
+    st.info.seededTemplates ||= st.templates.filter((t) => t.builtin).map((t) => t.name);
+    for (const t of TPL.seed) {
+      if (st.info.seededTemplates.includes(t.name)) continue;
+      if (!st.templates.some((x) => x.name === t.name)) {
+        const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+        st.templates.push({ id: nextId(), name: t.name, category: t.category, description: t.description, format: "markdown",
+          body: t.body, filename: null, builtin: true, created_at: now, updated_at: now });
+      }
+      st.info.seededTemplates.push(t.name);
+    }
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
   }
@@ -282,6 +294,8 @@
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
       });
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
+      const folder = s.fields.find((f) => f.category_id === o.category_id && CM.isFolderLabel(f.label) && String(k.field_values[f.id] ?? "").trim());
+      if (folder) v["expediente.carpeta"] = String(k.field_values[folder.id]).trim();
       Object.assign(v, LG.feeVariables(s.charges.filter((x) => x.case_id === k.id), s.receipts.filter((x) => x.case_id === k.id)));
       if (k.assigned_user_id) lawyer = s.users.find((x) => x.id === k.assigned_user_id) || lawyer;
       office = s.offices.find((x) => x.id === k.office_id);

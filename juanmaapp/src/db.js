@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 import { seedTemplates } from "./templates.js";
-import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW } from "./templates-seed.js";
+import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW } from "./templates-seed.js";
 import { normStatus, courtCircuit } from "./case-meta.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 
@@ -524,6 +524,7 @@ function migrate(db) {
   // Change 36: the starter contract takes its fee from Pagos ({{honorarios.*}}).
   if (cols("document_templates").has("builtin")) {
     db.prepare("UPDATE document_templates SET body = replace(body, ?, ?) WHERE builtin = 1 AND instr(body, ?) > 0").run(FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, FEE_CLAUSE_OLD);
+    db.prepare("UPDATE document_templates SET body = replace(body, ?, ?) WHERE builtin = 1 AND instr(body, ?) = 1").run(CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW, CONTRACT_HEAD_OLD);
   }
   // Three statuses: Activo, Archivo provisional, Archivo definitivo.
   for (const row of db.prepare("SELECT DISTINCT status FROM cases").all()) {

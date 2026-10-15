@@ -4,6 +4,7 @@ import express from "express";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
+import { isFolderLabel } from "./case-meta.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
 
 const MAX_FILE = 8 * 1024 * 1024;
@@ -12,10 +13,19 @@ const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", 
 
 export function seedTemplates(db) {
   db.exec("CREATE TABLE IF NOT EXISTS app_flags (key TEXT PRIMARY KEY)");
-  if (db.prepare("SELECT 1 FROM app_flags WHERE key = 'templates_seeded'").get()) return;
+  const flag = db.prepare("SELECT 1 FROM app_flags WHERE key = ?");
+  const setFlag = db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES (?)");
   const ins = db.prepare("INSERT INTO document_templates (name, category, description, format, body, builtin) VALUES (?, ?, ?, 'markdown', ?, 1)");
-  for (const t of SEED_TEMPLATES) ins.run(t.name, t.category, t.description, t.body);
-  db.prepare("INSERT INTO app_flags (key) VALUES ('templates_seeded')").run();
+  const first = !flag.get("templates_seeded");
+  // Each starter template arrives once; one the firm deleted does not come back.
+  for (const t of SEED_TEMPLATES) {
+    const key = `template:${t.name}`;
+    if (flag.get(key)) continue;
+    const exists = db.prepare("SELECT 1 FROM document_templates WHERE name = ?").get(t.name);
+    if (first || !exists) { if (!exists) ins.run(t.name, t.category, t.description, t.body); }
+    setFlag.run(key);
+  }
+  setFlag.run("templates_seeded");
 }
 
 const formatRadicado = (r) => (/^\d{23}$/.test(r || "")
@@ -50,6 +60,8 @@ export function templateData(db, user, caseId) {
     const fields = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);
     const values = JSON.parse(k.field_values);
     for (const f of fields) v[`campo.${f.label}`] = values[f.id] ?? "";
+    const folder = fields.find((f) => isFolderLabel(f.label) && String(values[f.id] ?? "").trim());
+    if (folder) v["expediente.carpeta"] = String(values[folder.id]).trim();
     // Fees of the contract = the case's charges in Pagos.
     Object.assign(v, feeVariables(db.prepare("SELECT amount, due_date, status FROM charges WHERE case_id = ?").all(k.id),
       db.prepare("SELECT amount, voided_at FROM receipts WHERE case_id = ?").all(k.id)));

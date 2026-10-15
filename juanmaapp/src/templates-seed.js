@@ -3,7 +3,7 @@
 // Legal references are limited to well-established provisions; everything
 // case-specific is left for the attorney.
 
-export const DOC_CATEGORIES = ["Contrato", "Poder", "Derecho de petición", "Demanda", "Tutela", "Recurso", "Memorial", "Otro"];
+export const DOC_CATEGORIES = ["Contrato", "Poder", "Autorización", "Derecho de petición", "Demanda", "Tutela", "Recurso", "Memorial", "Otro"];
 
 export const VARIABLES = [
   ["cliente.nombre", "Nombre del cliente", "Cliente"],
@@ -14,6 +14,7 @@ export const VARIABLES = [
   ["cliente.direccion", "Dirección del cliente", "Cliente"],
   ["cliente.ciudad", "Ciudad del cliente", "Cliente"],
   ["cliente.departamento", "Departamento del cliente", "Cliente"],
+  ["expediente.carpeta", "Número de carpeta (y del contrato)", "Expediente"],
   ["expediente.radicado", "Radicado", "Expediente"],
   ["expediente.tipo_proceso", "Tipo de proceso", "Expediente"],
   ["expediente.subproceso", "Subproceso", "Expediente"],
@@ -48,10 +49,44 @@ const FOOTER = "\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de un
 
 export const SEED_TEMPLATES = [
   {
+    name: "Autorización para consulta y reporte en centrales de riesgo",
+    category: "Autorización",
+    description: "Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).",
+    body: `# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO
+
+{{fecha.ciudad_y_fecha}}
+
+Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:
+
+1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.
+2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.
+3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.
+
+## DERECHOS DEL TITULAR
+
+Declaro que conozco que:
+
+- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.
+- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.
+- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.
+- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.
+
+## VIGENCIA
+
+Esta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.
+
+Firma:
+
+____________________________________
+**{{cliente.nombre}}**
+{{cliente.tipo_documento}} No. {{cliente.documento}}
+Huella: [FILL: Huella del índice derecho, si se firma en físico]` + FOOTER,
+  },
+  {
     name: "Contrato de prestación de servicios profesionales de abogado",
     category: "Contrato",
     description: "Honorarios, alcance del mandato, obligaciones de las partes y terminación.",
-    body: `# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO
+    body: `# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}
 
 Entre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:
 
@@ -254,3 +289,7 @@ T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
 // The starter fee clause before change 36, and its replacement: the fee comes from Pagos.
 export const FEE_CLAUSE_OLD = "1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.";
 export const FEE_CLAUSE_NEW = "1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.";
+
+// Change 40: the starter contract carries the case's folder number.
+export const CONTRACT_HEAD_OLD = "# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n";
+export const CONTRACT_HEAD_NEW = "# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n";

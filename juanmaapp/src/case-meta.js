@@ -11,9 +11,10 @@ const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 export function normStatus(x) {
   const n = nrm(x);
   if (!n) return "Activo";
-  // Codes from the previous system: 1 = activo, 2 = archivado.
+  // Codes from the firm's previous system: 1 = activo, 2 = archivo definitivo, 3 = archivo provisional.
   if (n === "1") return "Activo";
   if (n === "2") return "Archivo definitivo";
+  if (n === "3") return "Archivo provisional";
   if (n.includes("provisional")) return "Archivo provisional";
   if (/definitiv|cerrad|terminad|archivad|finalizad|archivo/.test(n)) return "Archivo definitivo";
   return "Activo";
@@ -75,3 +76,6 @@ export function courtMatches(c, { department = "", city = "", area = "" } = {}) 
   if (area && !areaIncludes(area).includes(c.area)) return false;
   return true;
 }
+
+// The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
+export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));

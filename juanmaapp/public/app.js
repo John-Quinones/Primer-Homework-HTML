@@ -2083,7 +2083,8 @@ $("#tpl-edit-mode").addEventListener("change", (e) => {
 });
 $("#tpl-text").addEventListener("input", renderTplDoc);
 
-const tplFileBase = () => (tplActive.name + (tplData["cliente.nombre"] ? " - " + tplData["cliente.nombre"] : ""))
+const tplFileBase = () => (tplActive.name + (tplActive.category === "Contrato" && tplData["expediente.carpeta"] ? ` N.º ${tplData["expediente.carpeta"]}` : "")
+  + (tplData["cliente.nombre"] ? " - " + tplData["cliente.nombre"] : ""))
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 90) || "documento";
 const currentText = () => ($("#tpl-edit-mode").checked ? $("#tpl-text").value : filledText());
 

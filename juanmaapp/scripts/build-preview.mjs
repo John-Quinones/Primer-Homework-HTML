@@ -8,7 +8,7 @@ import { SEED_CATALOG } from "../src/db.js";
 import { ROLES, PERMISSIONS, DEFAULT_MATRIX, GERENCIA_ONLY } from "../src/auth.js";
 import { REPORTS } from "../src/reports.js";
 import { AREAS } from "../src/places.js";
-import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES, FEE_CLAUSE_OLD, FEE_CLAUSE_NEW } from "../src/templates-seed.js";
+import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES, FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW } from "../src/templates-seed.js";
 import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
 import { readVersion } from "../src/version.js";
 
@@ -49,7 +49,7 @@ html = html
 window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, matrix: DEFAULT_MATRIX, gerenciaOnly: GERENCIA_ONLY })};
 window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
 window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
-window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES, feeClause: [FEE_CLAUSE_OLD, FEE_CLAUSE_NEW] })};</script>`,
+window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES, feeClause: [FEE_CLAUSE_OLD, FEE_CLAUSE_NEW], contractHead: [CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW] })};</script>`,
     `<script>window.JUANMA_VERSION = ${JSON.stringify(readVersion())};</script>`,
     `<script>window.JUANMA_PROMPT = ${JSON.stringify(read("prompts/nomosai-system-prompt.md"))};</script>`,
     `<script>${safe(read("public/web-store.js"))}</script>`,

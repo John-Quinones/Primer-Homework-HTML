@@ -58,3 +58,14 @@ test("RFC 3161 request and reply parsing", () => {
   assert.ok(q.includes(Buffer.from("ab".repeat(32), "hex")));
   assert.deepEqual(readTimestampReply(Buffer.from([0x30, 0x05, 0x30, 0x03, 0x02, 0x01, 0x02])), { status: 2, granted: false, genTime: null });
 });
+
+test("status code 3 is archivo provisional; the contract carries the folder number; the credit-bureau authorization exists", async () => {
+  const { normStatus } = await import("../src/case-meta.js");
+  assert.deepEqual(["1", "2", "3"].map(normStatus), ["Activo", "Archivo definitivo", "Archivo provisional"]);
+  const list = (await admin.call("GET", "/templates")).body;
+  const auth = list.find((t) => /centrales de riesgo/.test(t.name));
+  assert.equal(auth?.category, "Autorización");
+  const contract = list.find((t) => /Contrato de prestación/.test(t.name));
+  const body = (await admin.call("GET", `/templates/${contract.id}`)).body.body;
+  assert.match(body, /^# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N\.º \{\{expediente\.carpeta\}\}/);
+});

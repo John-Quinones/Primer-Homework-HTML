@@ -193,6 +193,7 @@
     [/(honorarios|suma( fija)? de|valor de|por valor de|precio de|la suma de)\s*\$?\s*$/, "honorarios.valor"],
     [/(forma de pago|pagader[oa]s? asi|pagara asi|se pagara)\s*[:.]?\s*$/, "honorarios.forma_pago"],
     [/radicad[oa]\s*(no\.?|numero)?\s*[:.]?\s*$/, "expediente.radicado"],
+    [/(contrato|carpeta)\s*(n\.?\s?o\.?|no\.?|numero|#)\s*[:.]?\s*$/, "expediente.carpeta"],
     [/(correo( electronico)?|e-?mail)\s*[:.]?\s*$/, "cliente.correo"],
     [/(telefono|celular|movil|whatsapp)\s*(no\.?)?\s*[:.]?\s*$/, "cliente.telefono"],
     [/(direccion|domicilio en la)\s*[:.]?\s*$/, "cliente.direccion"],
