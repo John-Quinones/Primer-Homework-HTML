@@ -605,3 +605,8 @@ fieldset.person-type legend { font-size: .8rem; color: var(--text-muted); paddin
   display: inline-block; padding: 1px 8px; border-radius: 6px; border: 1.5px solid var(--brand-blue); color: var(--brand-blue);
   font-size: .78rem; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
 }
+
+/* Suggestions under the fields look like the example inside them (change 22):
+   the same muted gray with some transparency, so they read as a hint, not as data. */
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: .6; }
+.field-tip, form .hint.span2 { color: var(--text-muted); opacity: .6; font-weight: 400; }
