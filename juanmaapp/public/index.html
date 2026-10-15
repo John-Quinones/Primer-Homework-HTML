@@ -78,6 +78,7 @@
       </div>
     </div>
     <div class="topbar-right">
+      <span class="history-nav"><button type="button" data-action="go-back" title="Volver a la vista anterior" aria-label="Atrás">‹<span class="hn-text"> Atrás</span></button><button type="button" data-action="go-forward" title="Ir a la vista siguiente" aria-label="Adelante"><span class="hn-text">Adelante </span>›</button></span>
       <span id="demo-badge" class="demo-badge" hidden>Enlace de prueba · datos guardados</span>
       <button type="button" id="view-badge" class="view-badge" data-action="display-prefs" title="Cambiar tamaño de letra, vista y modo día o noche">Vista: Web</button>
       <details class="bell">
@@ -221,12 +222,17 @@
         <div class="view-head">
           <h2>Agenda</h2>
           <div class="toolbar">
-            <select id="agenda-kind"><option value="">Todo</option><option value="audiencia">Audiencias</option><option value="tarea">Tareas</option><option value="termino">Términos</option></select>
-            <select id="agenda-status"><option value="pendiente">Pendientes</option><option value="hecha">Hechas</option><option value="">Todas</option></select>
+            <select id="agenda-kind" aria-label="Tipo"><option value="">Todo</option><option value="audiencia">Audiencias</option><option value="tarea">Tareas</option><option value="termino">Términos</option><option value="recurso">Recursos</option><option value="requerimiento">Requerimientos</option><option value="peticion">Peticiones</option><option value="oficio">Oficios</option></select>
+            <select id="agenda-status" aria-label="Estado"><option value="pendiente">Pendientes</option><option value="hecha">Hechas</option><option value="">Todas</option></select>
+            <select id="agenda-user" aria-label="Funcionario"><option value="">Todos los funcionarios</option></select>
             <label class="inline toggle"><input type="checkbox" id="agenda-mine" checked /> Solo mías</label>
             <button class="primary" data-action="new-task">+ Tarea o audiencia</button>
           </div>
         </div>
+        <details id="agenda-follow" class="panel follow-panel">
+          <summary><strong>Seguimiento por funcionario</strong> <span class="muted">· cumplimiento de tareas, términos, oficios y peticiones</span></summary>
+          <div id="agenda-follow-body" class="table-scroll"></div>
+        </details>
         <div id="agenda-list" class="agenda"></div>
       </section>
 
@@ -1098,12 +1104,18 @@
       <label>Expediente * <select name="case_id" required></select></label>
       <div class="grid2">
         <label>Tipo
-          <select name="kind"><option value="audiencia">Audiencia</option><option value="tarea">Tarea</option><option value="termino">Término / vencimiento</option></select>
+          <select name="kind"><option value="audiencia">Audiencia</option><option value="tarea">Tarea</option><option value="termino">Término / vencimiento</option><option value="recurso">Recurso</option><option value="requerimiento">Requerimiento</option><option value="peticion">Derecho de petición</option><option value="oficio">Oficio (entrega y respuesta)</option></select>
         </label>
-        <label>Fecha y hora * <input name="due_at" type="datetime-local" required /></label>
+        <label><span data-due-label>Fecha y hora</span> * <input name="due_at" type="datetime-local" required /></label>
         <label class="span2">Título * <input name="title" required placeholder="Ej. Audiencia inicial art. 77 CPTSS" /></label>
+        <div class="span2 grid2 response-box" data-response hidden>
+          <label>Fecha de entrega o radicación <input name="delivered_at" type="date" /></label>
+          <label>Respuesta recibida el <input name="response_at" type="date" /></label>
+          <label class="span2">Respuesta (resumen) <input name="response_notes" placeholder="Ej. La EPS remitió la historia clínica completa" /></label>
+          <p class="hint span2" data-response-hint></p>
+        </div>
         <label>Lugar o enlace <input name="location" placeholder="Sala 3 o enlace Teams/Lifesize" /></label>
-        <label>Responsable <select name="assigned_user_id"><option value="">— El del expediente —</option></select></label>
+        <label>Funcionario responsable <select name="assigned_user_id"><option value="">— El del expediente —</option></select></label>
       </div>
       <fieldset><legend>Avisar antes</legend>
         <div class="radio-row">
@@ -1114,7 +1126,8 @@
         </div>
       </fieldset>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
-      <label class="inline"><input type="checkbox" name="done" /> Hecha</label>
+      <label class="inline"><input type="checkbox" name="done" /> Cumplida</label>
+      <label data-done-notes hidden>¿Cómo se cumplió? <input name="done_notes" placeholder="Ej. Memorial radicado por correo al despacho" /></label>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>

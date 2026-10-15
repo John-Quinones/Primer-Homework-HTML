@@ -1,5 +1,6 @@
 // Process monitoring, task reminders and scheduled reports. Times are
 // Colombia local time (UTC-5, no daylight saving).
+import { TASK_KIND_LABEL } from "./case-meta.js";
 import { findByRadicado, actuaciones } from "./ramajudicial.js";
 import { sendEmail, sendWhatsapp } from "./notify.js";
 import { loadUser, scopeOf } from "./auth.js";
@@ -18,7 +19,7 @@ export function bogota(date = new Date()) {
 export const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
 const sqlUtc = (ms) => new Date(ms).toISOString().slice(0, 19).replace("T", " ");
 
-function notify(db, userId, kind, title, body, link, key) {
+export function notify(db, userId, kind, title, body, link, key) {
   db.prepare(`INSERT OR IGNORE INTO notifications (user_id, kind, title, body, link, key) VALUES (?, ?, ?, ?, ?, ?)`)
     .run(userId, kind, title, body, link, key ?? null);
 }
@@ -186,7 +187,7 @@ export function taskReminders(db, now = new Date()) {
   const nowMs = now.getTime();
   const tasks = db.prepare(`SELECT t.*, k.assigned_user_id AS case_user, c.full_name AS client
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id WHERE t.status = 'pendiente'`).all();
-  const KIND = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término" };
+  const KIND = TASK_KIND_LABEL;
   let created = 0;
   for (const t of tasks) {
     const due = bogotaMs(t.due_at);
@@ -196,13 +197,13 @@ export function taskReminders(db, now = new Date()) {
       if (nowMs >= due - d * 86400000 && nowMs < due) {
         const when = d === 0 ? "hoy" : d === 1 ? "mañana" : `en ${d} días`;
         const before = db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE key = ?").get(`task:${t.id}:${d}`).n;
-        notify(db, who, t.kind, `${KIND[t.kind]} ${when}: ${t.title}`, `${t.due_at} · ${t.client}${t.location ? " · " + t.location : ""}`, "#agenda", `task:${t.id}:${d}`);
+        notify(db, who, t.kind, `${KIND[t.kind]} ${when}: ${t.title}`, `${t.due_at} · ${t.client}${t.location ? " · " + t.location : ""}`, `#expediente-${t.case_id}`, `task:${t.id}:${d}`);
         if (!before) created++;
       }
     }
     if (nowMs >= due) {
       const before = db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE key = ?").get(`task:${t.id}:overdue`).n;
-      notify(db, who, "vencida", `${KIND[t.kind]} vencida: ${t.title}`, `${t.due_at} · ${t.client}`, "#agenda", `task:${t.id}:overdue`);
+      notify(db, who, "vencida", `${KIND[t.kind]} vencida: ${t.title}`, `${t.due_at} · ${t.client}`, `#expediente-${t.case_id}`, `task:${t.id}:overdue`);
       if (!before) created++;
     }
   }

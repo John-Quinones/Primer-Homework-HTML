@@ -36,6 +36,7 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 - E-mail on Azure goes through Microsoft 365 / Graph (MAIL_TRANSPORT=graph, MAIL_FROM, Exchange RBAC for Applications); WhatsApp uses templates tecjuridicos_aviso (utility) and tecjuridicos_codigo (authentication). SMS is not used (user asked to omit it). Steps in juanmaapp/AZURE.md 6–7.
 - Signed PDFs are generated once and kept with their SHA-256; verification in Firmas and public verificar.html (code on every page).
 - The starter contract is numbered with the case folder ({{expediente.carpeta}}).
+- Client and case screens (`#cliente-ID`, `#expediente-ID`, changes 46–47): the case screen gathers tasks per funcionario with follow-up (`taskFollowUp` in `src/case-meta.js`), oficios/peticiones/requerimientos with delivery and answer, all actuaciones with one-click consult, and the full history. Task kinds: `TASK_KINDS`; petitions 15 business days (`addBusinessDays`).
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.

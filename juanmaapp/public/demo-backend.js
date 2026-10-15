@@ -313,27 +313,45 @@
   const taskOut = (t) => {
     const k = s.cases.find((x) => x.id === t.case_id);
     const o = caseOut(k);
-    return clone({ ...t, radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
-      assigned_name: s.users.find((u) => u.id === t.assigned_user_id)?.name ?? null });
+    const name = (id) => s.users.find((u) => u.id === id)?.name ?? null;
+    return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", ...t,
+      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
+      assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
+  };
+  // Same as the server: the assignee hears about a new task in the bell.
+  const tellAssignee = (t, before) => {
+    if (!t.assigned_user_id || t.assigned_user_id === before || t.assigned_user_id === me().id || t.status !== "pendiente") return;
+    const key = `assign:${t.id}:${t.assigned_user_id}`;
+    if (s.notes.some((n) => n.key === key)) return;
+    const o = taskOut(t);
+    s.notes.push({ id: nextId(), user_id: t.assigned_user_id, kind: "asignada", title: `${me().name} le asignó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
+      body: `Plazo ${t.due_at} · ${o.client_name}`, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
   };
   const taskValues = (b, cur = {}) => {
     const v = {
-      kind: ["tarea", "audiencia", "termino"].includes(b.kind) ? b.kind : cur.kind || "tarea",
+      kind: CM.TASK_KINDS.includes(b.kind) ? b.kind : cur.kind || "tarea",
       title: "title" in b ? str(b.title) : cur.title, notes: "notes" in b ? str(b.notes) : cur.notes || "",
       due_at: "due_at" in b ? str(b.due_at).replace("T", " ").slice(0, 16) : cur.due_at,
       location: "location" in b ? str(b.location) : cur.location || "",
       assigned_user_id: "assigned_user_id" in b ? (+b.assigned_user_id || null) : cur.assigned_user_id ?? null,
       remind_days: "remind_days" in b ? [...new Set(b.remind_days)].sort((a, c) => c - a) : cur.remind_days || [1],
       status: ["pendiente", "hecha", "cancelada"].includes(b.status) ? b.status : cur.status || "pendiente",
+      done_notes: "done_notes" in b ? str(b.done_notes) : cur.done_notes || "",
+      delivered_at: "delivered_at" in b ? str(b.delivered_at).slice(0, 10) : cur.delivered_at || "",
+      response_at: "response_at" in b ? str(b.response_at).slice(0, 10) : cur.response_at || "",
+      response_notes: "response_notes" in b ? str(b.response_notes) : cur.response_notes || "",
     };
     v.title || fail("Escriba el título.");
     /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v.due_at || "") || fail("Indique fecha y hora.");
+    if (!CM.RESPONSE_KINDS.includes(v.kind)) Object.assign(v, { delivered_at: "", response_at: "", response_notes: "" });
+    [v.delivered_at, v.response_at].every((d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(d)) || fail("Fecha no válida.");
+    if (v.response_at && v.response_at !== (cur.response_at || "") && v.status !== "cancelada") v.status = "hecha";
     return v;
   };
   // Same windows as the server's taskReminders(): each fires once.
   function reminders() {
     const now = Date.now();
-    const KIND = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término" };
+    const KIND = CM.TASK_KIND_LABEL;
     for (const t of s.tasks.filter((x) => x.status === "pendiente")) {
       const k = s.cases.find((x) => x.id === t.case_id);
       const who = t.assigned_user_id || k?.assigned_user_id || t.created_by;
@@ -342,7 +360,7 @@
       const client = s.clients.find((c) => c.id === k.client_id)?.full_name || "";
       const push = (key, title, body) => {
         if (s.notes.some((n) => n.key === key)) return;
-        s.notes.push({ id: nextId(), user_id: who, kind: t.kind, title, body, link: "#agenda", key, created_at: stamp(), read_at: null });
+        s.notes.push({ id: nextId(), user_id: who, kind: t.kind, title, body, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
       };
       for (const d of t.remind_days) {
         if (now >= due - d * 86400000 && now < due) push(`task:${t.id}:${d}`, `${KIND[t.kind]} ${d === 0 ? "hoy" : d === 1 ? "mañana" : "en " + d + " días"}: ${t.title}`, `${t.due_at} · ${client}`);
@@ -542,6 +560,7 @@
         if (q.caseId && t.case_id !== +q.caseId) return false;
         if (q.mine === "1" && !(t.assigned_user_id === me().id || (!t.assigned_user_id && (k.assigned_user_id === me().id
           || (!k.assigned_user_id && t.created_by === me().id))))) return false;
+        if (q.userId && (t.assigned_user_id || k.assigned_user_id) !== +q.userId) return false;
         if (q.status && t.status !== q.status) return false;
         if (q.kind && t.kind !== q.kind) return false;
         if (q.from && t.due_at < q.from) return false;
@@ -552,17 +571,21 @@
     ["POST", /^\/tasks$/, (m, b) => {
       need("cases.write");
       visibleCase(+b.case_id);
-      const t = { id: nextId(), case_id: +b.case_id, created_by: me().id, created_at: stamp(), done_at: null, ...taskValues(b) };
+      const t = { id: nextId(), case_id: +b.case_id, created_by: me().id, created_at: stamp(), done_at: null, done_by: null, ...taskValues(b) };
+      if (t.status === "hecha") Object.assign(t, { done_at: stamp(), done_by: me().id });
       s.tasks.push(t);
+      tellAssignee(t, null);
       return taskOut(t);
     }],
     ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
       need("cases.write");
       const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
       visibleCase(t.case_id);
-      const before = t.due_at;
+      const before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
       Object.assign(t, taskValues(b, t));
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
+      t.done_by = t.status === "hecha" ? (wasDone ? t.done_by ?? null : me().id) : null;
+      tellAssignee(t, assignee);
       if (before !== t.due_at) s.notes = s.notes.filter((n) => !String(n.key || "").startsWith(`task:${t.id}:`));
       return taskOut(t);
     }],

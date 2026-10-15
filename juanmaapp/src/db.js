@@ -89,7 +89,7 @@ CREATE INDEX IF NOT EXISTS courts_place ON courts(department, city, area);
 CREATE TABLE IF NOT EXISTS tasks (
   id                INTEGER PRIMARY KEY,
   case_id           INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-  kind              TEXT NOT NULL DEFAULT 'tarea' CHECK (kind IN ('tarea','audiencia','termino')),
+  kind              TEXT NOT NULL DEFAULT 'tarea' CHECK (kind IN ('tarea','audiencia','termino','recurso','requerimiento','peticion','oficio')),
   title             TEXT NOT NULL,
   notes             TEXT NOT NULL DEFAULT '',
   due_at            TEXT NOT NULL,           -- local Bogotá time, 'YYYY-MM-DD HH:MM'
@@ -99,7 +99,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   status            TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente','hecha','cancelada')),
   created_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at        TEXT NOT NULL DEFAULT (datetime('now')),
-  done_at           TEXT
+  done_at           TEXT,
+  done_by           INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  done_notes        TEXT NOT NULL DEFAULT '',  -- how it was fulfilled
+  delivered_at      TEXT NOT NULL DEFAULT '',  -- oficios/peticiones: date delivered or filed (local date)
+  response_at       TEXT NOT NULL DEFAULT '',  -- date the answer arrived (local date)
+  response_notes    TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS tasks_due ON tasks(status, due_at);
 
@@ -471,6 +476,29 @@ function migrate(db) {
     db.exec("INSERT INTO process_types_new (id, category_id, name, sort) SELECT id, category_id, name, sort FROM process_types");
     db.exec("DROP TABLE process_types");
     db.exec("ALTER TABLE process_types_new RENAME TO process_types");
+    db.exec("COMMIT");
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+  // Change 47: more task kinds (recursos, requerimientos, peticiones, oficios) and follow-up columns.
+  // SQLite cannot change a CHECK constraint in place, so the table is rebuilt keeping every row.
+  if (!/'oficio'/.test(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'").get()?.sql || "'oficio'")) {
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.exec("BEGIN");
+    db.exec(`CREATE TABLE tasks_new (
+      id INTEGER PRIMARY KEY,
+      case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'tarea' CHECK (kind IN ('tarea','audiencia','termino','recurso','requerimiento','peticion','oficio')),
+      title TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', due_at TEXT NOT NULL, location TEXT NOT NULL DEFAULT '',
+      assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, remind_days TEXT NOT NULL DEFAULT '[1]',
+      status TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente','hecha','cancelada')),
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), done_at TEXT,
+      done_by INTEGER REFERENCES users(id) ON DELETE SET NULL, done_notes TEXT NOT NULL DEFAULT '',
+      delivered_at TEXT NOT NULL DEFAULT '', response_at TEXT NOT NULL DEFAULT '', response_notes TEXT NOT NULL DEFAULT '')`);
+    db.exec(`INSERT INTO tasks_new (id, case_id, kind, title, notes, due_at, location, assigned_user_id, remind_days, status, created_by, created_at, done_at)
+      SELECT id, case_id, kind, title, notes, due_at, location, assigned_user_id, remind_days, status, created_by, created_at, done_at FROM tasks`);
+    db.exec("DROP TABLE tasks");
+    db.exec("ALTER TABLE tasks_new RENAME TO tasks");
+    db.exec("CREATE INDEX IF NOT EXISTS tasks_due ON tasks(status, due_at)");
     db.exec("COMMIT");
     db.exec("PRAGMA foreign_keys = ON");
   }

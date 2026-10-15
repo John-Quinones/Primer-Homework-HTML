@@ -79,3 +79,30 @@ export function courtMatches(c, { department = "", city = "", area = "" } = {}) 
 
 // The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
 export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));
+
+// ----- Case tasks: kinds and follow-up (change 47) -----
+export const TASK_KINDS = ["tarea", "audiencia", "termino", "recurso", "requerimiento", "peticion", "oficio"];
+export const TASK_KIND_LABEL = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término", recurso: "Recurso", requerimiento: "Requerimiento", peticion: "Petición", oficio: "Oficio" };
+/** Kinds whose answer is tracked: delivered on a date, answered (or not) by the deadline. */
+export const RESPONSE_KINDS = ["oficio", "peticion", "requerimiento"];
+/** Stored UTC "YYYY-MM-DD HH:MM[:SS]" → Colombia time "YYYY-MM-DD HH:MM" (UTC-5, no daylight saving). */
+export const utcToBogota = (utc) => (utc ? new Date(Date.parse(String(utc).replace(" ", "T").slice(0, 19) + "Z") - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") : "");
+
+/**
+ * Follow-up state of a task at `now` (Colombia time "YYYY-MM-DD HH:MM"):
+ * { key, label, tone } with tone ok | warn | bad | muted.
+ */
+export function taskFollowUp(t, now) {
+  const answered = RESPONSE_KINDS.includes(t.kind);
+  if (t.status === "cancelada") return { key: "cancelada", label: "Cancelada", tone: "muted" };
+  if (t.status === "hecha") {
+    const when = (answered && t.response_at) || utcToBogota(t.done_at);
+    const late = when && t.due_at && when.slice(0, 16) > t.due_at && !(when.length === 10 && when <= t.due_at.slice(0, 10));
+    return late ? { key: "tarde", label: answered ? "Respondido fuera de plazo" : "Cumplida con retraso", tone: "warn" }
+      : { key: "a_tiempo", label: answered ? "Respondido" : "Cumplida a tiempo", tone: "ok" };
+  }
+  if (t.due_at && t.due_at < now) return { key: "vencida", label: answered ? "Sin respuesta · plazo vencido" : "Vencida", tone: "bad" };
+  const soon = t.due_at && Date.parse(t.due_at.replace(" ", "T") + "Z") - Date.parse(now.replace(" ", "T") + "Z") <= 2 * 86400000;
+  if (answered) return { key: soon ? "por_vencer" : "en_plazo", label: t.delivered_at ? (soon ? "Esperando respuesta · vence pronto" : "Esperando respuesta") : "Por entregar", tone: soon ? "warn" : "muted" };
+  return soon ? { key: "por_vencer", label: "Por vencer", tone: "warn" } : { key: "en_plazo", label: "En plazo", tone: "muted" };
+}

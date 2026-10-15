@@ -787,6 +787,46 @@ a.chip-stat strong { color: var(--link); }
 .data-table.compact td, .data-table.compact th { padding: 5px 6px; }
 @media (max-width: 760px) { .ficha-grid { grid-template-columns: 1fr; } .chip-stat { min-width: 0; flex: 1 1 40%; } }
 
+/* Change 47: back/forward, follow-up, case history */
+.history-nav { display: inline-flex; gap: 4px; }
+.history-nav button { font-size: .78rem; padding: 4px 10px; border-radius: 999px; cursor: pointer; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.4); color: #fff; }
+.history-nav button:hover, .history-nav button:focus-visible { background: rgba(255,255,255,.24); }
+.follow { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--surface-muted); color: var(--text-muted); }
+.follow.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.follow.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.follow.bad { background: color-mix(in srgb, var(--error) 14%, transparent); color: var(--error); }
+.follow-people { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.person-tally { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: .85rem; }
+.ficha-panel tr.is-done td { opacity: .72; }
+.acts-scroll { max-height: 440px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.acts-scroll thead th { position: sticky; top: 0; background: var(--surface); }
+.hist-filters { margin-bottom: 10px; }
+.hist-filters .chip { border: 1px solid var(--border); cursor: pointer; font: inherit; font-size: .78rem; color: var(--text); }
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-height: 560px; overflow: auto; }
+.history li { display: grid; grid-template-columns: 9.5rem 14px 1fr; gap: 10px; align-items: start; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.history li > div { min-width: 0; overflow-wrap: anywhere; }
+.history .h-when { font-size: .8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.history .h-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: var(--brand-silver); }
+.history .h-actuacion { background: var(--brand-blue); }
+.history .h-tarea { background: var(--warn); }
+.history .h-pago { background: var(--ok); }
+.history .h-firma, .history .h-correo { background: var(--brand-navy); }
+#case-rows tr.row-link { cursor: pointer; }
+#case-rows tr.row-link:hover td { background: var(--surface-muted); }
+.follow-panel { margin-bottom: 14px; }
+.follow-panel summary { cursor: pointer; }
+.response-box { border: 1px dashed var(--border); border-radius: 10px; padding: 10px; }
+@media (max-width: 760px) {
+  .history li { grid-template-columns: 1fr; gap: 2px; }
+  .history .h-dot { display: none; }
+  .history-nav button { padding: 4px 8px; }
+}
+.hist-filters .chip.active { color: #fff; }
+.history-nav button { white-space: nowrap; }
+.agenda-body a { color: var(--link); text-decoration: none; }
+.agenda-body a:hover { text-decoration: underline; }
+@media (max-width: 760px) { .hn-text { display: none; } .history-nav button { font-size: 1rem; line-height: 1; padding: 5px 11px; } }
+
 </style>
 </head>
 <body>
@@ -857,6 +897,7 @@ a.chip-stat strong { color: var(--link); }
       </div>
     </div>
     <div class="topbar-right">
+      <span class="history-nav"><button type="button" data-action="go-back" title="Volver a la vista anterior" aria-label="Atrás">‹<span class="hn-text"> Atrás</span></button><button type="button" data-action="go-forward" title="Ir a la vista siguiente" aria-label="Adelante"><span class="hn-text">Adelante </span>›</button></span>
       <span id="demo-badge" class="demo-badge" hidden>Enlace de prueba · datos guardados</span>
       <button type="button" id="view-badge" class="view-badge" data-action="display-prefs" title="Cambiar tamaño de letra, vista y modo día o noche">Vista: Web</button>
       <details class="bell">
@@ -1000,12 +1041,17 @@ a.chip-stat strong { color: var(--link); }
         <div class="view-head">
           <h2>Agenda</h2>
           <div class="toolbar">
-            <select id="agenda-kind"><option value="">Todo</option><option value="audiencia">Audiencias</option><option value="tarea">Tareas</option><option value="termino">Términos</option></select>
-            <select id="agenda-status"><option value="pendiente">Pendientes</option><option value="hecha">Hechas</option><option value="">Todas</option></select>
+            <select id="agenda-kind" aria-label="Tipo"><option value="">Todo</option><option value="audiencia">Audiencias</option><option value="tarea">Tareas</option><option value="termino">Términos</option><option value="recurso">Recursos</option><option value="requerimiento">Requerimientos</option><option value="peticion">Peticiones</option><option value="oficio">Oficios</option></select>
+            <select id="agenda-status" aria-label="Estado"><option value="pendiente">Pendientes</option><option value="hecha">Hechas</option><option value="">Todas</option></select>
+            <select id="agenda-user" aria-label="Funcionario"><option value="">Todos los funcionarios</option></select>
             <label class="inline toggle"><input type="checkbox" id="agenda-mine" checked /> Solo mías</label>
             <button class="primary" data-action="new-task">+ Tarea o audiencia</button>
           </div>
         </div>
+        <details id="agenda-follow" class="panel follow-panel">
+          <summary><strong>Seguimiento por funcionario</strong> <span class="muted">· cumplimiento de tareas, términos, oficios y peticiones</span></summary>
+          <div id="agenda-follow-body" class="table-scroll"></div>
+        </details>
         <div id="agenda-list" class="agenda"></div>
       </section>
 
@@ -1877,12 +1923,18 @@ a.chip-stat strong { color: var(--link); }
       <label>Expediente * <select name="case_id" required></select></label>
       <div class="grid2">
         <label>Tipo
-          <select name="kind"><option value="audiencia">Audiencia</option><option value="tarea">Tarea</option><option value="termino">Término / vencimiento</option></select>
+          <select name="kind"><option value="audiencia">Audiencia</option><option value="tarea">Tarea</option><option value="termino">Término / vencimiento</option><option value="recurso">Recurso</option><option value="requerimiento">Requerimiento</option><option value="peticion">Derecho de petición</option><option value="oficio">Oficio (entrega y respuesta)</option></select>
         </label>
-        <label>Fecha y hora * <input name="due_at" type="datetime-local" required /></label>
+        <label><span data-due-label>Fecha y hora</span> * <input name="due_at" type="datetime-local" required /></label>
         <label class="span2">Título * <input name="title" required placeholder="Ej. Audiencia inicial art. 77 CPTSS" /></label>
+        <div class="span2 grid2 response-box" data-response hidden>
+          <label>Fecha de entrega o radicación <input name="delivered_at" type="date" /></label>
+          <label>Respuesta recibida el <input name="response_at" type="date" /></label>
+          <label class="span2">Respuesta (resumen) <input name="response_notes" placeholder="Ej. La EPS remitió la historia clínica completa" /></label>
+          <p class="hint span2" data-response-hint></p>
+        </div>
         <label>Lugar o enlace <input name="location" placeholder="Sala 3 o enlace Teams/Lifesize" /></label>
-        <label>Responsable <select name="assigned_user_id"><option value="">— El del expediente —</option></select></label>
+        <label>Funcionario responsable <select name="assigned_user_id"><option value="">— El del expediente —</option></select></label>
       </div>
       <fieldset><legend>Avisar antes</legend>
         <div class="radio-row">
@@ -1893,7 +1945,8 @@ a.chip-stat strong { color: var(--link); }
         </div>
       </fieldset>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
-      <label class="inline"><input type="checkbox" name="done" /> Hecha</label>
+      <label class="inline"><input type="checkbox" name="done" /> Cumplida</label>
+      <label data-done-notes hidden>¿Cómo se cumplió? <input name="done_notes" placeholder="Ej. Memorial radicado por correo al despacho" /></label>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -3617,7 +3670,34 @@ function courtMatches(c, { department = "", city = "", area = "" } = {}) {
 // The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
 const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));
 
-return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel };
+// ----- Case tasks: kinds and follow-up (change 47) -----
+const TASK_KINDS = ["tarea", "audiencia", "termino", "recurso", "requerimiento", "peticion", "oficio"];
+const TASK_KIND_LABEL = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término", recurso: "Recurso", requerimiento: "Requerimiento", peticion: "Petición", oficio: "Oficio" };
+/** Kinds whose answer is tracked: delivered on a date, answered (or not) by the deadline. */
+const RESPONSE_KINDS = ["oficio", "peticion", "requerimiento"];
+/** Stored UTC "YYYY-MM-DD HH:MM[:SS]" → Colombia time "YYYY-MM-DD HH:MM" (UTC-5, no daylight saving). */
+const utcToBogota = (utc) => (utc ? new Date(Date.parse(String(utc).replace(" ", "T").slice(0, 19) + "Z") - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") : "");
+
+/**
+ * Follow-up state of a task at `now` (Colombia time "YYYY-MM-DD HH:MM"):
+ * { key, label, tone } with tone ok | warn | bad | muted.
+ */
+function taskFollowUp(t, now) {
+  const answered = RESPONSE_KINDS.includes(t.kind);
+  if (t.status === "cancelada") return { key: "cancelada", label: "Cancelada", tone: "muted" };
+  if (t.status === "hecha") {
+    const when = (answered && t.response_at) || utcToBogota(t.done_at);
+    const late = when && t.due_at && when.slice(0, 16) > t.due_at && !(when.length === 10 && when <= t.due_at.slice(0, 10));
+    return late ? { key: "tarde", label: answered ? "Respondido fuera de plazo" : "Cumplida con retraso", tone: "warn" }
+      : { key: "a_tiempo", label: answered ? "Respondido" : "Cumplida a tiempo", tone: "ok" };
+  }
+  if (t.due_at && t.due_at < now) return { key: "vencida", label: answered ? "Sin respuesta · plazo vencido" : "Vencida", tone: "bad" };
+  const soon = t.due_at && Date.parse(t.due_at.replace(" ", "T") + "Z") - Date.parse(now.replace(" ", "T") + "Z") <= 2 * 86400000;
+  if (answered) return { key: soon ? "por_vencer" : "en_plazo", label: t.delivered_at ? (soon ? "Esperando respuesta · vence pronto" : "Esperando respuesta") : "Por entregar", tone: soon ? "warn" : "muted" };
+  return soon ? { key: "por_vencer", label: "Por vencer", tone: "warn" } : { key: "en_plazo", label: "En plazo", tone: "muted" };
+}
+
+return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, isFolderLabel, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp };
 })();
 
 window.JuanmaLedger = (function () {
@@ -3827,7 +3907,17 @@ function feeVariables(charges, receipts = []) {
   };
 }
 
-return { METHODS, AGING, STATE_LABELS, fmtCOP, daysBetween, addDays, addMonths, agingBucket, splitAmount, applyPayments, portfolio, clientRows, reminderMessage, RECEIPT_START, nextReceiptNumber, receiptLabel, colombianHolidays, collectionWindow, pesosEnLetras, longDateEs, feeVariables };
+/** Date `n` business days after `date` (no weekends, no Colombian holidays). E.g. a petition is answered within 15 (Ley 1755 de 2015, art. 14). */
+function addBusinessDays(date, n) {
+  let d = new Date(date + "T00:00:00Z"), left = n;
+  while (left > 0) {
+    d = new Date(d.getTime() + 86400000);
+    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6 && !colombianHolidays(d.getUTCFullYear()).has(iso(d))) left--;
+  }
+  return iso(d);
+}
+
+return { METHODS, AGING, STATE_LABELS, fmtCOP, daysBetween, addDays, addMonths, agingBucket, splitAmount, applyPayments, portfolio, clientRows, reminderMessage, RECEIPT_START, nextReceiptNumber, receiptLabel, colombianHolidays, collectionWindow, pesosEnLetras, longDateEs, feeVariables, addBusinessDays };
 })();
 
 window.JuanmaValidate = (function () {
@@ -4257,8 +4347,10 @@ return { decisionOf, withDecisions };
       ["Persona natural: nombres y apellidos por separado; se corrigen solos a mayúscula inicial (JOHN → John).", "Persona jurídica: razón social, NIT con dígito de verificación y representante legal.", "Busque por nombre o número de documento en la casilla superior.", "Escriba el documento sin puntos ni espacios."]],
     expedientes: ["Expedientes", "Cada proceso o asunto de un cliente: tipo y subproceso, calidad del cliente (demandante, demandado, ejecutante…), estado, despacho, radicado y responsable.",
       ["Filtre por departamento, ciudad o circuito, área y despacho: si marca Ibagué y Civil, ve los expedientes de los despachos civiles del circuito de Ibagué.", "El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior.", "La columna Carpeta muestra el número de carpeta física; búsquelo en la casilla «Buscar carpeta, cliente o radicado»."]],
-    agenda: ["Agenda", "Audiencias, términos y tareas de cada expediente, con recordatorios por correo o WhatsApp.",
-      ["Escriba el título con la norma o etapa: «Audiencia inicial art. 77 CPTSS».", "Marque la tarea como hecha cuando se cumpla para que salga de pendientes."]],
+    agenda: ["Agenda", "Audiencias, términos, tareas, recursos, requerimientos, peticiones y oficios de cada expediente, asignados a un funcionario con plazo y recordatorio.",
+      ["Escriba el título con la norma o etapa: «Audiencia inicial art. 77 CPTSS».", "Al asignar a un funcionario, le llega el aviso en la campana con el enlace al expediente.",
+        "Marque «Cumplida» cuando se cumpla: queda quién la cumplió y si fue a tiempo o con retraso.", "Oficios y peticiones: registre la fecha de entrega; al llegar la respuesta use «Respuesta». Si vence el plazo sin respuesta, se avisa.",
+        "«Seguimiento por funcionario» muestra pendientes, vencidas y el porcentaje de cumplimiento de cada uno."]],
     consulta: ["Consulta de procesos", "Consulta en la Rama Judicial los expedientes con radicado y avisa de actuaciones nuevas (reportes a las 7, 13 y 17 h).",
       ["Requiere conexión a internet desde el servidor; en el enlace de prueba no está disponible.", "Solo se consultan expedientes con la casilla «Consultar automáticamente» marcada."]],
     despachos: ["Despachos judiciales", "Directorio de juzgados, tribunales y altas cortes con su correo, para elegirlos en los expedientes y en el correo certificado.",
@@ -4494,7 +4586,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
-<script>window.JUANMA_VERSION = {"change":46,"sha":"","date":"2026-10-15"};</script>
+<script>window.JUANMA_VERSION = {"change":47,"sha":"","date":"2026-10-15"};</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -4920,27 +5012,45 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
   const taskOut = (t) => {
     const k = s.cases.find((x) => x.id === t.case_id);
     const o = caseOut(k);
-    return clone({ ...t, radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
-      assigned_name: s.users.find((u) => u.id === t.assigned_user_id)?.name ?? null });
+    const name = (id) => s.users.find((u) => u.id === id)?.name ?? null;
+    return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", ...t,
+      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_name: o.client_name, type_name: o.type_name,
+      assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
+  };
+  // Same as the server: the assignee hears about a new task in the bell.
+  const tellAssignee = (t, before) => {
+    if (!t.assigned_user_id || t.assigned_user_id === before || t.assigned_user_id === me().id || t.status !== "pendiente") return;
+    const key = `assign:${t.id}:${t.assigned_user_id}`;
+    if (s.notes.some((n) => n.key === key)) return;
+    const o = taskOut(t);
+    s.notes.push({ id: nextId(), user_id: t.assigned_user_id, kind: "asignada", title: `${me().name} le asignó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
+      body: `Plazo ${t.due_at} · ${o.client_name}`, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
   };
   const taskValues = (b, cur = {}) => {
     const v = {
-      kind: ["tarea", "audiencia", "termino"].includes(b.kind) ? b.kind : cur.kind || "tarea",
+      kind: CM.TASK_KINDS.includes(b.kind) ? b.kind : cur.kind || "tarea",
       title: "title" in b ? str(b.title) : cur.title, notes: "notes" in b ? str(b.notes) : cur.notes || "",
       due_at: "due_at" in b ? str(b.due_at).replace("T", " ").slice(0, 16) : cur.due_at,
       location: "location" in b ? str(b.location) : cur.location || "",
       assigned_user_id: "assigned_user_id" in b ? (+b.assigned_user_id || null) : cur.assigned_user_id ?? null,
       remind_days: "remind_days" in b ? [...new Set(b.remind_days)].sort((a, c) => c - a) : cur.remind_days || [1],
       status: ["pendiente", "hecha", "cancelada"].includes(b.status) ? b.status : cur.status || "pendiente",
+      done_notes: "done_notes" in b ? str(b.done_notes) : cur.done_notes || "",
+      delivered_at: "delivered_at" in b ? str(b.delivered_at).slice(0, 10) : cur.delivered_at || "",
+      response_at: "response_at" in b ? str(b.response_at).slice(0, 10) : cur.response_at || "",
+      response_notes: "response_notes" in b ? str(b.response_notes) : cur.response_notes || "",
     };
     v.title || fail("Escriba el título.");
     /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v.due_at || "") || fail("Indique fecha y hora.");
+    if (!CM.RESPONSE_KINDS.includes(v.kind)) Object.assign(v, { delivered_at: "", response_at: "", response_notes: "" });
+    [v.delivered_at, v.response_at].every((d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(d)) || fail("Fecha no válida.");
+    if (v.response_at && v.response_at !== (cur.response_at || "") && v.status !== "cancelada") v.status = "hecha";
     return v;
   };
   // Same windows as the server's taskReminders(): each fires once.
   function reminders() {
     const now = Date.now();
-    const KIND = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término" };
+    const KIND = CM.TASK_KIND_LABEL;
     for (const t of s.tasks.filter((x) => x.status === "pendiente")) {
       const k = s.cases.find((x) => x.id === t.case_id);
       const who = t.assigned_user_id || k?.assigned_user_id || t.created_by;
@@ -4949,7 +5059,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       const client = s.clients.find((c) => c.id === k.client_id)?.full_name || "";
       const push = (key, title, body) => {
         if (s.notes.some((n) => n.key === key)) return;
-        s.notes.push({ id: nextId(), user_id: who, kind: t.kind, title, body, link: "#agenda", key, created_at: stamp(), read_at: null });
+        s.notes.push({ id: nextId(), user_id: who, kind: t.kind, title, body, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
       };
       for (const d of t.remind_days) {
         if (now >= due - d * 86400000 && now < due) push(`task:${t.id}:${d}`, `${KIND[t.kind]} ${d === 0 ? "hoy" : d === 1 ? "mañana" : "en " + d + " días"}: ${t.title}`, `${t.due_at} · ${client}`);
@@ -5149,6 +5259,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
         if (q.caseId && t.case_id !== +q.caseId) return false;
         if (q.mine === "1" && !(t.assigned_user_id === me().id || (!t.assigned_user_id && (k.assigned_user_id === me().id
           || (!k.assigned_user_id && t.created_by === me().id))))) return false;
+        if (q.userId && (t.assigned_user_id || k.assigned_user_id) !== +q.userId) return false;
         if (q.status && t.status !== q.status) return false;
         if (q.kind && t.kind !== q.kind) return false;
         if (q.from && t.due_at < q.from) return false;
@@ -5159,17 +5270,21 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     ["POST", /^\/tasks$/, (m, b) => {
       need("cases.write");
       visibleCase(+b.case_id);
-      const t = { id: nextId(), case_id: +b.case_id, created_by: me().id, created_at: stamp(), done_at: null, ...taskValues(b) };
+      const t = { id: nextId(), case_id: +b.case_id, created_by: me().id, created_at: stamp(), done_at: null, done_by: null, ...taskValues(b) };
+      if (t.status === "hecha") Object.assign(t, { done_at: stamp(), done_by: me().id });
       s.tasks.push(t);
+      tellAssignee(t, null);
       return taskOut(t);
     }],
     ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
       need("cases.write");
       const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
       visibleCase(t.case_id);
-      const before = t.due_at;
+      const before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
       Object.assign(t, taskValues(b, t));
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
+      t.done_by = t.status === "hecha" ? (wasDone ? t.done_by ?? null : me().id) : null;
+      tellAssignee(t, assignee);
       if (before !== t.due_at) s.notes = s.notes.filter((n) => !String(n.key || "").startsWith(`task:${t.id}:`));
       return taskOut(t);
     }],
@@ -6529,6 +6644,11 @@ async function renderExpedienteFicha(id) {
   const billed = (charges || []).filter((c) => c.state !== "anulado").reduce((a, c) => a + c.amount, 0);
   const balance = (charges || []).filter((c) => c.state !== "anulado").reduce((a, c) => a + c.balance, 0);
   const paid = caseReceipts.filter((r) => !r.voided_at).reduce((a, r) => a + r.amount, 0);
+  const canWrite = can("cases.write");
+  const work = (tasks || []).filter((t) => !CMETA.RESPONSE_KINDS.includes(t.kind));
+  const answers = (tasks || []).filter((t) => CMETA.RESPONSE_KINDS.includes(t.kind));
+  agendaCache = tasks || [];
+  const hist = caseHistory({ k, tasks, acts, docs, charges, receipts: caseReceipts, signs: caseSigns, mails });
   const panel = (title, count, body, actions = "") => `<section class="panel ficha-panel"><div class="ficha-panel-head"><h3 class="panel-title">${title}${count != null ? ` <span class="count">${count}</span>` : ""}</h3>${actions}</div>${body}</section>`;
   const empty = (t) => `<p class="empty">${t}</p>`;
   box.innerHTML = `
@@ -6539,6 +6659,7 @@ async function renderExpedienteFicha(id) {
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        ${k.radicado && can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta ya este radicado en la Rama Judicial y trae las actuaciones nuevas">↻ Consultar ahora</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
@@ -6549,21 +6670,29 @@ async function renderExpedienteFicha(id) {
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
-      ${panel("Datos del expediente", null, `<dl class="facts">
+      ${wide(panel("Datos del expediente", null, `<dl class="facts">
         ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
+        ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
         ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
-      </dl>`)}
-      ${panel("Agenda", (tasks || []).length, (tasks || []).length ? `<ul class="ficha-list">${tasks.map((t) => `<li>
-          <span class="badge ${t.status === "hecha" ? "ok" : "warn"}">${escapeHtml(KIND_LABEL[t.kind] || t.kind)}</span> <strong>${escapeHtml(t.title)}</strong>
-          <span class="muted">${fmtDue(t.due_at)}${t.location ? " · " + escapeHtml(t.location) : ""}${t.status === "hecha" ? " · hecha" : ""}</span>
-          ${t.status !== "hecha" && can("cases.write") ? `<button class="mini" data-action="task-done" data-id="${t.id}">Marcar hecha</button>` : ""}</li>`).join("")}</ul>`
-        : empty("Sin audiencias, términos ni tareas."), can("cases.write") ? `<button class="mini primary" data-action="new-task" data-case="${k.id}">+ Tarea o audiencia</button>` : "")}
-      ${acts !== null ? panel("Actuaciones (Rama Judicial)", (acts || []).length, (acts || []).length ? `<ul class="ficha-list">${acts.slice(0, 8).map((a) => `<li>
-          <strong>${escapeHtml(String(a.fecha || "").slice(0, 10))}</strong> ${escapeHtml(a.actuacion || "")}<span class="muted">${a.anotacion ? " · " + escapeHtml(String(a.anotacion).slice(0, 160)) : ""}</span></li>`).join("")}</ul>`
-        : empty("Aún no hay actuaciones consultadas."), `<button class="mini" data-action="view-acts" data-id="${k.id}">Ver todas</button>`) : ""}
+      </dl>`))}
+      ${wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
+        canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : ""))}
+      ${wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
+        : empty("Sin oficios, peticiones ni requerimientos. Registre la entrega y la app controla la respuesta y su plazo."),
+        canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : ""))}
+      ${acts !== null ? wide(panel("Actuaciones (consulta automática)", acts.length, `
+          <p class="hint">${WEB ? "En este enlace de prueba no se puede consultar la Rama Judicial (no se conecta a sitios externos); en la versión del servidor (Azure) se consulta en automático y con «Consultar ahora»." : k.monitor ? "Se consulta en automático a las 7, 13 y 17 h." : "La consulta automática está desactivada para este expediente (actívela en Expedientes, columna «Consulta»)."}
+            ${k.last_checked_at ? `Última consulta: ${escapeHtml(CMETA.utcToBogota(k.last_checked_at))}.` : "Aún no se ha consultado."} Con «Recordatorio» crea un término o tarea a partir de la actuación.</p>
+          ${acts.length ? `<div class="acts-scroll"><table class="data-table compact"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th></th></tr></thead><tbody>${acts.map((a, i) => `<tr>
+            <td>${escapeHtml(String(a.fecha || "").slice(0, 10))}</td><td><strong>${escapeHtml(a.actuacion || "")}</strong>${a.decision ? `<br><span class="muted">Decisión: ${escapeHtml(a.decision)}</span>` : ""}</td>
+            <td>${escapeHtml(String(a.anotacion || "").slice(0, 300))}</td>
+            <td>${canWrite ? `<button class="mini" data-action="act-remind" data-case="${k.id}" data-act="${i}">Recordatorio</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+          : empty(k.last_checked_at ? "La consulta no ha encontrado actuaciones." : "Use «↻ Consultar ahora» para traer las actuaciones de la Rama Judicial.")}`,
+        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`))
+        : !k.radicado ? wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial."))) : ""}
       ${panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
           <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
           <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
@@ -6585,9 +6714,96 @@ async function renderExpedienteFicha(id) {
           <button class="mini" data-action="mail-proof" data-id="${m.id}">Constancia</button></li>`).join("")}</ul>` : empty("Sin correos enviados desde este expediente."),
         `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`)
         : can("mail.send") ? panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba.")) : ""}
+      ${wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
+          .map(([t, label]) => `<button type="button" class="chip ${t === "" ? "active" : ""}" data-hist="${t}">${label}</button>`).join("")}</div>
+        <ol class="history">${hist.map((h) => `<li data-type="${h.type}"><span class="h-when">${escapeHtml(h.at)}</span><span class="h-dot h-${h.type}"></span>
+          <div><strong>${escapeHtml(h.text)}</strong>${h.sub ? `<br><span class="muted">${escapeHtml(h.sub)}</span>` : ""}</div></li>`).join("")}</ol>`))}
     </div>`;
+  ACTS_CACHE = acts || [];
+}
+let ACTS_CACHE = [];
+const CMETA = window.JuanmaCaseMeta;
+const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["expediente", "Expediente"]];
+const wide = (html) => html.replace('class="panel ficha-panel"', 'class="panel ficha-panel ficha-wide"');
+const kindButtons = (caseId, kinds) => `<span class="toolbar">${kinds.map((x) => `<button class="mini ${x === kinds[0] ? "primary" : ""}" data-action="new-task" data-case="${caseId}" data-kind="${x}">+ ${KIND_LABEL[x]}</button>`).join("")}</span>`;
+const whoOf = (t) => t.assigned_name || t.case_assigned_name || "Sin responsable";
+const followBadge = (t) => { const f = CMETA.taskFollowUp(t, bogotaNow()); return `<span class="follow ${f.tone}">${escapeHtml(f.label)}</span>`; };
+
+/** Per-person tally: pending, overdue, done on time, done late. */
+function followSummary(list) {
+  if (!list.length) return "";
+  const now = bogotaNow(), by = new Map();
+  for (const t of list) {
+    const f = CMETA.taskFollowUp(t, now), who = whoOf(t);
+    const r = by.get(who) || { pend: 0, venc: 0, ok: 0, tarde: 0 };
+    if (f.key === "vencida") r.venc++; else if (f.key === "a_tiempo") r.ok++; else if (f.key === "tarde") r.tarde++; else if (f.key !== "cancelada") r.pend++;
+    by.set(who, r);
+  }
+  return `<div class="follow-people">${[...by].map(([who, r]) => `<span class="person-tally"><strong>${escapeHtml(who)}</strong>
+    ${r.pend ? `<span class="follow muted">${r.pend} pendiente(s)</span>` : ""}${r.venc ? `<span class="follow bad">${r.venc} vencida(s)</span>` : ""}
+    ${r.ok ? `<span class="follow ok">${r.ok} a tiempo</span>` : ""}${r.tarde ? `<span class="follow warn">${r.tarde} con retraso</span>` : ""}</span>`).join("")}</div>`;
+}
+
+function taskTable(list, answers) {
+  const canWrite = can("cases.write");
+  const rows = list.map((t) => {
+    const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
+      ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
+    const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
+    return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
+        <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
+        <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
+        <td>${escapeHtml(t.delivered_at || "—")}</td><td>${fmtDue(t.due_at)}</td>
+        <td>${t.response_at ? `${escapeHtml(t.response_at)}${t.response_notes ? `<br><span class="muted">${escapeHtml(t.response_notes)}</span>` : ""}` : "—"}</td>
+        <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`
+      : `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
+        <td><span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" || t.kind === "recurso" ? "warn" : ""}">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
+        <td><strong>${escapeHtml(t.title)}</strong>${t.location ? `<br><span class="muted">${escapeHtml(t.location)}</span>` : ""}${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}${done ? `<br><span class="muted">${done}</span>` : ""}</td>
+        <td>${escapeHtml(whoOf(t))}${t.created_by_name ? `<br><span class="muted">Asignó: ${escapeHtml(t.created_by_name)}</span>` : ""}</td>
+        <td>${fmtDue(t.due_at)}<br><span class="muted">${t.remind_days?.length ? "Aviso " + t.remind_days.map((d) => (d === 0 ? "el mismo día" : d + " d antes")).join(", ") : "Sin aviso"}</span></td>
+        <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`;
+  }).join("");
+  return `<div class="table-scroll"><table class="data-table compact"><thead><tr>${answers
+    ? "<th>Tipo</th><th>Asunto y responsable</th><th>Entregado</th><th>Plazo de respuesta</th><th>Respuesta</th><th>Estado</th><th></th>"
+    : "<th>Tipo</th><th>Asunto</th><th>Funcionario</th><th>Plazo</th><th>Seguimiento</th><th></th>"}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/** Everything that happened in the case, newest first, in Colombia time. */
+function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails }) {
+  const out = [], at = (utc) => CMETA.utcToBogota(utc), add = (when, type, text, sub = "") => when && out.push({ at: when, type, text, sub });
+  add(at(k.created_at), "expediente", "Se creó el expediente", [k.type_name, k.title].filter(Boolean).join(" · "));
+  if (k.last_checked_at) add(at(k.last_checked_at), "actuacion", "Última consulta en la Rama Judicial");
+  for (const a of acts || []) add(String(a.fecha || "").slice(0, 10), "actuacion", `Actuación: ${a.actuacion || ""}`, String(a.anotacion || "").slice(0, 220));
+  for (const t of tasks || []) {
+    const label = KIND_LABEL[t.kind];
+    add(at(t.created_at), "tarea", `Asignado (${label.toLowerCase()}): ${t.title}`, `${whoOf(t)} · plazo ${t.due_at}${t.created_by_name ? " · asignó " + t.created_by_name : ""}`);
+    if (t.delivered_at) add(t.delivered_at, "tarea", `Entregado o radicado (${label.toLowerCase()}): ${t.title}`);
+    if (t.response_at) add(t.response_at, "tarea", `Respuesta recibida: ${t.title}`, t.response_notes);
+    if (t.status === "hecha" && t.done_at && !t.response_at) add(at(t.done_at), "tarea", `Cumplido (${label.toLowerCase()}): ${t.title}`,
+      [t.done_by_name && "por " + t.done_by_name, CMETA.taskFollowUp(t, bogotaNow()).label, t.done_notes].filter(Boolean).join(" · "));
+  }
+  for (const d of docs || []) add(at(d.created_at), "documento", `Documento guardado: ${d.name}`, d.filename);
+  for (const c of charges || []) add(at(c.created_at), "pago", `Cobro: ${c.concept}${c.plan_label ? " (" + c.plan_label + ")" : ""}`, `${cop(c.amount)} · vence ${c.due_date}`);
+  for (const r of receipts || []) add(r.paid_on, "pago", `Pago recibido · recibo ${receiptNo(r.number)}${r.voided_at ? " (anulado)" : ""}`, `${cop(r.amount)}${r.method ? " · " + r.method : ""}`);
+  for (const r of signs || []) {
+    add(at(r.created_at), "firma", `Enviado a firma: ${r.title}`);
+    if (r.completed_at) add(at(r.completed_at), "firma", `Firmado por todos: ${r.title}`);
+  }
+  for (const m of mails || []) {
+    add(at(m.sent_at), "correo", `Correo ${m.status === "enviado" ? "enviado" : "fallido"}: ${m.subject}`, m.to_addr);
+    if (m.opened_at) add(at(m.opened_at), "correo", `Correo abierto: ${m.subject}`, m.to_addr);
+    if (m.confirmed_at) add(at(m.confirmed_at), "correo", `Acuse de recibo: ${m.subject}`, m.confirm_name || m.to_addr);
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 $("#ficha-expediente").addEventListener("click", (e) => {
+  const h = e.target.closest("[data-hist]");
+  if (h) {
+    $$("[data-hist]", h.parentElement).forEach((x) => x.classList.toggle("active", x === h));
+    $$(".history li", $("#ficha-expediente")).forEach((li) => (li.hidden = !!h.dataset.hist && li.dataset.type !== h.dataset.hist));
+    return;
+  }
   const b = e.target.closest("[data-fdoc]");
   if (!b) return;
   guarded(async () => {
@@ -6752,7 +6968,7 @@ function renderCaseRows() {
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
-    <tr>
+    <tr class="row-link" data-open="${k.id}" title="Abrir el expediente">
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
       <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
@@ -6763,11 +6979,12 @@ function renderCaseRows() {
         ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
         : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
       <td class="row-actions">
+        <button class="primary" data-action="open-case" data-id="${k.id}">Abrir</button>
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
         <button data-action="case-docs" data-id="${k.id}">Documentos</button>
-        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
+        ${can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
     </tr>`).join("");
@@ -6789,6 +7006,12 @@ $("#case-mine").addEventListener("change", renderCaseRows);
 for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
 for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
+// A click anywhere on the row (not on its buttons or switches) opens the case.
+$("#case-rows").addEventListener("click", (e) => {
+  if (e.target.closest("button, a, input, label, select")) return;
+  const tr = e.target.closest("tr[data-open]");
+  if (tr) location.hash = `#expediente-${tr.dataset.open}`;
+});
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
   const box = e.target.closest("[data-case-monitor]");
   if (!box) return;
@@ -7161,9 +7384,26 @@ document.addEventListener("click", (e) => {
       const f = await api("GET", `/mail/${id}/tsr`);
       await saveFile(`Correo ${id} - sello de tiempo.tsr`, new Blob([D.b64ToBytes(f.base64)], { type: "application/timestamp-reply" }));
     },
-    "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null),
-    "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id)),
-    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como hecha."); await refreshView(); },
+    "go-back": () => history.back(),
+    "go-forward": () => history.forward(),
+    "open-case": () => { location.hash = `#expediente-${id}`; },
+    "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
+    "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
+    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
+    "act-remind": () => {
+      const a = ACTS_CACHE[Number(btn.dataset.act)];
+      return openTaskDialog(null, Number(btn.dataset.case), "termino", { title: `Actuación: ${a.actuacion || ""}`.slice(0, 140), notes: `${String(a.fecha || "").slice(0, 10)} · ${a.anotacion || ""}`.trim() });
+    },
+    "consult-case": async () => {
+      btn.disabled = true;
+      toast("Consultando en la Rama Judicial…");
+      try {
+        const r = await api("POST", "/monitor/check", { case_ids: [id] });
+        const x = r.results?.[0];
+        toast(!x ? "No se pudo consultar." : x.ok ? (x.newCount ? `${x.newCount} actuación(es) nueva(s).` : "Consultado: sin actuaciones nuevas.") : x.error, !x?.ok);
+      } finally { btn.disabled = false; }
+      await refreshView();
+    },
     "delete-task": async () => {
       if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
       await api("DELETE", `/tasks/${id}`);
@@ -8878,7 +9118,7 @@ function mailProof(m) {
 }
 
 // ---------- Agenda (tareas, audiencias, términos) ----------
-const KIND_LABEL = { audiencia: "Audiencia", tarea: "Tarea", termino: "Término" };
+const KIND_LABEL = window.JuanmaCaseMeta.TASK_KIND_LABEL;
 const bogotaNow = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
 const DAY_FMT = new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 const dayLabel = (ymd) => {
@@ -8893,7 +9133,12 @@ async function renderAgenda() {
   if ($("#agenda-mine").checked) q.set("mine", "1");
   if ($("#agenda-kind").value) q.set("kind", $("#agenda-kind").value);
   if ($("#agenda-status").value) q.set("status", $("#agenda-status").value);
-  const tasks = await api("GET", `/tasks?${q}`);
+  const sel = $("#agenda-user"), cur = sel.value;
+  sel.innerHTML = '<option value="">Todos los funcionarios</option>' + directory.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+  sel.value = cur;
+  if (sel.value) { q.set("userId", sel.value); q.delete("mine"); }
+  const [tasks, all] = await Promise.all([api("GET", `/tasks?${q}`), api("GET", "/tasks")]);
+  renderFollowTable(all);
   const now = bogotaNow();
   const groups = new Map();
   for (const t of tasks) {
@@ -8910,13 +9155,13 @@ async function renderAgenda() {
           <span class="time">${escapeHtml(key === "vencidas" ? t.due_at : t.due_at.slice(11))}</span>
           <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
           <div class="agenda-body">
-            <strong>${escapeHtml(t.title)}</strong>
+            <span><strong><a href="#expediente-${t.case_id}" title="Abrir el expediente">${escapeHtml(t.title)}</a></strong> ${followBadge(t)}</span>
             <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
-            <span class="muted">${escapeHtml(t.assigned_name || "Responsable del expediente")}</span>
+            <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
           ${can("cases.write") ? `<span class="toolbar">
-            ${t.status === "pendiente" ? `<button data-action="task-done" data-id="${t.id}">Hecha</button>` : ""}
+            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button></span>` : ""}
         </li>`).join("")}</ul>
@@ -8924,25 +9169,73 @@ async function renderAgenda() {
   agendaCache = tasks;
 }
 let agendaCache = [];
-["#agenda-mine", "#agenda-kind", "#agenda-status"].forEach((sel) => $(sel).addEventListener("change", () => guarded(renderAgenda)));
+// Compliance per person over every task the user can see.
+function renderFollowTable(all) {
+  const now = bogotaNow(), by = new Map();
+  for (const t of all) {
+    const who = whoOf(t), f = CMETA.taskFollowUp(t, now);
+    const r = by.get(who) || { who, total: 0, pend: 0, venc: 0, ok: 0, tarde: 0 };
+    r.total++;
+    if (f.key === "vencida") r.venc++; else if (f.key === "a_tiempo") r.ok++; else if (f.key === "tarde") r.tarde++; else if (f.key !== "cancelada") r.pend++;
+    by.set(who, r);
+  }
+  const rows = [...by.values()].sort((a, b) => b.venc - a.venc || b.pend - a.pend);
+  $("#agenda-follow-body").innerHTML = rows.length ? `<table class="data-table compact"><thead><tr><th>Funcionario</th><th class="num">Pendientes</th><th class="num">Vencidas</th><th class="num">Cumplidas a tiempo</th><th class="num">Con retraso</th><th class="num">Cumplimiento</th></tr></thead><tbody>${rows.map((r) => {
+      const closed = r.ok + r.tarde + r.venc;
+      return `<tr><td><strong>${escapeHtml(r.who)}</strong></td><td class="num">${r.pend}</td><td class="num">${r.venc ? `<span class="follow bad">${r.venc}</span>` : 0}</td>
+        <td class="num">${r.ok}</td><td class="num">${r.tarde}</td><td class="num">${closed ? Math.round((r.ok / closed) * 100) + " %" : "—"}</td></tr>`;
+    }).join("")}</tbody></table><p class="hint">Cumplimiento = cumplidas a tiempo sobre (cumplidas + vencidas sin cumplir).</p>` : '<p class="empty">Aún no hay tareas asignadas.</p>';
+}
+["#agenda-mine", "#agenda-kind", "#agenda-status", "#agenda-user"].forEach((sel) => $(sel).addEventListener("change", () => guarded(renderAgenda)));
 
 const taskForm = $("#task-dialog form");
-async function openTaskDialog(t = null, caseId = null) {
+const TASK_TITLE_HINT = {
+  audiencia: "Ej. Audiencia inicial art. 77 CPTSS", tarea: "Ej. Preparar alegatos de conclusión", termino: "Ej. Vence traslado de la demanda",
+  recurso: "Ej. Recurso de apelación contra el auto del 10 de octubre", requerimiento: "Ej. Atender requerimiento del despacho: aportar poder",
+  peticion: "Ej. Derecho de petición a Colpensiones: historia laboral", oficio: "Ej. Oficio a la EPS para que remita la historia clínica",
+};
+// Form fields follow the kind: oficios, peticiones and requerimientos track delivery and answer.
+function syncTaskForm(autoDue = false) {
+  const f = taskForm.elements, kind = f.kind.value, answered = CMETA.RESPONSE_KINDS.includes(kind);
+  $("[data-response]", taskForm).hidden = !answered;
+  $("[data-due-label]", taskForm).textContent = answered ? "Plazo de respuesta" : kind === "audiencia" ? "Fecha y hora" : "Plazo (fecha y hora)";
+  f.title.placeholder = TASK_TITLE_HINT[kind] || "";
+  $("[data-response-hint]", taskForm).textContent = kind === "peticion"
+    ? "Derecho de petición: la entidad debe responder en 15 días hábiles (Ley 1755 de 2015, art. 14; 10 días para documentos, 30 para consultas). Al indicar la fecha de radicación la app calcula el plazo sin fines de semana ni festivos."
+    : "Al registrar la fecha de respuesta, queda como cumplido. Si vence el plazo sin respuesta, el responsable recibe el aviso.";
+  if (autoDue && kind === "peticion" && f.delivered_at.value && !f.due_at.dataset.touched) f.due_at.value = `${L.addBusinessDays(f.delivered_at.value, 15)}T17:00`;
+  $("[data-done-notes]", taskForm).hidden = !f.done.checked;
+}
+taskForm.elements.kind.addEventListener("change", () => syncTaskForm(true));
+taskForm.elements.delivered_at.addEventListener("change", () => syncTaskForm(true));
+taskForm.elements.done.addEventListener("change", () => syncTaskForm());
+taskForm.elements.due_at.addEventListener("input", () => (taskForm.elements.due_at.dataset.touched = "1"));
+
+async function openTaskDialog(t = null, caseId = null, kind = null, preset = {}, focus = "") {
   const cases = await api("GET", "/cases");
   if (!cases.length) { toast("Primero cree un expediente.", true); return; }
-  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
-  openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : "Nueva tarea o audiencia", t ? {
+  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${caseFolder(k) ? "Carpeta " + escapeHtml(caseFolder(k)) + " · " : ""}${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  const k0 = kind || "audiencia";
+  openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : `Nuevo: ${KIND_LABEL[k0].toLowerCase()}`, t ? {
     id: t.id, kind: t.kind, title: t.title, location: t.location, notes: t.notes, due_at: t.due_at.replace(" ", "T"),
-  } : { kind: "audiencia" });
+    delivered_at: t.delivered_at || "", response_at: t.response_at || "", response_notes: t.response_notes || "", done_notes: t.done_notes || "",
+  } : { kind: k0, delivered_at: CMETA.RESPONSE_KINDS.includes(k0) ? bogotaNow().slice(0, 10) : "", ...preset });
+  delete taskForm.elements.due_at.dataset.touched;
+  if (t) taskForm.elements.due_at.dataset.touched = "1";
   taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
   taskForm.elements.case_id.disabled = !!t;
   const officeOf = cases.find((k) => k.id === Number(taskForm.elements.case_id.value))?.office_id;
   taskForm.elements.assigned_user_id.innerHTML = '<option value="">— El del expediente —</option>' +
     directory.filter((u) => u.scopeAll || u.offices.some((o) => o.id === officeOf)).map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
   taskForm.elements.assigned_user_id.value = t?.assigned_user_id ?? "";
-  const days = t ? t.remind_days : [1];
+  const days = t ? t.remind_days : k0 === "audiencia" ? [3, 1] : [1];
   $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
   taskForm.elements.done.checked = t?.status === "hecha";
+  syncTaskForm(!t);
+  if (focus && taskForm.elements[focus]) {
+    if (focus === "response_at" && !taskForm.elements.response_at.value) taskForm.elements.response_at.value = bogotaNow().slice(0, 10);
+    taskForm.elements[focus].focus();
+  }
 }
 wireDialog($("#task-dialog"), async (form) => {
   const d = formData(form);
@@ -8951,9 +9244,12 @@ wireDialog($("#task-dialog"), async (form) => {
     due_at: d.due_at.replace("T", " "), assigned_user_id: Number(d.assigned_user_id) || null,
     remind_days: $$("input[name=remind]:checked", form).map((c) => Number(c.value)),
     status: form.elements.done.checked ? "hecha" : "pendiente",
+    done_notes: form.elements.done.checked ? d.done_notes || "" : "",
+    delivered_at: d.delivered_at || "", response_at: d.response_at || "", response_notes: d.response_notes || "",
   };
   if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
-  toast(d.id ? "Guardado." : `${KIND_LABEL[d.kind]} creada.`);
+  const who = directory.find((u) => u.id === body.assigned_user_id);
+  toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who ? `. Se avisó a ${who.name}` : ""}.`);
   refreshBell();
   await refreshView();
 });

@@ -515,6 +515,11 @@ async function renderExpedienteFicha(id) {
   const billed = (charges || []).filter((c) => c.state !== "anulado").reduce((a, c) => a + c.amount, 0);
   const balance = (charges || []).filter((c) => c.state !== "anulado").reduce((a, c) => a + c.balance, 0);
   const paid = caseReceipts.filter((r) => !r.voided_at).reduce((a, r) => a + r.amount, 0);
+  const canWrite = can("cases.write");
+  const work = (tasks || []).filter((t) => !CMETA.RESPONSE_KINDS.includes(t.kind));
+  const answers = (tasks || []).filter((t) => CMETA.RESPONSE_KINDS.includes(t.kind));
+  agendaCache = tasks || [];
+  const hist = caseHistory({ k, tasks, acts, docs, charges, receipts: caseReceipts, signs: caseSigns, mails });
   const panel = (title, count, body, actions = "") => `<section class="panel ficha-panel"><div class="ficha-panel-head"><h3 class="panel-title">${title}${count != null ? ` <span class="count">${count}</span>` : ""}</h3>${actions}</div>${body}</section>`;
   const empty = (t) => `<p class="empty">${t}</p>`;
   box.innerHTML = `
@@ -525,6 +530,7 @@ async function renderExpedienteFicha(id) {
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
+        ${k.radicado && can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta ya este radicado en la Rama Judicial y trae las actuaciones nuevas">↻ Consultar ahora</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
@@ -535,21 +541,29 @@ async function renderExpedienteFicha(id) {
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
-      ${panel("Datos del expediente", null, `<dl class="facts">
+      ${wide(panel("Datos del expediente", null, `<dl class="facts">
         ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
+        ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
         ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
-      </dl>`)}
-      ${panel("Agenda", (tasks || []).length, (tasks || []).length ? `<ul class="ficha-list">${tasks.map((t) => `<li>
-          <span class="badge ${t.status === "hecha" ? "ok" : "warn"}">${escapeHtml(KIND_LABEL[t.kind] || t.kind)}</span> <strong>${escapeHtml(t.title)}</strong>
-          <span class="muted">${fmtDue(t.due_at)}${t.location ? " · " + escapeHtml(t.location) : ""}${t.status === "hecha" ? " · hecha" : ""}</span>
-          ${t.status !== "hecha" && can("cases.write") ? `<button class="mini" data-action="task-done" data-id="${t.id}">Marcar hecha</button>` : ""}</li>`).join("")}</ul>`
-        : empty("Sin audiencias, términos ni tareas."), can("cases.write") ? `<button class="mini primary" data-action="new-task" data-case="${k.id}">+ Tarea o audiencia</button>` : "")}
-      ${acts !== null ? panel("Actuaciones (Rama Judicial)", (acts || []).length, (acts || []).length ? `<ul class="ficha-list">${acts.slice(0, 8).map((a) => `<li>
-          <strong>${escapeHtml(String(a.fecha || "").slice(0, 10))}</strong> ${escapeHtml(a.actuacion || "")}<span class="muted">${a.anotacion ? " · " + escapeHtml(String(a.anotacion).slice(0, 160)) : ""}</span></li>`).join("")}</ul>`
-        : empty("Aún no hay actuaciones consultadas."), `<button class="mini" data-action="view-acts" data-id="${k.id}">Ver todas</button>`) : ""}
+      </dl>`))}
+      ${wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
+        canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : ""))}
+      ${wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
+        : empty("Sin oficios, peticiones ni requerimientos. Registre la entrega y la app controla la respuesta y su plazo."),
+        canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : ""))}
+      ${acts !== null ? wide(panel("Actuaciones (consulta automática)", acts.length, `
+          <p class="hint">${WEB ? "En este enlace de prueba no se puede consultar la Rama Judicial (no se conecta a sitios externos); en la versión del servidor (Azure) se consulta en automático y con «Consultar ahora»." : k.monitor ? "Se consulta en automático a las 7, 13 y 17 h." : "La consulta automática está desactivada para este expediente (actívela en Expedientes, columna «Consulta»)."}
+            ${k.last_checked_at ? `Última consulta: ${escapeHtml(CMETA.utcToBogota(k.last_checked_at))}.` : "Aún no se ha consultado."} Con «Recordatorio» crea un término o tarea a partir de la actuación.</p>
+          ${acts.length ? `<div class="acts-scroll"><table class="data-table compact"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th></th></tr></thead><tbody>${acts.map((a, i) => `<tr>
+            <td>${escapeHtml(String(a.fecha || "").slice(0, 10))}</td><td><strong>${escapeHtml(a.actuacion || "")}</strong>${a.decision ? `<br><span class="muted">Decisión: ${escapeHtml(a.decision)}</span>` : ""}</td>
+            <td>${escapeHtml(String(a.anotacion || "").slice(0, 300))}</td>
+            <td>${canWrite ? `<button class="mini" data-action="act-remind" data-case="${k.id}" data-act="${i}">Recordatorio</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+          : empty(k.last_checked_at ? "La consulta no ha encontrado actuaciones." : "Use «↻ Consultar ahora» para traer las actuaciones de la Rama Judicial.")}`,
+        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar ahora</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`))
+        : !k.radicado ? wide(panel("Actuaciones", null, empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en la Rama Judicial."))) : ""}
       ${panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
           <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
           <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
@@ -571,9 +585,96 @@ async function renderExpedienteFicha(id) {
           <button class="mini" data-action="mail-proof" data-id="${m.id}">Constancia</button></li>`).join("")}</ul>` : empty("Sin correos enviados desde este expediente."),
         `<button class="mini" data-action="mail-case" data-case="${k.id}">Enviar correo</button>`)
         : can("mail.send") ? panel("Correos con trazabilidad", null, empty("El correo con trazabilidad funciona en la versión del servidor (Azure); no está disponible en este enlace de prueba.")) : ""}
+      ${wide(panel("Historial del expediente", hist.length, `<div class="chip-row hist-filters">${HIST_TYPES.filter(([t]) => t === "" || hist.some((h) => h.type === t))
+          .map(([t, label]) => `<button type="button" class="chip ${t === "" ? "active" : ""}" data-hist="${t}">${label}</button>`).join("")}</div>
+        <ol class="history">${hist.map((h) => `<li data-type="${h.type}"><span class="h-when">${escapeHtml(h.at)}</span><span class="h-dot h-${h.type}"></span>
+          <div><strong>${escapeHtml(h.text)}</strong>${h.sub ? `<br><span class="muted">${escapeHtml(h.sub)}</span>` : ""}</div></li>`).join("")}</ol>`))}
     </div>`;
+  ACTS_CACHE = acts || [];
+}
+let ACTS_CACHE = [];
+const CMETA = window.JuanmaCaseMeta;
+const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["expediente", "Expediente"]];
+const wide = (html) => html.replace('class="panel ficha-panel"', 'class="panel ficha-panel ficha-wide"');
+const kindButtons = (caseId, kinds) => `<span class="toolbar">${kinds.map((x) => `<button class="mini ${x === kinds[0] ? "primary" : ""}" data-action="new-task" data-case="${caseId}" data-kind="${x}">+ ${KIND_LABEL[x]}</button>`).join("")}</span>`;
+const whoOf = (t) => t.assigned_name || t.case_assigned_name || "Sin responsable";
+const followBadge = (t) => { const f = CMETA.taskFollowUp(t, bogotaNow()); return `<span class="follow ${f.tone}">${escapeHtml(f.label)}</span>`; };
+
+/** Per-person tally: pending, overdue, done on time, done late. */
+function followSummary(list) {
+  if (!list.length) return "";
+  const now = bogotaNow(), by = new Map();
+  for (const t of list) {
+    const f = CMETA.taskFollowUp(t, now), who = whoOf(t);
+    const r = by.get(who) || { pend: 0, venc: 0, ok: 0, tarde: 0 };
+    if (f.key === "vencida") r.venc++; else if (f.key === "a_tiempo") r.ok++; else if (f.key === "tarde") r.tarde++; else if (f.key !== "cancelada") r.pend++;
+    by.set(who, r);
+  }
+  return `<div class="follow-people">${[...by].map(([who, r]) => `<span class="person-tally"><strong>${escapeHtml(who)}</strong>
+    ${r.pend ? `<span class="follow muted">${r.pend} pendiente(s)</span>` : ""}${r.venc ? `<span class="follow bad">${r.venc} vencida(s)</span>` : ""}
+    ${r.ok ? `<span class="follow ok">${r.ok} a tiempo</span>` : ""}${r.tarde ? `<span class="follow warn">${r.tarde} con retraso</span>` : ""}</span>`).join("")}</div>`;
+}
+
+function taskTable(list, answers) {
+  const canWrite = can("cases.write");
+  const rows = list.map((t) => {
+    const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
+      ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
+    const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
+    return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
+        <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
+        <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
+        <td>${escapeHtml(t.delivered_at || "—")}</td><td>${fmtDue(t.due_at)}</td>
+        <td>${t.response_at ? `${escapeHtml(t.response_at)}${t.response_notes ? `<br><span class="muted">${escapeHtml(t.response_notes)}</span>` : ""}` : "—"}</td>
+        <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`
+      : `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
+        <td><span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" || t.kind === "recurso" ? "warn" : ""}">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
+        <td><strong>${escapeHtml(t.title)}</strong>${t.location ? `<br><span class="muted">${escapeHtml(t.location)}</span>` : ""}${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}${done ? `<br><span class="muted">${done}</span>` : ""}</td>
+        <td>${escapeHtml(whoOf(t))}${t.created_by_name ? `<br><span class="muted">Asignó: ${escapeHtml(t.created_by_name)}</span>` : ""}</td>
+        <td>${fmtDue(t.due_at)}<br><span class="muted">${t.remind_days?.length ? "Aviso " + t.remind_days.map((d) => (d === 0 ? "el mismo día" : d + " d antes")).join(", ") : "Sin aviso"}</span></td>
+        <td>${followBadge(t)}</td><td class="row-actions">${actions}</td></tr>`;
+  }).join("");
+  return `<div class="table-scroll"><table class="data-table compact"><thead><tr>${answers
+    ? "<th>Tipo</th><th>Asunto y responsable</th><th>Entregado</th><th>Plazo de respuesta</th><th>Respuesta</th><th>Estado</th><th></th>"
+    : "<th>Tipo</th><th>Asunto</th><th>Funcionario</th><th>Plazo</th><th>Seguimiento</th><th></th>"}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/** Everything that happened in the case, newest first, in Colombia time. */
+function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails }) {
+  const out = [], at = (utc) => CMETA.utcToBogota(utc), add = (when, type, text, sub = "") => when && out.push({ at: when, type, text, sub });
+  add(at(k.created_at), "expediente", "Se creó el expediente", [k.type_name, k.title].filter(Boolean).join(" · "));
+  if (k.last_checked_at) add(at(k.last_checked_at), "actuacion", "Última consulta en la Rama Judicial");
+  for (const a of acts || []) add(String(a.fecha || "").slice(0, 10), "actuacion", `Actuación: ${a.actuacion || ""}`, String(a.anotacion || "").slice(0, 220));
+  for (const t of tasks || []) {
+    const label = KIND_LABEL[t.kind];
+    add(at(t.created_at), "tarea", `Asignado (${label.toLowerCase()}): ${t.title}`, `${whoOf(t)} · plazo ${t.due_at}${t.created_by_name ? " · asignó " + t.created_by_name : ""}`);
+    if (t.delivered_at) add(t.delivered_at, "tarea", `Entregado o radicado (${label.toLowerCase()}): ${t.title}`);
+    if (t.response_at) add(t.response_at, "tarea", `Respuesta recibida: ${t.title}`, t.response_notes);
+    if (t.status === "hecha" && t.done_at && !t.response_at) add(at(t.done_at), "tarea", `Cumplido (${label.toLowerCase()}): ${t.title}`,
+      [t.done_by_name && "por " + t.done_by_name, CMETA.taskFollowUp(t, bogotaNow()).label, t.done_notes].filter(Boolean).join(" · "));
+  }
+  for (const d of docs || []) add(at(d.created_at), "documento", `Documento guardado: ${d.name}`, d.filename);
+  for (const c of charges || []) add(at(c.created_at), "pago", `Cobro: ${c.concept}${c.plan_label ? " (" + c.plan_label + ")" : ""}`, `${cop(c.amount)} · vence ${c.due_date}`);
+  for (const r of receipts || []) add(r.paid_on, "pago", `Pago recibido · recibo ${receiptNo(r.number)}${r.voided_at ? " (anulado)" : ""}`, `${cop(r.amount)}${r.method ? " · " + r.method : ""}`);
+  for (const r of signs || []) {
+    add(at(r.created_at), "firma", `Enviado a firma: ${r.title}`);
+    if (r.completed_at) add(at(r.completed_at), "firma", `Firmado por todos: ${r.title}`);
+  }
+  for (const m of mails || []) {
+    add(at(m.sent_at), "correo", `Correo ${m.status === "enviado" ? "enviado" : "fallido"}: ${m.subject}`, m.to_addr);
+    if (m.opened_at) add(at(m.opened_at), "correo", `Correo abierto: ${m.subject}`, m.to_addr);
+    if (m.confirmed_at) add(at(m.confirmed_at), "correo", `Acuse de recibo: ${m.subject}`, m.confirm_name || m.to_addr);
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 $("#ficha-expediente").addEventListener("click", (e) => {
+  const h = e.target.closest("[data-hist]");
+  if (h) {
+    $$("[data-hist]", h.parentElement).forEach((x) => x.classList.toggle("active", x === h));
+    $$(".history li", $("#ficha-expediente")).forEach((li) => (li.hidden = !!h.dataset.hist && li.dataset.type !== h.dataset.hist));
+    return;
+  }
   const b = e.target.closest("[data-fdoc]");
   if (!b) return;
   guarded(async () => {
@@ -738,7 +839,7 @@ function renderCaseRows() {
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
-    <tr>
+    <tr class="row-link" data-open="${k.id}" title="Abrir el expediente">
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
       <td>${escapeHtml(k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
@@ -749,11 +850,12 @@ function renderCaseRows() {
         ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
         : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
       <td class="row-actions">
+        <button class="primary" data-action="open-case" data-id="${k.id}">Abrir</button>
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
         ${k.radicado ? `<button data-action="portals" data-id="${k.id}">Portales</button>` : ""}
         <button data-action="case-docs" data-id="${k.id}">Documentos</button>
-        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
+        ${can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
       </td>
     </tr>`).join("");
@@ -775,6 +877,12 @@ $("#case-mine").addEventListener("change", renderCaseRows);
 for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
 for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
+// A click anywhere on the row (not on its buttons or switches) opens the case.
+$("#case-rows").addEventListener("click", (e) => {
+  if (e.target.closest("button, a, input, label, select")) return;
+  const tr = e.target.closest("tr[data-open]");
+  if (tr) location.hash = `#expediente-${tr.dataset.open}`;
+});
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
   const box = e.target.closest("[data-case-monitor]");
   if (!box) return;
@@ -1147,9 +1255,26 @@ document.addEventListener("click", (e) => {
       const f = await api("GET", `/mail/${id}/tsr`);
       await saveFile(`Correo ${id} - sello de tiempo.tsr`, new Blob([D.b64ToBytes(f.base64)], { type: "application/timestamp-reply" }));
     },
-    "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null),
-    "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id)),
-    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como hecha."); await refreshView(); },
+    "go-back": () => history.back(),
+    "go-forward": () => history.forward(),
+    "open-case": () => { location.hash = `#expediente-${id}`; },
+    "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
+    "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
+    "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
+    "act-remind": () => {
+      const a = ACTS_CACHE[Number(btn.dataset.act)];
+      return openTaskDialog(null, Number(btn.dataset.case), "termino", { title: `Actuación: ${a.actuacion || ""}`.slice(0, 140), notes: `${String(a.fecha || "").slice(0, 10)} · ${a.anotacion || ""}`.trim() });
+    },
+    "consult-case": async () => {
+      btn.disabled = true;
+      toast("Consultando en la Rama Judicial…");
+      try {
+        const r = await api("POST", "/monitor/check", { case_ids: [id] });
+        const x = r.results?.[0];
+        toast(!x ? "No se pudo consultar." : x.ok ? (x.newCount ? `${x.newCount} actuación(es) nueva(s).` : "Consultado: sin actuaciones nuevas.") : x.error, !x?.ok);
+      } finally { btn.disabled = false; }
+      await refreshView();
+    },
     "delete-task": async () => {
       if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
       await api("DELETE", `/tasks/${id}`);
@@ -2864,7 +2989,7 @@ function mailProof(m) {
 }
 
 // ---------- Agenda (tareas, audiencias, términos) ----------
-const KIND_LABEL = { audiencia: "Audiencia", tarea: "Tarea", termino: "Término" };
+const KIND_LABEL = window.JuanmaCaseMeta.TASK_KIND_LABEL;
 const bogotaNow = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
 const DAY_FMT = new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 const dayLabel = (ymd) => {
@@ -2879,7 +3004,12 @@ async function renderAgenda() {
   if ($("#agenda-mine").checked) q.set("mine", "1");
   if ($("#agenda-kind").value) q.set("kind", $("#agenda-kind").value);
   if ($("#agenda-status").value) q.set("status", $("#agenda-status").value);
-  const tasks = await api("GET", `/tasks?${q}`);
+  const sel = $("#agenda-user"), cur = sel.value;
+  sel.innerHTML = '<option value="">Todos los funcionarios</option>' + directory.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
+  sel.value = cur;
+  if (sel.value) { q.set("userId", sel.value); q.delete("mine"); }
+  const [tasks, all] = await Promise.all([api("GET", `/tasks?${q}`), api("GET", "/tasks")]);
+  renderFollowTable(all);
   const now = bogotaNow();
   const groups = new Map();
   for (const t of tasks) {
@@ -2896,13 +3026,13 @@ async function renderAgenda() {
           <span class="time">${escapeHtml(key === "vencidas" ? t.due_at : t.due_at.slice(11))}</span>
           <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
           <div class="agenda-body">
-            <strong>${escapeHtml(t.title)}</strong>
+            <span><strong><a href="#expediente-${t.case_id}" title="Abrir el expediente">${escapeHtml(t.title)}</a></strong> ${followBadge(t)}</span>
             <span class="muted">${escapeHtml(t.client_name)} · ${escapeHtml(t.type_name)}${t.radicado ? " · " + escapeHtml(formatRadicado(t.radicado)) : ""}</span>
             ${t.location ? `<span class="muted">${escapeHtml(t.location)}</span>` : ""}
-            <span class="muted">${escapeHtml(t.assigned_name || "Responsable del expediente")}</span>
+            <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
           ${can("cases.write") ? `<span class="toolbar">
-            ${t.status === "pendiente" ? `<button data-action="task-done" data-id="${t.id}">Hecha</button>` : ""}
+            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button></span>` : ""}
         </li>`).join("")}</ul>
@@ -2910,25 +3040,73 @@ async function renderAgenda() {
   agendaCache = tasks;
 }
 let agendaCache = [];
-["#agenda-mine", "#agenda-kind", "#agenda-status"].forEach((sel) => $(sel).addEventListener("change", () => guarded(renderAgenda)));
+// Compliance per person over every task the user can see.
+function renderFollowTable(all) {
+  const now = bogotaNow(), by = new Map();
+  for (const t of all) {
+    const who = whoOf(t), f = CMETA.taskFollowUp(t, now);
+    const r = by.get(who) || { who, total: 0, pend: 0, venc: 0, ok: 0, tarde: 0 };
+    r.total++;
+    if (f.key === "vencida") r.venc++; else if (f.key === "a_tiempo") r.ok++; else if (f.key === "tarde") r.tarde++; else if (f.key !== "cancelada") r.pend++;
+    by.set(who, r);
+  }
+  const rows = [...by.values()].sort((a, b) => b.venc - a.venc || b.pend - a.pend);
+  $("#agenda-follow-body").innerHTML = rows.length ? `<table class="data-table compact"><thead><tr><th>Funcionario</th><th class="num">Pendientes</th><th class="num">Vencidas</th><th class="num">Cumplidas a tiempo</th><th class="num">Con retraso</th><th class="num">Cumplimiento</th></tr></thead><tbody>${rows.map((r) => {
+      const closed = r.ok + r.tarde + r.venc;
+      return `<tr><td><strong>${escapeHtml(r.who)}</strong></td><td class="num">${r.pend}</td><td class="num">${r.venc ? `<span class="follow bad">${r.venc}</span>` : 0}</td>
+        <td class="num">${r.ok}</td><td class="num">${r.tarde}</td><td class="num">${closed ? Math.round((r.ok / closed) * 100) + " %" : "—"}</td></tr>`;
+    }).join("")}</tbody></table><p class="hint">Cumplimiento = cumplidas a tiempo sobre (cumplidas + vencidas sin cumplir).</p>` : '<p class="empty">Aún no hay tareas asignadas.</p>';
+}
+["#agenda-mine", "#agenda-kind", "#agenda-status", "#agenda-user"].forEach((sel) => $(sel).addEventListener("change", () => guarded(renderAgenda)));
 
 const taskForm = $("#task-dialog form");
-async function openTaskDialog(t = null, caseId = null) {
+const TASK_TITLE_HINT = {
+  audiencia: "Ej. Audiencia inicial art. 77 CPTSS", tarea: "Ej. Preparar alegatos de conclusión", termino: "Ej. Vence traslado de la demanda",
+  recurso: "Ej. Recurso de apelación contra el auto del 10 de octubre", requerimiento: "Ej. Atender requerimiento del despacho: aportar poder",
+  peticion: "Ej. Derecho de petición a Colpensiones: historia laboral", oficio: "Ej. Oficio a la EPS para que remita la historia clínica",
+};
+// Form fields follow the kind: oficios, peticiones and requerimientos track delivery and answer.
+function syncTaskForm(autoDue = false) {
+  const f = taskForm.elements, kind = f.kind.value, answered = CMETA.RESPONSE_KINDS.includes(kind);
+  $("[data-response]", taskForm).hidden = !answered;
+  $("[data-due-label]", taskForm).textContent = answered ? "Plazo de respuesta" : kind === "audiencia" ? "Fecha y hora" : "Plazo (fecha y hora)";
+  f.title.placeholder = TASK_TITLE_HINT[kind] || "";
+  $("[data-response-hint]", taskForm).textContent = kind === "peticion"
+    ? "Derecho de petición: la entidad debe responder en 15 días hábiles (Ley 1755 de 2015, art. 14; 10 días para documentos, 30 para consultas). Al indicar la fecha de radicación la app calcula el plazo sin fines de semana ni festivos."
+    : "Al registrar la fecha de respuesta, queda como cumplido. Si vence el plazo sin respuesta, el responsable recibe el aviso.";
+  if (autoDue && kind === "peticion" && f.delivered_at.value && !f.due_at.dataset.touched) f.due_at.value = `${L.addBusinessDays(f.delivered_at.value, 15)}T17:00`;
+  $("[data-done-notes]", taskForm).hidden = !f.done.checked;
+}
+taskForm.elements.kind.addEventListener("change", () => syncTaskForm(true));
+taskForm.elements.delivered_at.addEventListener("change", () => syncTaskForm(true));
+taskForm.elements.done.addEventListener("change", () => syncTaskForm());
+taskForm.elements.due_at.addEventListener("input", () => (taskForm.elements.due_at.dataset.touched = "1"));
+
+async function openTaskDialog(t = null, caseId = null, kind = null, preset = {}, focus = "") {
   const cases = await api("GET", "/cases");
   if (!cases.length) { toast("Primero cree un expediente.", true); return; }
-  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
-  openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : "Nueva tarea o audiencia", t ? {
+  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${caseFolder(k) ? "Carpeta " + escapeHtml(caseFolder(k)) + " · " : ""}${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  const k0 = kind || "audiencia";
+  openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : `Nuevo: ${KIND_LABEL[k0].toLowerCase()}`, t ? {
     id: t.id, kind: t.kind, title: t.title, location: t.location, notes: t.notes, due_at: t.due_at.replace(" ", "T"),
-  } : { kind: "audiencia" });
+    delivered_at: t.delivered_at || "", response_at: t.response_at || "", response_notes: t.response_notes || "", done_notes: t.done_notes || "",
+  } : { kind: k0, delivered_at: CMETA.RESPONSE_KINDS.includes(k0) ? bogotaNow().slice(0, 10) : "", ...preset });
+  delete taskForm.elements.due_at.dataset.touched;
+  if (t) taskForm.elements.due_at.dataset.touched = "1";
   taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
   taskForm.elements.case_id.disabled = !!t;
   const officeOf = cases.find((k) => k.id === Number(taskForm.elements.case_id.value))?.office_id;
   taskForm.elements.assigned_user_id.innerHTML = '<option value="">— El del expediente —</option>' +
     directory.filter((u) => u.scopeAll || u.offices.some((o) => o.id === officeOf)).map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
   taskForm.elements.assigned_user_id.value = t?.assigned_user_id ?? "";
-  const days = t ? t.remind_days : [1];
+  const days = t ? t.remind_days : k0 === "audiencia" ? [3, 1] : [1];
   $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
   taskForm.elements.done.checked = t?.status === "hecha";
+  syncTaskForm(!t);
+  if (focus && taskForm.elements[focus]) {
+    if (focus === "response_at" && !taskForm.elements.response_at.value) taskForm.elements.response_at.value = bogotaNow().slice(0, 10);
+    taskForm.elements[focus].focus();
+  }
 }
 wireDialog($("#task-dialog"), async (form) => {
   const d = formData(form);
@@ -2937,9 +3115,12 @@ wireDialog($("#task-dialog"), async (form) => {
     due_at: d.due_at.replace("T", " "), assigned_user_id: Number(d.assigned_user_id) || null,
     remind_days: $$("input[name=remind]:checked", form).map((c) => Number(c.value)),
     status: form.elements.done.checked ? "hecha" : "pendiente",
+    done_notes: form.elements.done.checked ? d.done_notes || "" : "",
+    delivered_at: d.delivered_at || "", response_at: d.response_at || "", response_notes: d.response_notes || "",
   };
   if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
-  toast(d.id ? "Guardado." : `${KIND_LABEL[d.kind]} creada.`);
+  const who = directory.find((u) => u.id === body.assigned_user_id);
+  toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who ? `. Se avisó a ${who.name}` : ""}.`);
   refreshBell();
   await refreshView();
 });

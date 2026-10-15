@@ -203,3 +203,13 @@ export function feeVariables(charges, receipts = []) {
     "honorarios.cuotas": String(n), "honorarios.pagado": fmtCOP(paid), "honorarios.saldo": fmtCOP(Math.max(0, total - paid)),
   };
 }
+
+/** Date `n` business days after `date` (no weekends, no Colombian holidays). E.g. a petition is answered within 15 (Ley 1755 de 2015, art. 14). */
+export function addBusinessDays(date, n) {
+  let d = new Date(date + "T00:00:00Z"), left = n;
+  while (left > 0) {
+    d = new Date(d.getTime() + 86400000);
+    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6 && !colombianHolidays(d.getUTCFullYear()).has(iso(d))) left--;
+  }
+  return iso(d);
+}
