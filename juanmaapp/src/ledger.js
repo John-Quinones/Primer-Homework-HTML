@@ -155,3 +155,51 @@ export function collectionWindow(when) {
   if (dow !== 6 && (hm < 420 || hm >= 1140)) return { ok: false, reason: "Entre semana solo se permite cobrar de 7:00 a. m. a 7:00 p. m. (Ley 2300 de 2023)." };
   return { ok: true, reason: "" };
 }
+
+/** "Un millón quinientos mil pesos m/cte." — amounts in words for receipts and contracts. */
+export function pesosEnLetras(n) {
+  const U = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince",
+    "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco",
+    "veintiséis", "veintisiete", "veintiocho", "veintinueve"];
+  const D = ["", "", "", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
+  const C = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"];
+  const under1000 = (x) => {
+    if (x === 100) return "cien";
+    const c = Math.floor(x / 100), r = x % 100;
+    const dec = r < 30 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? " y " + U[r % 10] : "");
+    return [C[c], dec].filter(Boolean).join(" ");
+  };
+  const apocope = (s) => s.replace(/veintiuno$/, "veintiún").replace(/uno$/, "un");
+  const words = (x) => {
+    if (x === 0) return "cero";
+    const millions = Math.floor(x / 1e6), thousands = Math.floor((x % 1e6) / 1000), rest = x % 1000;
+    const out = [];
+    if (millions) out.push(millions === 1 ? "un millón" : apocope(words(millions)) + " millones");
+    if (thousands) out.push(thousands === 1 ? "mil" : apocope(under1000(thousands)) + " mil");
+    if (rest) out.push(under1000(rest));
+    return out.join(" ");
+  };
+  const n0 = Math.round(n);
+  const w = apocope(words(n0));
+  const de = n0 >= 1e6 && n0 % 1e6 === 0 ? " de" : "";
+  return (w.charAt(0).toUpperCase() + w.slice(1) + de + (n0 === 1 ? " peso" : " pesos") + " m/cte.");
+}
+
+const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+export const longDateEs = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return y ? `${d} de ${MONTHS_ES[m - 1]} de ${y}` : ""; };
+
+/** Fee variables for documents ({{honorarios.*}}) from a case's charges. */
+export function feeVariables(charges, receipts = []) {
+  const live = charges.filter((c) => c.status !== "anulado");
+  if (!live.length) return {};
+  const total = live.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+  const paid = receipts.filter((r) => !r.voided_at).reduce((a, r) => a + (Number(r.amount) || 0), 0);
+  const dates = live.map((c) => c.due_date).sort();
+  const n = live.length;
+  return {
+    "honorarios.valor": fmtCOP(total), "honorarios.valor_letras": pesosEnLetras(total),
+    "honorarios.forma_pago": n > 1 ? `${n} cuotas: ${live.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).map((c) => `${fmtCOP(c.amount)} el ${longDateEs(c.due_date)}`).join("; ")}`
+      : `un solo pago a más tardar el ${longDateEs(dates[0])}`,
+    "honorarios.cuotas": String(n), "honorarios.pagado": fmtCOP(paid), "honorarios.saldo": fmtCOP(Math.max(0, total - paid)),
+  };
+}

@@ -1920,9 +1920,55 @@ async function openTemplate(id) {
 async function loadTplData() {
   const caseId = $("#tpl-case").value;
   tplData = await api("GET", `/templates/data${caseId ? `?caseId=${caseId}` : ""}`);
+  renderFees();
+  applyDraftFees();
+}
+
+// ----- Contract fees: the value written in the contract is the case's charge in Pagos -----
+const feeBox = $("#tpl-fees");
+const feeInput = (n) => $(`[name=${n}]`, feeBox);
+function draftFees() {
+  const total = parseMoney(feeInput("fee_amount").value), n = Math.min(60, Math.max(1, Number(feeInput("fee_n").value) || 1));
+  const first = feeInput("fee_due").value || localToday(), every = feeInput("fee_every").value;
+  if (!(total > 0)) return null;
+  const step = (i) => (every === "quincenal" ? L.addDays(first, 15 * i) : every === "semanal" ? L.addDays(first, 7 * i) : L.addMonths(first, i));
+  return { total, n, first, every, charges: L.splitAmount(total, n).map((amount, i) => ({ amount, due_date: step(i), status: "pendiente" })) };
+}
+function renderFees() {
+  const uses = tplActive?.vars.some((k) => k.startsWith("honorarios.")) || tplActive?.category === "Contrato";
+  feeBox.hidden = !uses || !can("payments.manage");
+  if (feeBox.hidden) return;
+  const caseId = Number($("#tpl-case").value) || null;
+  const registered = !!tplData["honorarios.valor"];
+  $("#tpl-fees-form").hidden = registered;
+  $("#tpl-fees-save").hidden = registered;
+  $("#tpl-fees-status").textContent = registered
+    ? `Honorarios de este expediente en Pagos: ${tplData["honorarios.valor"]} · ${tplData["honorarios.forma_pago"]} · pagado ${tplData["honorarios.pagado"]} · saldo ${tplData["honorarios.saldo"]}. Para cambiarlos, edite el cobro en Pagos.`
+    : caseId ? "Escriba el valor y las cuotas: el contrato los muestra de inmediato y, al registrarlos, quedan como cobro del cliente en Pagos (cartera, recibos y recordatorios)."
+      : "Elija el expediente del cliente para ligar los honorarios a su cuenta en Pagos.";
+  if (!feeInput("fee_due").value) feeInput("fee_due").value = localToday();
+}
+function applyDraftFees() {
+  for (const k of Object.keys(tplOverrides)) if (k.startsWith("honorarios.")) delete tplOverrides[k];
+  const d = !tplData["honorarios.valor"] && draftFees();
+  if (d) Object.assign(tplOverrides, L.feeVariables(d.charges));
   renderTplVars();
   renderTplDoc();
 }
+feeBox.addEventListener("input", applyDraftFees);
+$("#tpl-fees-save").addEventListener("click", () => guarded(async () => {
+  const caseId = Number($("#tpl-case").value) || null;
+  if (!caseId) throw new Error("Elija primero el expediente del cliente.");
+  const d = draftFees();
+  if (!d) throw new Error("Escriba el valor de los honorarios.");
+  const k = await api("GET", `/cases/${caseId}`);
+  await api("POST", "/payments/charges", { client_id: k.client_id, case_id: caseId, concept: `Honorarios · ${tplActive.name}`,
+    amount: d.total, installments: d.n, due_date: d.first, every: d.every });
+  toast(`Honorarios registrados en Pagos: ${L.fmtCOP(d.total)} en ${d.n} cuota(s).`);
+  tplOverrides = Object.fromEntries(Object.entries(tplOverrides).filter(([key]) => !key.startsWith("honorarios.")));
+  feeInput("fee_amount").value = "";
+  await loadTplData();
+}));
 $("#tpl-case").addEventListener("change", () => guarded(async () => { tplOverrides = {}; await loadTplData(); }));
 
 const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
@@ -2984,33 +3030,7 @@ wireDialog($("#pay-settings-dialog"), async (form) => {
 });
 
 // ----- PDFs: receipt and account statement -----
-function pesosEnLetras(n) {
-  const U = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince",
-    "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco",
-    "veintiséis", "veintisiete", "veintiocho", "veintinueve"];
-  const D = ["", "", "", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
-  const C = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"];
-  const under1000 = (x) => {
-    if (x === 100) return "cien";
-    const c = Math.floor(x / 100), r = x % 100;
-    const dec = r < 30 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? " y " + U[r % 10] : "");
-    return [C[c], dec].filter(Boolean).join(" ");
-  };
-  const apocope = (s) => s.replace(/veintiuno$/, "veintiún").replace(/uno$/, "un");
-  const words = (x) => {
-    if (x === 0) return "cero";
-    const millions = Math.floor(x / 1e6), thousands = Math.floor((x % 1e6) / 1000), rest = x % 1000;
-    const out = [];
-    if (millions) out.push(millions === 1 ? "un millón" : apocope(words(millions)) + " millones");
-    if (thousands) out.push(thousands === 1 ? "mil" : apocope(under1000(thousands)) + " mil");
-    if (rest) out.push(under1000(rest));
-    return out.join(" ");
-  };
-  const n0 = Math.round(n);
-  const w = apocope(words(n0));
-  const de = n0 >= 1e6 && n0 % 1e6 === 0 ? " de" : "";
-  return (w.charAt(0).toUpperCase() + w.slice(1) + de + (n0 === 1 ? " peso" : " pesos") + " m/cte.");
-}
+const pesosEnLetras = (n) => L.pesosEnLetras(n);
 
 function pdfBase(title) {
   const { jsPDF } = window.jspdf;

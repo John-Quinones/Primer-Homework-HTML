@@ -189,6 +189,9 @@
   const GUESS = [
     [/(c\.?\s?c\.?|cedula( de ciudadania)?|identificad[oa] con( la)?( cedula)?|documento( de identidad)?|nit)\s*(no\.?|n\.?o|numero|#)?\s*[:.]?\s*$/, "cliente.documento"],
     [/(tarjeta profesional|t\.\s?p\.)\s*(no\.?|numero)?\s*$/, "abogado.tarjeta_profesional"],
+    [/(en letras|\(\s*)$/, "honorarios.valor_letras"],
+    [/(honorarios|suma( fija)? de|valor de|por valor de|precio de|la suma de)\s*\$?\s*$/, "honorarios.valor"],
+    [/(forma de pago|pagader[oa]s? asi|pagara asi|se pagara)\s*[:.]?\s*$/, "honorarios.forma_pago"],
     [/radicad[oa]\s*(no\.?|numero)?\s*[:.]?\s*$/, "expediente.radicado"],
     [/(correo( electronico)?|e-?mail)\s*[:.]?\s*$/, "cliente.correo"],
     [/(telefono|celular|movil|whatsapp)\s*(no\.?)?\s*[:.]?\s*$/, "cliente.telefono"],
@@ -205,6 +208,7 @@
     [/cedula|\bc\.?c\b|documento|identificacion|\bnit\b/, "cliente.documento"], [/radicado/, "expediente.radicado"],
     [/correo|e-?mail/, "cliente.correo"], [/telefono|celular/, "cliente.telefono"], [/direccion/, "cliente.direccion"],
     [/juzgado|despacho|juez/, "expediente.despacho"], [/demandad|contraparte|entidad/, "expediente.contraparte"],
+    [/honorario|valor del contrato|valor total/, "honorarios.valor"], [/forma de pago|cuotas/, "honorarios.forma_pago"],
     [/apoderad|abogad/, "abogado.nombre"], [/tarjeta/, "abogado.tarjeta_profesional"], [/fecha/, "fecha.hoy"],
     [/ciudad|municipio/, "cliente.ciudad"], [/nombre|cliente|poderdante|demandante|otorgante/, "cliente.nombre"],
   ];

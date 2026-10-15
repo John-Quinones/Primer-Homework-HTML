@@ -317,6 +317,17 @@
                   </div>
                 </div>
                 <label>Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
+                <fieldset id="tpl-fees" class="fees-box" hidden>
+                  <legend>Honorarios del contrato</legend>
+                  <p class="hint" id="tpl-fees-status"></p>
+                  <div class="grid4" id="tpl-fees-form">
+                    <label>Valor total <input name="fee_amount" inputmode="numeric" class="money" placeholder="$ 0" /></label>
+                    <label>Número de cuotas <input name="fee_n" type="number" min="1" max="60" value="1" /></label>
+                    <label>Primer pago <input name="fee_due" type="date" /></label>
+                    <label>Periodicidad <select name="fee_every"><option value="mensual">Mensual</option><option value="quincenal">Quincenal</option><option value="semanal">Semanal</option></select></label>
+                  </div>
+                  <div class="toolbar"><button type="button" class="primary" id="tpl-fees-save">Registrar honorarios en Pagos</button></div>
+                </fieldset>
                 <details id="tpl-vars-box">
                   <summary>Datos del documento <span id="tpl-missing" class="badge warn"></span></summary>
                   <p class="hint">Corrija o complete cualquier dato; el documento se actualiza al instante.</p>

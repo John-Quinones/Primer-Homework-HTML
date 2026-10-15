@@ -67,6 +67,7 @@
     // Signature events carry their time in "at", as on the server.
     for (const r of st.signs) for (const e of r.events || []) e.at ??= e.created_at;
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
+    if (TPL.feeClause) for (const t of st.templates) if (t.builtin && t.body?.includes(TPL.feeClause[0])) t.body = t.body.replace(TPL.feeClause[0], TPL.feeClause[1]);
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
   }
@@ -281,6 +282,7 @@
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
       });
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
+      Object.assign(v, LG.feeVariables(s.charges.filter((x) => x.case_id === k.id), s.receipts.filter((x) => x.case_id === k.id)));
       if (k.assigned_user_id) lawyer = s.users.find((x) => x.id === k.assigned_user_id) || lawyer;
       office = s.offices.find((x) => x.id === k.office_id);
     }

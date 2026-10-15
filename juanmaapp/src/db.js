@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
 import { seedTemplates } from "./templates.js";
+import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW } from "./templates-seed.js";
 import { normStatus, courtCircuit } from "./case-meta.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 
@@ -495,6 +496,10 @@ function migrate(db) {
   }
   // The app was renamed (change 18): starter templates carry the new name in their footer.
   if (cols("document_templates").has("builtin")) db.exec("UPDATE document_templates SET body = replace(body, 'JuanMaApp', 'TecjuridicosApp') WHERE builtin = 1 AND body LIKE '%JuanMaApp%'");
+  // Change 36: the starter contract takes its fee from Pagos ({{honorarios.*}}).
+  if (cols("document_templates").has("builtin")) {
+    db.prepare("UPDATE document_templates SET body = replace(body, ?, ?) WHERE builtin = 1 AND instr(body, ?) > 0").run(FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, FEE_CLAUSE_OLD);
+  }
   // Three statuses: Activo, Archivo provisional, Archivo definitivo.
   for (const row of db.prepare("SELECT DISTINCT status FROM cases").all()) {
     const next = normStatus(row.status);

@@ -3,6 +3,7 @@
 import express from "express";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { typePath } from "./sql.js";
+import { feeVariables } from "./ledger.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
 
 const MAX_FILE = 8 * 1024 * 1024;
@@ -49,6 +50,9 @@ export function templateData(db, user, caseId) {
     const fields = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);
     const values = JSON.parse(k.field_values);
     for (const f of fields) v[`campo.${f.label}`] = values[f.id] ?? "";
+    // Fees of the contract = the case's charges in Pagos.
+    Object.assign(v, feeVariables(db.prepare("SELECT amount, due_date, status FROM charges WHERE case_id = ?").all(k.id),
+      db.prepare("SELECT amount, voided_at FROM receipts WHERE case_id = ?").all(k.id)));
     if (k.assigned_user_id) lawyer = loadUser(db, k.assigned_user_id) || user;
     office = db.prepare("SELECT * FROM offices WHERE id = ?").get(k.office_id);
   }

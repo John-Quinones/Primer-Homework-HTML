@@ -34,6 +34,12 @@ export const VARIABLES = [
   ["oficina.direccion", "Dirección de la oficina", "Oficina"],
   ["oficina.telefono", "Teléfono de la oficina", "Oficina"],
   ["oficina.correo", "Correo de la oficina", "Oficina"],
+  ["honorarios.valor", "Valor de los honorarios ($)", "Honorarios"],
+  ["honorarios.valor_letras", "Valor de los honorarios en letras", "Honorarios"],
+  ["honorarios.forma_pago", "Forma de pago (cuotas y fechas)", "Honorarios"],
+  ["honorarios.cuotas", "Número de cuotas", "Honorarios"],
+  ["honorarios.pagado", "Valor ya pagado", "Honorarios"],
+  ["honorarios.saldo", "Saldo por pagar", "Honorarios"],
   ["fecha.hoy", "Fecha de hoy (14 de octubre de 2026)", "Fecha"],
   ["fecha.ciudad_y_fecha", "Ciudad y fecha (Ibagué, 14 de octubre de 2026)", "Fecha"],
 ].map(([key, label, group]) => ({ key, label, group }));
@@ -61,7 +67,7 @@ El servicio comprende el estudio del caso, la elaboración y radicación de los 
 
 EL CLIENTE pagará a EL ABOGADO:
 
-1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.
+1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.
 2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.
 
 Los gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.
@@ -244,3 +250,7 @@ _______________________________
 T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
   },
 ];
+
+// The starter fee clause before change 36, and its replacement: the fee comes from Pagos.
+export const FEE_CLAUSE_OLD = "1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.";
+export const FEE_CLAUSE_NEW = "1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.";
