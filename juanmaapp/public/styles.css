@@ -812,3 +812,104 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
 .consent-history { font-size: .82rem; }
 @media (max-width: 760px) { .consent-status li { grid-template-columns: 1fr; } }
 @media print { .topbar, .legal-tabs, .no-print { display: none !important; } .legal-doc { max-height: none !important; overflow: visible !important; } }
+
+/* ---------- Change 58: button styles chosen by the firm (UI UX Pro Max catalog) ----------
+   Style 2 "Neumorfismo" for every button on light surfaces: soft raised buttons that sink when pressed.
+   Style 3 "Glassmorphism" for buttons on the dark brand areas: sign-in, top bar, command center and side menu.
+   Kept from the UI UX Pro Max checklist: visible keyboard focus, real disabled state, 150 ms feedback
+   on transform/shadow only, and prefers-reduced-motion. */
+:root {
+  --neu-base: #e8ecf2;
+  --neu-ink: var(--brand-navy);
+  --neu-edge: rgba(0, 43, 106, .10);
+  --neu-dark: rgba(140, 156, 184, .55);
+  --neu-light: rgba(255, 255, 255, .95);
+  --neu-raise: 4px 4px 10px var(--neu-dark), -4px -4px 10px var(--neu-light);
+  --neu-raise-sm: 2px 2px 5px var(--neu-dark), -2px -2px 5px var(--neu-light);
+  --neu-press: inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px var(--neu-light);
+  --glass-btn: rgba(255, 255, 255, .14);
+  --glass-btn-hover: rgba(255, 255, 255, .22);
+  --glass-ring: inset 0 0 0 1px rgba(255, 255, 255, .35);
+  --glass-drop: 0 8px 24px rgba(0, 10, 30, .25);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --neu-base: #1b1e24; --neu-ink: #e9eaec; --neu-edge: rgba(255, 255, 255, .07);
+    --neu-dark: rgba(0, 0, 0, .65); --neu-light: rgba(255, 255, 255, .05);
+  }
+}
+:root[data-theme="dark"] {
+  --neu-base: #1b1e24; --neu-ink: #e9eaec; --neu-edge: rgba(255, 255, 255, .07);
+  --neu-dark: rgba(0, 0, 0, .65); --neu-light: rgba(255, 255, 255, .05);
+}
+
+/* Style 2 · Neumorfismo */
+button, a.button, .file-btn {
+  background: var(--neu-base); color: var(--neu-ink); border: 1px solid var(--neu-edge);
+  border-radius: 12px; padding: 8px 14px; min-height: 36px; font-weight: 600;
+  box-shadow: var(--neu-raise);
+  transition: box-shadow .15s ease, transform .15s ease, background-color .15s ease, color .15s ease;
+}
+button:hover:not(:disabled), a.button:hover, .file-btn:hover { box-shadow: var(--neu-raise-sm); }
+button:active:not(:disabled), a.button:active, .file-btn:active,
+button[aria-pressed="true"], button.active { box-shadow: var(--neu-press); transform: translateY(1px); }
+button:focus-visible, a.button:focus-visible, .file-btn:focus-within { outline: 3px solid var(--brand-blue); outline-offset: 3px; }
+button:disabled { box-shadow: none; transform: none; }
+button.primary, a.button, .file-btn { background: var(--brand-primary); color: var(--brand-primary-ink); border-color: var(--brand-primary); }
+button.primary:hover:not(:disabled), a.button:hover, .file-btn:hover { background: var(--brand-blue); border-color: var(--brand-blue); }
+button.primary:active:not(:disabled) { box-shadow: inset 3px 3px 7px rgba(0, 0, 0, .35); }
+button.danger { color: var(--error); }
+button.danger-solid { background: var(--error); border-color: var(--error); color: #fff; }
+button.mini { min-height: 0; padding: 3px 9px; border-radius: 8px; box-shadow: var(--neu-raise-sm); }
+button.mini:active:not(:disabled) { box-shadow: inset 2px 2px 4px var(--neu-dark), inset -2px -2px 4px var(--neu-light); }
+.bell-head button { min-height: 0; padding: 4px 9px; box-shadow: var(--neu-raise-sm); }
+/* Pill tabs: the selected one stays pressed in, the rest stay raised */
+.tabs button, .legal-tabs button, .legal-tabs a { background: var(--neu-base); color: var(--neu-ink); border-color: var(--neu-edge); box-shadow: var(--neu-raise-sm); }
+.tabs button.active { background: var(--neu-base); color: var(--neu-ink); border-color: var(--neu-edge); box-shadow: var(--neu-press); }
+/* Text-style buttons keep looking like links */
+.link-btn, .legal-links button, .order-btns button, .help-btn { box-shadow: none; min-height: 0; transform: none !important; }
+.link-btn, .legal-links button { background: none; border: 0; padding: 0; color: var(--link, var(--brand-blue)); font-weight: inherit; }
+.legal-links button { color: inherit; }
+.help-btn { padding: 0; border-radius: 50%; background: var(--neu-base); box-shadow: var(--neu-raise-sm); }
+.help-btn:hover, .help-btn:focus-visible { background: var(--brand-blue); color: #fff; }
+
+/* Style 3 · Glassmorphism on the dark brand areas */
+.auth-card button, .topbar button, .command button, .history-nav button, .view-badge,
+.command-head .help-btn {
+  background: var(--glass-btn); color: #fff; border: 0;
+  box-shadow: var(--glass-ring), var(--glass-drop);
+  backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+.auth-card button:hover:not(:disabled), .topbar button:hover:not(:disabled), .command button:hover:not(:disabled),
+.history-nav button:hover, .view-badge:hover, .command-head .help-btn:hover { background: var(--glass-btn-hover); color: #fff; box-shadow: var(--glass-ring), var(--glass-drop); }
+.auth-card button:active:not(:disabled), .topbar button:active:not(:disabled), .command button:active:not(:disabled) { transform: scale(.98); box-shadow: var(--glass-ring); }
+.auth-card button:focus-visible, .topbar button:focus-visible, .command button:focus-visible, .view-badge:focus-visible { outline-color: #fff; }
+/* Main action on glass: frosted white with navy text */
+.auth-card button.primary, .command button.primary {
+  background: rgba(255, 255, 255, .92); color: var(--brand-navy); border: 0;
+  box-shadow: var(--glass-ring), 0 10px 28px rgba(0, 10, 30, .35);
+}
+.auth-card button.primary:hover:not(:disabled), .command button.primary:hover:not(:disabled) { background: #fff; color: var(--brand-navy); }
+.auth-card .link-btn { background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; color: #cfe6ff; }
+.demo-grid button { border-radius: 12px; }
+.history-nav button, .view-badge { min-height: 0; }
+/* Popovers opened from the top bar are light surfaces: back to Neumorfismo there */
+.topbar .user-pop button, .topbar .bell-pop button {
+  background: var(--neu-base); color: var(--neu-ink); border: 1px solid var(--neu-edge);
+  box-shadow: var(--neu-raise-sm); backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.topbar .user-pop button:hover:not(:disabled), .topbar .bell-pop button:hover:not(:disabled) { background: var(--neu-base); color: var(--neu-ink); box-shadow: var(--neu-raise-sm); }
+.topbar .user-pop button:focus-visible, .topbar .bell-pop button:focus-visible { outline-color: var(--brand-blue); }
+/* Side menu: the open module is a frosted glass tile */
+.sidenav a.active {
+  background: var(--glass-btn); color: #fff;
+  box-shadow: var(--glass-ring), var(--glass-drop);
+  backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+.sidenav a:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.command .kpi { box-shadow: var(--glass-ring); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+
+@media (prefers-reduced-motion: reduce) {
+  button, a.button, .file-btn, .sidenav a { transition: none; }
+  button:active, a.button:active { transform: none; }
+}
