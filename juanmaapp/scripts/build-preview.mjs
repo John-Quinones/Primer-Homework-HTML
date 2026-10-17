@@ -10,7 +10,7 @@ import { REPORTS } from "../src/reports.js";
 import { AREAS } from "../src/places.js";
 import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES, FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW } from "../src/templates-seed.js";
 import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
-import { readVersion } from "../src/version.js";
+import { readVersion, readNews } from "../src/version.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(path.join(root, p), "utf8");
@@ -50,7 +50,7 @@ window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, 
 window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
 window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
 window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES, feeClause: [FEE_CLAUSE_OLD, FEE_CLAUSE_NEW], contractHead: [CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW] })};</script>`,
-    `<script>window.JUANMA_VERSION = ${JSON.stringify(readVersion())};</script>`,
+    `<script>window.JUANMA_VERSION = ${JSON.stringify({ ...readVersion(), news: readNews() })};</script>`,
     // Address of the published link, for signers' links (#firmar-CODE); filled only in the web-link version below.
     `<script>window.JUANMA_LINK_URL = "";</script>`,
     `<script>window.JUANMA_PROMPT = ${JSON.stringify(read("prompts/nomosai-system-prompt.md"))};</script>`,

@@ -224,7 +224,26 @@ async function enterApp(user, { fresh = true } = {}) {
   startBell();
   await showView();
   if (me.must_change_password && !WEB) openForcedPasswordChange();
+  else showNewsOnce();
 }
+
+// «Novedades de la versión»: shown the first time each user enters a new version (change 62).
+function showNewsOnce() {
+  const v = authInfo.version || {};
+  if (!v.change || !v.news?.length) return;
+  const key = `juanma.newsSeen.${me.id}`;
+  try { if (localStorage.getItem(key) === String(v.change)) return; } catch {}
+  const dlg = $("#news-dialog");
+  $$("[data-news-number]", dlg).forEach((el) => { el.textContent = v.change; });
+  $("[data-news-date]", dlg).textContent = v.date ? `Publicada el ${v.date.split("-").reverse().join("/")}` : "";
+  $(".news-list", dlg).innerHTML = v.news.map((c) => `<li class="${c.n === v.change ? "is-current" : ""}">
+    <span class="news-n">${c.n}</span>
+    <p><strong>${escapeHtml(c.title)}</strong>${c.n === v.change ? ' <span class="news-tag">Actual</span>' : ""}
+    <em>${escapeHtml(c.text)}${c.n === v.change ? "" : ` · ${escapeHtml(c.date)}`}</em></p></li>`).join("");
+  dlg.addEventListener("close", () => { try { localStorage.setItem(key, String(v.change)); } catch {} }, { once: true });
+  dlg.showModal();
+}
+$("#news-dialog [data-action=news-close]").addEventListener("click", () => $("#news-dialog").close());
 
 // A temporary password assigned by Gerencia must be replaced before working.
 function openForcedPasswordChange() {
@@ -244,6 +263,13 @@ async function boot() {
   const v = st.version || {};
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
+  // Version seal on the sign-in screen (change 62).
+  $$("[data-version-seal]").forEach((el) => {
+    el.hidden = !v.change;
+    el.title = v.sha ? `Versión ${v.sha}` : "";
+    el.querySelector("[data-version-number]").textContent = v.change || "";
+    el.querySelector("[data-version-date]").textContent = v.date ? `Actualizada el ${v.date.split("-").reverse().join("/")}` : "";
+  });
   // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
   // A signer's link on the test link (#firmar-CODE) opens the signing page, without signing in.
   const signTok = location.hash.match(/^#firmar-([\w-]+)$/);

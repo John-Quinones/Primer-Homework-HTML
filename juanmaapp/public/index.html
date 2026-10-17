@@ -17,7 +17,11 @@
       <img class="auth-logo" src="logo-t.png" alt="" width="84" height="84" />
       <h1 class="auth-title">TecjuridicosApp</h1>
       <p class="auth-sub">Gestión jurídica</p>
-      <p class="app-version" data-version></p>
+      <div class="version-seal" data-version-seal hidden>
+        <small>Versión</small>
+        <b data-version-number></b>
+        <span><i aria-hidden="true"></i><span data-version-date></span></span>
+      </div>
 
       <form id="login-form" autocomplete="on">
         <p class="auth-note">Ingrese con su correo (Gmail, Outlook, Hotmail o el de la firma) y su contraseña.</p>
@@ -826,6 +830,15 @@
   </div>
 
   <!-- Formulario de cliente -->
+  <dialog id="news-dialog" class="news-dialog" aria-labelledby="news-title">
+    <div class="news-top">
+      <div class="news-badge"><small>Versión</small><b data-news-number></b></div>
+      <div><h3 id="news-title">Novedades de la versión <span data-news-number></span></h3><p class="muted" data-news-date></p></div>
+    </div>
+    <ol class="news-list"></ol>
+    <div class="news-actions"><button type="button" class="primary" data-action="news-close">Entendido</button></div>
+  </dialog>
+
   <dialog id="client-dialog">
     <form method="dialog" data-form="client">
       <h3 data-title>Nuevo cliente</h3>

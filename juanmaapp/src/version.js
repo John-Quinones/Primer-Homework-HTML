@@ -24,5 +24,25 @@ export function readVersion() {
   }
 }
 
-export const VERSION = readVersion();
+// The latest rows of CAMBIOS.md, shown once per version in «Novedades de la versión».
+export function readNews(count = 3) {
+  try {
+    const plain = (t) => t.replace(/\*\*/g, "").replace(/`/g, "").trim();
+    return readFileSync(path.join(root, "CAMBIOS.md"), "utf8").split("\n")
+      .map((line) => line.match(/^\|\s*(\d+)\s*\|\s*([\d/]+)\s*\|\s*(.+?)\s*\|\s*$/))
+      .filter(Boolean)
+      .slice(-count).reverse()
+      .map(([, n, date, text]) => {
+        // A row that opens with a bold phrase uses it as the title; otherwise its first sentence.
+        const bold = text.match(/^\*\*(.+?)\*\*\s*(.*)$/);
+        const [title, rest] = bold ? [bold[1], bold[2]] : [text.split(/(?<=\.)\s/)[0], text.split(/(?<=\.)\s/).slice(1).join(" ")];
+        const body = plain(rest);
+        return { n: Number(n), date, title: plain(title).replace(/\.$/, ""), text: body.length > 190 ? body.slice(0, 187).replace(/\s+\S*$/, "") + "…" : body };
+      });
+  } catch {
+    return [];
+  }
+}
+
+export const VERSION = { ...readVersion(), news: readNews() };
 export const versionLabel = (v = VERSION) => (v.change ? `Cambio ${v.change}${v.date ? ` · ${v.date.split("-").reverse().join("/")}` : ""}` : "Versión local");
