@@ -3308,6 +3308,37 @@ signForm.addEventListener("change", (e) => {
   }
   if (e.target.name === "pdf") guarded(() => previewSignPdf(e.target.files[0]));
 });
+// The e-mail to the signer: the office leaves out the parts it does not want this time (version 2.8).
+function renderMailBox() {
+  const L = window.JuanmaLegal;
+  $("#mail-parts").innerHTML = L.MAIL_PARTS.filter((p) => p.key !== "policies").map((p) =>
+    `<label class="inline"><input type="checkbox" data-mail-part="${p.key}" checked /> ${escapeHtml(p.label)}</label>`).join("");
+  $("#mail-policy-list").innerHTML = L.CONSENT_ITEMS.map((i) =>
+    `<label class="inline"><input type="checkbox" data-mail-policy="${i.key}" checked /> ${escapeHtml(i.title)}</label>`).join("");
+  updateMailPreview();
+}
+function mailChoice() {
+  const out = Object.fromEntries($$("[data-mail-part]", signForm).map((c) => [c.dataset.mailPart, c.checked]));
+  out.policies = $$("[data-mail-policy]", signForm).filter((c) => c.checked).map((c) => c.dataset.mailPolicy);
+  return out;
+}
+function updateMailPreview() {
+  const L = window.JuanmaLegal, f = signForm.elements;
+  $("[data-mail-box]", signForm).hidden = f.mode.value === "presencial";
+  const contract = L.isServiceContract(f.title.value);
+  $("#mail-policies").hidden = !contract;
+  const opts = mailChoice();
+  const first = $("#signer-rows .signer-row");
+  const name = first ? $('[data-k="name"]', first)?.value.trim() : "";
+  const channel = first ? $('[data-k="otp_channel"]', first)?.value : "email";
+  const policies = contract ? L.CONSENT_ITEMS.filter((i) => opts.policies.includes(i.key)).map((i) => ({ title: i.title })) : [];
+  const parts = L.signMailParts({ name: name || "[nombre del firmante]", message: f.message.value, title: f.title.value || "[nombre del documento]",
+    link: "[enlace privado de cada firmante]", code_via: ({ whatsapp: "WhatsApp", sms: "SMS" })[channel] || "correo", policies }, opts);
+  $("#mail-preview").textContent = `Asunto: Documento para firmar: ${f.title.value}\n\n${parts.map((p) => p.text).join("\n\n")}`;
+}
+signForm.addEventListener("input", () => updateMailPreview());
+signForm.addEventListener("change", () => updateMailPreview());
+
 // The chosen PDF is shown page by page before sending, so the firm sees exactly what will be signed.
 async function previewSignPdf(file) {
   const box = $("[data-pdf-box]", signForm), info = $("[data-pdf-info]", signForm);
@@ -3350,6 +3381,7 @@ async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   signForm.elements.notify.checked = true;
   $("[data-stamp-num]", signForm).hidden = true;
   if (!remoteSignOk()) signForm.elements.mode.value = "presencial";
+  renderMailBox();
 }
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -3367,7 +3399,7 @@ wireDialog($("#sign-dialog"), async (form) => {
   const body = { title: form.elements.title.value, case_id: Number(form.elements.case_id.value) || null, signers,
     message: form.elements.message.value, mode: form.elements.mode.value,
     stamp_page: page === "num" ? String(Math.max(1, Number(form.elements.stamp_num.value) || 1)) : page,
-    stamp_pos: form.elements.stamp_pos.value, notify: form.elements.notify.checked };
+    stamp_pos: form.elements.stamp_pos.value, notify: form.elements.notify.checked, mail: mailChoice() };
   if (form.elements.source.value === "pdf") {
     const f = form.elements.pdf.files[0];
     if (!f) throw new Error("Elija el archivo PDF.");

@@ -31,7 +31,7 @@ test("version 2.4: the risk-bureau authorization is its own document and its own
 
 test("a client signing by link gets the policies as a checklist and answers each one, stored as evidence", async () => {
   mails.length = 0;
-  const r = await admin.call("POST", "/esign", { title: "Contrato de servicios y poder", doc_text: "# CONTRATO\n\nTexto.", case_id: caseId,
+  const r = await admin.call("POST", "/esign", { title: "Contrato de prestación de servicios profesionales de abogado", doc_text: "# CONTRATO\n\nTexto.", case_id: caseId,
     signers: [{ name: "Marta Gil", id_number: "38222111", email: "marta@cliente.co", otp_channel: "email" }] });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const mail = mails.find((m) => m.to === "marta@cliente.co");
@@ -53,7 +53,7 @@ test("a client signing by link gets the policies as a checklist and answers each
   for (const [key, val] of Object.entries(answers)) {
     assert.equal(k.status[key].granted, val ? 1 : 0, key);
     assert.equal(k.status[key].method, "firma");
-    assert.match(k.status[key].note, /Contrato de servicios y poder/);
+    assert.match(k.status[key].note, /Contrato de prestación de servicios/);
   }
   assert.deepEqual(verifyConsentChain(srv.db), { ok: true });
 });
@@ -65,4 +65,45 @@ test("someone who is not a client of the firm signs without the checklist", asyn
   assert.doesNotMatch(mail.text, /Políticas de datos personales/);
   const token = mail.text.match(/firmar\.html#(\S+)/)[1];
   assert.equal((await pub("GET", `/public/sign/${token}`)).body.consent, undefined);
+});
+
+const sendTo = async (title, signer, mail) => {
+  mails.length = 0;
+  const r = await admin.call("POST", "/esign", { title, doc_text: "# DOC\n\nTexto.", case_id: caseId, signers: [signer], mail });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const m = mails.find((x) => x.to === signer.email);
+  return { m, token: m.text.match(/firmar\.html#(\S+)/)[1] };
+};
+
+test("version 2.8: the policies go only the first time, with the services contract", async () => {
+  const marta = { name: "Marta Gil", id_number: "38222111", email: "marta@cliente.co", otp_channel: "email" };
+  const again = await sendTo("Contrato de prestación de servicios profesionales de abogado", marta);
+  assert.doesNotMatch(again.m.text, /Políticas de datos personales/);
+  assert.equal((await pub("GET", `/public/sign/${again.token}`)).body.consent, undefined);
+  const c2 = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Luis", last_names: "Rojas", id_number: "1.110.555.444", email: "luis@cliente.co" })).body;
+  const luis = { name: "Luis Rojas", id_number: "1110555444", email: "luis@cliente.co", otp_channel: "email" };
+  const poder = await sendTo("Poder especial", luis);
+  assert.doesNotMatch(poder.m.text, /Políticas de datos personales/);
+  assert.ok(c2.id);
+});
+
+test("version 2.8: the office leaves out parts of the e-mail and chooses which policies go", async () => {
+  await admin.call("POST", "/clients", { person_type: "natural", first_names: "Ana", last_names: "Paz", id_number: "65.432.100", email: "ana@cliente.co" });
+  const ana = { name: "Ana Paz", id_number: "65432100", email: "ana@cliente.co", otp_channel: "email" };
+  const { m, token } = await sendTo("Contrato de prestación de servicios", ana,
+    { greeting: false, doc_line: false, code_note: false, closing: true, message: true, policies: ["datos", "privacidad"] });
+  assert.doesNotMatch(m.text, /Hola Ana/);
+  assert.doesNotMatch(m.text, /Documento:/);
+  assert.doesNotMatch(m.text, /código de verificación/);
+  assert.match(m.text, /firmar\.html#/);
+  const titles = CONSENT_ITEMS.filter((i) => m.text.includes(`[ ] ${i.title}`)).map((i) => i.key);
+  assert.deepEqual(titles, ["datos", "privacidad"]);
+  const v = (await pub("GET", `/public/sign/${token}`)).body;
+  assert.deepEqual(v.consent.items.map((i) => i.key), ["datos", "privacidad"]);
+  await pub("POST", `/public/sign/${token}/otp`, { channel: "email" });
+  const otp = mails.at(-1).text.match(/es (\d{6})/)[1];
+  const ok = await pub("POST", `/public/sign/${token}/sign`, { otp, typed_name: "Ana Paz", accept: true, signature_png: PNG, consents: { datos: true, privacidad: false } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const recs = srv.db.prepare("SELECT item FROM consent_records WHERE client_name LIKE 'Ana%' ORDER BY id").all().map((r) => r.item);
+  assert.deepEqual(recs, ["datos", "privacidad"]);
 });

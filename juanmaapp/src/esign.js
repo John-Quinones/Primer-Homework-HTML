@@ -9,8 +9,8 @@ import { can, scopeOf } from "./auth.js";
 import { sendEmail, sendSms, sendWhatsapp, sendWhatsappCode, channelReady } from "./notify.js";
 import { buildSignedPdf } from "./signed-pdf.js";
 import { newVerifyCode, normVerifyCode } from "./verify-code.js";
-import { clientForSigner, signConsentAnswers, recordConsents } from "./consents.js";
-import { CONSENT_ITEMS, legalVersion, legalDoc } from "./legal.js";
+import { policiesFor, parseMailOpts, signConsentAnswers, recordConsents } from "./consents.js";
+import { legalVersion, legalDoc, signMailParts, mailOptions } from "./legal.js";
 import { signersProblem } from "./person.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
@@ -46,19 +46,16 @@ async function sendLink(db, req, request, signer, token) {
   const link = `${publicUrl(req)}/firmar.html#${token}`;
   const via = signer.email ? "email" : signer.otp_channel !== "email" ? signer.otp_channel : "email";
   const codeVia = CHANNEL_LABEL[signer.otp_channel] || "correo";
-  // A client of the firm also gets the data policies as a checklist: on the page they accept or not each one, separately (version 2.4).
-  const caseId = request.case_id ?? db.prepare("SELECT case_id FROM sign_requests WHERE id = ?").get(request.id)?.case_id;
-  const client = clientForSigner(db, caseId, signer);
-  const policies = client ? CONSENT_ITEMS.map((i) => ({ title: i.title, url: `${publicUrl(req)}/legal.html#${i.doc}`, doc: legalDoc(i.doc).title })) : [];
-  const listText = policies.length ? `\n\nPolíticas de datos personales (versión ${legalVersion().name}). En la página de firma decidirá por separado si acepta o no cada una:\n${policies.map((p) => `[ ] ${p.title}: ${p.url}`).join("\n")}` : "";
-  const listHtml = policies.length ? `<p><strong>Políticas de datos personales</strong> (versión ${esc(legalVersion().name)}). En la página de firma decidirá <strong>por separado</strong> si acepta o no cada una:</p>
-    <ul style="list-style:none;padding-left:0">${policies.map((p) => `<li style="margin:4px 0">&#9744; ${esc(p.title)} · <a href="${esc(p.url)}">leer ${esc(p.doc)}</a></li>`).join("")}</ul>` : "";
-  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}${listText}\n\nAl firmar le enviaremos un código de verificación por ${codeVia}.\n\nTecjuridicosApp`;
-  const html = `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(signer.name)}:</p><p>${esc(request.message || "Le enviamos un documento para su firma electrónica.")}</p>
-    <p><strong>Documento:</strong> ${esc(request.title)}</p>
-    <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Leer y firmar</a></p>
-    ${listHtml}
-    <p style="color:#666;font-size:12px">Al firmar le enviaremos un código de verificación por ${esc(codeVia)}. Si no esperaba este mensaje, ignórelo.</p></div>`;
+  // A client of the firm also gets the data policies as a checklist: on the page they accept or not each one, separately (version 2.4),
+  // only with the services contract and only the items not answered yet. The office chose which parts go in the e-mail (version 2.8).
+  const full = { ...request };
+  if (full.case_id === undefined || full.mail_opts === undefined) Object.assign(full, db.prepare("SELECT case_id, mail_opts FROM sign_requests WHERE id = ?").get(request.id) || {});
+  const ask = policiesFor(db, full, signer);
+  const policies = ask ? ask.items.map((i) => ({ title: i.title, url: `${publicUrl(req)}/legal.html#${i.doc}`, doc: legalDoc(i.doc).title })) : [];
+  const parts = signMailParts({ name: signer.name, message: request.message, title: request.title, link, code_via: codeVia, policies, version: legalVersion().name },
+    parseMailOpts(full.mail_opts));
+  const text = parts.map((p) => p.text).join("\n\n");
+  const html = `<div style="font-family:Arial,sans-serif;color:#101010">${parts.map((p) => p.html).join("\n")}</div>`;
   const r = await deliver(via, signer, `Documento para firmar: ${request.title}`, via === "email" ? text : `${request.title}: para leerlo y firmarlo abra ${link}`, html);
   event(db, request.id, signer.id, r.ok ? "enlace_enviado" : "enlace_no_enviado", r.ok ? `${CHANNEL_LABEL[via]} ${via === "email" ? signer.email : maskPhone(signer.phone)}${policies.length ? " · con las políticas de datos" : ""}` : r.detail);
   return r;
@@ -232,16 +229,16 @@ export function esignRouter(db) {
     const hash = sha(file || Buffer.from(text, "utf8"));
     const stampPage = /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last";
     const stampPos = ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br";
-    const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by, stamp_page, stamp_pos, notify, verify_code)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id,
-      stampPage, stampPos, b.notify === false ? 0 : 1, newVerifyCode()).lastInsertRowid;
+    const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by, stamp_page, stamp_pos, notify, verify_code, mail_opts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id,
+      stampPage, stampPos, b.notify === false ? 0 : 1, newVerifyCode(), JSON.stringify(mailOptions(b.mail))).lastInsertRowid;
     event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
     const ins = db.prepare("INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, otp_channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     const delivery = [];
     for (const s of signers) {
       const token = randomBytes(24).toString("base64url");
       const sid = ins.run(id, s.name, s.id_type, s.id_number, s.email, s.phone, sha(token), s.otp_channel).lastInsertRowid;
-      if (remote) delivery.push(await sendLink(db, req, { id, title, message: str(b.message), case_id: Number(b.case_id) || null }, { id: sid, ...s }, token));
+      if (remote) delivery.push(await sendLink(db, req, { id, title, message: str(b.message) }, { id: sid, ...s }, token));
     }
     res.status(201).json({ ...requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(id)), delivery });
   });
@@ -308,7 +305,8 @@ export function esignPublicRouter(db) {
         otp_channel: s.otp_channel, otp_channels: otpChannels(s) },
     };
     // A client of the firm answers the data policies, each on its own, together with the signature.
-    if (s.status === "pendiente" && x.status === "enviada" && clientForSigner(db, x.case_id, s)) v.consent = { items: CONSENT_ITEMS, version: legalVersion().name };
+    const ask = s.status === "pendiente" && x.status === "enviada" ? policiesFor(db, x, s) : null;
+    if (ask) v.consent = { items: ask.items, version: legalVersion().name };
     // Once everybody signed, the signer can download the signed document (stamps + certificate).
     if (x.status === "completada") {
       // Only names and dates of the others: their documents, IPs and signatures are in the signed PDF itself (audit A01-002).
@@ -375,10 +373,10 @@ export function esignPublicRouter(db) {
     if (!PNG.test(b.signature_png || "") || b.signature_png.length > 400000) return res.status(400).json({ error: "Dibuje su firma." });
     if (!str(b.typed_name)) return res.status(400).json({ error: "Escriba su nombre completo." });
     if (!b.accept) return res.status(400).json({ error: "Debe aceptar el documento para firmarlo." });
-    const client = clientForSigner(db, f.x.case_id, s);
+    const ask = policiesFor(db, f.x, s), client = ask?.client;
     let consents = null;
-    if (client) {
-      try { consents = signConsentAnswers(b.consents); } catch (err) { return res.status(400).json({ error: err.message }); }
+    if (ask) {
+      try { consents = signConsentAnswers(b.consents, ask.items); } catch (err) { return res.status(400).json({ error: err.message }); }
     }
     db.prepare(`UPDATE sign_signers SET status = 'firmado', method = 'enlace_otp', signed_at = datetime('now'), ip = ?, user_agent = ?,
       typed_name = ?, signature_png = ?, otp_hash = NULL WHERE id = ?`)

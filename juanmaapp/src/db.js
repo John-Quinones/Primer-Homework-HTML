@@ -534,6 +534,7 @@ function migrate(db) {
   add("sign_requests", "verify_code", "TEXT");
   add("sign_requests", "signed_pdf", "BLOB");
   add("sign_requests", "signed_sha256", "TEXT");
+  add("sign_requests", "mail_opts", "TEXT"); // version 2.8: parts of the e-mail the office kept (NULL = all)
   for (const r of db.prepare("SELECT id FROM sign_requests WHERE verify_code IS NULL").all()) {
     db.prepare("UPDATE sign_requests SET verify_code = ? WHERE id = ?").run(newVerifyCode(), r.id);
   }

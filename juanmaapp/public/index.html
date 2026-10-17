@@ -1034,6 +1034,15 @@
         </label>
         <label>Mensaje para los firmantes <input name="message" placeholder="Por favor revise y firme el documento." /></label>
       </div>
+      <fieldset data-mail-box><legend>Correo al firmante</legend>
+        <p class="hint">Cada cliente se maneja distinto: quite lo que no quiera enviar esta vez. El enlace para firmar siempre va.</p>
+        <div id="mail-parts" class="check-grid"></div>
+        <div id="mail-policies" hidden>
+          <p class="hint">Políticas que irán en el correo y que el cliente responderá Sí o No al firmar. Solo van con el contrato de prestación de servicios, y se omiten las que el cliente ya respondió.</p>
+          <div id="mail-policy-list" class="check-grid"></div>
+        </div>
+        <details open><summary>Vista previa del correo</summary><pre id="mail-preview" class="mail-preview"></pre></details>
+      </fieldset>
       <fieldset><legend>Estampa de firma en el PDF</legend>
         <div class="grid2">
           <label>Página

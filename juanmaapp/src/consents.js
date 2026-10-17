@@ -9,7 +9,7 @@ import { can, scopeOf, inTransaction } from "./auth.js";
 import { sendEmail, sendWhatsapp } from "./notify.js";
 import { publicBase } from "./public-url.js";
 import { VERSION } from "./version.js";
-import { CONSENT_ITEMS, CONSENT_METHODS, legalVersion, setLegalVersion, FIRM, consentItem, consentText, consentCanonical, consentStatus } from "./legal.js";
+import { CONSENT_ITEMS, CONSENT_METHODS, legalVersion, setLegalVersion, FIRM, consentItem, consentText, consentCanonical, consentStatus, isServiceContract, policyItemsToAsk } from "./legal.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -114,10 +114,24 @@ export function clientForSigner(db, caseId, signer) {
   return null;
 }
 
+/**
+ * The client who answers the policies with this signature, and which items: only on the services
+ * contract, only the items the office left in the e-mail and the client has not answered before.
+ */
+export function policiesFor(db, request, signer) {
+  if (!isServiceContract(request.title)) return null;
+  const client = clientForSigner(db, request.case_id, signer);
+  if (!client) return null;
+  const answered = db.prepare("SELECT DISTINCT item FROM consent_records WHERE client_id = ?").all(client.id).map((r) => r.item);
+  const items = policyItemsToAsk(request.title, parseMailOpts(request.mail_opts), answered);
+  return items.length ? { client, items } : null;
+}
+export const parseMailOpts = (v) => { try { return typeof v === "string" ? JSON.parse(v) : v || null; } catch { return null; } };
+
 /** Checked answers sent with a signature: every item must be answered yes or no. */
-export function signConsentAnswers(raw) {
+export function signConsentAnswers(raw, items = CONSENT_ITEMS) {
   const answers = {};
-  for (const i of CONSENT_ITEMS) {
+  for (const i of items) {
     if (typeof raw?.[i.key] !== "boolean") fail(`Responda si acepta o no: ${i.title}.`);
     answers[i.key] = raw[i.key];
   }

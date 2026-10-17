@@ -1135,11 +1135,14 @@
     const linkVia = x.email ? "email" : "whatsapp";
     const link = SIGN_LINK ? `${SIGN_LINK}#firmar-${token}` : "";
     const firm = paySettings().firm_name || "TEC Jurídicos";
-    const link_text = [`${firm}: ${r.message || "le enviamos un documento para firmar electrónicamente."}`, "", `Documento: «${r.title}»`,
-      link ? `Ábralo aquí: ${link}` : "", `Código de la solicitud: ${token} (si la página se lo pide, escríbalo en «¿Le enviaron un documento para firmar?»).`,
-      ...(signerClient(r, x) ? ["", `Políticas de datos personales (versión ${LEGAL.legalVersion().name}). En la página de firma decidirá por separado si acepta o no cada una:`,
-        ...LEGAL.CONSENT_ITEMS.map((i) => `☐ ${i.title}`)] : []),
-      "", `En un mensaje aparte le llegará su código de verificación de 6 dígitos por ${VIA[codeVia]}.`].filter((l, i, a) => l || a[i - 1]).join("\n");
+    // Same parts as the server's e-mail; the office chose which ones go (version 2.8).
+    const ask = policiesFor(r, x);
+    const parts = LEGAL.signMailParts({ name: x.name, message: r.message, title: r.title, link, code_via: VIA[codeVia],
+      policies: (ask?.items || []).map((i) => ({ title: i.title })), version: LEGAL.legalVersion().name }, r.mail_opts);
+    const at = parts.findIndex((p) => p.key === "link");
+    parts.splice(at + 1, 0, { text: `Código de la solicitud: ${token} (si la página se lo pide, escríbalo en «¿Le enviaron un documento para firmar?»).` });
+    if (!link) parts.splice(at, 1);
+    const link_text = parts.map((p) => p.text).join("\n\n");
     const code_text = `${firm}: su código para firmar «${r.title.slice(0, 60)}» es ${otp}. Vence en ${OTP_HOURS} horas. No lo comparta.`;
     signEvent(r, x.id, "enlace_generado", `Enlace por ${VIA[linkVia]} (${linkVia === "email" ? maskMail(x.email) : maskTel(x.phone)}) y código por ${VIA[codeVia]} (${codeVia === "email" ? maskMail(x.email) : maskTel(x.phone)}); los envía ${me().name} desde su equipo.`);
     return { signer_id: x.id, name: x.name, ok: true, manual: true, token, otp, link, link_via: linkVia, code_via: codeVia,
@@ -1154,6 +1157,14 @@
     const c = k && s.clients.find((y) => y.id === k.client_id);
     return c && x.email && c.email && c.email.toLowerCase() === x.email.toLowerCase() ? c : null;
   };
+  // Same as the server's policiesFor: only with the services contract, only the items the office left in the message and not answered yet.
+  const policiesFor = (r, x) => {
+    if (!LEGAL.isServiceContract(r.title)) return null;
+    const client = signerClient(r, x);
+    if (!client) return null;
+    const items = LEGAL.policyItemsToAsk(r.title, r.mail_opts, s.consents.filter((y) => y.client_id === client.id).map((y) => y.item));
+    return items.length ? { client, items } : null;
+  };
   async function bySignToken(token) {
     await syncSigns();
     const code = normSignToken(token);
@@ -1166,7 +1177,7 @@
     title: r.title, message: r.message, doc_kind: r.doc_kind, doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, doc_hash: r.doc_hash,
     request_status: r.status, signed: r.status === "completada",
     signer: { name: x.name, status: x.status, signed_at: x.signed_at, otp_channel: x.otp_channel, email: maskMail(x.email), phone: maskTel(x.phone) },
-    consent: x.status === "pendiente" && r.status === "enviada" && signerClient(r, x) ? { items: LEGAL.CONSENT_ITEMS, version: LEGAL.legalVersion().name } : undefined,
+    consent: x.status === "pendiente" && r.status === "enviada" && policiesFor(r, x) ? { items: policiesFor(r, x).items, version: LEGAL.legalVersion().name } : undefined,
   });
   async function finishIfAll(r) {
     if (!r.signers.every((y) => y.status === "firmado")) return;
@@ -1226,8 +1237,8 @@
       (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || b.signature_png.length > 400000) && fail("Dibuje su firma.");
       str(b.typed_name).length >= 3 || fail("Escriba su nombre completo.");
       b.accept || fail("Debe aceptar el documento para firmarlo.");
-      const client = signerClient(r, x);
-      if (client) for (const i of LEGAL.CONSENT_ITEMS) typeof b.consents?.[i.key] === "boolean" || fail(`Responda si acepta o no: ${i.title}.`);
+      const ask = policiesFor(r, x), client = ask?.client;
+      if (ask) for (const i of ask.items) typeof b.consents?.[i.key] === "boolean" || fail(`Responda si acepta o no: ${i.title}.`);
       if ((await shaText(`${x.id}:${String(b.otp ?? "").replace(/\D/g, "")}`)) !== x.otp_hash) {
         x.otp_attempts = (x.otp_attempts || 0) + 1;
         signEvent(r, x.id, "codigo_incorrecto", `Intento ${x.otp_attempts} de 5`);
@@ -1241,9 +1252,9 @@
       signEvent(r, x.id, "firmado", `OTP verificado por ${via} · SHA-256 ${r.doc_hash}`);
       if (client) {
         await window.JuanmaStore.refresh?.("consents").then((now) => { if (now) s.consents = now.items; });
-        await recordConsents(client, b.consents, { method: "firma", byClient: true, user_agent: navigator.userAgent, typed_name: b.typed_name, typed_id: x.id_number,
+        await recordConsents(client, Object.fromEntries(ask.items.map((i) => [i.key, b.consents[i.key]])), { method: "firma", byClient: true, user_agent: navigator.userAgent, typed_name: b.typed_name, typed_id: x.id_number,
           note: `Firma de «${r.title}» (solicitud N.º ${r.id})` });
-        signEvent(r, x.id, "politicas_respondidas", LEGAL.CONSENT_ITEMS.map((i) => `${i.key}: ${b.consents[i.key] ? "sí" : "no"}`).join(" · "));
+        signEvent(r, x.id, "politicas_respondidas", ask.items.map((i) => `${i.key}: ${b.consents[i.key] ? "sí" : "no"}`).join(" · "));
       }
       await finishIfAll(r);
       return signerView(r, x);
@@ -1307,7 +1318,8 @@
       const r = { id: nextId(), title, case_id: +b.case_id || null, office_id: officeId, doc_kind: kind, doc_name: str(b.doc_name), doc_hash: hash,
         message: str(b.message), status: "enviada", created_by: me().id, created_at: stamp(), completed_at: null, signers: [], events: [],
         stamp_page: /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last",
-        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br", notify: b.notify !== false, verify_code: newVerifyCode() };
+        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br", notify: b.notify !== false, verify_code: newVerifyCode(),
+        mail_opts: LEGAL.mailOptions(b.mail) };
       for (const x of signers) r.signers.push({ id: nextId(), ...x, status: "pendiente", method: null, signed_at: null, ip: "", user_agent: "", typed_name: "", reject_reason: null, otp_sent_at: null });
       if (pdf) s.blobs[`signpdf-${r.id}`] = pdf; else s.blobs[`signtxt-${r.id}`] = text;
       signEvent(r, null, "creada", `${me().name} · SHA-256 ${hash}`);

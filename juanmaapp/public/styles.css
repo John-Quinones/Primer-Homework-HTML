@@ -1027,3 +1027,7 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 .consent-choice { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .consent-choice label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
 .consent-choice input { width: 18px; height: 18px; }
+
+/* Preview of the e-mail to a signer (version 2.8) */
+.mail-preview { white-space: pre-wrap; word-break: break-word; font: .85rem/1.45 ui-monospace, Menlo, Consolas, monospace; background: var(--surface, #fff);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; max-height: 320px; overflow: auto; margin: 6px 0 0; }

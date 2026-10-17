@@ -14,10 +14,10 @@ export const FIRM = {
   nit: "901.269.714-4",
   address: "",
   city: "Ibagué (Tolima)",
-  email: "",
-  phone: "",
-  website: "",
-  privacy_officer: "",
+  email: "gerencia@tecjuridicos.com",
+  phone: "314 415 6914",
+  website: "tecjuridicos.com",
+  privacy_officer: "Área Jurídica",
 };
 
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -31,6 +31,11 @@ export function legalVersion() {
   return { name: String(v.name || v.change || "local"), date: y && m && d ? `${d} de ${MONTHS[m - 1]} de ${y}` : "" };
 }
 const V = () => legalVersion();
+
+/** The data policies go to a client only once: with the services contract (user's rule, version 2.8). */
+export function isServiceContract(title) {
+  return /contrato/i.test(title || "") && /prestaci[oó]n\s+de\s+(los\s+)?servicios/i.test(title || "");
+}
 const META = (since = true) => `<p class="legal-meta">Versión ${V().name} de TecjuridicosApp${V().date ? ` · ${since ? "vigente desde el " : ""}${V().date}` : ""}</p>`;
 
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -383,4 +388,58 @@ export function consentAnswers(form, items, prefix = "cs") {
     if (v === "si" || v === "no") answers[i.key] = v === "si"; else missing.push(i.title);
   }
   return { answers, missing };
+}
+
+// ----- e-mail to a signer (version 2.8) -----
+// The office decides, for each client, which parts go in the message: every part
+// can be left out except the link, and the policies can be chosen one by one.
+export const MAIL_PARTS = [
+  { key: "greeting", label: "Saludo («Hola …:»)" },
+  { key: "message", label: "Mensaje para el firmante" },
+  { key: "doc_line", label: "Nombre del documento" },
+  { key: "policies", label: "Políticas de datos personales" },
+  { key: "code_note", label: "Aviso del código de verificación" },
+  { key: "closing", label: "Despedida («TecjuridicosApp»)" },
+];
+
+/** What to include, from what the office chose; anything not sent stays included (the old behavior). */
+export function mailOptions(raw) {
+  const o = raw && typeof raw === "object" ? raw : {};
+  const out = {};
+  for (const p of MAIL_PARTS) if (p.key !== "policies") out[p.key] = o[p.key] !== false;
+  const keys = CONSENT_ITEMS.map((i) => i.key);
+  out.policies = Array.isArray(o.policies) ? keys.filter((k) => o.policies.includes(k)) : keys;
+  return out;
+}
+
+/**
+ * The parts of the e-mail, in order, as text and HTML. ctx: name, message, title, link,
+ * code_via, policies ([{ title, url, doc }] already chosen and pending), version.
+ */
+export function signMailParts(ctx, opts) {
+  const o = mailOptions(opts);
+  const parts = [];
+  if (o.greeting) parts.push({ key: "greeting", text: `Hola ${ctx.name || ""}:`, html: `<p>Hola ${esc(ctx.name || "")}:</p>` });
+  const msg = String(ctx.message ?? "").trim() || "Le enviamos un documento para su firma electrónica.";
+  if (o.message) parts.push({ key: "message", text: msg, html: `<p>${esc(msg)}</p>` });
+  if (o.doc_line) parts.push({ key: "doc_line", text: `Documento: ${ctx.title || ""}`, html: `<p><strong>Documento:</strong> ${esc(ctx.title || "")}</p>` });
+  parts.push({ key: "link", text: `Para leerlo y firmarlo, abra este enlace:\n${ctx.link || ""}`,
+    html: `<p><a href="${esc(ctx.link || "")}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Leer y firmar</a></p>` });
+  const pol = ctx.policies || [];
+  if (pol.length) {
+    const head = `Políticas de datos personales (versión ${ctx.version || legalVersion().name}). En la página de firma decidirá por separado si acepta o no cada una:`;
+    parts.push({ key: "policies", text: `${head}\n${pol.map((p) => `[ ] ${p.title}${p.url ? `: ${p.url}` : ""}`).join("\n")}`,
+      html: `<p>${esc(head)}</p><ul style="list-style:none;padding-left:0">${pol.map((p) => `<li style="margin:4px 0">&#9744; ${esc(p.title)}${p.url ? ` · <a href="${esc(p.url)}">leer ${esc(p.doc || "")}</a>` : ""}</li>`).join("")}</ul>` });
+  }
+  if (o.code_note && ctx.code_via) parts.push({ key: "code_note", text: `Al firmar le enviaremos un código de verificación por ${ctx.code_via}.`,
+    html: `<p style="color:#666;font-size:12px">Al firmar le enviaremos un código de verificación por ${esc(ctx.code_via)}. Si no esperaba este mensaje, ignórelo.</p>` });
+  if (o.closing) parts.push({ key: "closing", text: "TecjuridicosApp", html: "<p>TecjuridicosApp</p>" });
+  return parts;
+}
+
+/** Policy items to ask with this signature: services contract, chosen in the e-mail, not answered before. */
+export function policyItemsToAsk(title, opts, answeredKeys) {
+  if (!isServiceContract(title)) return [];
+  const chosen = mailOptions(opts).policies, done = new Set(answeredKeys || []);
+  return CONSENT_ITEMS.filter((i) => chosen.includes(i.key) && !done.has(i.key));
 }
