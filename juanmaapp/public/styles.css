@@ -919,7 +919,13 @@ button.mini:active:not(:disabled) { box-shadow: inset 2px 2px 4px var(--neu-dark
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --select-tint: color-mix(in srgb, var(--brand-blue) 20%, transparent); } }
 :root[data-theme="dark"] { --select-tint: color-mix(in srgb, var(--brand-blue) 20%, transparent); }
 
-.page-nav { display: flex; gap: 8px; margin: 0 0 12px; }
+/* Change 60: the bar sits at the foot of each screen and stays at the bottom of the window while scrolling */
+.page-nav {
+  display: flex; justify-content: space-between; gap: 8px; margin: 16px 0 0;
+  position: sticky; bottom: 0; z-index: 6;
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
 .page-nav button { min-height: 36px; padding: 6px 14px; font-size: .85rem; }
 
 /* List rows and text-like buttons stay flat (they are not raised Neumorfismo buttons) */
@@ -945,4 +951,4 @@ section.sec-current { scroll-margin-top: 64px; }
 #case-rows tr.row-link:hover td { background: var(--select-tint); }
 
 @media (prefers-reduced-motion: reduce) { .facts > div { transition: none; } }
-.public-nav { max-width: 860px; margin: 16px auto 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.public-nav { max-width: 860px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }

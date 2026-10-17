@@ -1,4 +1,4 @@
-// Change 59: "‹ Atrás / Adelante ›" at the top of each public page (legal texts, authorizations, verification, acknowledgment).
+// Changes 59–60: "‹ Atrás / Adelante ›" at the foot of each public page (legal texts, authorizations, verification, acknowledgment).
 (() => {
   const main = document.querySelector("main");
   if (!main) return;
@@ -15,7 +15,7 @@
   const fwd = btn("Adelante ›", "Ir a la pantalla siguiente", () => history.forward());
   nav.append(back, fwd);
   nav.classList.add("public-nav");
-  main.before(nav); // before <main>: some pages rewrite main.innerHTML
+  main.after(nav); // after <main>: some pages rewrite main.innerHTML
   const sync = () => {
     const n = window.navigation;
     if (!n || typeof n.canGoBack !== "boolean") return;

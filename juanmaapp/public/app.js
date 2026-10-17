@@ -433,14 +433,14 @@ function showView() {
 const refreshView = () => showView();
 window.addEventListener("hashchange", () => guarded(showView));
 
-// Change 59: every screen carries its own "‹ Atrás / Adelante ›" buttons (no longer in the top bar).
+// Changes 59–60: every screen carries its own "‹ Atrás / Adelante ›" buttons at its foot (not in the top bar); the bar sticks to the bottom of the window.
 for (const view of $$("main .view")) {
   const nav = document.createElement("nav");
   nav.className = "page-nav";
   nav.setAttribute("aria-label", "Navegación entre pantallas");
   nav.innerHTML = '<button type="button" class="mini" data-action="go-back" title="Volver a la pantalla anterior">‹ Atrás</button>'
     + '<button type="button" class="mini" data-action="go-forward" title="Ir a la pantalla siguiente">Adelante ›</button>';
-  view.prepend(nav);
+  view.append(nav);
 }
 /** Greys out Atrás / Adelante when there is nowhere to go (browsers with the Navigation API). */
 function syncPageNav() {
