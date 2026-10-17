@@ -2852,9 +2852,13 @@ $("#admin-tabs").addEventListener("click", (e) => {
 // Hidden users (version 2.11): Gerencia hides a user, whose actions then read "Asistente";
 // the hidden users are seen again only with their own password, for 15 minutes.
 let hiddenInfo = { count: 0, has_password: false, unlocked: false, can_manage: false }, hiddenTimer = null;
+// Version 2.14 (John): the «Crear/Cambiar contraseña de ocultos» button is switched off and the strip
+// only shows while there are hidden users. The password stays saved; the first «Ocultar» still
+// asks to create it when none exists. Set to true to bring the button back.
+const SHOW_HIDDEN_PASSWORD_BUTTON = false;
 function renderHiddenBar() {
   const bar = $("#hidden-users-bar");
-  bar.hidden = !hiddenInfo.can_manage;
+  bar.hidden = !hiddenInfo.can_manage || (!SHOW_HIDDEN_PASSWORD_BUTTON && !hiddenInfo.count && !hiddenInfo.unlocked);
   if (bar.hidden) return;
   const until = hiddenInfo.unlocked_until ? new Date(hiddenInfo.unlocked_until).toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" }) : "";
   bar.innerHTML = `<span class="hidden-users-text">${hiddenInfo.unlocked
@@ -2863,7 +2867,7 @@ function renderHiddenBar() {
       : "Ningún usuario oculto. Con «Ocultar» un usuario sale de esta lista y todo lo que haga aparece como «Asistente»."}</span>
     <span class="row-actions">${hiddenInfo.unlocked ? '<button data-action="lock-hidden">Volver a ocultar</button>'
       : hiddenInfo.count ? '<button data-action="unlock-hidden">Ver usuarios ocultos</button>' : ""}
-      <button data-action="hidden-password">${hiddenInfo.has_password ? "Cambiar contraseña de ocultos" : "Crear contraseña de ocultos"}</button></span>`;
+      ${SHOW_HIDDEN_PASSWORD_BUTTON ? `<button data-action="hidden-password">${hiddenInfo.has_password ? "Cambiar contraseña de ocultos" : "Crear contraseña de ocultos"}</button>` : ""}</span>`;
   clearTimeout(hiddenTimer);
   if (hiddenInfo.unlocked_until) hiddenTimer = setTimeout(() => { if (location.hash.startsWith("#usuarios")) renderUsuarios(); }, Math.max(1000, Date.parse(hiddenInfo.unlocked_until) - Date.now() + 500));
 }
