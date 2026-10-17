@@ -69,8 +69,52 @@
         <p class="hint">Este es el <strong>enlace de prueba</strong>: quien pueda abrirlo entra con cualquier usuario y ve todos los datos. Úselo con datos de prueba; para los datos reales de la firma use la app en Azure, con contraseña o Microsoft 365.</p>
         <div class="demo-grid"></div>
       </div>
+      <form id="sign-code-form" class="sign-code" hidden>
+        <p class="auth-or"><span>o</span></p>
+        <p class="auth-note">¿Le enviaron un documento para firmar? Escriba el código de la solicitud que le llegó con el enlace.</p>
+        <label>Código de la solicitud <input name="token" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" required /></label>
+        <p class="form-error" hidden></p>
+        <button class="wide">Abrir el documento para firmar</button>
+      </form>
       <p class="legal-links"><a href="legal.html#tratamiento" data-legal="tratamiento">Tratamiento de datos</a><a href="legal.html#privacidad" data-legal="privacidad">Privacidad</a><a href="legal.html#cookies" data-legal="cookies">Cookies</a><a href="legal.html#terminos" data-legal="terminos">Términos y condiciones</a></p>
     </div>
+  </div>
+
+  <!-- ============ FIRMA POR ENLACE (página del firmante en el enlace de prueba) ============ -->
+  <div id="sign-screen" class="sign-screen" hidden>
+    <header class="topbar"><div class="brand"><img class="logo" src="logo-t.png" alt="" width="44" height="44" /><div><h1>Firma electrónica</h1><p class="tagline">TecjuridicosApp</p></div></div></header>
+    <main class="public-wrap">
+      <div id="ps-msg" class="status" hidden></div>
+      <section id="ps-doc" class="panel" hidden>
+        <h2 id="ps-title"></h2>
+        <p id="ps-intro" class="hint"></p>
+        <article id="ps-text" class="document"></article>
+        <iframe id="ps-pdf" class="pdf-frame" title="Documento" hidden></iframe>
+        <p class="hash">Huella del documento (SHA-256): <span id="ps-hash"></span></p>
+      </section>
+      <section id="ps-done" class="panel" hidden>
+        <h3 class="panel-title">Documento firmado por todos</h3>
+        <p class="hint">Descargue el PDF con la estampa de cada firma, el pie de verificación en cada página y el certificado de firma al final.</p>
+        <button id="ps-dl" class="primary" type="button">Descargar documento firmado</button>
+      </section>
+      <section id="ps-sign" class="panel" hidden>
+        <h3 class="panel-title">Firmar</h3>
+        <p class="hint" id="ps-otp-note"></p>
+        <form id="ps-form">
+          <div class="grid2">
+            <label>Código de verificación (6 dígitos) <input name="otp" inputmode="numeric" maxlength="6" pattern="\d{6}" required autocomplete="one-time-code" /></label>
+            <label>Nombre completo <input name="typed_name" required /></label>
+          </div>
+          <label>Firma (dibuje con el dedo o el mouse)</label>
+          <canvas class="sig-canvas" id="ps-pad"></canvas>
+          <p><button type="button" id="ps-clear" class="mini">Borrar firma</button></p>
+          <label class="inline"><input type="checkbox" name="accept" required /> Leí el documento y lo firmo electrónicamente. Entiendo que esta firma tiene la misma validez que mi firma manuscrita.</label>
+          <p class="form-error" hidden></p>
+          <div class="toolbar"><button class="primary">Firmar documento</button> <button type="button" id="ps-reject" class="danger">No firmar</button></div>
+        </form>
+      </section>
+      <p><button type="button" class="link-btn" id="ps-exit">Salir</button></p>
+    </main>
   </div>
 
   <div id="app-root" hidden>
@@ -965,7 +1009,7 @@
       </fieldset>
       <div class="grid2">
         <label>Forma de firma
-          <select name="mode"><option value="remote">Enlace privado con código OTP (correo, SMS o WhatsApp)</option><option value="presencial">En persona, en este equipo</option></select>
+          <select name="mode"><option value="remote">Enlace privado con código OTP (correo o WhatsApp)</option><option value="presencial">En persona, en este equipo</option></select>
         </label>
         <label>Mensaje para los firmantes <input name="message" placeholder="Por favor revise y firme el documento." /></label>
       </div>
@@ -1009,6 +1053,16 @@
         <button type="button" data-sign-out="cancel" class="danger">Cancelar solicitud</button>
         <button value="cancel">Cerrar</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Enviar enlaces y códigos (enlace de prueba: se envían desde este equipo) -->
+  <dialog id="sign-send-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3 data-title>Enviar enlace y código a los firmantes</h3>
+      <p class="hint">Desde este enlace de prueba los mensajes salen desde su equipo: para cada firmante envíe primero el enlace y luego, en un mensaje aparte, el código de verificación. El código sirve una sola vez y vence en 24 horas.</p>
+      <div id="sign-send-body"></div>
+      <div class="dialog-actions"><button value="cancel" class="primary">Listo</button></div>
     </form>
   </dialog>
 

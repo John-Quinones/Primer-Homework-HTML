@@ -104,5 +104,31 @@
     for (const path of [...saved.keys()]) if (!want.has(path)) await remove(path);
   }
 
-  window.JuanmaStore = { load, save, kind: () => kind };
+  // Re-reads one collection (and the blobs whose key starts with blobPrefix) as stored now, so
+  // records another device changed (a signer signing by link) are not overwritten with an old copy.
+  async function refresh(name, blobPrefix = null) {
+    if (kind !== "db") return null;
+    const items = [];
+    for (const path of [...saved.keys()]) if (path.startsWith(`jm_${name}/`)) saved.delete(path);
+    for (const d of await readCollection(`jm_${name}`)) {
+      saved.set(`jm_${name}/${d.id}`, JSON.stringify(d.data));
+      items.push(...(d.data.items || []));
+    }
+    items.sort((a, b) => (a.id > b.id ? 1 : -1));
+    const blobs = {};
+    if (blobPrefix) {
+      const byKey = {};
+      const snap = await db.collection("jm_blob").where("key", ">=", blobPrefix).where("key", "<", blobPrefix + "\uffff").limit(1000).get().catch(() => null);
+      for (const d of snap?.docs || []) {
+        if (!d.exists) continue;
+        const data = JSON.parse(JSON.stringify(d.data()));
+        saved.set(`jm_blob/${d.id}`, JSON.stringify(data));
+        (byKey[data.key] ||= [])[data.n] = data.part;
+      }
+      for (const [key, parts] of Object.entries(byKey)) if (!parts.includes(undefined)) blobs[key] = parts.join("");
+    }
+    return { items, blobs };
+  }
+
+  window.JuanmaStore = { load, save, refresh, kind: () => kind };
 })();

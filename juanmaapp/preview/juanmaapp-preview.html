@@ -1060,6 +1060,17 @@ section.sec-current { scroll-margin-top: 64px; }
 
 @media (prefers-reduced-motion: reduce) { .facts > div { transition: none; } }
 .public-nav { max-width: 860px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+/* Signer's page inside the test link (change 61) */
+.sign-screen { min-height: 100vh; background: var(--bg, #f4f6f9); }
+.sign-screen .public-wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; display: grid; gap: 16px; }
+.sign-screen .pdf-frame { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 10px; }
+.sign-screen .hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .76rem; word-break: break-all; color: var(--text-muted); }
+.sign-code { margin-top: 8px; }
+.send-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 10px 0; display: grid; gap: 8px; }
+.send-card .send-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.send-card .send-step > span:first-child { min-width: 9rem; font-weight: 600; }
+.send-card code { font-size: .95rem; letter-spacing: .08em; }
+.signer-row .invalid { border-color: var(--danger, #c0392b); box-shadow: 0 0 0 2px rgba(192, 57, 43, .18); }
 
 </style>
 </head>
@@ -1122,8 +1133,52 @@ section.sec-current { scroll-margin-top: 64px; }
         <p class="hint">Este es el <strong>enlace de prueba</strong>: quien pueda abrirlo entra con cualquier usuario y ve todos los datos. Úselo con datos de prueba; para los datos reales de la firma use la app en Azure, con contraseña o Microsoft 365.</p>
         <div class="demo-grid"></div>
       </div>
+      <form id="sign-code-form" class="sign-code" hidden>
+        <p class="auth-or"><span>o</span></p>
+        <p class="auth-note">¿Le enviaron un documento para firmar? Escriba el código de la solicitud que le llegó con el enlace.</p>
+        <label>Código de la solicitud <input name="token" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" required /></label>
+        <p class="form-error" hidden></p>
+        <button class="wide">Abrir el documento para firmar</button>
+      </form>
       <p class="legal-links"><a href="legal.html#tratamiento" data-legal="tratamiento">Tratamiento de datos</a><a href="legal.html#privacidad" data-legal="privacidad">Privacidad</a><a href="legal.html#cookies" data-legal="cookies">Cookies</a><a href="legal.html#terminos" data-legal="terminos">Términos y condiciones</a></p>
     </div>
+  </div>
+
+  <!-- ============ FIRMA POR ENLACE (página del firmante en el enlace de prueba) ============ -->
+  <div id="sign-screen" class="sign-screen" hidden>
+    <header class="topbar"><div class="brand"><img class="logo" src="data:image/png;base64,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" alt="" width="44" height="44" /><div><h1>Firma electrónica</h1><p class="tagline">TecjuridicosApp</p></div></div></header>
+    <main class="public-wrap">
+      <div id="ps-msg" class="status" hidden></div>
+      <section id="ps-doc" class="panel" hidden>
+        <h2 id="ps-title"></h2>
+        <p id="ps-intro" class="hint"></p>
+        <article id="ps-text" class="document"></article>
+        <iframe id="ps-pdf" class="pdf-frame" title="Documento" hidden></iframe>
+        <p class="hash">Huella del documento (SHA-256): <span id="ps-hash"></span></p>
+      </section>
+      <section id="ps-done" class="panel" hidden>
+        <h3 class="panel-title">Documento firmado por todos</h3>
+        <p class="hint">Descargue el PDF con la estampa de cada firma, el pie de verificación en cada página y el certificado de firma al final.</p>
+        <button id="ps-dl" class="primary" type="button">Descargar documento firmado</button>
+      </section>
+      <section id="ps-sign" class="panel" hidden>
+        <h3 class="panel-title">Firmar</h3>
+        <p class="hint" id="ps-otp-note"></p>
+        <form id="ps-form">
+          <div class="grid2">
+            <label>Código de verificación (6 dígitos) <input name="otp" inputmode="numeric" maxlength="6" pattern="\d{6}" required autocomplete="one-time-code" /></label>
+            <label>Nombre completo <input name="typed_name" required /></label>
+          </div>
+          <label>Firma (dibuje con el dedo o el mouse)</label>
+          <canvas class="sig-canvas" id="ps-pad"></canvas>
+          <p><button type="button" id="ps-clear" class="mini">Borrar firma</button></p>
+          <label class="inline"><input type="checkbox" name="accept" required /> Leí el documento y lo firmo electrónicamente. Entiendo que esta firma tiene la misma validez que mi firma manuscrita.</label>
+          <p class="form-error" hidden></p>
+          <div class="toolbar"><button class="primary">Firmar documento</button> <button type="button" id="ps-reject" class="danger">No firmar</button></div>
+        </form>
+      </section>
+      <p><button type="button" class="link-btn" id="ps-exit">Salir</button></p>
+    </main>
   </div>
 
   <div id="app-root" hidden>
@@ -2018,7 +2073,7 @@ section.sec-current { scroll-margin-top: 64px; }
       </fieldset>
       <div class="grid2">
         <label>Forma de firma
-          <select name="mode"><option value="remote">Enlace privado con código OTP (correo, SMS o WhatsApp)</option><option value="presencial">En persona, en este equipo</option></select>
+          <select name="mode"><option value="remote">Enlace privado con código OTP (correo o WhatsApp)</option><option value="presencial">En persona, en este equipo</option></select>
         </label>
         <label>Mensaje para los firmantes <input name="message" placeholder="Por favor revise y firme el documento." /></label>
       </div>
@@ -2062,6 +2117,16 @@ section.sec-current { scroll-margin-top: 64px; }
         <button type="button" data-sign-out="cancel" class="danger">Cancelar solicitud</button>
         <button value="cancel">Cerrar</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Enviar enlaces y códigos (enlace de prueba: se envían desde este equipo) -->
+  <dialog id="sign-send-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3 data-title>Enviar enlace y código a los firmantes</h3>
+      <p class="hint">Desde este enlace de prueba los mensajes salen desde su equipo: para cada firmante envíe primero el enlace y luego, en un mensaje aparte, el código de verificación. El código sirve una sola vez y vence en 24 horas.</p>
+      <div id="sign-send-body"></div>
+      <div class="dialog-actions"><button value="cancel" class="primary">Listo</button></div>
     </form>
   </dialog>
 
@@ -4660,7 +4725,59 @@ function clientMatches(c, q, by = "") {
   return ok || (!by && docHit);
 }
 
-return { PARTICLES, properName, looksLikeCompany, splitFullName, personFields, clientMatches };
+/**
+ * Checks one signer of an e-signature request. Returns the problem as
+ * { field, message } or null. The document and the mobile are optional, but
+ * when written they must look real (change 61: "5555" was accepted in both).
+ * remote: the code goes by the signer's otp_channel ("email" | "whatsapp" | "sms").
+ */
+function signerProblem(s, { remote = false } = {}) {
+  const name = String(s.name ?? "").trim();
+  if (!name) return { field: "name", message: "Cada firmante necesita nombre." };
+  if (name.length < 3 || !/\p{L}/u.test(name)) return { field: "name", message: `Escriba el nombre completo del firmante (${name}).` };
+  const doc = String(s.id_number ?? "").replace(/[\s.]/g, "");
+  if (doc && !/^\d{5,10}(-\d)?$/.test(doc) && !(/^[A-Za-z0-9]{5,12}$/.test(doc) && /[A-Za-z]/.test(doc))) {
+    return { field: "id_number", message: `El documento de ${name} no es válido: la cédula lleva entre 5 y 10 dígitos (el pasaporte, letras y números).` };
+  }
+  const email = String(s.email ?? "").trim();
+  if (email && !/^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']{2,}$/.test(email)) return { field: "email", message: `El correo de ${name} no es válido.` };
+  const phone = String(s.phone ?? "").trim();
+  if (phone && !mobileDigits(phone)) {
+    return { field: "phone", message: `El celular de ${name} no es válido: debe tener 10 dígitos y empezar por 3 (ej. 300 123 4567), o el indicativo de otro país con +.` };
+  }
+  if (doc && phone && doc.replace(/\D/g, "") === phone.replace(/\D/g, "")) return { field: "phone", message: `El documento y el celular de ${name} son el mismo número. Revíselos.` };
+  if (remote) {
+    const ch = s.otp_channel || "email";
+    if (ch === "email" && !email) return { field: "email", message: `Falta el correo de ${name} para enviarle el enlace y el código.` };
+    if (ch !== "email" && !phone) return { field: "phone", message: `Falta el celular de ${name} para enviarle el código por ${ch === "sms" ? "SMS" : "WhatsApp"}.` };
+  }
+  return null;
+}
+
+/** "300 123 4567", "+57 300 1234567" → "573001234567" (for wa.me); foreign numbers need "+". "" when not a mobile. */
+function mobileDigits(phone) {
+  const raw = String(phone ?? "").trim();
+  const d = raw.replace(/\D/g, "");
+  if (/^3\d{9}$/.test(d)) return `57${d}`;
+  if (/^573\d{9}$/.test(d)) return d;
+  if (raw.startsWith("+") && !d.startsWith("57") && d.length >= 8 && d.length <= 15) return d;
+  return "";
+}
+
+/** Checks every signer and that no document is repeated. Returns { index, field, message } or null. */
+function signersProblem(list, opts = {}) {
+  const seen = new Map();
+  for (const [index, s] of list.entries()) {
+    const p = signerProblem(s, opts);
+    if (p) return { index, ...p };
+    const doc = String(s.id_number ?? "").replace(/[\s.-]/g, "").toUpperCase();
+    if (doc && seen.has(doc)) return { index, field: "id_number", message: `${s.name} y ${list[seen.get(doc)].name} tienen el mismo documento.` };
+    if (doc) seen.set(doc, index);
+  }
+  return null;
+}
+
+return { PARTICLES, properName, looksLikeCompany, splitFullName, personFields, clientMatches, signerProblem, mobileDigits, signersProblem };
 })();
 
 window.JuanmaPortals = (function () {
@@ -5454,7 +5571,8 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Autorización para el tratamiento de datos personales","category":"Autorización","description":"Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies y comunicaciones), para firmar en papel.","body":"# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **{{oficina.nombre}}** (TEC Jurídicos), en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:\n\n| Autorización | SÍ | NO |\n|---|---|---|\n| 1. **Tratamiento de datos personales** para prestar los servicios jurídicos, llevar mi expediente, consultar mis procesos, ejecutar el contrato, registrar pagos y cumplir obligaciones legales. | ☐ | ☐ |\n| 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |\n| 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |\n| 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |\n| 5. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |\n\n## DERECHOS DEL TITULAR\n\nConozco que, conforme al artículo 8 de la Ley 1581 de 2012, puedo conocer, actualizar, rectificar y suprimir mis datos; pedir prueba de esta autorización; ser informado(a) del uso de mis datos; revocar cualquiera de estas autorizaciones cuando no exista un deber legal o contractual de conservarlos; y presentar quejas ante la Superintendencia de Industria y Comercio después de agotar el trámite ante EL RESPONSABLE, escribiendo a {{oficina.correo}} o en {{oficina.direccion}}, {{oficina.ciudad}}.\n\nLa información que entrego está amparada por el secreto profesional del abogado (artículo 74 de la Constitución y numeral 9 del artículo 28 de la Ley 1123 de 2007). EL RESPONSABLE conservará la prueba de esta autorización mientras trate mis datos.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Acuerdo de confidencialidad y tratamiento de datos (funcionarios y contratistas)","category":"Contrato","description":"Secreto profesional (Ley 1123 de 2007) y deberes del encargado (Ley 1581 de 2012) para quien accede a la información de los clientes.","body":"# ACUERDO DE CONFIDENCIALIDAD Y TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nEntre **{{oficina.nombre}}** (TEC Jurídicos), en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:\n\n## PRIMERA. Información confidencial\n\nEs confidencial toda la información de clientes, contrapartes y procesos a la que EL RECEPTOR acceda por cualquier medio, incluida TecjuridicosApp: datos personales, hechos, estrategias, documentos, honorarios, pagos y credenciales de acceso.\n\n## SEGUNDA. Obligaciones\n\nEL RECEPTOR se obliga a:\n\n1. Guardar el secreto profesional y la reserva de la información, aun después de terminada su relación con LA FIRMA (artículo 74 de la Constitución y Ley 1123 de 2007).\n2. Usar la información solo para las labores que LA FIRMA le asigne y conforme a la Política de tratamiento de datos personales.\n3. No copiar, extraer, reenviar ni divulgar información fuera de lo que exige cada encargo, ni usar correos o dispositivos personales no autorizados para ello.\n4. Mantener en secreto su usuario y contraseña, no compartir su cuenta y cerrar sesión en equipos compartidos.\n5. Informar de inmediato a LA FIRMA cualquier pérdida, acceso indebido o incidente de seguridad.\n6. Devolver o destruir la información en su poder al terminar la relación.\n\n## TERCERA. Registro de actividad\n\nEL RECEPTOR conoce que TecjuridicosApp registra en una bitácora cada cambio que hace, con fecha, hora, dirección IP y dispositivo, y lo autoriza para fines de seguridad y control.\n\n## CUARTA. Incumplimiento\n\nEl incumplimiento de este acuerdo es falta grave y da lugar a las acciones laborales, contractuales, disciplinarias, civiles y penales que correspondan, sin perjuicio de la indemnización de los perjuicios causados.\n\n## QUINTA. Vigencia\n\nEste acuerdo rige desde su firma y sus obligaciones de confidencialidad no terminan con la relación.\n\nFirmas:\n\n____________________________________\n**LA FIRMA**\n{{abogado.nombre}}\n\n____________________________________\n**EL RECEPTOR**\n[FILL: Nombre completo]\nC.C. [FILL: Número de documento]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"]};</script>
-<script>window.JUANMA_VERSION = {"change":50,"sha":"","date":"2026-10-16"};</script>
+<script>window.JUANMA_VERSION = {"change":61,"sha":"e8f1f23","date":"2026-10-17"};</script>
+<script>window.JUANMA_LINK_URL = "";</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
 <script>// Where the browser backend keeps the firm's data.
 // - Published link (claude.ai): the artifact's own database, so data survives
@@ -5562,7 +5680,33 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     for (const path of [...saved.keys()]) if (!want.has(path)) await remove(path);
   }
 
-  window.JuanmaStore = { load, save, kind: () => kind };
+  // Re-reads one collection (and the blobs whose key starts with blobPrefix) as stored now, so
+  // records another device changed (a signer signing by link) are not overwritten with an old copy.
+  async function refresh(name, blobPrefix = null) {
+    if (kind !== "db") return null;
+    const items = [];
+    for (const path of [...saved.keys()]) if (path.startsWith(`jm_${name}/`)) saved.delete(path);
+    for (const d of await readCollection(`jm_${name}`)) {
+      saved.set(`jm_${name}/${d.id}`, JSON.stringify(d.data));
+      items.push(...(d.data.items || []));
+    }
+    items.sort((a, b) => (a.id > b.id ? 1 : -1));
+    const blobs = {};
+    if (blobPrefix) {
+      const byKey = {};
+      const snap = await db.collection("jm_blob").where("key", ">=", blobPrefix).where("key", "<", blobPrefix + "\uffff").limit(1000).get().catch(() => null);
+      for (const d of snap?.docs || []) {
+        if (!d.exists) continue;
+        const data = JSON.parse(JSON.stringify(d.data()));
+        saved.set(`jm_blob/${d.id}`, JSON.stringify(data));
+        (byKey[data.key] ||= [])[data.n] = data.part;
+      }
+      for (const [key, parts] of Object.entries(byKey)) if (!parts.includes(undefined)) blobs[key] = parts.join("");
+    }
+    return { items, blobs };
+  }
+
+  window.JuanmaStore = { load, save, refresh, kind: () => kind };
 })();
 </script>
 <script>// In-browser backend for the published link (and a local copy of the file).
@@ -5998,7 +6142,6 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     juris: "La búsqueda y verificación en las relatorías oficiales necesita la app instalada en el servidor (este enlace no puede abrir sitios externos). Aquí puede analizar una sentencia pegando su texto.",
     mail: "El envío de correos necesita la app instalada en el servidor con el correo de la firma configurado (SMTP).",
     consent: "El envío del enlace de autorizaciones necesita la app instalada en el servidor. En este enlace use «Firmar en la oficina».",
-    remote: "La firma por enlace con código OTP (correo, SMS o WhatsApp) necesita la app instalada en el servidor. En este enlace use la firma presencial.",
   };
   // ----- Client authorizations (change 56): append-only, hash-chained like the server -----
   const LEGAL = window.JuanmaLegal;
@@ -6660,11 +6803,72 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     }],
   ];
 
-  // ----- e-signature (in person on this device) -----
+  // ----- e-signature: in person on this device, or by private link + one-time code (change 61) -----
+  // On the link the messages cannot leave by themselves: the app prepares the link and the code
+  // and the office sends them from its own WhatsApp or e-mail. The signer opens the same link
+  // (#firmar-CODE, or types the request code on the sign-in screen) and signs with the code.
+  const hideSecrets = ({ token_hash, otp_hash, otp_expires_at, otp_attempts, ...x }) => x;
   const signOut = (r) => ({
     ...clone(r), doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, has_pdf: !!s.blobs[`signpdf-${r.id}`],
-    signers: r.signers.map((x) => ({ ...clone(x), signature_png: s.blobs[`sig-${r.id}-${x.id}`] || null })),
+    signers: r.signers.map((x) => ({ ...hideSecrets(clone(x)), signature_png: s.blobs[`sig-${r.id}-${x.id}`] || null })),
   });
+  // A signer may have signed from another device: read the requests as stored now before using them.
+  async function syncSigns() {
+    const now = await window.JuanmaStore.refresh?.("signs", "sig-");
+    if (!now) return;
+    s.signs = now.items;
+    Object.assign(s.blobs, now.blobs);
+  }
+  const SIGN_LINK = window.JUANMA_LINK_URL || "";
+  const OTP_HOURS = 24;
+  const CODE_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  const newSignToken = () => { const c = [...crypto.getRandomValues(new Uint32Array(8))].map((x) => CODE_ABC[x % CODE_ABC.length]).join(""); return `${c.slice(0, 4)}-${c.slice(4)}`; };
+  const normSignToken = (t) => String(t || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^(.{4})(.{4})$/, "$1-$2");
+  const newOtp = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+  const maskMail = (e) => String(e || "").replace(/^(.{2}).*(@.*)$/, "$1•••$2");
+  const maskTel = (p) => { const d = String(p || "").replace(/\D/g, ""); return d ? `•••${d.slice(-4)}` : ""; };
+  const VIA = { email: "correo", whatsapp: "WhatsApp", sms: "SMS" };
+  // New link code and one-time code for a signer (the old ones stop working). Only their hashes are kept.
+  async function issueLink(r, x) {
+    const token = newSignToken(), otp = newOtp();
+    x.token_hash = await shaText(token);
+    x.otp_hash = await shaText(`${x.id}:${otp}`);
+    x.otp_expires_at = new Date(Date.now() + OTP_HOURS * 3600000).toISOString();
+    x.otp_attempts = 0;
+    x.otp_sent_at = stamp();
+    const codeVia = x.otp_channel === "email" || !x.phone ? "email" : "whatsapp";
+    const linkVia = x.email ? "email" : "whatsapp";
+    const link = SIGN_LINK ? `${SIGN_LINK}#firmar-${token}` : "";
+    const firm = paySettings().firm_name || "TEC Jurídicos";
+    const link_text = [`${firm}: ${r.message || "le enviamos un documento para firmar electrónicamente."}`, "", `Documento: «${r.title}»`,
+      link ? `Ábralo aquí: ${link}` : "", `Código de la solicitud: ${token} (si la página se lo pide, escríbalo en «¿Le enviaron un documento para firmar?»).`,
+      "", `En un mensaje aparte le llegará su código de verificación de 6 dígitos por ${VIA[codeVia]}.`].filter((l, i, a) => l || a[i - 1]).join("\n");
+    const code_text = `${firm}: su código para firmar «${r.title.slice(0, 60)}» es ${otp}. Vence en ${OTP_HOURS} horas. No lo comparta.`;
+    signEvent(r, x.id, "enlace_generado", `Enlace por ${VIA[linkVia]} (${linkVia === "email" ? maskMail(x.email) : maskTel(x.phone)}) y código por ${VIA[codeVia]} (${codeVia === "email" ? maskMail(x.email) : maskTel(x.phone)}); los envía ${me().name} desde su equipo.`);
+    return { signer_id: x.id, name: x.name, ok: true, manual: true, token, otp, link, link_via: linkVia, code_via: codeVia,
+      email: x.email, wa: PERSON.mobileDigits(x.phone), subject: `Documento para firmar: ${r.title}`, link_text, code_text, hours: OTP_HOURS };
+  }
+  async function bySignToken(token) {
+    await syncSigns();
+    const code = normSignToken(token);
+    /^[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code) || fail("El código de la solicitud no es válido. Revise el mensaje que le llegó.");
+    const h = await shaText(code);
+    for (const r of s.signs) { const x = r.signers.find((y) => y.token_hash === h); if (x) return { r, x }; }
+    fail("El enlace o el código de la solicitud no es válido o fue reemplazado por uno nuevo. Pida que se lo envíen de nuevo.");
+  }
+  const signerView = (r, x) => ({
+    title: r.title, message: r.message, doc_kind: r.doc_kind, doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, doc_hash: r.doc_hash,
+    request_status: r.status, signed: r.status === "completada",
+    signer: { name: x.name, status: x.status, signed_at: x.signed_at, otp_channel: x.otp_channel, email: maskMail(x.email), phone: maskTel(x.phone) },
+  });
+  async function finishIfAll(r) {
+    if (!r.signers.every((y) => y.status === "firmado")) return;
+    r.status = "completada"; r.completed_at = stamp();
+    signEvent(r, null, "completada", "Todos los firmantes firmaron.");
+    const notes = await window.JuanmaStore.refresh?.("notes");
+    if (notes) s.notes = notes.items;
+    s.notes.push({ id: nextId(), user_id: r.created_by, kind: "firma", title: "Documento firmado por todos", body: r.title, link: "#firmas", key: null, created_at: stamp(), read_at: null });
+  }
   const signVisible = (r) => inScope(r.office_id) || r.created_by === me().id;
   const getSign = (id) => s.signs.find((r) => r.id === id && signVisible(r)) || fail("La solicitud no existe.");
   const signEvent = (r, signerId, event, detail = "") => r.events.push({ id: nextId(), request_id: r.id, signer_id: signerId, event, detail, ip: "", at: stamp(), created_at: stamp() });
@@ -6696,10 +6900,49 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
   const b64bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
   routes.push(
-    ["GET", /^\/esign$/, () => { need("esign.use"); return s.signs.filter(signVisible).slice().reverse().map(signOut); }],
-    ["GET", /^\/esign\/(\d+)$/, (m) => { need("esign.use"); return signOut(getSign(+m[1])); }],
-    ["GET", /^\/esign\/(\d+)\/signed$/, async (m) => { need("esign.use"); return ensureSignedPdf(getSign(+m[1])); }],
-    ["POST", /^\/public\/verify$/, (m, b) => {
+    ["GET", /^\/esign$/, async () => { need("esign.use"); await syncSigns(); return s.signs.filter(signVisible).slice().reverse().map(signOut); }],
+    ["GET", /^\/esign\/(\d+)$/, async (m) => { need("esign.use"); await syncSigns(); return signOut(getSign(+m[1])); }],
+    ["GET", /^\/esign\/(\d+)\/signed$/, async (m) => { need("esign.use"); await syncSigns(); return ensureSignedPdf(getSign(+m[1])); }],
+    // The signer's page (no sign-in: the request code is the credential, the one-time code proves the phone or e-mail).
+    ["GET", /^\/public\/sign\/([\w-]+)$/, async (m) => { const { r, x } = await bySignToken(m[1]); return signerView(r, x); }],
+    ["GET", /^\/public\/sign\/([\w-]+)\/pdf$/, async (m) => {
+      const { r } = await bySignToken(m[1]);
+      s.blobs[`signpdf-${r.id}`] || fail("La solicitud no tiene PDF.");
+      return { name: r.doc_name, base64: s.blobs[`signpdf-${r.id}`] };
+    }],
+    ["GET", /^\/public\/sign\/([\w-]+)\/signed$/, async (m) => ensureSignedPdf((await bySignToken(m[1])).r)],
+    ["POST", /^\/public\/sign\/([\w-]+)\/sign$/, async (m, b) => {
+      const { r, x } = await bySignToken(m[1]);
+      (x.status !== "pendiente" || r.status !== "enviada") && fail("Este documento ya no está pendiente de su firma.");
+      (!x.otp_hash || Date.parse(x.otp_expires_at) < Date.now()) && fail("El código de verificación venció. Pida a la firma que le envíe uno nuevo.");
+      x.otp_attempts >= 5 && fail("Demasiados intentos con un código equivocado. Pida a la firma que le envíe uno nuevo.");
+      (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || b.signature_png.length > 400000) && fail("Dibuje su firma.");
+      str(b.typed_name).length >= 3 || fail("Escriba su nombre completo.");
+      b.accept || fail("Debe aceptar el documento para firmarlo.");
+      if ((await shaText(`${x.id}:${String(b.otp ?? "").replace(/\D/g, "")}`)) !== x.otp_hash) {
+        x.otp_attempts = (x.otp_attempts || 0) + 1;
+        signEvent(r, x.id, "codigo_incorrecto", `Intento ${x.otp_attempts} de 5`);
+        await save();
+        fail(x.otp_attempts >= 5 ? "Código incorrecto. Ya no quedan intentos: pida a la firma un código nuevo." : `Código incorrecto. Le quedan ${5 - x.otp_attempts} intento(s).`);
+      }
+      const via = x.otp_channel === "email" || !x.phone ? `correo ${maskMail(x.email)}` : `WhatsApp ${maskTel(x.phone)}`;
+      Object.assign(x, { status: "firmado", method: "enlace_otp", otp_channel: x.otp_channel === "email" || !x.phone ? "email" : "whatsapp",
+        signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name), otp_hash: null });
+      s.blobs[`sig-${r.id}-${x.id}`] = b.signature_png;
+      signEvent(r, x.id, "firmado", `OTP verificado por ${via} · SHA-256 ${r.doc_hash}`);
+      await finishIfAll(r);
+      return signerView(r, x);
+    }],
+    ["POST", /^\/public\/sign\/([\w-]+)\/reject$/, async (m, b) => {
+      const { r, x } = await bySignToken(m[1]);
+      (x.status !== "pendiente" || r.status !== "enviada") && fail("Este documento ya no está pendiente.");
+      Object.assign(x, { status: "rechazado", reject_reason: str(b.reason).slice(0, 500), otp_hash: null });
+      r.status = "rechazada";
+      signEvent(r, x.id, "rechazado", str(b.reason).slice(0, 500));
+      return signerView(r, x);
+    }],
+    ["POST", /^\/public\/verify$/, async (m, b) => {
+      await syncSigns();
       const hash = String(b.sha256 || "").toLowerCase();
       const code = String(b.code || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^(.{5})(.{5})$/, "$1-$2");
       const describe = (r, match) => ({ match, title: r.title, status: r.status, created_at: r.created_at, completed_at: r.completed_at, verify_code: r.verify_code,
@@ -6723,12 +6966,15 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     }],
     ["POST", /^\/esign$/, async (m, b) => {
       need("esign.use");
-      b.mode !== "presencial" && fail(NEEDS_SERVER.remote);
+      const remote = b.mode !== "presencial";
       const title = str(b.title) || fail("Escriba el nombre del documento.");
       const signers = (Array.isArray(b.signers) ? b.signers : []).map((x) => ({ name: str(x.name), id_type: str(x.id_type) || "CC", id_number: str(x.id_number),
-        email: str(x.email).toLowerCase(), phone: str(x.phone), otp_channel: ["email", "sms", "whatsapp"].includes(x.otp_channel) ? x.otp_channel : "email" }));
+        email: str(x.email).toLowerCase(), phone: str(x.phone), otp_channel: ["email", "whatsapp"].includes(x.otp_channel) ? x.otp_channel : "email" }));
       (!signers.length || signers.length > 10) && fail("Agregue entre 1 y 10 firmantes.");
-      signers.some((x) => !x.name) && fail("Cada firmante necesita nombre.");
+      const problem = PERSON.signersProblem(signers, { remote });
+      problem && fail(problem.message);
+      remote && !SIGN_LINK && fail("Este archivo no conoce la dirección del enlace de prueba; use la firma presencial.");
+      await syncSigns();
       let kind, hash, pdf = null, text = null;
       if (b.doc_pdf_base64) {
         const bytes = b64bytes(String(b.doc_pdf_base64));
@@ -6750,35 +6996,43 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       for (const x of signers) r.signers.push({ id: nextId(), ...x, status: "pendiente", method: null, signed_at: null, ip: "", user_agent: "", typed_name: "", reject_reason: null, otp_sent_at: null });
       if (pdf) s.blobs[`signpdf-${r.id}`] = pdf; else s.blobs[`signtxt-${r.id}`] = text;
       signEvent(r, null, "creada", `${me().name} · SHA-256 ${hash}`);
+      const delivery = [];
+      if (remote) for (const x of r.signers) delivery.push(await issueLink(r, x));
       s.signs.push(r);
-      return { ...signOut(r), delivery: [] };
+      return { ...signOut(r), delivery };
     }],
-    ["POST", /^\/esign\/(\d+)\/remind\/(\d+)$/, () => { need("esign.use"); fail(NEEDS_SERVER.remote); }],
-    ["POST", /^\/esign\/(\d+)\/cancel$/, (m) => {
+    ["POST", /^\/esign\/(\d+)\/remind\/(\d+)$/, async (m) => {
       need("esign.use");
+      await syncSigns();
+      const r = getSign(+m[1]);
+      const x = r.signers.find((y) => y.id === +m[2]);
+      (!x || r.status !== "enviada" || x.status !== "pendiente") && fail("Este firmante no tiene firma pendiente.");
+      PERSON.signerProblem(x, { remote: true }) && fail(PERSON.signerProblem(x, { remote: true }).message);
+      return issueLink(r, x);
+    }],
+    ["POST", /^\/esign\/(\d+)\/cancel$/, async (m) => {
+      need("esign.use");
+      await syncSigns();
       const r = getSign(+m[1]);
       r.status !== "enviada" && fail("Solo se cancelan solicitudes en curso.");
       r.status = "cancelada";
       signEvent(r, null, "cancelada", me().name);
       return signOut(r);
     }],
-    ["POST", /^\/esign\/(\d+)\/in-person\/(\d+)$/, (m, b) => {
+    ["POST", /^\/esign\/(\d+)\/in-person\/(\d+)$/, async (m, b) => {
       need("esign.use");
+      await syncSigns();
       const r = getSign(+m[1]);
       const x = r.signers.find((y) => y.id === +m[2]);
       (!x || r.status !== "enviada" || x.status !== "pendiente") && fail("Este firmante no tiene firma pendiente.");
       (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || b.signature_png.length > 400000) && fail("Dibuje la firma.");
       str(b.typed_name) || fail("Escriba el nombre completo del firmante.");
       b.accept || fail("El firmante debe aceptar el documento.");
-      Object.assign(x, { status: "firmado", method: "presencial", signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name) });
+      Object.assign(x, { status: "firmado", method: "presencial", signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name), otp_hash: null });
       if (str(b.id_number)) x.id_number = str(b.id_number);
       s.blobs[`sig-${r.id}-${x.id}`] = b.signature_png;
       signEvent(r, x.id, "firmado_presencial", `Testigo: ${me().name} · SHA-256 ${r.doc_hash}`);
-      if (r.signers.every((y) => y.status === "firmado")) {
-        r.status = "completada"; r.completed_at = stamp();
-        signEvent(r, null, "completada", "Todos los firmantes firmaron.");
-        s.notes.push({ id: nextId(), user_id: r.created_by, kind: "firma", title: "Documento firmado por todos", body: r.title, link: "#firmas", key: null, created_at: stamp(), read_at: null });
-      }
+      await finishIfAll(r);
       return signOut(r);
     }],
     // ----- certified e-mail: needs the server's mail account -----
@@ -7058,7 +7312,7 @@ Return only a JSON object:
 
   window.JuanmaBackend = {
     web: true,
-    esignRemote: false,
+    signLink: !!(window.JUANMA_LINK_URL),
     async request(method, url, body) {
       await READY;
       const path = url.split("?")[0];
@@ -7326,6 +7580,7 @@ function showAuth(status = {}) {
   $("#ms-error").hidden = !msError;
   $("#ms-error").textContent = msError;
   if (msCode) history.replaceState(null, "", location.pathname + location.hash);
+  $("#sign-code-form").hidden = !(WEB && backend.signLink) || !!status.setupNeeded;
   const demo = backend.demoUsers?.();
   $("#demo-logins").hidden = !demo?.length || !!status.setupNeeded;
   if (demo) {
@@ -7368,6 +7623,9 @@ async function boot() {
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
   // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
+  // A signer's link on the test link (#firmar-CODE) opens the signing page, without signing in.
+  const signTok = location.hash.match(/^#firmar-([\w-]+)$/);
+  if (signTok && WEB) return openSignerPage(signTok[1]);
   const reset = location.hash.match(/^#(restablecer|invitacion)-([\w-]+)$/);
   if (reset && $("#reset-form")) {
     showAuth(st);
@@ -7411,6 +7669,73 @@ $("#reset-form")?.addEventListener("submit", async (e) => {
     await enterApp(out.user);
   } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 });
+
+// ----- Signer's page on the test link (change 61): request code + one-time code, no sign-in -----
+let signerToken = "", signerPad = null;
+$("#sign-code-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const err = $(".form-error", e.target);
+  const code = e.target.elements.token.value.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (code.length !== 8) { err.textContent = "El código de la solicitud tiene 8 letras y números (ej. ABCD-EFGH)."; err.hidden = false; return; }
+  err.hidden = true;
+  guarded(() => openSignerPage(code));
+});
+function signerMsg(text, isErr = false) { const m = $("#ps-msg"); m.hidden = !text; m.textContent = text || ""; m.classList.toggle("error", isErr); }
+function renderSigner(v) {
+  $("#ps-doc").hidden = false;
+  $("#ps-title").textContent = v.title;
+  $("#ps-intro").textContent = v.message || `Documento para la firma de ${v.signer.name}.`;
+  $("#ps-hash").textContent = v.doc_hash;
+  if (v.doc_kind === "markdown") $("#ps-text").innerHTML = DOMPurify.sanitize(marked.parse(v.doc_text || ""));
+  $("#ps-done").hidden = !v.signed;
+  const pending = v.signer.status === "pendiente" && v.request_status === "enviada";
+  $("#ps-sign").hidden = !pending;
+  const via = v.signer.otp_channel === "whatsapp" && v.signer.phone ? `WhatsApp al celular ${v.signer.phone}` : `correo ${v.signer.email}`;
+  $("#ps-otp-note").textContent = `${v.signer.name}: escriba el código de verificación de 6 dígitos que le llegó por ${via}, su nombre completo y dibuje su firma.`;
+  if (pending) { $("#ps-form").elements.typed_name.value ||= v.signer.name; signerMsg(""); }
+  else signerMsg(v.signer.status === "firmado" ? `Firmado el ${window.JuanmaPdf.colombiaTime(v.signer.signed_at)}. Gracias.`
+    : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
+  if (pending && !signerPad) signerPad = window.JuanmaSigPad($("#ps-pad"));
+}
+async function openSignerPage(token) {
+  signerToken = token;
+  history.replaceState(null, "", location.pathname);
+  $("#auth-screen").hidden = true;
+  $("#app-root").hidden = true;
+  $("#sign-screen").hidden = false;
+  try {
+    const v = await api("GET", `/public/sign/${encodeURIComponent(token)}`);
+    renderSigner(v);
+    if (v.doc_kind === "pdf") {
+      const f = await api("GET", `/public/sign/${encodeURIComponent(token)}/pdf`);
+      const frame = $("#ps-pdf");
+      frame.src = URL.createObjectURL(new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
+      frame.hidden = false;
+    }
+  } catch (e) { $("#ps-doc").hidden = true; $("#ps-sign").hidden = true; signerMsg(e.message, true); }
+}
+$("#ps-clear").addEventListener("click", () => signerPad?.clear());
+$("#ps-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, err = $(".form-error", f);
+  err.hidden = true;
+  try {
+    if (!signerPad || signerPad.isEmpty()) throw new Error("Dibuje su firma.");
+    renderSigner(await api("POST", `/public/sign/${encodeURIComponent(signerToken)}/sign`,
+      { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: signerPad.toPng() }));
+    toast("Documento firmado.");
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
+$("#ps-reject").addEventListener("click", () => guarded(async () => {
+  const reason = window.prompt("¿Por qué no firma? (opcional)");
+  if (reason === null) return;
+  renderSigner(await api("POST", `/public/sign/${encodeURIComponent(signerToken)}/reject`, { reason }));
+}));
+$("#ps-dl").addEventListener("click", () => guarded(async () => {
+  const f = await api("GET", `/public/sign/${encodeURIComponent(signerToken)}/signed`);
+  await saveFile(f.filename, new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
+}));
+$("#ps-exit").addEventListener("click", () => { $("#sign-screen").hidden = true; signerToken = ""; guarded(boot); });
 
 // ----- Display preferences (this device) and account -----
 const prefsForm = $("#prefs-dialog form");
@@ -10200,13 +10525,15 @@ async function renderFirmas() {
 }
 
 const signForm = $("#sign-dialog form");
+// The test link signs by link only when it knows its own address (a downloaded copy does not).
+const remoteSignOk = () => !WEB || !!window.JuanmaBackend?.signLink;
 function signerRow(v = {}) {
   const div = document.createElement("div");
   div.className = "signer-row";
   div.innerHTML = `<input data-k="name" placeholder="Nombre completo" value="${escapeHtml(v.name || "")}" aria-label="Nombre del firmante" />
-    <input data-k="id_number" placeholder="Documento" value="${escapeHtml(v.id_number || "")}" aria-label="Documento del firmante" />
+    <input data-k="id_number" placeholder="Cédula (ej. 52123456)" inputmode="numeric" value="${escapeHtml(v.id_number || "")}" aria-label="Documento del firmante" title="Cédula: 5 a 10 dígitos. Pasaporte: letras y números." />
     <input data-k="email" type="email" placeholder="Correo" value="${escapeHtml(v.email || "")}" aria-label="Correo del firmante" />
-    <input data-k="phone" inputmode="tel" placeholder="Celular" value="${escapeHtml(v.phone || "")}" aria-label="Celular del firmante" />
+    <input data-k="phone" type="tel" inputmode="tel" placeholder="Celular (ej. 300 123 4567)" value="${escapeHtml(v.phone || "")}" aria-label="Celular del firmante" title="10 dígitos, empieza por 3. Otro país: con + e indicativo." />
     <select data-k="otp_channel" aria-label="Medio del código OTP" title="Por dónde recibe el código de verificación">
       <option value="email">Código por correo</option><option value="whatsapp">Código por WhatsApp</option>
     </select>
@@ -10215,6 +10542,17 @@ function signerRow(v = {}) {
 }
 $("#add-signer").addEventListener("click", () => $("#signer-rows").append(signerRow()));
 $("#signer-rows").addEventListener("click", (e) => { if (e.target.closest("[data-rm]")) e.target.closest(".signer-row").remove(); });
+$("#signer-rows").addEventListener("input", (e) => e.target.classList.remove("invalid"));
+// Same checks as the server (src/person.js): the wrong field is marked and the message says what to fix.
+function checkSigners(rows, signers, remote) {
+  $$(".invalid", $("#signer-rows")).forEach((el) => el.classList.remove("invalid"));
+  if (!signers.length) throw new Error("Agregue al menos un firmante.");
+  const p = window.JuanmaPerson.signersProblem(signers, { remote });
+  if (!p) return;
+  const el = $(`[data-k="${p.field}"]`, rows[p.index]);
+  if (el) { el.classList.add("invalid"); el.focus(); }
+  throw new Error(p.message);
+}
 signForm.addEventListener("change", (e) => {
   if (e.target.name === "stamp_page") $("[data-stamp-num]", signForm).hidden = e.target.value !== "num";
   if (e.target.name === "source") {
@@ -10241,7 +10579,7 @@ async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   signForm.elements.stamp_pos.value = "br";
   signForm.elements.notify.checked = true;
   $("[data-stamp-num]", signForm).hidden = true;
-  if (window.JuanmaBackend?.esignRemote === false) signForm.elements.mode.value = "presencial";
+  if (!remoteSignOk()) signForm.elements.mode.value = "presencial";
 }
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -10252,8 +10590,9 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
 });
 
 wireDialog($("#sign-dialog"), async (form) => {
-  const signers = $$("#signer-rows .signer-row").map((row) => Object.fromEntries($$("input, select", row).map((i) => [i.dataset.k, i.value.trim()])))
-    .filter((x) => x.name || x.email || x.phone);
+  const rows = $$("#signer-rows .signer-row").filter((row) => $$("input", row).some((i) => i.value.trim()));
+  const signers = rows.map((row) => Object.fromEntries($$("input, select", row).map((i) => [i.dataset.k, i.value.trim()])));
+  checkSigners(rows, signers, form.elements.mode.value !== "presencial");
   const page = form.elements.stamp_page.value;
   const body = { title: form.elements.title.value, case_id: Number(form.elements.case_id.value) || null, signers,
     message: form.elements.message.value, mode: form.elements.mode.value,
@@ -10267,9 +10606,39 @@ wireDialog($("#sign-dialog"), async (form) => {
   } else body.doc_text = form.elements.doc_text.value;
   const r = await api("POST", "/esign", body);
   const failed = (r.delivery || []).filter((d) => !d.ok);
-  toast(failed.length ? `Solicitud creada, pero ${failed.length} enlace(s) no se enviaron: ${failed[0].detail}` : body.mode === "presencial" ? "Solicitud creada. Abra “Ver” para firmar en persona." : "Enlaces de firma enviados.", !!failed.length);
+  const manual = (r.delivery || []).filter((d) => d.manual);
+  toast(failed.length ? `Solicitud creada, pero ${failed.length} enlace(s) no se enviaron: ${failed[0].detail}` : body.mode === "presencial" ? "Solicitud creada. Abra “Ver” para firmar en persona."
+    : manual.length ? "Solicitud creada. Envíe ahora el enlace y el código a cada firmante." : "Enlaces de firma enviados.", !!failed.length);
   if (FICHAS[route().name]) await refreshView();
   else location.hash === "#firmas" ? await renderFirmas() : (location.hash = "#firmas");
+  if (manual.length) openSignSend(r.title, manual);
+});
+
+// Test link: the link and the one-time code leave from this device (WhatsApp or e-mail), in two separate messages.
+function openSignSend(title, list) {
+  const dlg = $("#sign-send-dialog");
+  $("[data-title]", dlg).textContent = `Enviar a firma · ${title}`;
+  const btns = (d, kind) => {
+    const via = d[`${kind}_via`], text = d[`${kind}_text`];
+    const out = [];
+    if (via === "whatsapp" && d.wa) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="https://wa.me/${d.wa}?text=${encodeURIComponent(text)}">Enviar por WhatsApp</a>`);
+    if (via === "email" && d.email) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent(kind === "code" ? `Código para firmar: ${title}` : d.subject)}&body=${encodeURIComponent(text)}">Enviar por correo</a>`);
+    out.push(`<button type="button" class="mini" data-copy="${escapeHtml(text)}">Copiar mensaje</button>`);
+    return out.join(" ");
+  };
+  $("#sign-send-body").innerHTML = list.map((d) => `<div class="send-card">
+    <strong>${escapeHtml(d.name)}</strong>
+    <div class="send-step"><span>1. Enlace${d.link_via === "email" ? " (correo)" : " (WhatsApp)"}</span>${btns(d, "link")}</div>
+    <div class="send-step"><span>2. Código ${escapeHtml(d.otp)}</span>${btns(d, "code")}</div>
+    <p class="hint">Código de la solicitud: <code>${escapeHtml(d.token)}</code>. Si el firmante abre el enlace y no ve el documento, lo escribe en «¿Le enviaron un documento para firmar?» de la pantalla de ingreso. El código de verificación vence en ${d.hours} horas y sirve una vez.</p>
+  </div>`).join("");
+  dlg.showModal();
+}
+$("#sign-send-body").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); toast("Mensaje copiado."); }
+  catch { toast("No se pudo copiar; use el botón de WhatsApp o correo.", true); }
 });
 
 async function openSignDetail(id) {
@@ -10285,7 +10654,7 @@ async function openSignDetail(id) {
         <img class="sig-img" src="${escapeHtml(x.signature_png)}" alt="Firma de ${escapeHtml(x.name)}" />`
         : x.status === "rechazado" ? `<span class="badge bad">No firmó: ${escapeHtml(x.reject_reason || "")}</span>`
         : `<span class="badge warn">Pendiente</span>${r.status === "enviada" ? `
-          ${(x.email || x.phone) && window.JuanmaBackend?.esignRemote !== false ? `<button type="button" class="mini" data-sign-remind="${x.id}">Reenviar enlace</button>` : ""}
+          ${(x.email || x.phone) && remoteSignOk() ? `<button type="button" class="mini" data-sign-remind="${x.id}">${WEB ? "Enviar enlace y código" : "Reenviar enlace"}</button>` : ""}
           <button type="button" class="mini" data-sign-inperson="${x.id}">Firmar en persona</button>` : ""}`}</div>
     </li>`).join("")}</ul>
     <details><summary>Registro de eventos (${r.events.length})</summary>
@@ -10304,6 +10673,7 @@ $("#sign-detail").addEventListener("click", (e) => {
   guarded(async () => {
     if (remind) {
       const d = await api("POST", `/esign/${signCurrent.id}/remind/${remind.dataset.signRemind}`);
+      if (d.manual) { await openSignDetail(signCurrent.id); openSignSend(signCurrent.title, [d]); return; }
       toast(d.ok ? "Enlace reenviado. El anterior dejó de funcionar." : `No se envió: ${d.detail}`, !d.ok);
       await openSignDetail(signCurrent.id);
     } else if (inperson) {

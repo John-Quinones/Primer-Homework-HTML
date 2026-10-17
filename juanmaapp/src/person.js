@@ -95,3 +95,55 @@ export function clientMatches(c, q, by = "") {
   const ok = words(text).every((w) => hay.split(" ").some((h) => h.startsWith(w)) || (w.length >= 4 && hay.includes(w)));
   return ok || (!by && docHit);
 }
+
+/**
+ * Checks one signer of an e-signature request. Returns the problem as
+ * { field, message } or null. The document and the mobile are optional, but
+ * when written they must look real (change 61: "5555" was accepted in both).
+ * remote: the code goes by the signer's otp_channel ("email" | "whatsapp" | "sms").
+ */
+export function signerProblem(s, { remote = false } = {}) {
+  const name = String(s.name ?? "").trim();
+  if (!name) return { field: "name", message: "Cada firmante necesita nombre." };
+  if (name.length < 3 || !/\p{L}/u.test(name)) return { field: "name", message: `Escriba el nombre completo del firmante (${name}).` };
+  const doc = String(s.id_number ?? "").replace(/[\s.]/g, "");
+  if (doc && !/^\d{5,10}(-\d)?$/.test(doc) && !(/^[A-Za-z0-9]{5,12}$/.test(doc) && /[A-Za-z]/.test(doc))) {
+    return { field: "id_number", message: `El documento de ${name} no es válido: la cédula lleva entre 5 y 10 dígitos (el pasaporte, letras y números).` };
+  }
+  const email = String(s.email ?? "").trim();
+  if (email && !/^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']{2,}$/.test(email)) return { field: "email", message: `El correo de ${name} no es válido.` };
+  const phone = String(s.phone ?? "").trim();
+  if (phone && !mobileDigits(phone)) {
+    return { field: "phone", message: `El celular de ${name} no es válido: debe tener 10 dígitos y empezar por 3 (ej. 300 123 4567), o el indicativo de otro país con +.` };
+  }
+  if (doc && phone && doc.replace(/\D/g, "") === phone.replace(/\D/g, "")) return { field: "phone", message: `El documento y el celular de ${name} son el mismo número. Revíselos.` };
+  if (remote) {
+    const ch = s.otp_channel || "email";
+    if (ch === "email" && !email) return { field: "email", message: `Falta el correo de ${name} para enviarle el enlace y el código.` };
+    if (ch !== "email" && !phone) return { field: "phone", message: `Falta el celular de ${name} para enviarle el código por ${ch === "sms" ? "SMS" : "WhatsApp"}.` };
+  }
+  return null;
+}
+
+/** "300 123 4567", "+57 300 1234567" → "573001234567" (for wa.me); foreign numbers need "+". "" when not a mobile. */
+export function mobileDigits(phone) {
+  const raw = String(phone ?? "").trim();
+  const d = raw.replace(/\D/g, "");
+  if (/^3\d{9}$/.test(d)) return `57${d}`;
+  if (/^573\d{9}$/.test(d)) return d;
+  if (raw.startsWith("+") && !d.startsWith("57") && d.length >= 8 && d.length <= 15) return d;
+  return "";
+}
+
+/** Checks every signer and that no document is repeated. Returns { index, field, message } or null. */
+export function signersProblem(list, opts = {}) {
+  const seen = new Map();
+  for (const [index, s] of list.entries()) {
+    const p = signerProblem(s, opts);
+    if (p) return { index, ...p };
+    const doc = String(s.id_number ?? "").replace(/[\s.-]/g, "").toUpperCase();
+    if (doc && seen.has(doc)) return { index, field: "id_number", message: `${s.name} y ${list[seen.get(doc)].name} tienen el mismo documento.` };
+    if (doc) seen.set(doc, index);
+  }
+  return null;
+}

@@ -952,3 +952,14 @@ section.sec-current { scroll-margin-top: 64px; }
 
 @media (prefers-reduced-motion: reduce) { .facts > div { transition: none; } }
 .public-nav { max-width: 860px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+/* Signer's page inside the test link (change 61) */
+.sign-screen { min-height: 100vh; background: var(--bg, #f4f6f9); }
+.sign-screen .public-wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; display: grid; gap: 16px; }
+.sign-screen .pdf-frame { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 10px; }
+.sign-screen .hash { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .76rem; word-break: break-all; color: var(--text-muted); }
+.sign-code { margin-top: 8px; }
+.send-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 10px 0; display: grid; gap: 8px; }
+.send-card .send-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.send-card .send-step > span:first-child { min-width: 9rem; font-weight: 600; }
+.send-card code { font-size: .95rem; letter-spacing: .08em; }
+.signer-row .invalid { border-color: var(--danger, #c0392b); box-shadow: 0 0 0 2px rgba(192, 57, 43, .18); }

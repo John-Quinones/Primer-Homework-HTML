@@ -51,6 +51,8 @@ window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
 window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
 window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES, feeClause: [FEE_CLAUSE_OLD, FEE_CLAUSE_NEW], contractHead: [CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW] })};</script>`,
     `<script>window.JUANMA_VERSION = ${JSON.stringify(readVersion())};</script>`,
+    // Address of the published link, for signers' links (#firmar-CODE); filled only in the web-link version below.
+    `<script>window.JUANMA_LINK_URL = "";</script>`,
     `<script>window.JUANMA_PROMPT = ${JSON.stringify(read("prompts/nomosai-system-prompt.md"))};</script>`,
     `<script>${safe(read("public/web-store.js"))}</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,
@@ -78,7 +80,9 @@ const gutters = `<style>
 @media (min-width: 761px) { main { padding-left: 24px; } .sidenav { padding-right: 12px; } }
 .toast { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 </style>`;
-const artifact = `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${head}\n${gutters}\n${body}`;
+const LINK_URL = process.env.JUANMA_LINK_URL || "https://claude.ai/artifact/ReozPvwxi8VWkwbdPRssSz";
+const artifact = `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${head}\n${gutters}\n${body}`
+  .replace('<script>window.JUANMA_LINK_URL = "";</script>', () => `<script>window.JUANMA_LINK_URL = ${JSON.stringify(LINK_URL)};</script>`);
 const outA = path.join(root, "preview/juanmaapp-web.html");
 writeFileSync(outA, artifact);
 console.log(`Wrote ${path.relative(root, outA)} (${(artifact.length / 1024).toFixed(0)} KB)`);

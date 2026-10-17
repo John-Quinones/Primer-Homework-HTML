@@ -431,7 +431,6 @@
     juris: "La búsqueda y verificación en las relatorías oficiales necesita la app instalada en el servidor (este enlace no puede abrir sitios externos). Aquí puede analizar una sentencia pegando su texto.",
     mail: "El envío de correos necesita la app instalada en el servidor con el correo de la firma configurado (SMTP).",
     consent: "El envío del enlace de autorizaciones necesita la app instalada en el servidor. En este enlace use «Firmar en la oficina».",
-    remote: "La firma por enlace con código OTP (correo, SMS o WhatsApp) necesita la app instalada en el servidor. En este enlace use la firma presencial.",
   };
   // ----- Client authorizations (change 56): append-only, hash-chained like the server -----
   const LEGAL = window.JuanmaLegal;
@@ -1093,11 +1092,72 @@
     }],
   ];
 
-  // ----- e-signature (in person on this device) -----
+  // ----- e-signature: in person on this device, or by private link + one-time code (change 61) -----
+  // On the link the messages cannot leave by themselves: the app prepares the link and the code
+  // and the office sends them from its own WhatsApp or e-mail. The signer opens the same link
+  // (#firmar-CODE, or types the request code on the sign-in screen) and signs with the code.
+  const hideSecrets = ({ token_hash, otp_hash, otp_expires_at, otp_attempts, ...x }) => x;
   const signOut = (r) => ({
     ...clone(r), doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, has_pdf: !!s.blobs[`signpdf-${r.id}`],
-    signers: r.signers.map((x) => ({ ...clone(x), signature_png: s.blobs[`sig-${r.id}-${x.id}`] || null })),
+    signers: r.signers.map((x) => ({ ...hideSecrets(clone(x)), signature_png: s.blobs[`sig-${r.id}-${x.id}`] || null })),
   });
+  // A signer may have signed from another device: read the requests as stored now before using them.
+  async function syncSigns() {
+    const now = await window.JuanmaStore.refresh?.("signs", "sig-");
+    if (!now) return;
+    s.signs = now.items;
+    Object.assign(s.blobs, now.blobs);
+  }
+  const SIGN_LINK = window.JUANMA_LINK_URL || "";
+  const OTP_HOURS = 24;
+  const CODE_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  const newSignToken = () => { const c = [...crypto.getRandomValues(new Uint32Array(8))].map((x) => CODE_ABC[x % CODE_ABC.length]).join(""); return `${c.slice(0, 4)}-${c.slice(4)}`; };
+  const normSignToken = (t) => String(t || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^(.{4})(.{4})$/, "$1-$2");
+  const newOtp = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+  const maskMail = (e) => String(e || "").replace(/^(.{2}).*(@.*)$/, "$1•••$2");
+  const maskTel = (p) => { const d = String(p || "").replace(/\D/g, ""); return d ? `•••${d.slice(-4)}` : ""; };
+  const VIA = { email: "correo", whatsapp: "WhatsApp", sms: "SMS" };
+  // New link code and one-time code for a signer (the old ones stop working). Only their hashes are kept.
+  async function issueLink(r, x) {
+    const token = newSignToken(), otp = newOtp();
+    x.token_hash = await shaText(token);
+    x.otp_hash = await shaText(`${x.id}:${otp}`);
+    x.otp_expires_at = new Date(Date.now() + OTP_HOURS * 3600000).toISOString();
+    x.otp_attempts = 0;
+    x.otp_sent_at = stamp();
+    const codeVia = x.otp_channel === "email" || !x.phone ? "email" : "whatsapp";
+    const linkVia = x.email ? "email" : "whatsapp";
+    const link = SIGN_LINK ? `${SIGN_LINK}#firmar-${token}` : "";
+    const firm = paySettings().firm_name || "TEC Jurídicos";
+    const link_text = [`${firm}: ${r.message || "le enviamos un documento para firmar electrónicamente."}`, "", `Documento: «${r.title}»`,
+      link ? `Ábralo aquí: ${link}` : "", `Código de la solicitud: ${token} (si la página se lo pide, escríbalo en «¿Le enviaron un documento para firmar?»).`,
+      "", `En un mensaje aparte le llegará su código de verificación de 6 dígitos por ${VIA[codeVia]}.`].filter((l, i, a) => l || a[i - 1]).join("\n");
+    const code_text = `${firm}: su código para firmar «${r.title.slice(0, 60)}» es ${otp}. Vence en ${OTP_HOURS} horas. No lo comparta.`;
+    signEvent(r, x.id, "enlace_generado", `Enlace por ${VIA[linkVia]} (${linkVia === "email" ? maskMail(x.email) : maskTel(x.phone)}) y código por ${VIA[codeVia]} (${codeVia === "email" ? maskMail(x.email) : maskTel(x.phone)}); los envía ${me().name} desde su equipo.`);
+    return { signer_id: x.id, name: x.name, ok: true, manual: true, token, otp, link, link_via: linkVia, code_via: codeVia,
+      email: x.email, wa: PERSON.mobileDigits(x.phone), subject: `Documento para firmar: ${r.title}`, link_text, code_text, hours: OTP_HOURS };
+  }
+  async function bySignToken(token) {
+    await syncSigns();
+    const code = normSignToken(token);
+    /^[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(code) || fail("El código de la solicitud no es válido. Revise el mensaje que le llegó.");
+    const h = await shaText(code);
+    for (const r of s.signs) { const x = r.signers.find((y) => y.token_hash === h); if (x) return { r, x }; }
+    fail("El enlace o el código de la solicitud no es válido o fue reemplazado por uno nuevo. Pida que se lo envíen de nuevo.");
+  }
+  const signerView = (r, x) => ({
+    title: r.title, message: r.message, doc_kind: r.doc_kind, doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, doc_hash: r.doc_hash,
+    request_status: r.status, signed: r.status === "completada",
+    signer: { name: x.name, status: x.status, signed_at: x.signed_at, otp_channel: x.otp_channel, email: maskMail(x.email), phone: maskTel(x.phone) },
+  });
+  async function finishIfAll(r) {
+    if (!r.signers.every((y) => y.status === "firmado")) return;
+    r.status = "completada"; r.completed_at = stamp();
+    signEvent(r, null, "completada", "Todos los firmantes firmaron.");
+    const notes = await window.JuanmaStore.refresh?.("notes");
+    if (notes) s.notes = notes.items;
+    s.notes.push({ id: nextId(), user_id: r.created_by, kind: "firma", title: "Documento firmado por todos", body: r.title, link: "#firmas", key: null, created_at: stamp(), read_at: null });
+  }
   const signVisible = (r) => inScope(r.office_id) || r.created_by === me().id;
   const getSign = (id) => s.signs.find((r) => r.id === id && signVisible(r)) || fail("La solicitud no existe.");
   const signEvent = (r, signerId, event, detail = "") => r.events.push({ id: nextId(), request_id: r.id, signer_id: signerId, event, detail, ip: "", at: stamp(), created_at: stamp() });
@@ -1129,10 +1189,49 @@
   const b64bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
   routes.push(
-    ["GET", /^\/esign$/, () => { need("esign.use"); return s.signs.filter(signVisible).slice().reverse().map(signOut); }],
-    ["GET", /^\/esign\/(\d+)$/, (m) => { need("esign.use"); return signOut(getSign(+m[1])); }],
-    ["GET", /^\/esign\/(\d+)\/signed$/, async (m) => { need("esign.use"); return ensureSignedPdf(getSign(+m[1])); }],
-    ["POST", /^\/public\/verify$/, (m, b) => {
+    ["GET", /^\/esign$/, async () => { need("esign.use"); await syncSigns(); return s.signs.filter(signVisible).slice().reverse().map(signOut); }],
+    ["GET", /^\/esign\/(\d+)$/, async (m) => { need("esign.use"); await syncSigns(); return signOut(getSign(+m[1])); }],
+    ["GET", /^\/esign\/(\d+)\/signed$/, async (m) => { need("esign.use"); await syncSigns(); return ensureSignedPdf(getSign(+m[1])); }],
+    // The signer's page (no sign-in: the request code is the credential, the one-time code proves the phone or e-mail).
+    ["GET", /^\/public\/sign\/([\w-]+)$/, async (m) => { const { r, x } = await bySignToken(m[1]); return signerView(r, x); }],
+    ["GET", /^\/public\/sign\/([\w-]+)\/pdf$/, async (m) => {
+      const { r } = await bySignToken(m[1]);
+      s.blobs[`signpdf-${r.id}`] || fail("La solicitud no tiene PDF.");
+      return { name: r.doc_name, base64: s.blobs[`signpdf-${r.id}`] };
+    }],
+    ["GET", /^\/public\/sign\/([\w-]+)\/signed$/, async (m) => ensureSignedPdf((await bySignToken(m[1])).r)],
+    ["POST", /^\/public\/sign\/([\w-]+)\/sign$/, async (m, b) => {
+      const { r, x } = await bySignToken(m[1]);
+      (x.status !== "pendiente" || r.status !== "enviada") && fail("Este documento ya no está pendiente de su firma.");
+      (!x.otp_hash || Date.parse(x.otp_expires_at) < Date.now()) && fail("El código de verificación venció. Pida a la firma que le envíe uno nuevo.");
+      x.otp_attempts >= 5 && fail("Demasiados intentos con un código equivocado. Pida a la firma que le envíe uno nuevo.");
+      (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || b.signature_png.length > 400000) && fail("Dibuje su firma.");
+      str(b.typed_name).length >= 3 || fail("Escriba su nombre completo.");
+      b.accept || fail("Debe aceptar el documento para firmarlo.");
+      if ((await shaText(`${x.id}:${String(b.otp ?? "").replace(/\D/g, "")}`)) !== x.otp_hash) {
+        x.otp_attempts = (x.otp_attempts || 0) + 1;
+        signEvent(r, x.id, "codigo_incorrecto", `Intento ${x.otp_attempts} de 5`);
+        await save();
+        fail(x.otp_attempts >= 5 ? "Código incorrecto. Ya no quedan intentos: pida a la firma un código nuevo." : `Código incorrecto. Le quedan ${5 - x.otp_attempts} intento(s).`);
+      }
+      const via = x.otp_channel === "email" || !x.phone ? `correo ${maskMail(x.email)}` : `WhatsApp ${maskTel(x.phone)}`;
+      Object.assign(x, { status: "firmado", method: "enlace_otp", otp_channel: x.otp_channel === "email" || !x.phone ? "email" : "whatsapp",
+        signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name), otp_hash: null });
+      s.blobs[`sig-${r.id}-${x.id}`] = b.signature_png;
+      signEvent(r, x.id, "firmado", `OTP verificado por ${via} · SHA-256 ${r.doc_hash}`);
+      await finishIfAll(r);
+      return signerView(r, x);
+    }],
+    ["POST", /^\/public\/sign\/([\w-]+)\/reject$/, async (m, b) => {
+      const { r, x } = await bySignToken(m[1]);
+      (x.status !== "pendiente" || r.status !== "enviada") && fail("Este documento ya no está pendiente.");
+      Object.assign(x, { status: "rechazado", reject_reason: str(b.reason).slice(0, 500), otp_hash: null });
+      r.status = "rechazada";
+      signEvent(r, x.id, "rechazado", str(b.reason).slice(0, 500));
+      return signerView(r, x);
+    }],
+    ["POST", /^\/public\/verify$/, async (m, b) => {
+      await syncSigns();
       const hash = String(b.sha256 || "").toLowerCase();
       const code = String(b.code || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^(.{5})(.{5})$/, "$1-$2");
       const describe = (r, match) => ({ match, title: r.title, status: r.status, created_at: r.created_at, completed_at: r.completed_at, verify_code: r.verify_code,
@@ -1156,12 +1255,15 @@
     }],
     ["POST", /^\/esign$/, async (m, b) => {
       need("esign.use");
-      b.mode !== "presencial" && fail(NEEDS_SERVER.remote);
+      const remote = b.mode !== "presencial";
       const title = str(b.title) || fail("Escriba el nombre del documento.");
       const signers = (Array.isArray(b.signers) ? b.signers : []).map((x) => ({ name: str(x.name), id_type: str(x.id_type) || "CC", id_number: str(x.id_number),
-        email: str(x.email).toLowerCase(), phone: str(x.phone), otp_channel: ["email", "sms", "whatsapp"].includes(x.otp_channel) ? x.otp_channel : "email" }));
+        email: str(x.email).toLowerCase(), phone: str(x.phone), otp_channel: ["email", "whatsapp"].includes(x.otp_channel) ? x.otp_channel : "email" }));
       (!signers.length || signers.length > 10) && fail("Agregue entre 1 y 10 firmantes.");
-      signers.some((x) => !x.name) && fail("Cada firmante necesita nombre.");
+      const problem = PERSON.signersProblem(signers, { remote });
+      problem && fail(problem.message);
+      remote && !SIGN_LINK && fail("Este archivo no conoce la dirección del enlace de prueba; use la firma presencial.");
+      await syncSigns();
       let kind, hash, pdf = null, text = null;
       if (b.doc_pdf_base64) {
         const bytes = b64bytes(String(b.doc_pdf_base64));
@@ -1183,35 +1285,43 @@
       for (const x of signers) r.signers.push({ id: nextId(), ...x, status: "pendiente", method: null, signed_at: null, ip: "", user_agent: "", typed_name: "", reject_reason: null, otp_sent_at: null });
       if (pdf) s.blobs[`signpdf-${r.id}`] = pdf; else s.blobs[`signtxt-${r.id}`] = text;
       signEvent(r, null, "creada", `${me().name} · SHA-256 ${hash}`);
+      const delivery = [];
+      if (remote) for (const x of r.signers) delivery.push(await issueLink(r, x));
       s.signs.push(r);
-      return { ...signOut(r), delivery: [] };
+      return { ...signOut(r), delivery };
     }],
-    ["POST", /^\/esign\/(\d+)\/remind\/(\d+)$/, () => { need("esign.use"); fail(NEEDS_SERVER.remote); }],
-    ["POST", /^\/esign\/(\d+)\/cancel$/, (m) => {
+    ["POST", /^\/esign\/(\d+)\/remind\/(\d+)$/, async (m) => {
       need("esign.use");
+      await syncSigns();
+      const r = getSign(+m[1]);
+      const x = r.signers.find((y) => y.id === +m[2]);
+      (!x || r.status !== "enviada" || x.status !== "pendiente") && fail("Este firmante no tiene firma pendiente.");
+      PERSON.signerProblem(x, { remote: true }) && fail(PERSON.signerProblem(x, { remote: true }).message);
+      return issueLink(r, x);
+    }],
+    ["POST", /^\/esign\/(\d+)\/cancel$/, async (m) => {
+      need("esign.use");
+      await syncSigns();
       const r = getSign(+m[1]);
       r.status !== "enviada" && fail("Solo se cancelan solicitudes en curso.");
       r.status = "cancelada";
       signEvent(r, null, "cancelada", me().name);
       return signOut(r);
     }],
-    ["POST", /^\/esign\/(\d+)\/in-person\/(\d+)$/, (m, b) => {
+    ["POST", /^\/esign\/(\d+)\/in-person\/(\d+)$/, async (m, b) => {
       need("esign.use");
+      await syncSigns();
       const r = getSign(+m[1]);
       const x = r.signers.find((y) => y.id === +m[2]);
       (!x || r.status !== "enviada" || x.status !== "pendiente") && fail("Este firmante no tiene firma pendiente.");
       (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || b.signature_png.length > 400000) && fail("Dibuje la firma.");
       str(b.typed_name) || fail("Escriba el nombre completo del firmante.");
       b.accept || fail("El firmante debe aceptar el documento.");
-      Object.assign(x, { status: "firmado", method: "presencial", signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name) });
+      Object.assign(x, { status: "firmado", method: "presencial", signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name), otp_hash: null });
       if (str(b.id_number)) x.id_number = str(b.id_number);
       s.blobs[`sig-${r.id}-${x.id}`] = b.signature_png;
       signEvent(r, x.id, "firmado_presencial", `Testigo: ${me().name} · SHA-256 ${r.doc_hash}`);
-      if (r.signers.every((y) => y.status === "firmado")) {
-        r.status = "completada"; r.completed_at = stamp();
-        signEvent(r, null, "completada", "Todos los firmantes firmaron.");
-        s.notes.push({ id: nextId(), user_id: r.created_by, kind: "firma", title: "Documento firmado por todos", body: r.title, link: "#firmas", key: null, created_at: stamp(), read_at: null });
-      }
+      await finishIfAll(r);
       return signOut(r);
     }],
     // ----- certified e-mail: needs the server's mail account -----
@@ -1491,7 +1601,7 @@ Return only a JSON object:
 
   window.JuanmaBackend = {
     web: true,
-    esignRemote: false,
+    signLink: !!(window.JUANMA_LINK_URL),
     async request(method, url, body) {
       await READY;
       const path = url.split("?")[0];

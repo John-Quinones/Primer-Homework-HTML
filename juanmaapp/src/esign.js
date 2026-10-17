@@ -9,6 +9,7 @@ import { can, scopeOf } from "./auth.js";
 import { sendEmail, sendSms, sendWhatsapp, sendWhatsappCode, channelReady } from "./notify.js";
 import { buildSignedPdf } from "./signed-pdf.js";
 import { newVerifyCode, normVerifyCode } from "./verify-code.js";
+import { signersProblem } from "./person.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -192,11 +193,9 @@ export function esignRouter(db) {
       email: str(s.email).toLowerCase(), phone: str(s.phone), otp_channel: CHANNELS.includes(s.otp_channel) ? s.otp_channel : "email" })) : [];
     if (!signers.length || signers.length > 10) return res.status(400).json({ error: "Agregue entre 1 y 10 firmantes." });
     const remote = b.mode !== "presencial";
+    const problem = signersProblem(signers, { remote });
+    if (problem) return res.status(400).json({ error: problem.message, field: problem.field, index: problem.index });
     for (const s of signers) {
-      if (!s.name) return res.status(400).json({ error: "Cada firmante necesita nombre." });
-      if (s.email && !/^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']+$/.test(s.email)) return res.status(400).json({ error: `El correo de ${s.name} no es válido.` });
-      if (remote && s.otp_channel === "email" && !s.email.includes("@")) return res.status(400).json({ error: `Falta un correo válido para ${s.name}.` });
-      if (remote && s.otp_channel !== "email" && s.phone.replace(/\D/g, "").length < 10) return res.status(400).json({ error: `Falta el celular de ${s.name} para enviarle el código por ${CHANNEL_LABEL[s.otp_channel]}.` });
       if (remote && s.otp_channel !== "email" && !channelReady(s.otp_channel)) {
         return res.status(400).json({ error: `El servidor aún no tiene configurado el envío por ${CHANNEL_LABEL[s.otp_channel]}. Use correo o configure el canal.` });
       }

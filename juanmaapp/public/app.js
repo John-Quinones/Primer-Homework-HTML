@@ -202,6 +202,7 @@ function showAuth(status = {}) {
   $("#ms-error").hidden = !msError;
   $("#ms-error").textContent = msError;
   if (msCode) history.replaceState(null, "", location.pathname + location.hash);
+  $("#sign-code-form").hidden = !(WEB && backend.signLink) || !!status.setupNeeded;
   const demo = backend.demoUsers?.();
   $("#demo-logins").hidden = !demo?.length || !!status.setupNeeded;
   if (demo) {
@@ -244,6 +245,9 @@ async function boot() {
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
   // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
+  // A signer's link on the test link (#firmar-CODE) opens the signing page, without signing in.
+  const signTok = location.hash.match(/^#firmar-([\w-]+)$/);
+  if (signTok && WEB) return openSignerPage(signTok[1]);
   const reset = location.hash.match(/^#(restablecer|invitacion)-([\w-]+)$/);
   if (reset && $("#reset-form")) {
     showAuth(st);
@@ -287,6 +291,73 @@ $("#reset-form")?.addEventListener("submit", async (e) => {
     await enterApp(out.user);
   } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 });
+
+// ----- Signer's page on the test link (change 61): request code + one-time code, no sign-in -----
+let signerToken = "", signerPad = null;
+$("#sign-code-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const err = $(".form-error", e.target);
+  const code = e.target.elements.token.value.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (code.length !== 8) { err.textContent = "El código de la solicitud tiene 8 letras y números (ej. ABCD-EFGH)."; err.hidden = false; return; }
+  err.hidden = true;
+  guarded(() => openSignerPage(code));
+});
+function signerMsg(text, isErr = false) { const m = $("#ps-msg"); m.hidden = !text; m.textContent = text || ""; m.classList.toggle("error", isErr); }
+function renderSigner(v) {
+  $("#ps-doc").hidden = false;
+  $("#ps-title").textContent = v.title;
+  $("#ps-intro").textContent = v.message || `Documento para la firma de ${v.signer.name}.`;
+  $("#ps-hash").textContent = v.doc_hash;
+  if (v.doc_kind === "markdown") $("#ps-text").innerHTML = DOMPurify.sanitize(marked.parse(v.doc_text || ""));
+  $("#ps-done").hidden = !v.signed;
+  const pending = v.signer.status === "pendiente" && v.request_status === "enviada";
+  $("#ps-sign").hidden = !pending;
+  const via = v.signer.otp_channel === "whatsapp" && v.signer.phone ? `WhatsApp al celular ${v.signer.phone}` : `correo ${v.signer.email}`;
+  $("#ps-otp-note").textContent = `${v.signer.name}: escriba el código de verificación de 6 dígitos que le llegó por ${via}, su nombre completo y dibuje su firma.`;
+  if (pending) { $("#ps-form").elements.typed_name.value ||= v.signer.name; signerMsg(""); }
+  else signerMsg(v.signer.status === "firmado" ? `Firmado el ${window.JuanmaPdf.colombiaTime(v.signer.signed_at)}. Gracias.`
+    : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
+  if (pending && !signerPad) signerPad = window.JuanmaSigPad($("#ps-pad"));
+}
+async function openSignerPage(token) {
+  signerToken = token;
+  history.replaceState(null, "", location.pathname);
+  $("#auth-screen").hidden = true;
+  $("#app-root").hidden = true;
+  $("#sign-screen").hidden = false;
+  try {
+    const v = await api("GET", `/public/sign/${encodeURIComponent(token)}`);
+    renderSigner(v);
+    if (v.doc_kind === "pdf") {
+      const f = await api("GET", `/public/sign/${encodeURIComponent(token)}/pdf`);
+      const frame = $("#ps-pdf");
+      frame.src = URL.createObjectURL(new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
+      frame.hidden = false;
+    }
+  } catch (e) { $("#ps-doc").hidden = true; $("#ps-sign").hidden = true; signerMsg(e.message, true); }
+}
+$("#ps-clear").addEventListener("click", () => signerPad?.clear());
+$("#ps-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, err = $(".form-error", f);
+  err.hidden = true;
+  try {
+    if (!signerPad || signerPad.isEmpty()) throw new Error("Dibuje su firma.");
+    renderSigner(await api("POST", `/public/sign/${encodeURIComponent(signerToken)}/sign`,
+      { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: signerPad.toPng() }));
+    toast("Documento firmado.");
+  } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
+$("#ps-reject").addEventListener("click", () => guarded(async () => {
+  const reason = window.prompt("¿Por qué no firma? (opcional)");
+  if (reason === null) return;
+  renderSigner(await api("POST", `/public/sign/${encodeURIComponent(signerToken)}/reject`, { reason }));
+}));
+$("#ps-dl").addEventListener("click", () => guarded(async () => {
+  const f = await api("GET", `/public/sign/${encodeURIComponent(signerToken)}/signed`);
+  await saveFile(f.filename, new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
+}));
+$("#ps-exit").addEventListener("click", () => { $("#sign-screen").hidden = true; signerToken = ""; guarded(boot); });
 
 // ----- Display preferences (this device) and account -----
 const prefsForm = $("#prefs-dialog form");
@@ -3076,13 +3147,15 @@ async function renderFirmas() {
 }
 
 const signForm = $("#sign-dialog form");
+// The test link signs by link only when it knows its own address (a downloaded copy does not).
+const remoteSignOk = () => !WEB || !!window.JuanmaBackend?.signLink;
 function signerRow(v = {}) {
   const div = document.createElement("div");
   div.className = "signer-row";
   div.innerHTML = `<input data-k="name" placeholder="Nombre completo" value="${escapeHtml(v.name || "")}" aria-label="Nombre del firmante" />
-    <input data-k="id_number" placeholder="Documento" value="${escapeHtml(v.id_number || "")}" aria-label="Documento del firmante" />
+    <input data-k="id_number" placeholder="Cédula (ej. 52123456)" inputmode="numeric" value="${escapeHtml(v.id_number || "")}" aria-label="Documento del firmante" title="Cédula: 5 a 10 dígitos. Pasaporte: letras y números." />
     <input data-k="email" type="email" placeholder="Correo" value="${escapeHtml(v.email || "")}" aria-label="Correo del firmante" />
-    <input data-k="phone" inputmode="tel" placeholder="Celular" value="${escapeHtml(v.phone || "")}" aria-label="Celular del firmante" />
+    <input data-k="phone" type="tel" inputmode="tel" placeholder="Celular (ej. 300 123 4567)" value="${escapeHtml(v.phone || "")}" aria-label="Celular del firmante" title="10 dígitos, empieza por 3. Otro país: con + e indicativo." />
     <select data-k="otp_channel" aria-label="Medio del código OTP" title="Por dónde recibe el código de verificación">
       <option value="email">Código por correo</option><option value="whatsapp">Código por WhatsApp</option>
     </select>
@@ -3091,6 +3164,17 @@ function signerRow(v = {}) {
 }
 $("#add-signer").addEventListener("click", () => $("#signer-rows").append(signerRow()));
 $("#signer-rows").addEventListener("click", (e) => { if (e.target.closest("[data-rm]")) e.target.closest(".signer-row").remove(); });
+$("#signer-rows").addEventListener("input", (e) => e.target.classList.remove("invalid"));
+// Same checks as the server (src/person.js): the wrong field is marked and the message says what to fix.
+function checkSigners(rows, signers, remote) {
+  $$(".invalid", $("#signer-rows")).forEach((el) => el.classList.remove("invalid"));
+  if (!signers.length) throw new Error("Agregue al menos un firmante.");
+  const p = window.JuanmaPerson.signersProblem(signers, { remote });
+  if (!p) return;
+  const el = $(`[data-k="${p.field}"]`, rows[p.index]);
+  if (el) { el.classList.add("invalid"); el.focus(); }
+  throw new Error(p.message);
+}
 signForm.addEventListener("change", (e) => {
   if (e.target.name === "stamp_page") $("[data-stamp-num]", signForm).hidden = e.target.value !== "num";
   if (e.target.name === "source") {
@@ -3117,7 +3201,7 @@ async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   signForm.elements.stamp_pos.value = "br";
   signForm.elements.notify.checked = true;
   $("[data-stamp-num]", signForm).hidden = true;
-  if (window.JuanmaBackend?.esignRemote === false) signForm.elements.mode.value = "presencial";
+  if (!remoteSignOk()) signForm.elements.mode.value = "presencial";
 }
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -3128,8 +3212,9 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
 });
 
 wireDialog($("#sign-dialog"), async (form) => {
-  const signers = $$("#signer-rows .signer-row").map((row) => Object.fromEntries($$("input, select", row).map((i) => [i.dataset.k, i.value.trim()])))
-    .filter((x) => x.name || x.email || x.phone);
+  const rows = $$("#signer-rows .signer-row").filter((row) => $$("input", row).some((i) => i.value.trim()));
+  const signers = rows.map((row) => Object.fromEntries($$("input, select", row).map((i) => [i.dataset.k, i.value.trim()])));
+  checkSigners(rows, signers, form.elements.mode.value !== "presencial");
   const page = form.elements.stamp_page.value;
   const body = { title: form.elements.title.value, case_id: Number(form.elements.case_id.value) || null, signers,
     message: form.elements.message.value, mode: form.elements.mode.value,
@@ -3143,9 +3228,39 @@ wireDialog($("#sign-dialog"), async (form) => {
   } else body.doc_text = form.elements.doc_text.value;
   const r = await api("POST", "/esign", body);
   const failed = (r.delivery || []).filter((d) => !d.ok);
-  toast(failed.length ? `Solicitud creada, pero ${failed.length} enlace(s) no se enviaron: ${failed[0].detail}` : body.mode === "presencial" ? "Solicitud creada. Abra “Ver” para firmar en persona." : "Enlaces de firma enviados.", !!failed.length);
+  const manual = (r.delivery || []).filter((d) => d.manual);
+  toast(failed.length ? `Solicitud creada, pero ${failed.length} enlace(s) no se enviaron: ${failed[0].detail}` : body.mode === "presencial" ? "Solicitud creada. Abra “Ver” para firmar en persona."
+    : manual.length ? "Solicitud creada. Envíe ahora el enlace y el código a cada firmante." : "Enlaces de firma enviados.", !!failed.length);
   if (FICHAS[route().name]) await refreshView();
   else location.hash === "#firmas" ? await renderFirmas() : (location.hash = "#firmas");
+  if (manual.length) openSignSend(r.title, manual);
+});
+
+// Test link: the link and the one-time code leave from this device (WhatsApp or e-mail), in two separate messages.
+function openSignSend(title, list) {
+  const dlg = $("#sign-send-dialog");
+  $("[data-title]", dlg).textContent = `Enviar a firma · ${title}`;
+  const btns = (d, kind) => {
+    const via = d[`${kind}_via`], text = d[`${kind}_text`];
+    const out = [];
+    if (via === "whatsapp" && d.wa) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="https://wa.me/${d.wa}?text=${encodeURIComponent(text)}">Enviar por WhatsApp</a>`);
+    if (via === "email" && d.email) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent(kind === "code" ? `Código para firmar: ${title}` : d.subject)}&body=${encodeURIComponent(text)}">Enviar por correo</a>`);
+    out.push(`<button type="button" class="mini" data-copy="${escapeHtml(text)}">Copiar mensaje</button>`);
+    return out.join(" ");
+  };
+  $("#sign-send-body").innerHTML = list.map((d) => `<div class="send-card">
+    <strong>${escapeHtml(d.name)}</strong>
+    <div class="send-step"><span>1. Enlace${d.link_via === "email" ? " (correo)" : " (WhatsApp)"}</span>${btns(d, "link")}</div>
+    <div class="send-step"><span>2. Código ${escapeHtml(d.otp)}</span>${btns(d, "code")}</div>
+    <p class="hint">Código de la solicitud: <code>${escapeHtml(d.token)}</code>. Si el firmante abre el enlace y no ve el documento, lo escribe en «¿Le enviaron un documento para firmar?» de la pantalla de ingreso. El código de verificación vence en ${d.hours} horas y sirve una vez.</p>
+  </div>`).join("");
+  dlg.showModal();
+}
+$("#sign-send-body").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); toast("Mensaje copiado."); }
+  catch { toast("No se pudo copiar; use el botón de WhatsApp o correo.", true); }
 });
 
 async function openSignDetail(id) {
@@ -3161,7 +3276,7 @@ async function openSignDetail(id) {
         <img class="sig-img" src="${escapeHtml(x.signature_png)}" alt="Firma de ${escapeHtml(x.name)}" />`
         : x.status === "rechazado" ? `<span class="badge bad">No firmó: ${escapeHtml(x.reject_reason || "")}</span>`
         : `<span class="badge warn">Pendiente</span>${r.status === "enviada" ? `
-          ${(x.email || x.phone) && window.JuanmaBackend?.esignRemote !== false ? `<button type="button" class="mini" data-sign-remind="${x.id}">Reenviar enlace</button>` : ""}
+          ${(x.email || x.phone) && remoteSignOk() ? `<button type="button" class="mini" data-sign-remind="${x.id}">${WEB ? "Enviar enlace y código" : "Reenviar enlace"}</button>` : ""}
           <button type="button" class="mini" data-sign-inperson="${x.id}">Firmar en persona</button>` : ""}`}</div>
     </li>`).join("")}</ul>
     <details><summary>Registro de eventos (${r.events.length})</summary>
@@ -3180,6 +3295,7 @@ $("#sign-detail").addEventListener("click", (e) => {
   guarded(async () => {
     if (remind) {
       const d = await api("POST", `/esign/${signCurrent.id}/remind/${remind.dataset.signRemind}`);
+      if (d.manual) { await openSignDetail(signCurrent.id); openSignSend(signCurrent.title, [d]); return; }
       toast(d.ok ? "Enlace reenviado. El anterior dejó de funcionar." : `No se envió: ${d.detail}`, !d.ok);
       await openSignDetail(signCurrent.id);
     } else if (inperson) {
