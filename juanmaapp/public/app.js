@@ -125,7 +125,8 @@ const VIEW_PERMS = {
 
 // Only Gerencia deletes (change 24); every delete button carries data-action="delete-…" or data-jact="delete-…".
 const isGerencia = () => me?.role === "Gerencia";
-const DELETE_PERMS = ["clients.delete", "cases.delete"];
+// Gerencia-only permissions (src/auth.js GERENCIA_ONLY): deleting, and creating process types, sub-processes and fields.
+const GERENCIA_PERMS = ["clients.delete", "cases.delete", "catalog.manage"];
 
 // What each shortcut of the side menu does (shown under its name, and as a tooltip).
 const NAV_DESC = {
@@ -164,6 +165,11 @@ function applyPermissions() {
   $("#user-role").textContent = me.role;
   $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   $("#courts-import-btn").hidden = !can("catalog.manage");
+  // Creating process types and sub-processes from the case form or an import is for Gerencia only.
+  $$("[data-new-cat], [data-new-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
+  const createCat = $("#import-create-catalog");
+  createCat.disabled = !can("catalog.manage");
+  if (createCat.disabled) createCat.checked = false;
   $("#portal-probe").hidden = !can("users.manage");
   $("#tpl-manage-bar").hidden = !can("templates.manage");
   $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
@@ -1441,6 +1447,38 @@ function renderCustomFields(cat, values) {
 }
 
 caseForm.elements.category_id.addEventListener("change", (e) => fillTypeSelect(e.target.value));
+
+// Gerencia creates a process type or a sub-process right from the case form;
+// what was already typed in the form stays.
+async function newCatalogEntry(kind) {
+  const catId = caseForm.elements.category_id.value;
+  const cat = categoryOf(catId);
+  const name = await ask(kind === "cat"
+    ? { title: "Nuevo tipo de proceso", message: "Quedará en Configuración para todos los expedientes. Ej. Civil, Familia, Comercial.", input: "", okLabel: "Crear" }
+    : { title: `Nuevo subproceso de ${cat?.name || ""}`, message: "Ej. Ejecutivo singular, Divorcio, Sucesión.", input: "", okLabel: "Crear" });
+  if (!name) return;
+  try {
+    const made = kind === "cat" ? await api("POST", "/categories", { name }) : await api("POST", `/categories/${catId}/types`, { name });
+    let typeId = null;
+    if (kind === "cat") {
+      await loadCatalog();
+      // A new process type needs at least one sub-process to file a case under it.
+      const sub = await ask({ title: `Primer subproceso de ${made.name}`, message: "Un expediente necesita tipo y subproceso. Puede agregar más después.", input: "General", okLabel: "Crear" });
+      if (sub) typeId = (await api("POST", `/categories/${made.id}/types`, { name: sub })).id;
+    } else typeId = made.id;
+    await loadCatalog();
+    const curCat = kind === "cat" ? made.id : Number(catId);
+    caseForm.elements.category_id.innerHTML = state.catalog.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    caseForm.elements.category_id.value = curCat;
+    const values = Object.fromEntries([...new FormData(caseForm)].filter(([k]) => k.startsWith("cf_")).map(([k, v]) => [Number(k.slice(3)), v]));
+    fillTypeSelect(curCat, typeId);
+    if (kind !== "cat") renderCustomFields(categoryOf(curCat), values);
+    renderParties();
+    toast(kind === "cat" ? `Tipo de proceso «${made.name}» creado.` : `Subproceso «${made.name}» creado.`);
+  } catch (err) { toast(err.message, true); }
+}
+$("[data-new-cat]").addEventListener("click", () => newCatalogEntry("cat"));
+$("[data-new-type]").addEventListener("click", () => newCatalogEntry("type"));
 caseForm.elements.process_type_id.addEventListener("change", () => fillRoleSelect());
 
 // Responsible people: users of the chosen office, plus roles that see every office.
@@ -2695,7 +2733,7 @@ async function renderUsuarios() {
   $("#role-matrix").innerHTML = `<thead><tr><th>Permiso</th>${roleInfo.roles.map((r) => `<th>${escapeHtml(r)}${details[r] && !details[r].builtin
     ? `<div class="role-actions"><button class="mini" data-action="rename-role" data-role="${escapeHtml(r)}">Renombrar</button><button class="mini danger" data-action="delete-role" data-role="${escapeHtml(r)}" aria-label="Eliminar rol">✕</button></div>` : ""}</th>`).join("")}</tr></thead>
     <tbody>${perms.map(([p, label]) => `<tr><td>${escapeHtml(label)}</td>${roleInfo.roles.map((r) => {
-      const onlyGerencia = DELETE_PERMS.includes(p);
+      const onlyGerencia = GERENCIA_PERMS.includes(p);
       const locked = (r === "Gerencia" && p === "users.manage") || onlyGerencia;
       const on = onlyGerencia ? r === "Gerencia" : roleInfo.matrix[r].includes(p);
       return `<td class="center"><input type="checkbox" data-role="${escapeHtml(r)}" data-perm="${p}" aria-label="${escapeHtml(r)}: ${escapeHtml(label)}"
@@ -2732,7 +2770,7 @@ function renderUserPerms(checked) {
   const form = $("#user-dialog form");
   const custom = form.elements.custom_permissions.checked;
   $("#user-perm-checks").innerHTML = Object.entries(roleInfo.permissions).map(([p, label]) => `
-    <label class="inline"><input type="checkbox" name="perm" value="${p}" ${checked.includes(p) ? "checked" : ""} ${custom ? "" : "disabled"} /> ${escapeHtml(label)}</label>`).join("");
+    <label class="inline"><input type="checkbox" name="perm" value="${p}" ${checked.includes(p) ? "checked" : ""} ${custom && !GERENCIA_PERMS.includes(p) ? "" : "disabled"} /> ${escapeHtml(label)}</label>`).join("");
 }
 $("#user-dialog [name=custom_permissions]").addEventListener("change", () => {
   const form = $("#user-dialog form");

@@ -1031,3 +1031,8 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 /* Preview of the e-mail to a signer (version 2.8) */
 .mail-preview { white-space: pre-wrap; word-break: break-word; font: .85rem/1.45 ui-monospace, Menlo, Consolas, monospace; background: var(--surface, #fff);
   border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; max-height: 320px; overflow: auto; margin: 6px 0 0; }
+
+/* Select with a "+ Nuevo" button beside it (case form: process type and sub-process, Gerencia only). */
+.select-add { display: flex; gap: 6px; align-items: center; }
+.select-add > select { flex: 1; min-width: 0; }
+.select-add > button[hidden] { display: none; }

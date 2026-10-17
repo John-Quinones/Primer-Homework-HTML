@@ -815,7 +815,7 @@
             <button class="primary">+ Agregar</button>
           </form>
         </div>
-        <p class="hint">Cada tipo de proceso agrupa sus subprocesos y los campos propios que se llenan en cada expediente.</p>
+        <p class="hint">Cada tipo de proceso agrupa sus subprocesos y los campos propios que se llenan en cada expediente. Solo Gerencia (el administrador) crea tipos de proceso, subprocesos y campos; también puede crearlos desde «Nuevo expediente» con «+ Nuevo».</p>
         <div id="catalog" class="catalog"></div>
         <div class="panel" id="channels-panel" hidden>
           <h3 class="panel-title">Canales de envío (correo y WhatsApp)</h3>
@@ -897,8 +897,8 @@
       <input type="hidden" name="id" />
       <label>Cliente * <select name="client_id" required></select></label>
       <div class="grid2">
-        <label>Tipo de proceso * <select name="category_id" required></select></label>
-        <label>Subproceso * <select name="process_type_id" required></select></label>
+        <label>Tipo de proceso * <span class="select-add"><select name="category_id" required></select><button type="button" class="mini" data-new-cat title="Crear un tipo de proceso nuevo (solo Gerencia)">+ Nuevo</button></span></label>
+        <label>Subproceso * <span class="select-add"><select name="process_type_id" required></select><button type="button" class="mini" data-new-type title="Crear un subproceso nuevo (solo Gerencia)">+ Nuevo</button></span></label>
       </div>
       <div class="grid2">
         <label>Asunto <input name="title" placeholder="Ej. Cobro de prestaciones sociales" /></label>

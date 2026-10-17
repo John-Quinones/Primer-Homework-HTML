@@ -28,7 +28,7 @@ export const ROLES = [
 export const PERMISSIONS = {
   "scope.all": "Ve todas las oficinas",
   "users.manage": "Gestiona usuarios, roles y oficinas",
-  "catalog.manage": "Configura tipos de proceso, subprocesos y campos",
+  "catalog.manage": "Crea y configura tipos de proceso, subprocesos y campos (solo Gerencia)",
   "clients.write": "Crea y edita clientes",
   "clients.delete": "Elimina clientes (solo Gerencia)",
   "cases.write": "Crea y edita expedientes",
@@ -48,7 +48,7 @@ export const PERMISSIONS = {
 // Starting matrix; Gerencia edits it in Usuarios › Roles.
 export const DEFAULT_MATRIX = {
   "Gerencia": Object.keys(PERMISSIONS),
-  "Director Jurídico": ["scope.all", "catalog.manage", "clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage", "esign.use", "mail.send"],
+  "Director Jurídico": ["scope.all", "clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "templates.manage", "esign.use", "mail.send"],
   "Director Contable": ["scope.all", "reports.view", "payments.manage"],
   "Gerente Regional": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "import.run", "reports.view", "processes.consult", "esign.use", "mail.send", "payments.manage"],
   "Abogado": ["clients.write", "cases.write", "drafts.generate", "jurisprudence.use", "reports.view", "processes.consult", "esign.use", "mail.send"],
@@ -56,9 +56,11 @@ export const DEFAULT_MATRIX = {
   "Asistente": ["clients.write", "cases.write", "drafts.generate", "payments.manage"],
 };
 
-// Deleting anything is for Gerencia only (change 24): these permissions are
-// always on for Gerencia and never reach another role or a user's own checklist.
-export const GERENCIA_ONLY = ["clients.delete", "cases.delete"];
+// Deleting anything (change 24) and creating process types, sub-processes and
+// fields (version 2.9) are for Gerencia, the administrator, only: these
+// permissions are always on for Gerencia and never reach another role or a
+// user's own checklist.
+export const GERENCIA_ONLY = ["clients.delete", "cases.delete", "catalog.manage"];
 export const effectivePermissions = (role, perms) => {
   const p = perms.filter((x) => role === "Gerencia" || !GERENCIA_ONLY.includes(x));
   if (role === "Gerencia") for (const x of ["users.manage", ...GERENCIA_ONLY]) if (!p.includes(x)) p.push(x);
