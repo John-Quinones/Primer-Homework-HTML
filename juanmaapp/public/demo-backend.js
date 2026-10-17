@@ -139,7 +139,7 @@
   })();
   // Who is signed in is per viewer, never shared.
   let currentId = (() => { try { return Number(localStorage.getItem("juanmaapp-current")) || null; } catch { return null; } })();
-  const setCurrent = (id) => { currentId = id; try { id ? localStorage.setItem("juanmaapp-current", String(id)) : localStorage.removeItem("juanmaapp-current"); } catch {} };
+  const setCurrent = (id) => { currentId = id; hiddenUntil = 0; try { id ? localStorage.setItem("juanmaapp-current", String(id)) : localStorage.removeItem("juanmaapp-current"); } catch {} };
   const fail = (msg) => { throw new Error(msg); };
   const str = (v) => (v == null ? "" : String(v).trim());
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -190,15 +190,21 @@
   };
   const bogotaNow = (d = new Date()) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
+  // Version 2.11, same as the server: a hidden user reads "Asistente"; only the hidden-users
+  // password (Gerencia, 15 minutes, this viewer only) shows who it is.
+  const ASSISTANT = "Asistente";
+  let hiddenUntil = 0;
+  const hiddenOpen = () => hiddenUntil > Date.now() && me().role === "Gerencia";
+  const shownName = (u) => (u ? (u.hidden ? ASSISTANT : u.name) : null);
   const userOut = (u) => ({
-    id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at,
+    id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at, hidden: !!u.hidden,
     offices: s.offices.filter((o) => u.office_ids.includes(o.id)).map((o) => ({ id: o.id, name: o.name })),
     permissions: userPerms(u), phone: u.phone || "", professional_card: u.professional_card || "", custom_permissions: !!u.custom_permissions,
   });
   const me = () => {
     const u = s.users.find((x) => x.id === currentId && x.active);
     if (!u) fail("Inicie sesión para continuar.");
-    return userOut(u);
+    return u.hidden ? { ...userOut(u), name: ASSISTANT, real_name: u.name } : userOut(u);
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
@@ -228,6 +234,15 @@
       summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : [] });
   }
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
+  const onlyGerencia = () => { if (me().role !== "Gerencia") fail("Solo Gerencia puede ocultar usuarios: su rol no tiene permiso para esta acción."); };
+  const hiddenTries = { n: 0, until: 0 };
+  // PBKDF2-SHA256 (the link has no scrypt); only the salt and hash are stored.
+  const hiddenHash = async (pw, salt) => {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(pw || "")), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: 200000 }, key, 256);
+    return [...new Uint8Array(bits)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  };
+  const hiddenCheck = async (pw) => !!s.info.hiddenPass && (await hiddenHash(pw, s.info.hiddenPass.salt)) === s.info.hiddenPass.hash;
   const scope = () => (me().permissions.includes("scope.all") ? null : me().offices.map((o) => o.id));
   const inScope = (officeId) => { const sc = scope(); return sc === null || sc.includes(officeId); };
   const clientVisible = (c) => inScope(c.office_id) || s.cases.some((k) => k.client_id === c.id && inScope(k.office_id));
@@ -251,7 +266,7 @@
     const cl = s.clients.find((x) => x.id === k.client_id);
     const u = s.users.find((x) => x.id === k.assigned_user_id);
     return clone({ parties: [], ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
-      office_name: officeName(k.office_id), assigned_name: u?.name ?? null });
+      office_name: officeName(k.office_id), assigned_name: shownName(u) });
   };
   // Same as the server: our clients among the parties are linked to their client record.
   const isPartyClient = (k, clientId) => (k.parties || []).some((p) => p.ours && p.client_id === clientId);
@@ -347,7 +362,9 @@
     }
     office ||= s.offices.find((x) => x.id === lawyer.office_ids[0]) || s.offices.find((x) => x.is_main);
     Object.assign(v, {
-      "abogado.nombre": lawyer.name, "abogado.tarjeta_profesional": lawyer.professional_card || "", "abogado.correo": lawyer.email, "abogado.telefono": lawyer.phone || "",
+      // A hidden lawyer signs as "Asistente", without personal contact data (version 2.11).
+      "abogado.nombre": shownName(lawyer), "abogado.tarjeta_profesional": lawyer.hidden ? "" : lawyer.professional_card || "",
+      "abogado.correo": lawyer.hidden ? "" : lawyer.email, "abogado.telefono": lawyer.hidden ? "" : lawyer.phone || "",
       "oficina.nombre": office?.name, "oficina.ciudad": office?.city, "oficina.direccion": office?.address, "oficina.telefono": office?.phone, "oficina.correo": office?.email,
       "fecha.hoy": today, "fecha.ciudad_y_fecha": `${office?.city || v["expediente.ciudad"] || ""}, ${today}`.replace(/^, /, ""),
     });
@@ -357,7 +374,7 @@
   const taskOut = (t) => {
     const k = s.cases.find((x) => x.id === t.case_id);
     const o = caseOut(k);
-    const name = (id) => s.users.find((u) => u.id === id)?.name ?? null;
+    const name = (id) => shownName(s.users.find((u) => u.id === id));
     return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
       radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
@@ -488,12 +505,16 @@
       if (q.caseId) visibleCase(+q.caseId); else need("audit.view");
       const from = q.from ? Date.parse(q.from + "T00:00:00-05:00") : null, to = q.to ? Date.parse(q.to + "T23:59:59-05:00") : null;
       const like = String(q.q || "").toLowerCase();
+      // Who really did it stays in user_id; a hidden user reads "Asistente" unless unlocked.
+      const open = hiddenOpen(), hidden = s.users.filter((u) => u.hidden), hiddenIds = new Set(hidden.map((u) => u.id));
+      const mask = (t) => (open ? t : hidden.reduce((acc, u) => (u.name ? acc.split(u.name).join(ASSISTANT) : acc).split(u.email || "\u0000").join("(oculto)"), t));
       return clone(s.audit.filter((e) => {
         const t = Date.parse(e.at.replace(" ", "T") + "Z");
         return (!q.caseId || e.case_id === +q.caseId) && (!from || t >= from) && (!to || t <= to) && (!q.userId || e.user_id === +q.userId)
           && (!q.module || e.module === q.module) && (!q.device || e.device === q.device) && (!q.before || e.id < +q.before)
-          && (!like || `${e.summary} ${e.user_name} ${JSON.stringify(e.changes)}`.toLowerCase().includes(like));
-      }).sort((a, b) => b.id - a.id).slice(0, 300));
+          && (!like || `${e.summary} ${open || !hiddenIds.has(e.user_id) ? e.user_name : ""} ${JSON.stringify(e.changes)}`.toLowerCase().includes(like));
+      }).sort((a, b) => b.id - a.id).slice(0, 300).map((e) => ({ ...e, summary: mask(e.summary), changes: JSON.parse(mask(JSON.stringify(e.changes || []))),
+        ...(hiddenIds.has(e.user_id) ? { user_name: open ? `${hidden.find((u) => u.id === e.user_id).name} (oculto)` : ASSISTANT, hidden_user: true } : {}) })));
     }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
     ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
@@ -545,9 +566,62 @@
       s.users.forEach((u) => (u.office_ids = u.office_ids.filter((x) => x !== o.id)));
       return null;
     }],
-    ["GET", /^\/admin\/users\/directory$/, () => { me(); return s.users.filter((u) => u.active).sort((a, b) => a.name.localeCompare(b.name, "es"))
-      .map((u) => { const o = userOut(u); return { id: o.id, name: o.name, role: o.role, offices: o.offices, scopeAll: o.permissions.includes("scope.all") }; }); }],
-    ["GET", /^\/admin\/users$/, () => { need("users.manage"); return s.users.slice().sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, "es")).map(userOut); }],
+    ["GET", /^\/admin\/users\/directory$/, () => { me(); const open = hiddenOpen(); return s.users.filter((u) => u.active).sort((a, b) => a.name.localeCompare(b.name, "es"))
+      .map((u) => { const o = userOut(u), shown = !u.hidden || open;
+        return { id: o.id, name: shown ? o.name : ASSISTANT, role: shown ? o.role : ASSISTANT, offices: o.offices, scopeAll: o.permissions.includes("scope.all") }; }); }],
+    // Hidden users are left out until Gerencia enters the hidden-users password.
+    ["GET", /^\/admin\/users$/, () => { need("users.manage"); const open = hiddenOpen();
+      return s.users.filter((u) => open || !u.hidden).sort((a, b) => b.active - a.active || a.name.localeCompare(b.name, "es")).map(userOut); }],
+    ["GET", /^\/admin\/hidden-users$/, () => {
+      need("users.manage");
+      const open = hiddenOpen();
+      return { count: s.users.filter((u) => u.hidden).length, has_password: !!s.info.hiddenPass, unlocked: open,
+        unlocked_until: open ? new Date(hiddenUntil).toISOString() : null, can_manage: me().role === "Gerencia" };
+    }],
+    ["POST", /^\/admin\/hidden-users\/password$/, async (m, b) => {
+      onlyGerencia();
+      if (s.info.hiddenPass && !(await hiddenCheck(b.current))) {
+        auditAdd({ action: "Intentó cambiar la contraseña de usuarios ocultos", module: "Usuarios", ok: false, summary: "Contraseña actual incorrecta" });
+        fail("La contraseña actual de usuarios ocultos no es correcta.");
+      }
+      const pw = String(b.next || "");
+      pw.length < 10 && fail("La contraseña debe tener al menos 10 caracteres.");
+      (/^\d+$/.test(pw) || /^(.)\1+$/.test(pw)) && fail("Esa contraseña es fácil de adivinar: pruebe una frase de varias palabras.");
+      const salt = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join("");
+      const had = !!s.info.hiddenPass;
+      s.info = { ...s.info, hiddenPass: { salt, hash: await hiddenHash(b.next, salt), set_at: stamp(), set_by: me().id } };
+      hiddenUntil = 0;
+      auditAdd({ action: had ? "Cambió la contraseña de usuarios ocultos" : "Creó la contraseña de usuarios ocultos", module: "Usuarios", summary: "Contraseña de usuarios ocultos" });
+      return null;
+    }],
+    ["POST", /^\/admin\/hidden-users\/unlock$/, async (m, b) => {
+      onlyGerencia();
+      s.info.hiddenPass || fail("Primero cree la contraseña de usuarios ocultos.");
+      hiddenTries.until > Date.now() && fail(`Demasiados intentos. Espere ${Math.ceil((hiddenTries.until - Date.now()) / 60000)} minuto(s).`);
+      if (!(await hiddenCheck(b.password))) {
+        hiddenTries.n++;
+        if (hiddenTries.n >= 5) Object.assign(hiddenTries, { n: 0, until: Date.now() + 15 * 60000 });
+        auditAdd({ action: "Intentó ver usuarios ocultos", module: "Usuarios", ok: false, summary: "Contraseña de usuarios ocultos incorrecta" });
+        await save();
+        fail("La contraseña de usuarios ocultos no es correcta.");
+      }
+      hiddenTries.n = 0;
+      hiddenUntil = Date.now() + 15 * 60000;
+      auditAdd({ action: "Vio usuarios ocultos", module: "Usuarios", summary: "Abrió la vista de usuarios ocultos por 15 minutos" });
+      return { ok: true, unlocked_until: new Date(hiddenUntil).toISOString() };
+    }],
+    ["POST", /^\/admin\/hidden-users\/lock$/, () => { hiddenUntil = 0; return null; }],
+    ["PUT", /^\/admin\/users\/(\d+)\/hidden$/, (m, b) => {
+      onlyGerencia();
+      const hide = b.hidden === true, u = s.users.find((x) => x.id === +m[1]);
+      (!u || (u.hidden && !hiddenOpen())) && fail("El usuario no existe.");
+      hide && !s.info.hiddenPass && fail("Primero cree la contraseña de usuarios ocultos.");
+      !hide && !hiddenOpen() && fail("Escriba la contraseña de usuarios ocultos para mostrar este usuario.");
+      u.hidden = hide;
+      auditAdd({ action: hide ? "Ocultó un usuario" : "Volvió a mostrar un usuario", module: "Usuarios", entity: "usuario", record_id: u.id,
+        summary: hide ? "Ocultó un usuario: sus acciones se ven como «Asistente»" : "Volvió a mostrar un usuario oculto" });
+      return userOut(u);
+    }],
     ["POST", /^\/admin\/users$/, (m, b) => {
       need("users.manage");
       if (b.role === "Gerencia" && me().role !== "Gerencia") fail("Solo Gerencia puede crear usuarios de Gerencia.");
@@ -563,7 +637,7 @@
     }],
     ["PUT", /^\/admin\/users\/(\d+)$/, (m, b) => {
       need("users.manage");
-      const u = s.users.find((x) => x.id === +m[1]) || fail("El usuario no existe.");
+      const u = s.users.find((x) => x.id === +m[1] && (!x.hidden || hiddenOpen())) || fail("El usuario no existe.");
       const role = b.role ?? u.role;
       if ((u.role === "Gerencia" || role === "Gerencia") && me().role !== "Gerencia") fail("Solo Gerencia puede modificar usuarios de Gerencia.");
       s.roles.some((r) => r.name === role) || fail("Rol no válido.");
@@ -1069,7 +1143,7 @@
         const groups = new Map();
         for (const k of cases) {
           const key = k.assigned_user_id || 0;
-          const g = groups.get(key) || { user: k.assigned_name || "Sin responsable", role: s.users.find((u) => u.id === key)?.role || "", cases: 0, active: 0, closed: 0 };
+          const g = groups.get(key) || { user: k.assigned_name || "Sin responsable", role: (({ hidden, role } = s.users.find((u) => u.id === key) || {}) => (hidden ? ASSISTANT : role || ""))(), cases: 0, active: 0, closed: 0 };
           g.cases++; g.active += OPEN.includes(k.status) ? 1 : 0; g.closed += ARCHIVED.includes(k.status) ? 1 : 0;
           groups.set(key, g);
         }
@@ -1401,7 +1475,7 @@
     return inScope(client.office_id) ? client.office_id : scope()?.[0] ?? null;
   };
   const getCharge = (id) => s.charges.find((c) => c.id === +id && inScope(c.office_id)) || fail("El cobro no existe.");
-  const userName = (id) => s.users.find((u) => u.id === id)?.name || "";
+  const userName = (id) => shownName(s.users.find((u) => u.id === id)) || "";
 
   function paymentsReport(type, q) {
     const { charges, receipts, credit } = ledger(null, +q.officeId || null);
@@ -1648,7 +1722,7 @@ Return only a JSON object:
     async request(method, url, body) {
       await READY;
       const path = url.split("?")[0];
-      const logged = method !== "GET" && !/^\/(notifications|auth\/|monitor\/report\/preview)/.test(path) && s.users.some((x) => x.id === currentId);
+      const logged = method !== "GET" && !/^\/(notifications|auth\/|monitor\/report\/preview|admin\/hidden-users\/)/.test(path) && !/^\/admin\/users\/\d+\/hidden$/.test(path) && s.users.some((x) => x.id === currentId);
       if (method === "DELETE" && me().role !== "Gerencia") {
         auditChange(method, path, body, null, null, false); await save();
         fail("Solo Gerencia puede eliminar.");
@@ -1702,7 +1776,7 @@ Return only a JSON object:
       yield { type: "done", transactionId, boldLink: transactionId ? `https://checkout.bold.co/payment/link/${transactionId}` : null, servedBy: "Claude (cuenta del usuario)", ...audit };
     },
     // Sign-in on the link: pick your user (the link is private to the firm).
-    demoUsers: () => (s ? s.users.filter((u) => u.active).map((u) => ({ email: u.email, name: u.name, role: u.role, office: userOut(u).offices.map((o) => o.name).join(", ") })) : []),
+    demoUsers: () => (s ? s.users.filter((u) => u.active).map((u) => ({ email: u.email, name: shownName(u), role: u.hidden ? ASSISTANT : u.role, office: userOut(u).offices.map((o) => o.name).join(", ") })) : []),
     ready: () => READY,
     exportData: async () => { await READY; return JSON.stringify(s); },
   };

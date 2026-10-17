@@ -19,8 +19,8 @@ export function agendaRouter(db) {
   const SELECT = `SELECT t.*, k.radicado, k.title AS case_title, k.office_id, k.client_id, c.full_name AS client_name,
       ${typePath("pt")} AS type_name, u.name AS assigned_name, ku.name AS case_assigned_name, cb.name AS created_by_name, ud.name AS done_by_name
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id
-    JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users u ON u.id = t.assigned_user_id
-    LEFT JOIN users ku ON ku.id = k.assigned_user_id LEFT JOIN users cb ON cb.id = t.created_by LEFT JOIN users ud ON ud.id = t.done_by`;
+    JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users_shown u ON u.id = t.assigned_user_id
+    LEFT JOIN users_shown ku ON ku.id = k.assigned_user_id LEFT JOIN users_shown cb ON cb.id = t.created_by LEFT JOIN users_shown ud ON ud.id = t.done_by`;
   const out = (t) => ({ ...t, remind_days: JSON.parse(t.remind_days) });
   const visible = (req, id) => db.prepare(`${SELECT} WHERE t.id = ? AND ${officeCond(req)}`).get(id);
   const caseVisible = (req, caseId) => db.prepare(`SELECT k.* FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(caseId);

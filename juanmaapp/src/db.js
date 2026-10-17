@@ -5,7 +5,7 @@ import { CONSENT_SCHEMA } from "./consents.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { DEFAULT_MATRIX, PERMISSIONS } from "./auth.js";
+import { DEFAULT_MATRIX, PERMISSIONS, ASSISTANT } from "./auth.js";
 import { seedTemplates } from "./templates.js";
 import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW, FIRM_FIXES } from "./templates-seed.js";
 import { normStatus, courtCircuit } from "./case-meta.js";
@@ -555,6 +555,12 @@ function migrate(db) {
   db.exec("CREATE TABLE IF NOT EXISTS auth_throttle (key TEXT PRIMARY KEY, n INTEGER NOT NULL, first_ms INTEGER NOT NULL, until_ms INTEGER NOT NULL DEFAULT 0)");
   add("sessions", "last_seen", "TEXT");
   add("users", "ms_oid", "TEXT");
+  // Version 2.11: hidden users. Their actions read "Asistente" everywhere through this view;
+  // the real author stays in user_id columns and is shown only after the hidden-users password.
+  add("users", "hidden", "INTEGER NOT NULL DEFAULT 0");
+  db.exec(`DROP VIEW IF EXISTS users_shown;
+    CREATE VIEW users_shown AS SELECT id, CASE WHEN hidden = 1 THEN '${ASSISTANT}' ELSE name END AS name,
+      CASE WHEN hidden = 1 THEN '${ASSISTANT}' ELSE role END AS role FROM users`);
   for (const [col, def] of [["department", "TEXT NOT NULL DEFAULT ''"], ["city", "TEXT NOT NULL DEFAULT ''"], ["area", "TEXT NOT NULL DEFAULT ''"],
     ["court_id", "INTEGER REFERENCES courts(id) ON DELETE SET NULL"], ["court_name", "TEXT NOT NULL DEFAULT ''"],
     ["court_email", "TEXT NOT NULL DEFAULT ''"], ["radicado", "TEXT NOT NULL DEFAULT ''"],

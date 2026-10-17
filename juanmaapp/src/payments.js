@@ -252,7 +252,7 @@ export function paymentsRouter(db) {
     if (DATE.test(req.query.to || "")) { w.push("r.paid_on <= ?"); p.push(req.query.to); }
     return db.prepare(`SELECT r.*, c.full_name AS client_name, trim(c.id_type || ' ' || c.id_number) AS client_doc, c.email AS client_email,
         ch.concept AS charge_concept, ch.plan_label, u.name AS created_by_name
-      FROM receipts r JOIN clients c ON c.id = r.client_id LEFT JOIN charges ch ON ch.id = r.charge_id LEFT JOIN users u ON u.id = r.created_by
+      FROM receipts r JOIN clients c ON c.id = r.client_id LEFT JOIN charges ch ON ch.id = r.charge_id LEFT JOIN users_shown u ON u.id = r.created_by
       WHERE ${w.join(" AND ")} ORDER BY r.number DESC LIMIT 2000`).all(...p).map((x) => ({ ...x }));
   }));
 
@@ -295,7 +295,7 @@ export function paymentsRouter(db) {
   }));
 
   r.get("/reminders", h((req) => db.prepare(`SELECT pr.*, c.full_name AS client_name, ch.concept, ch.plan_label, u.name AS created_by_name
-      FROM payment_reminders pr JOIN charges ch ON ch.id = pr.charge_id JOIN clients c ON c.id = pr.client_id LEFT JOIN users u ON u.id = pr.created_by
+      FROM payment_reminders pr JOIN charges ch ON ch.id = pr.charge_id JOIN clients c ON c.id = pr.client_id LEFT JOIN users_shown u ON u.id = pr.created_by
       WHERE ${officeSql(req.user, "ch.office_id")} ${req.query.clientId ? `AND pr.client_id = ${Number(req.query.clientId)}` : ""}
       ORDER BY pr.id DESC LIMIT 500`).all().map((x) => ({ ...x, ok: !!x.ok }))));
 

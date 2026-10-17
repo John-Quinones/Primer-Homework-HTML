@@ -4,7 +4,7 @@
 // Entries are never edited or deleted from the app.
 import express from "express";
 import { auditTarget, auditVerb, auditDiff, deviceOf } from "./case-meta.js";
-import { scopeOf } from "./auth.js";
+import { scopeOf, hiddenUnlocked, ASSISTANT } from "./auth.js";
 
 export const AUDIT_SCHEMA = `CREATE TABLE IF NOT EXISTS audit_log (
   id            INTEGER PRIMARY KEY,
@@ -47,7 +47,8 @@ const SNAP = [
   [/^\/tasks\/(\d+)$/, "SELECT * FROM tasks WHERE id = ?"],
   [/^\/payments\/charges\/(\d+)/, "SELECT * FROM charges WHERE id = ?"],
   [/^\/payments\/receipts\/(\d+)/, "SELECT * FROM receipts WHERE id = ?"],
-  [/^\/admin\/users\/(\d+)/, "SELECT id, name, email, role, active, phone, professional_card, custom_permissions FROM users WHERE id = ?"],
+  [/^\/admin\/users\/(\d+)/, `SELECT id, CASE WHEN hidden = 1 THEN '${ASSISTANT}' ELSE name END AS name, CASE WHEN hidden = 1 THEN '' ELSE email END AS email,
+    role, active, phone, professional_card, custom_permissions FROM users WHERE id = ?`],
   [/^\/esign\/(\d+)/, "SELECT id, title, status, case_id FROM sign_requests WHERE id = ?"],
 ];
 const parseRow = (row) => {
@@ -58,7 +59,8 @@ const parseRow = (row) => {
 };
 const nameOf = (x) => x && (x.full_name || x.title || x.name || x.concept || x.subject || (x.number ? `N.º ${x.number}` : "") || x.email || "");
 // Reads and housekeeping that are not changes.
-const SKIP = [/^\/notifications/, /^\/auth\//, /^\/monitor\/report\/preview/, /^\/payments\/reminders\/preview/];
+// Hiding users is logged by auth.js itself, without the hidden user's name.
+const SKIP = [/^\/notifications/, /^\/auth\//, /^\/admin\/hidden-users\//, /^\/admin\/users\/\d+\/hidden$/, /^\/monitor\/report\/preview/, /^\/payments\/reminders\/preview/];
 
 /** Middleware after requireAuth: logs every successful (or denied) change. */
 export function auditMiddleware(db) {
@@ -115,10 +117,18 @@ export function auditRouter(db) {
     if (q.userId) { where.push("user_id = ?"); params.push(Number(q.userId)); }
     if (q.module) { where.push("module = ?"); params.push(String(q.module)); }
     if (q.device) { where.push("device = ?"); params.push(String(q.device)); }
-    if (q.q) { where.push("(summary LIKE ? OR user_name LIKE ? OR changes LIKE ?)"); const like = `%${String(q.q).slice(0, 80)}%`; params.push(like, like, like); }
+    // A hidden user's real name is never a search hit while the hidden users stay locked.
+    const unlocked = hiddenUnlocked(req);
+    if (q.q) { where.push(`(summary LIKE ? OR (user_name LIKE ?${unlocked ? "" : " AND COALESCE(user_id, 0) NOT IN (SELECT id FROM users WHERE hidden = 1)"}) OR changes LIKE ?)`); const like = `%${String(q.q).slice(0, 80)}%`; params.push(like, like, like); }
     if (q.before) { where.push("id < ?"); params.push(Number(q.before)); }
     const rows = db.prepare(`SELECT * FROM audit_log ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT 300`).all(...params);
-    res.json(rows.map((x) => ({ ...x, ok: !!x.ok, changes: JSON.parse(x.changes || "[]") })));
+    // The entry keeps who really did it (user_id); a hidden user reads "Asistente" unless unlocked.
+    const hiddenRows = db.prepare("SELECT id, name, email FROM users WHERE hidden = 1").all();
+    const hidden = new Map(hiddenRows.map((u) => [u.id, u.name]));
+    // Older entries about a hidden user (created, edited) name them too: masked while locked.
+    const mask = (t) => (unlocked ? t : hiddenRows.reduce((acc, u) => (u.name ? acc.split(u.name).join(ASSISTANT) : acc).split(u.email || "\u0000").join("(oculto)"), t));
+    res.json(rows.map((x) => ({ ...x, ok: !!x.ok, summary: mask(x.summary), changes: JSON.parse(mask(x.changes || "[]")),
+      ...(hidden.has(x.user_id) ? { user_name: unlocked ? `${hidden.get(x.user_id)} (oculto)` : ASSISTANT, hidden_user: true } : {}) })));
   });
   return r;
 }

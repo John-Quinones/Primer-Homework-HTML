@@ -313,7 +313,7 @@ export function recordsRouter(db) {
     JOIN process_types t ON t.id = k.process_type_id
     JOIN process_categories g ON g.id = t.category_id
     LEFT JOIN offices o ON o.id = k.office_id
-    LEFT JOIN users u ON u.id = k.assigned_user_id`;
+    LEFT JOIN users_shown u ON u.id = k.assigned_user_id`;
 
   const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated, parties: JSON.parse(row.parties || "[]") });
   // Our clients among the parties are linked to their client record (given, or found by document number).
@@ -456,7 +456,7 @@ export function recordsRouter(db) {
   r.get("/cases/:id/documents", h((req) => {
     const k = getCase(req, toInt(req.params.id, "id"));
     return db.prepare(`SELECT d.id, d.case_id, d.name, d.filename, d.mime, d.size, d.sha256, d.created_at, u.name AS created_by_name
-      FROM case_documents d LEFT JOIN users u ON u.id = d.created_by WHERE d.case_id = ? ORDER BY d.id DESC`).all(k.id).map(plain);
+      FROM case_documents d LEFT JOIN users_shown u ON u.id = d.created_by WHERE d.case_id = ? ORDER BY d.id DESC`).all(k.id).map(plain);
   }));
   r.post("/cases/:id/documents", h((req, res) => {
     checkPerm(req, "cases.write");

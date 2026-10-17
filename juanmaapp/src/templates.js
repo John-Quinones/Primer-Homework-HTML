@@ -2,7 +2,7 @@
 // starter ones, and the values a case provides to fill {{variables}}.
 import express from "express";
 import { formatRadicado } from "./portals.js";
-import { can, scopeOf, loadUser } from "./auth.js";
+import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
 import { isFolderLabel } from "./case-meta.js";
@@ -69,7 +69,9 @@ export function templateData(db, user, caseId) {
     office = db.prepare("SELECT * FROM offices WHERE id = ?").get(k.office_id);
   }
   office ||= db.prepare("SELECT * FROM offices WHERE id = ?").get(user.offices[0]?.id) || db.prepare("SELECT * FROM offices WHERE is_main = 1").get();
-  const card = db.prepare("SELECT professional_card FROM users WHERE id = ?").get(lawyer.id)?.professional_card || "";
+  // A hidden lawyer (version 2.11) signs as "Asistente", without personal contact data.
+  if (lawyer.hidden || lawyer.real_name) lawyer = { id: null, name: ASSISTANT, email: "", phone: "" };
+  const card = (lawyer.id && db.prepare("SELECT professional_card FROM users WHERE id = ?").get(lawyer.id)?.professional_card) || "";
   Object.assign(v, {
     "abogado.nombre": lawyer.name, "abogado.tarjeta_profesional": card, "abogado.correo": lawyer.email, "abogado.telefono": lawyer.phone || "",
     "oficina.nombre": office?.name || "", "oficina.ciudad": office?.city || "", "oficina.direccion": office?.address || "",

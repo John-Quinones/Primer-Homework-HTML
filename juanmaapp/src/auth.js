@@ -67,6 +67,16 @@ export const effectivePermissions = (role, perms) => {
   return p;
 };
 
+// Version 2.11: a hidden user's actions read "Asistente"; the real name is seen only with
+// the hidden-users password (Gerencia), and every user_id column keeps the real author.
+export const ASSISTANT = "Asistente";
+/** The user as everyone else sees them: hidden users go by "Asistente" (role and permissions unchanged). */
+export const shownUser = (u) => (u?.hidden ? { ...u, name: ASSISTANT, real_name: u.name } : u);
+const HIDDEN_UNLOCK_MS = 15 * 60 * 1000;
+const hiddenUnlocks = new Map(); // session hash -> unlocked until (ms); a restart locks again
+/** True while this Gerencia session entered the hidden-users password (15 minutes). */
+export const hiddenUnlocked = (req) => req.user?.role === "Gerencia" && (hiddenUnlocks.get(req.sessionHash) || 0) > Date.now();
+
 const SESSION_HOURS = 12;
 const COOKIE = "jm_session";
 
@@ -159,9 +169,9 @@ export function rolePermissions(db, role) {
 
 export function loadUser(db, id) {
   const row = db.prepare(`SELECT id, name, email, phone, professional_card, role, active, custom_permissions, created_at, must_change_password, invited_at,
-    password_hash != '!' AS has_password FROM users WHERE id = ?`).get(id);
+    password_hash != '!' AS has_password, hidden FROM users WHERE id = ?`).get(id);
   if (!row) return null;
-  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password };
+  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password, hidden: !!row.hidden };
   const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
     WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
   // A user's own checklist replaces the role's when it is turned on.
@@ -185,7 +195,7 @@ export function sessionMiddleware(db) {
         AND (last_seen IS NULL OR last_seen > datetime('now', ?))`).get(sha(token), `-${Number(process.env.SESSION_IDLE_HOURS) || 4} hours`);
       const u = s && loadUser(db, s.user_id);
       if (u?.active) {
-        req.user = u;
+        req.user = shownUser(u);
         req.sessionHash = sha(token);
         db.prepare("UPDATE sessions SET last_seen = datetime('now') WHERE token_hash = ? AND (last_seen IS NULL OR last_seen < datetime('now', '-1 minute'))").run(req.sessionHash);
       }
@@ -227,7 +237,7 @@ export function authRouter(db) {
 
   r.get("/status", (req, res) => {
     const hasUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n > 0;
-    res.json({ setupNeeded: !hasUsers, setupToken: !hasUsers && !!process.env.SETUP_TOKEN, passwordLogin: !passwordLoginOff(), user: req.user || null, microsoft: microsoftEnabled(), version: VERSION });
+    res.json({ setupNeeded: !hasUsers, setupToken: !hasUsers && !!process.env.SETUP_TOKEN, passwordLogin: !passwordLoginOff(), user: req.user ? { ...req.user, name: req.user.real_name || req.user.name } : null, microsoft: microsoftEnabled(), version: VERSION });
   });
 
   // First run only: create the Gerencia account.
@@ -455,13 +465,70 @@ export function adminRouter(db) {
   r.get("/users/directory", (req, res) => {
     const ids = db.prepare("SELECT id FROM users WHERE active = 1 ORDER BY name").all().map((u) => u.id);
     res.json(ids.map((id) => {
-      const u = loadUser(db, id);
-      return { id: u.id, name: u.name, role: u.role, offices: u.offices, scopeAll: u.permissions.includes("scope.all") };
+      const u = loadUser(db, id), shown = !u.hidden || hiddenUnlocked(req);
+      return { id: u.id, name: shown ? u.name : ASSISTANT, role: shown ? u.role : ASSISTANT, offices: u.offices, scopeAll: u.permissions.includes("scope.all") };
     }));
   });
 
+  // Hidden users are left out of the list until Gerencia enters the hidden-users password.
   r.get("/users", manage, (req, res) => {
-    res.json(db.prepare("SELECT id FROM users ORDER BY active DESC, name").all().map((u) => loadUser(db, u.id)));
+    const all = hiddenUnlocked(req);
+    res.json(db.prepare(`SELECT id FROM users ${all ? "" : "WHERE hidden = 0"} ORDER BY active DESC, name`).all().map((u) => loadUser(db, u.id)));
+  });
+
+  // ----- Hidden users (version 2.11): Gerencia only, behind their own password -----
+  const gerencia = (req, res, next) => (req.user.role === "Gerencia" ? next() : res.status(403).json({ error: "Solo Gerencia puede ocultar usuarios." }));
+  const hiddenPass = () => { try { return JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'hidden_users'").get()?.value || "{}").hash || ""; } catch { return ""; } };
+  const tries = throttle(db);
+  r.get("/hidden-users", manage, (req, res) => {
+    const until = hiddenUnlocked(req) ? hiddenUnlocks.get(req.sessionHash) : 0;
+    res.json({ count: db.prepare("SELECT COUNT(*) AS n FROM users WHERE hidden = 1").get().n, has_password: !!hiddenPass(),
+      unlocked: !!until, unlocked_until: until ? new Date(until).toISOString() : null, can_manage: req.user.role === "Gerencia" });
+  });
+  r.post("/hidden-users/password", gerencia, async (req, res) => {
+    const b = req.body ?? {}, cur = hiddenPass();
+    if (cur && !(await checkPassword(String(b.current || ""), cur))) {
+      audit(db, req, { action: "Intentó cambiar la contraseña de usuarios ocultos", module: "Usuarios", ok: false, summary: "Contraseña actual incorrecta" });
+      return res.status(403).json({ error: "La contraseña actual de usuarios ocultos no es correcta." });
+    }
+    const bad = passwordProblem(b.next);
+    if (bad) return res.status(400).json({ error: bad });
+    db.prepare("INSERT INTO settings (key, value) VALUES ('hidden_users', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(JSON.stringify({ hash: await hashPassword(b.next), set_at: new Date().toISOString(), set_by: req.user.id }));
+    hiddenUnlocks.clear(); // every open view of hidden users closes
+    audit(db, req, { action: cur ? "Cambió la contraseña de usuarios ocultos" : "Creó la contraseña de usuarios ocultos", module: "Usuarios", summary: "Contraseña de usuarios ocultos" });
+    res.status(204).end();
+  });
+  r.post("/hidden-users/unlock", gerencia, async (req, res) => {
+    const key = `hidden:${req.user.id}`, wait = tries.wait(key);
+    if (wait) return res.status(429).json({ error: `Demasiados intentos. Espere ${wait} minuto(s).` });
+    const cur = hiddenPass();
+    if (!cur) return res.status(409).json({ error: "Primero cree la contraseña de usuarios ocultos." });
+    if (!(await checkPassword(String(req.body?.password || ""), cur))) {
+      tries.fail(key, 5, 15 * 60 * 1000, 15 * 60 * 1000);
+      audit(db, req, { action: "Intentó ver usuarios ocultos", module: "Usuarios", ok: false, summary: "Contraseña de usuarios ocultos incorrecta" });
+      return res.status(403).json({ error: "La contraseña de usuarios ocultos no es correcta." });
+    }
+    tries.clear(key);
+    hiddenUnlocks.set(req.sessionHash, Date.now() + HIDDEN_UNLOCK_MS);
+    audit(db, req, { action: "Vio usuarios ocultos", module: "Usuarios", summary: "Abrió la vista de usuarios ocultos por 15 minutos" });
+    res.json({ ok: true, unlocked_until: new Date(Date.now() + HIDDEN_UNLOCK_MS).toISOString() });
+  });
+  r.post("/hidden-users/lock", manage, (req, res) => {
+    hiddenUnlocks.delete(req.sessionHash);
+    res.status(204).end();
+  });
+  // Hide needs the password to exist; showing a hidden user again needs the view unlocked.
+  r.put("/users/:id/hidden", gerencia, (req, res) => {
+    const id = Number(req.params.id), hide = req.body?.hidden === true;
+    const u = db.prepare("SELECT id, hidden FROM users WHERE id = ?").get(id);
+    if (!u || (u.hidden && !hiddenUnlocked(req))) return res.status(404).json({ error: "El usuario no existe." });
+    if (hide && !hiddenPass()) return res.status(409).json({ error: "Primero cree la contraseña de usuarios ocultos." });
+    if (!hide && !hiddenUnlocked(req)) return res.status(403).json({ error: "Escriba la contraseña de usuarios ocultos para mostrar este usuario." });
+    db.prepare("UPDATE users SET hidden = ? WHERE id = ?").run(hide ? 1 : 0, id);
+    audit(db, req, { action: hide ? "Ocultó un usuario" : "Volvió a mostrar un usuario", module: "Usuarios", entity: "usuario", record_id: id,
+      summary: hide ? "Ocultó un usuario: sus acciones se ven como «Asistente»" : "Volvió a mostrar un usuario oculto" });
+    res.json(loadUser(db, id));
   });
 
   const setUserPermissions = (userId, custom, perms) => {
@@ -501,8 +568,8 @@ export function adminRouter(db) {
   }
 
   r.post("/users/:id/invite", manage, async (req, res) => {
-    const u = db.prepare("SELECT id, active FROM users WHERE id = ?").get(Number(req.params.id));
-    if (!u) return res.status(404).json({ error: "El usuario no existe." });
+    const u = db.prepare("SELECT id, active, hidden FROM users WHERE id = ?").get(Number(req.params.id));
+    if (!u || (u.hidden && !hiddenUnlocked(req))) return res.status(404).json({ error: "El usuario no existe." });
     if (!u.active) return res.status(400).json({ error: "El usuario está inactivo: actívelo antes de invitarlo." });
     const r = await invite(req, u.id);
     res.status(r.ok ? 200 : 502).json(r.ok ? { ok: true, detail: r.detail, user: loadUser(db, u.id) } : { error: `No se envió la invitación: ${r.detail}` });
@@ -546,7 +613,7 @@ export function adminRouter(db) {
   r.put("/users/:id", manage, async (req, res) => {
     const id = Number(req.params.id);
     const cur = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
-    if (!cur) return res.status(404).json({ error: "El usuario no existe." });
+    if (!cur || (cur.hidden && !hiddenUnlocked(req))) return res.status(404).json({ error: "El usuario no existe." });
     const b = req.body ?? {};
     const role = b.role ?? cur.role;
     if (!roleExists(db, role)) return res.status(400).json({ error: "Rol no válido." });

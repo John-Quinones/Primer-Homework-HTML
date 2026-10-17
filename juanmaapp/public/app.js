@@ -481,9 +481,11 @@ $("#bell-list").addEventListener("click", (e) => {
 });
 
 // In-page confirm / prompt (the browser's own dialogs are blocked in some viewers).
-function ask({ title, message = "", input = null, okLabel = "Aceptar", danger = false }) {
+function ask({ title, message = "", input = null, okLabel = "Aceptar", danger = false, secret = false }) {
   const dlg = $("#ask-dialog");
   const field = dlg.querySelector("[name=text]");
+  field.type = secret ? "password" : "text"; // secret: a password, never trimmed or remembered
+  field.autocomplete = secret ? "new-password" : "on";
   $("[data-title]", dlg).textContent = title;
   $("[data-msg]", dlg).textContent = message;
   field.hidden = input === null;
@@ -498,7 +500,7 @@ function ask({ title, message = "", input = null, okLabel = "Aceptar", danger = 
   return new Promise((resolve) => {
     dlg.addEventListener("close", () => {
       if (dlg.returnValue !== "ok") return resolve(input === null ? false : null);
-      resolve(input === null ? true : field.value.trim() || null);
+      resolve(input === null ? true : (secret ? field.value : field.value.trim()) || null);
     }, { once: true });
   });
 }
@@ -1893,6 +1895,30 @@ document.addEventListener("click", (e) => {
       toast(`Invitación enviada a ${u.email}. El enlace vence en 72 horas.`);
       await renderUsuarios();
     },
+    "hide-user": async () => {
+      const u = adminUsers.find((x) => x.id === id);
+      if (!hiddenInfo.has_password && !(await setHiddenPassword())) return;
+      if (!(await ask({ title: "Ocultar usuario", okLabel: "Ocultar",
+        message: `${u.name} saldrá de esta lista y todo lo que haga (tareas, recibos, firmas, avisos, bitácora, informes y documentos) aparecerá como «Asistente». Puede seguir trabajando normalmente. Para verlo otra vez se pide la contraseña de usuarios ocultos.` }))) return;
+      await api("PUT", `/admin/users/${id}/hidden`, { hidden: true });
+      toast(`Usuario oculto. Ahora aparece como «Asistente».`);
+      await renderUsuarios();
+    },
+    "unhide-user": async () => {
+      const u = adminUsers.find((x) => x.id === id);
+      if (!(await ask({ title: "Dejar de ocultar", okLabel: "Mostrar", message: `${u.name} volverá a aparecer con su nombre en toda la App, también en lo que hizo mientras estuvo oculto.` }))) return;
+      await api("PUT", `/admin/users/${id}/hidden`, { hidden: false });
+      toast(`${u.name} ya no está oculto.`);
+      await renderUsuarios();
+    },
+    "unlock-hidden": async () => {
+      const password = await ask({ title: "Ver usuarios ocultos", message: "Escriba la contraseña de usuarios ocultos. La vista se cierra sola en 15 minutos.", input: "", secret: true, okLabel: "Ver" });
+      if (!password) return;
+      await api("POST", "/admin/hidden-users/unlock", { password });
+      await renderUsuarios();
+    },
+    "lock-hidden": async () => { await api("POST", "/admin/hidden-users/lock"); await renderUsuarios(); },
+    "hidden-password": async () => { if (await setHiddenPassword()) await renderUsuarios(); },
     "new-office": () => openOfficeDialog(null),
     "edit-office": () => openOfficeDialog(offices.find((o) => o.id === id)),
     "delete-office": async () => {
@@ -2703,12 +2729,50 @@ $("#admin-tabs").addEventListener("click", (e) => {
   if (b) showATab(b.dataset.atab);
 });
 
+// Hidden users (version 2.11): Gerencia hides a user, whose actions then read "Asistente";
+// the hidden users are seen again only with their own password, for 15 minutes.
+let hiddenInfo = { count: 0, has_password: false, unlocked: false, can_manage: false }, hiddenTimer = null;
+function renderHiddenBar() {
+  const bar = $("#hidden-users-bar");
+  bar.hidden = !hiddenInfo.can_manage;
+  if (bar.hidden) return;
+  const until = hiddenInfo.unlocked_until ? new Date(hiddenInfo.unlocked_until).toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" }) : "";
+  bar.innerHTML = `<span class="hidden-users-text">${hiddenInfo.unlocked
+      ? `<span class="badge warn">Viendo usuarios ocultos</span> (hasta las ${escapeHtml(until)}). Para los demás siguen apareciendo como «Asistente».`
+      : hiddenInfo.count ? `<strong>${hiddenInfo.count}</strong> usuario(s) oculto(s). Sus acciones aparecen como «Asistente».`
+      : "Ningún usuario oculto. Con «Ocultar» un usuario sale de esta lista y todo lo que haga aparece como «Asistente»."}</span>
+    <span class="row-actions">${hiddenInfo.unlocked ? '<button data-action="lock-hidden">Volver a ocultar</button>'
+      : hiddenInfo.count ? '<button data-action="unlock-hidden">Ver usuarios ocultos</button>' : ""}
+      <button data-action="hidden-password">${hiddenInfo.has_password ? "Cambiar contraseña de ocultos" : "Crear contraseña de ocultos"}</button></span>`;
+  clearTimeout(hiddenTimer);
+  if (hiddenInfo.unlocked_until) hiddenTimer = setTimeout(() => { if (location.hash.startsWith("#usuarios")) renderUsuarios(); }, Math.max(1000, Date.parse(hiddenInfo.unlocked_until) - Date.now() + 500));
+}
+// Ask for a new hidden-users password twice; returns true when it was saved.
+async function setHiddenPassword() {
+  let current = "";
+  if (hiddenInfo.has_password) {
+    current = await ask({ title: "Cambiar contraseña de ocultos", message: "Escriba la contraseña actual de usuarios ocultos.", input: "", secret: true, okLabel: "Seguir" });
+    if (!current) return false;
+  }
+  const next = await ask({ title: hiddenInfo.has_password ? "Contraseña nueva de ocultos" : "Crear contraseña de ocultos",
+    message: "Con esta contraseña Gerencia ve los usuarios ocultos. Use al menos 10 caracteres, distinta a la de ingreso. Guárdela: no se puede recuperar.", input: "", secret: true, okLabel: "Seguir" });
+  if (!next) return false;
+  const again = await ask({ title: "Repita la contraseña", message: "Escríbala otra vez para confirmar.", input: "", secret: true, okLabel: "Guardar" });
+  if (again === null) return false;
+  if (again !== next) { toast("Las dos contraseñas no coinciden. No se guardó nada."); return false; }
+  await api("POST", "/admin/hidden-users/password", { current, next });
+  toast(hiddenInfo.has_password ? "Contraseña de usuarios ocultos cambiada." : "Contraseña de usuarios ocultos creada.");
+  return true;
+}
+
 async function renderUsuarios() {
-  [adminUsers, offices, roleInfo] = await Promise.all([api("GET", "/admin/users"), api("GET", "/admin/offices"), api("GET", "/admin/roles")]);
+  [adminUsers, offices, roleInfo, hiddenInfo] = await Promise.all([api("GET", "/admin/users"), api("GET", "/admin/offices"), api("GET", "/admin/roles"),
+    api("GET", "/admin/hidden-users").catch(() => ({ count: 0, can_manage: false }))]);
   directory = await api("GET", "/admin/users/directory");
+  renderHiddenBar();
   $("#user-rows").innerHTML = adminUsers.map((u) => `
-    <tr class="${u.active ? "" : "inactive"}">
-      <td><strong>${escapeHtml(u.name)}</strong><br><span class="muted">${escapeHtml(u.email)}</span></td>
+    <tr class="${u.active ? "" : "inactive"} ${u.hidden ? "is-hidden-user" : ""}">
+      <td><strong>${escapeHtml(u.name)}</strong>${u.hidden ? ' <span class="badge warn">Oculto · se ve como «Asistente»</span>' : ""}<br><span class="muted">${escapeHtml(u.email)}</span></td>
       <td>${escapeHtml(u.role)}${u.custom_permissions ? '<br><span class="badge warn">Permisos propios</span>' : ""}</td>
       <td>${u.permissions.includes("scope.all") ? "Todas" : escapeHtml(u.offices.map((o) => o.name).join(", "))}</td>
       <td>${u.active ? '<span class="badge ok">Activo</span>' : '<span class="badge">Inactivo</span>'}</td>
@@ -2716,7 +2780,8 @@ async function renderUsuarios() {
         : `${u.must_change_password ? '<span class="badge warn">Contraseña temporal</span>' : u.has_password ? '<span class="badge ok">Con contraseña</span>' : '<span class="badge">Sin contraseña</span>'}
           ${u.invited_at ? `<br><span class="muted">Invitado ${escapeHtml(window.JuanmaPdf.colombiaTime(u.invited_at).replace(" (hora de Colombia)", ""))}</span>` : ""}`}</td>
       <td class="row-actions"><button data-action="edit-user" data-id="${u.id}">Editar</button>
-        ${!WEB && u.active ? `<button data-action="invite-user" data-id="${u.id}">${u.invited_at ? "Reenviar invitación" : "Invitar por correo"}</button>` : ""}</td>
+        ${!WEB && u.active ? `<button data-action="invite-user" data-id="${u.id}">${u.invited_at ? "Reenviar invitación" : "Invitar por correo"}</button>` : ""}
+        ${hiddenInfo.can_manage && u.id !== me.id ? (u.hidden ? `<button data-action="unhide-user" data-id="${u.id}">Dejar de ocultar</button>` : `<button data-action="hide-user" data-id="${u.id}">Ocultar</button>`) : ""}</td>
     </tr>`).join("");
   $("#office-cards").innerHTML = offices.map((o) => `
     <article class="result-card">

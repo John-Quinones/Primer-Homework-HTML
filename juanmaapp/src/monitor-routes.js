@@ -26,7 +26,7 @@ export function monitorRouter(db) {
              (SELECT error FROM process_checks pc WHERE pc.case_id = k.id ORDER BY pc.id DESC LIMIT 1) AS last_error,
              EXISTS (SELECT 1 FROM report_selection s WHERE s.user_id = ? AND s.case_id = k.id) AS selected
       FROM cases k JOIN clients c ON c.id = k.client_id JOIN process_types pt ON pt.id = k.process_type_id
-      LEFT JOIN users u ON u.id = k.assigned_user_id
+      LEFT JOIN users_shown u ON u.id = k.assigned_user_id
       WHERE k.radicado != '' AND ${officeCond(req)} ORDER BY k.last_action_date DESC, k.id DESC`).all(req.user.id);
     res.json(rows.map((x) => ({ ...x, monitor: !!x.monitor, selected: !!x.selected })));
   });

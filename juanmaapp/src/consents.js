@@ -142,7 +142,7 @@ export function signConsentAnswers(raw, items = CONSENT_ITEMS) {
 function consentsOut(db, clientId) {
   const records = db.prepare("SELECT * FROM consent_records WHERE client_id = ? ORDER BY id").all(clientId).map((x) => ({ ...x }));
   const requests = db.prepare(`SELECT r.id, r.channel, r.sent_to, r.created_at, r.expires_at, r.opened_at, r.answered_at, u.name AS created_by_name
-    FROM consent_requests r LEFT JOIN users u ON u.id = r.created_by WHERE r.client_id = ? ORDER BY r.id DESC`).all(clientId).map((x) => ({ ...x }));
+    FROM consent_requests r LEFT JOIN users_shown u ON u.id = r.created_by WHERE r.client_id = ? ORDER BY r.id DESC`).all(clientId).map((x) => ({ ...x }));
   return { version: LEGAL_VERSION(), items: CONSENT_ITEMS, methods: CONSENT_METHODS, status: consentStatus(records), records, requests };
 }
 

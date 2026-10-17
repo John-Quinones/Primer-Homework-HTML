@@ -1036,3 +1036,9 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 .select-add { display: flex; gap: 6px; align-items: center; }
 .select-add > select { flex: 1; min-width: 0; }
 .select-add > button[hidden] { display: none; }
+
+/* Hidden users (version 2.11): the Gerencia strip above the users table. */
+.hidden-users-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; }
+.hidden-users-bar .hidden-users-text { flex: 1 1 280px; }
+.hidden-users-bar .row-actions { display: flex; flex-wrap: wrap; gap: 8px; white-space: normal; }
+tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparent); }

@@ -68,7 +68,7 @@ export function reportsRouter(db) {
                k.counterparty, date(k.created_at) AS created, date(k.updated_at) AS updated
         FROM cases k JOIN clients c ON c.id = k.client_id
         JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id
-        LEFT JOIN offices o ON o.id = k.office_id LEFT JOIN users u ON u.id = k.assigned_user_id
+        LEFT JOIN offices o ON o.id = k.office_id LEFT JOIN users_shown u ON u.id = k.assigned_user_id
         ${W()} ORDER BY o.name, g.name, c.full_name`).all(...params);
     } else if (type === "clientes") {
       if (sc !== null) {
@@ -103,7 +103,7 @@ export function reportsRouter(db) {
       rows = db.prepare(`
         SELECT COALESCE(u.name, 'Sin responsable') AS user, COALESCE(u.role, '') AS role, COUNT(*) AS cases,
                SUM(k.status IN (${OPEN.map(() => "?").join(",")})) AS active, SUM(k.status IN ${ARCHIVED}) AS closed
-        FROM cases k LEFT JOIN users u ON u.id = k.assigned_user_id ${W()}
+        FROM cases k LEFT JOIN users_shown u ON u.id = k.assigned_user_id ${W()}
         GROUP BY k.assigned_user_id ORDER BY cases DESC`).all(...OPEN, ...params);
     } else if (type === "procesos") {
       inOffices("k.office_id");
