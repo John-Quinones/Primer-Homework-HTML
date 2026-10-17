@@ -13,20 +13,66 @@ export function properName(s) {
   return words.map((w, i) => (i > 0 && PARTICLES.has(w) ? w : capWord(w))).join(" ");
 }
 
-// Addresses: each word with an initial capital, joining words in lower case
-// ("la", "las", "los" only after "de": "Calle de la Paz", "Barrio La Pola"), house numbers and the letters next to them in capitals, "No" with its dot.
+// Addresses: road and place words written out in full whatever the user typed
+// (CALLE, calle, Clle, Cl → Calle; Cra, Kr → Carrera; Mz → Manzana; B/ → Barrio...),
+// each word with an initial capital, joining words in lower case ("la", "las", "los"
+// only after "de": "Calle de la Paz", "Barrio La Pola"), house numbers and the letters
+// next to them in capitals, "No." for the number sign written as a word.
+const ADDRESS_WORDS = Object.entries({
+  "Calle": ["calle", "cl", "cll", "clle", "cal", "call", "cale"],
+  "Carrera": ["carrera", "cra", "cr", "crr", "kr", "kra", "krr", "carr", "cara", "carrea"],
+  "Avenida": ["avenida", "av", "avd", "avda", "ave", "aven"],
+  "Avenida Calle": ["ac"],
+  "Avenida Carrera": ["ak"],
+  "Transversal": ["transversal", "tv", "tr", "trv", "trans", "transv", "tranv", "tranversal"],
+  "Diagonal": ["diagonal", "dg", "dig", "diag"],
+  "Circular": ["circular", "cq", "circ"],
+  "Autopista": ["autopista", "aut", "autop"],
+  "Vía": ["via", "vía"],
+  "Kilómetro": ["km", "kms", "kilometro", "kilómetro"],
+  "Manzana": ["manzana", "mz", "mza", "manz", "mzn"],
+  "Barrio": ["barrio", "br", "brr", "bar", "barr", "b/", "bº", "b°"],
+  "Conjunto": ["conjunto", "conj", "cjto", "cj", "cto"],
+  "Urbanización": ["urbanizacion", "urbanización", "urb", "urbaniz"],
+  "Condominio": ["condominio", "cond"],
+  "Edificio": ["edificio", "ed", "edif", "edf"],
+  "Torre": ["torre", "to", "tor", "twr"],
+  "Bloque": ["bloque", "bl", "blq", "bloq"],
+  "Etapa": ["etapa", "et"],
+  "Interior": ["interior", "int"],
+  "Casa": ["casa", "cs", "cas"],
+  "Apartamento": ["apartamento", "apto", "ap", "apt", "aptmo", "apartameto"],
+  "Oficina": ["oficina", "of", "ofi", "ofic", "ofc"],
+  "Local": ["local", "lc", "loc"],
+  "Piso": ["piso", "ps"],
+  "Lote": ["lote", "lt", "lte"],
+  "Sector": ["sector", "sec", "sect"],
+  "Vereda": ["vereda", "vda", "ver", "vrda"],
+  "Finca": ["finca", "fca"],
+  "Corregimiento": ["corregimiento", "corr", "correg"],
+}).reduce((m, [full, forms]) => { for (const f of forms) m.set(f, full); return m; }, new Map());
+const NUMBER_SIGNS = new Set(["no", "nro", "num", "n°", "nº", "número", "numero"]);
 const ADDRESS_JOINERS = new Set(["de", "del", "y", "e", "o", "a", "al", "en", "por"]);
-const ADDRESS_UPPER = new Set(["ph", "bis"]);
 
-/** "CRA 5 no 12b-30 BARRIO la POLA" → "Cra 5 No. 12B-30 Barrio La Pola". */
+const addressWord = (w) => ADDRESS_WORDS.get(w) || ADDRESS_WORDS.get(w.replace(/\.$/, ""));
+
+/** "CLLE 5 no 12b-30 BR la POLA" → "Calle 5 No. 12B-30 Barrio La Pola". */
 export function properAddress(s) {
-  const words = String(s ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es").split(" ").filter(Boolean);
+  const words = String(s ?? "").trim().toLocaleLowerCase("es")
+    // "cra5", "cll.10", "no.12", "#12" → "cra 5", "cll. 10", "no. 12", "# 12"; "b/la" → "b/ la"
+    .replace(/(^|\s)([a-zñ°º]+\.?|#)(?=\d)/g, (m, sp, w) => (w === "#" || addressWord(w) || NUMBER_SIGNS.has(w.replace(/\.$/, "")) ? `${sp}${w} ` : m))
+    .replace(/(^|\s)(b\/)(?=\S)/g, "$1$2 ")
+    .replace(/([\da-zñ])#\s*(?=\d)/g, "$1 # ")
+    .replace(/\s+/g, " ").split(" ").filter(Boolean);
   return words.map((w, i) => {
     const prev = words[i - 1] || "", next = words[i + 1] || "";
     if (/\d/.test(w)) return w.toLocaleUpperCase("es");
     if (/^[a-zñ]$/.test(w) && /\d/.test(prev)) return w.toLocaleUpperCase("es");
-    if (ADDRESS_UPPER.has(w)) return w === "bis" ? "Bis" : w.toUpperCase();
-    if ((w === "no" || w === "no.") && /^\d/.test(next)) return "No.";
+    if (w === "bis") return "Bis";
+    if (w === "ph") return "PH";
+    if (NUMBER_SIGNS.has(w.replace(/\.$/, "")) && /^\d/.test(next)) return "No.";
+    const full = addressWord(w);
+    if (full) return full;
     if (i > 0 && (ADDRESS_JOINERS.has(w) || (/^(la|las|los)$/.test(w) && prev === "de"))) return w;
     return capWord(w);
   }).join(" ");

@@ -14,9 +14,15 @@ test("names, cities and addresses in proper case whatever the user types", () =>
   assert.equal(canonicalCity("IBAGUE", "Tolima"), "Ibagué");
   assert.equal(canonicalCity("ibague", ""), "Ibagué");
   assert.equal(canonicalCity("VEREDA EL TOTUMO", "Tolima"), "Vereda El Totumo");
-  assert.equal(properAddress("CRA 5 no 12b-30 BARRIO la POLA"), "Cra 5 No. 12B-30 Barrio La Pola");
-  assert.equal(properAddress("calle DE LA paz # 4-56 apto 301"), "Calle de la Paz # 4-56 Apto 301");
-  assert.equal(properAddress("VIA A ARMENIA KM 5"), "Via a Armenia Km 5");
+  assert.equal(properAddress("CRA 5 no 12b-30 BARRIO la POLA"), "Carrera 5 No. 12B-30 Barrio La Pola");
+  assert.equal(properAddress("calle DE LA paz # 4-56 apto 301"), "Calle de la Paz # 4-56 Apartamento 301");
+  assert.equal(properAddress("VIA A ARMENIA KM 5"), "Vía a Armenia Kilómetro 5");
+  for (const x of ["CALLE 10", "calle 10", "Clle 10", "CL 10", "cll. 10"]) assert.equal(properAddress(x), "Calle 10");
+  assert.equal(properAddress("kr 3 bis sur # 4-56 ph"), "Carrera 3 Bis Sur # 4-56 PH");
+  assert.equal(properAddress("AV ambalá no. 45-10 conj ALTOS de la sabana torre 2 apto 301"), "Avenida Ambalá No. 45-10 Conjunto Altos de la Sabana Torre 2 Apartamento 301");
+  assert.equal(properAddress("mz b casa 12 URB el vergel"), "Manzana B Casa 12 Urbanización El Vergel");
+  assert.equal(properAddress("TV 5 nro 3-20 b/la pola"), "Transversal 5 No. 3-20 Barrio La Pola");
+  assert.equal(properAddress("cra5#12-30"), "Carrera 5 # 12-30");
 });
 
 test("clients and offices are saved with the city's accent and the address in proper case", async () => {

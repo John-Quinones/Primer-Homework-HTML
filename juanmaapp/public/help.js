@@ -56,7 +56,7 @@
     "client.email": ["cliente@correo.com", "Correo donde el cliente recibe notificaciones, recibos y recordatorios."],
     "client.phone": ["300 123 4567", "Celular con WhatsApp de preferencia. Escríbalo como quiera: queda 322 253 1327 (celular) o 608 261 4172 (fijo)."],
     "client.city": ["Escriba: I… Ibagué", "Elija de la lista o escríbala como quiera (IBAGUE → Ibagué): queda el municipio oficial (DIVIPOLA) con su tilde."],
-    "client.address": ["Ej. Calle 10 # 3-45, barrio Centro", "Dirección de notificación física. Se corrige a mayúscula inicial al salir (CRA 5 no 12b-30 → Cra 5 No. 12B-30)."],
+    "client.address": ["Ej. Calle 10 # 3-45, barrio Centro", "Dirección de notificación física. Se corrige al salir: tipos de vía y lugares completos y con mayúscula inicial (CLLE 5 no 12b-30 br la pola → Calle 5 No. 12B-30 Barrio La Pola)."],
     "client.notes": ["Ej. Prefiere contacto por WhatsApp en la tarde", "Datos útiles para atender al cliente; no escriba información reservada del proceso."],
     "case.title": ["", "Qué se busca en pocas palabras: «Reconocimiento de pensión de vejez»."],
     "case.radicado": ["", "Los 23 dígitos del radicado judicial; puede pegarlo con guiones o espacios."],

@@ -1256,7 +1256,7 @@ function setPersonType(type) {
 }
 clientForm.addEventListener("change", (e) => { if (e.target.name === "person_type") setPersonType(e.target.value); });
 // Names and addresses in proper case as soon as the user leaves the field, in every form
-// (JOHN or john → John; "cra 5 no 12b-30" → "Cra 5 No. 12B-30"; "3222531327" → "322 253 1327"). Cities and departments
+// (JOHN or john → John; "clle 5 no 12b-30" → "Calle 5 No. 12B-30"; "3222531327" → "322 253 1327"). Cities and departments
 // take their DANE spelling in the type-ahead (IBAGUE → Ibagué). Company names stay as written.
 const PERSON_NAME_FIELDS = '[name=first_names], [name=last_names], [name=legal_rep], [name=typed_name], [data-form=user] [name=name], #setup-name, [data-p=name], #signer-rows [data-k=name]';
 const PHONE_FIELDS = '[name=phone], input[name=whatsapp]:not([type=checkbox]), #signer-rows [data-k=phone]';
