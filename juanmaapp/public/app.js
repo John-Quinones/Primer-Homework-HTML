@@ -2603,6 +2603,16 @@ function setBox(sel, text, isError = false) {
   el.classList.toggle("error", isError);
 }
 
+// Research takes a while: show the seconds so the wait is visible. Returns the stop function.
+function elapsedBox(sel, text) {
+  const t0 = Date.now();
+  const tick = () => setBox(sel, `${text} (${Math.round((Date.now() - t0) / 1000)} s)`);
+  tick();
+  const id = setInterval(tick, 1000);
+  return () => clearInterval(id);
+}
+const fromCache = (o) => (o?.cached ? "Respuesta guardada de una consulta anterior (menos de 30 días). " : "");
+
 jSearch.addEventListener("input", () => WEB && showServerNotes());
 jSearch.addEventListener("change", () => WEB && showServerNotes());
 $("#j-verify-text").addEventListener("input", () => WEB && showServerNotes());
@@ -2617,11 +2627,12 @@ jSearch.addEventListener("submit", async (e) => {
   const btn = $("button", jSearch);
   btn.disabled = true;
   $("#j-results").innerHTML = "";
-  setBox("#j-search-status", "Buscando en las relatorías oficiales… puede tardar un minuto.");
+  const stop = elapsedBox("#j-search-status", "Buscando en las relatorías oficiales…");
   try {
     const out = await api("POST", "/jurisprudencia/search", formData(jSearch));
+    stop();
     jResults = out.results || [];
-    setBox("#j-search-status", jResults.length ? (out.notes || "") : `Sin resultados. ${out.notes || ""}`);
+    setBox("#j-search-status", fromCache(out) + (jResults.length ? (out.notes || "") : `Sin resultados. ${out.notes || ""}`));
     $("#j-results").innerHTML = jResults.map((r, i) => `
       <article class="result-card">
         <div class="result-head">
@@ -2638,6 +2649,7 @@ jSearch.addEventListener("submit", async (e) => {
         </div>
       </article>`).join("");
   } catch (err) {
+    stop();
     setBox("#j-search-status", `Error: ${err.message}`, true);
   } finally {
     btn.disabled = false;
@@ -2649,13 +2661,15 @@ async function runAnalysis(body) {
   showJTab("analizar");
   const box = $("#j-analysis");
   box.hidden = true;
-  setBox("#j-analyze-status", body.text ? "NomosAI está leyendo el texto pegado…" : "Leyendo la sentencia en la fuente oficial…");
+  const stop = elapsedBox("#j-analyze-status", body.text ? "NomosAI está leyendo el texto pegado…" : "Leyendo la sentencia en la fuente oficial…");
   $("button", jAnalyze).disabled = true;
   try {
     jAnalysis = await api("POST", "/jurisprudencia/analyze", body);
-    setBox("#j-analyze-status", "");
+    stop();
+    setBox("#j-analyze-status", fromCache(jAnalysis));
     renderAnalysis(jAnalysis);
   } catch (err) {
+    stop();
     setBox("#j-analyze-status", `Error: ${err.message}`, true);
   } finally {
     $("button", jAnalyze).disabled = false;

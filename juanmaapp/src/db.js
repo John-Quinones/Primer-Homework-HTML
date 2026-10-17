@@ -562,6 +562,8 @@ function migrate(db) {
   // Change 51 (security audit): sign-in counters in the database, idle sessions, Microsoft object id.
   db.exec("CREATE TABLE IF NOT EXISTS auth_throttle (key TEXT PRIMARY KEY, n INTEGER NOT NULL, first_ms INTEGER NOT NULL, until_ms INTEGER NOT NULL DEFAULT 0)");
   add("sessions", "last_seen", "TEXT");
+  // Version 2.19: answers of case-law research kept 30 days so the same query returns at once.
+  db.exec("CREATE TABLE IF NOT EXISTS jurisprudence_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL, created_ms INTEGER NOT NULL)");
   add("users", "ms_oid", "TEXT");
   // Version 2.11: hidden users. Their actions read "Asistente" everywhere through this view;
   // the real author stays in user_id columns and is shown only after the hidden-users password.

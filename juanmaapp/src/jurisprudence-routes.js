@@ -1,5 +1,5 @@
 import express from "express";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { scopeOf } from "./auth.js";
 import { searchSentencias, analyzeSentencia, analyzeText, verifyCitation, COURTS, CSJ_SALAS } from "./jurisprudence.js";
@@ -25,8 +25,26 @@ function apiError(err) {
   return [500, "Error interno del servidor."]; // details stay in the log (audit A10-001)
 }
 
+const CACHE_MS = 30 * 24 * 3600 * 1000;
+const cacheKey = (kind, args) => kind + ":" + createHash("sha256")
+  .update(JSON.stringify(args, (_k, v) => (typeof v === "string" ? v.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase() : v)))
+  .digest("hex");
+
 export function jurisprudenceRouter(db) {
   const r = express.Router();
+
+  // Same question within 30 days: answer from the database instead of researching again.
+  // Only answers that found something are kept, so a miss is always retried.
+  const cached = async (kind, args, run, keep) => {
+    const key = cacheKey(kind, args);
+    const row = db.prepare("SELECT result, created_ms FROM jurisprudence_cache WHERE key = ?").get(key);
+    if (row && Date.now() - row.created_ms < CACHE_MS) return { ...JSON.parse(row.result), cached: true };
+    const result = await run();
+    if (keep(result)) {
+      db.prepare("INSERT OR REPLACE INTO jurisprudence_cache (key, result, created_ms) VALUES (?, ?, ?)").run(key, JSON.stringify(result), Date.now());
+    }
+    return result;
+  };
 
   const ai = (fn) => async (req, res) => {
     try {
@@ -43,16 +61,18 @@ export function jurisprudenceRouter(db) {
   r.post("/search", ai((b) => {
     const query = str(b.query);
     if (!query) throw Object.assign(new Error("Escriba qué busca."), { status: 400 });
-    return searchSentencias({
+    const args = {
       query, court: COURTS[b.court] ? b.court : "", sala: str(b.sala),
       yearFrom: Number(b.yearFrom) || null, yearTo: Number(b.yearTo) || null,
-    }).then((out) => ({ ...out, results: out.results.map(withProof) }));
+    };
+    return cached("search", args, () => searchSentencias(args), (o) => o.results.length > 0).then((out) => ({ ...out, results: out.results.map(withProof) }));
   }));
 
   r.post("/analyze", ai((b) => {
     if (str(b.text).length >= 400) return analyzeText({ text: str(b.text), reference: str(b.reference) });
     if (!str(b.reference) && !str(b.url)) throw Object.assign(new Error("Indique la sentencia o su enlace."), { status: 400 });
-    return analyzeSentencia({ reference: str(b.reference), url: str(b.url), court: str(b.court) }).then(withProof);
+    const args = { reference: str(b.reference), url: str(b.url), court: str(b.court) };
+    return cached("analyze", args, () => analyzeSentencia(args), (o) => !!o.found).then(withProof);
   }));
 
   r.post("/verify", ai((b) => {

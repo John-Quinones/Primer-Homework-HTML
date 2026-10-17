@@ -22,6 +22,10 @@ export const COURTS = {
 
 export const CSJ_SALAS = ["Sala Plena", "Sala de Casación Civil, Agraria y Rural", "Sala de Casación Laboral", "Sala de Casación Penal", "Sala de Instrucción", "Sala de Primera Instancia"];
 
+// Depth of reasoning per request. "high" made a single judgment take minutes;
+// "medium" keeps the official-source rules and answers much sooner.
+const EFFORT = ["low", "medium", "high", "xhigh", "max"].includes(process.env.JURIS_EFFORT) ? process.env.JURIS_EFFORT : "medium";
+
 let client = new Anthropic();
 /** Tests swap in a stub client. */
 export function setClient(c) { client = c; }
@@ -81,11 +85,25 @@ export function lastJsonBlock(text) {
   return JSON.parse(blocks.at(-1)[1]);
 }
 
+/**
+ * Official Corte Constitucional page for a reference like "T-760 de 2008",
+ * "C-355/06" or "SU-214 de 2016", so the model reads it without searching.
+ * It is only a hint: the URL still counts as verified only if web_fetch returned it.
+ */
+export function ccRelatoriaUrl(reference) {
+  const m = String(reference || "").toUpperCase().match(/\b(SU|T|C)\s*-\s*(\d{1,4})\s*(?:\/|DE(?:L)?|-)\s*(\d{4}|\d{2})\b/);
+  if (!m) return null;
+  let year = Number(m[3]);
+  if (m[3].length === 2) year += year > 91 ? 1900 : 2000; // the Court started in 1992
+  if (year < 1992 || year > new Date().getFullYear()) return null;
+  return `https://www.corteconstitucional.gov.co/relatoria/${year}/${m[1]}-${Number(m[2])}-${String(year).slice(2)}.htm`;
+}
+
 /** One research turn with official-only web tools; resumes pause_turn. */
-async function research(prompt, { maxSearches = 6 } = {}) {
+async function research(prompt, { maxSearches = 6, maxFetches = 6 } = {}) {
   const tools = [
     { type: "web_search_20260209", name: "web_search", max_uses: maxSearches, allowed_domains: OFFICIAL_DOMAINS },
-    { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6, allowed_domains: OFFICIAL_DOMAINS },
+    { type: "web_fetch_20260209", name: "web_fetch", max_uses: maxFetches, allowed_domains: OFFICIAL_DOMAINS },
   ];
   const messages = [{ role: "user", content: prompt }];
   const content = [];
@@ -95,7 +113,7 @@ async function research(prompt, { maxSearches = 6 } = {}) {
       max_tokens: 32000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      output_config: { effort: "high" },
+      output_config: { effort: EFFORT },
       system: SYSTEM,
       tools,
       messages,
@@ -139,8 +157,9 @@ Return:
 // ---------- Analysis ----------
 export async function analyzeSentencia({ reference, url, court }) {
   const target = url ? `the judgment at ${url}` : `the judgment "${reference}"${court ? ` of the ${COURTS[court] || court}` : ""}`;
+  const direct = !url && (!court || court === "CC") ? ccRelatoriaUrl(reference) : null;
   const prompt = `Locate ${target} on the official court website, read it, and analyze it.
-
+${direct ? `Its official page should be ${direct}: fetch it first and search only if that page is missing or is another judgment.\n` : ""}
 Return:
 \`\`\`json
 {
@@ -159,7 +178,7 @@ Return:
 }
 \`\`\`
 If you cannot find it on an official site, return {"found": false, "notes": "why"}.`;
-  const { data, seen } = await research(prompt);
+  const { data, seen } = await research(prompt, url || direct ? { maxSearches: 2, maxFetches: 3 } : {});
   return { ...data, verified: !!data.found && verifiedUrl(data.url, seen) };
 }
 
@@ -172,7 +191,7 @@ export async function analyzeText({ text, reference }) {
     max_tokens: 32000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    output_config: { effort: "high" },
+    output_config: { effort: EFFORT },
     system: SYSTEM,
     messages: [{ role: "user", content: `Analyze ONLY the judgment text below. If something is not in the text, use null.
 Reference given by the user: ${reference || "[not given]"}

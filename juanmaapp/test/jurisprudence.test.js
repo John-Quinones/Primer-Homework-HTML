@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import {
-  isOfficialUrl, collectSeenUrls, verifiedUrl, lastJsonBlock, setClient, searchSentencias, verifyCitation,
+  isOfficialUrl, collectSeenUrls, verifiedUrl, lastJsonBlock, setClient, searchSentencias, verifyCitation, analyzeSentencia, ccRelatoriaUrl,
 } from "../src/jurisprudence.js";
 import { startServer } from "./helpers.js";
 
@@ -127,4 +127,53 @@ test("a result verified by the server keeps its mark when saved", async () => {
   assert.ok(r.proof);
   const saved = await call("POST", "/jurisprudencia/saved", { ...r, analysis: {} });
   assert.equal(saved.body.verified, true);
+});
+
+test("builds the Corte Constitucional page from the reference", () => {
+  assert.equal(ccRelatoriaUrl("Sentencia T-760 de 2008"), "https://www.corteconstitucional.gov.co/relatoria/2008/T-760-08.htm");
+  assert.equal(ccRelatoriaUrl("C-355/06"), "https://www.corteconstitucional.gov.co/relatoria/2006/C-355-06.htm");
+  assert.equal(ccRelatoriaUrl("su-214 del 2016"), "https://www.corteconstitucional.gov.co/relatoria/2016/SU-214-16.htm");
+  assert.equal(ccRelatoriaUrl("T-406-92"), "https://www.corteconstitucional.gov.co/relatoria/1992/T-406-92.htm");
+  assert.equal(ccRelatoriaUrl("SL1234-2021"), null);
+  assert.equal(ccRelatoriaUrl("radicado 25000-23-26-000-2012-00123-01"), null);
+});
+
+test("analysis of a Constitutional Court judgment goes straight to its page at medium effort", async () => {
+  const url = "https://www.corteconstitucional.gov.co/relatoria/2008/T-760-08.htm";
+  const stub = stubClient([{ stop_reason: "end_turn", content: [
+    { type: "web_fetch_tool_result", content: { type: "web_fetch_result", url } },
+    { type: "text", text: '```json\n{"found":true,"reference":"T-760 de 2008","url":"' + url + '"}\n```' },
+  ] }]);
+  setClient(stub);
+  const a = await analyzeSentencia({ reference: "T-760 de 2008" });
+  assert.equal(a.verified, true);
+  const req = stub.calls[0];
+  assert.equal(req.output_config.effort, "medium");
+  assert.ok(req.messages[0].content.includes(url));
+  assert.deepEqual(req.tools.map((t) => t.max_uses), [2, 3]);
+});
+
+test("the same analysis is answered from the database the second time", async () => {
+  const url = "https://www.corteconstitucional.gov.co/relatoria/2020/T-050-20.htm";
+  const stub = stubClient([{ stop_reason: "end_turn", content: [
+    { type: "web_fetch_tool_result", content: { type: "web_fetch_result", url } },
+    { type: "text", text: '```json\n{"found":true,"reference":"T-050 de 2020","url":"' + url + '"}\n```' },
+  ] }]);
+  setClient(stub);
+  const first = await call("POST", "/jurisprudencia/analyze", { reference: "T-050 de 2020" });
+  const again = await call("POST", "/jurisprudencia/analyze", { reference: "  t-050 DE 2020 " });
+  assert.equal(stub.calls.length, 1);
+  assert.equal(first.body.cached, undefined);
+  assert.equal(again.body.cached, true);
+  assert.equal(again.body.verified, true);
+  assert.ok(again.body.proof);
+});
+
+test("a judgment that was not found is researched again", async () => {
+  const miss = { stop_reason: "end_turn", content: [{ type: "text", text: '```json\n{"found":false,"notes":"No está."}\n```' }] };
+  const stub = stubClient([miss, miss]);
+  setClient(stub);
+  await call("POST", "/jurisprudencia/analyze", { reference: "T-999 de 2021" });
+  await call("POST", "/jurisprudencia/analyze", { reference: "T-999 de 2021" });
+  assert.equal(stub.calls.length, 2);
 });
