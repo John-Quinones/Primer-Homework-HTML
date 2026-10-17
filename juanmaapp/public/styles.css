@@ -744,8 +744,17 @@ a.chip-stat strong { color: var(--link); }
 .parties-grid > *, .parties-view > * { min-width: 0; }
 .party-side h4, .parties-view h4 { margin: 4px 0 6px; font-size: .9rem; }
 .party-rows { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
-.party-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: 8px; }
-.party-row [data-p=name] { grid-column: 1 / -1; }
+.party-row { display: grid; grid-template-columns: minmax(8.5rem, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: 8px; }
+.party-row [data-p=name] { grid-column: 1 / 3; }
+.party-row [data-p=role] { grid-column: 1 / 2; }
+.party-row [data-p=id_number] { grid-column: 2 / 4; }
+.party-row > label.inline { grid-column: 1 / -1; }
+.party-row select { min-width: 0; }
+/* Version 2.15: role of each party and of our main client */
+.our-client-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 2px 0 8px; font-weight: 600; }
+.our-client-line select { flex: 1 1 220px; max-width: 360px; }
+.our-client-line select.needs-choice { outline: 2px solid var(--warn, #c77700); outline-offset: 1px; }
+.role-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: .78rem; background: color-mix(in srgb, var(--accent, #027cc6) 12%, transparent); color: var(--accent, #027cc6); }
 .party-row.main { grid-template-columns: 1fr auto; padding: 6px 8px; background: var(--surface-muted); border-radius: 8px; }
 .party-row input { min-width: 0; }
 @media (max-width: 760px) { .sec-nav { position: static; } }

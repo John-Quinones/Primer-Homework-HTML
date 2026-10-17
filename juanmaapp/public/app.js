@@ -860,9 +860,9 @@ const verCaseButtons = (k, keys = ["", "tareas", "actuaciones", "pagos", "correo
 function partiesView(k) {
   const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
   const mainSide = CMETA.sideOfRole(k.client_role);
-  const list = [...(mainSide ? [{ side: mainSide, name: k.client_name, ours: true, client_id: k.client_id, main: true }] : []), ...(k.parties || [])];
+  const list = [...(mainSide ? [{ side: mainSide, role: k.client_role, name: k.client_name, ours: true, client_id: k.client_id, main: true }] : []), ...(k.parties || [])];
   if (!list.length) return "";
-  const col = (side) => `<div><h4>${escapeHtml(labels[side])}</h4><ul class="ficha-list">${list.filter((p) => p.side === side).map((p) => `<li><span><strong>${escapeHtml(p.name)}</strong>${p.id_number ? ` <span class="muted">${escapeHtml(p.id_number)}</span>` : ""}${p.main ? ' <span class="muted">· cliente principal</span>' : ""}</span>
+  const col = (side) => `<div><h4>${escapeHtml(labels[side])}</h4><ul class="ficha-list">${list.filter((p) => p.side === side).map((p) => `<li><span><strong>${escapeHtml(p.name)}</strong>${p.role ? ` <span class="role-tag">${escapeHtml(p.role)}</span>` : ""}${p.id_number ? ` <span class="muted">${escapeHtml(p.id_number)}</span>` : ""}${p.main ? ' <span class="muted">· cliente principal</span>' : ""}</span>
       <span>${p.ours ? '<span class="follow ok">Nuestro cliente</span>' : ""}${p.client_id && !p.main ? ` <button class="mini" data-action="go" data-to="#cliente-${p.client_id}">Ver cliente</button>` : ""}</span></li>`).join("") || '<li class="muted">Sin registrar</li>'}</ul></div>`;
   return `<div class="parties-view">${col("activa")}${col("pasiva")}</div>`;
 }
@@ -1455,12 +1455,20 @@ function fillTypeSelect(catId, selectedTypeId) {
 }
 
 // Procedural role options follow the process: Demandante/Demandado, Ejecutante/Ejecutado, penal roles…
-function fillRoleSelect(selected = caseForm.elements.client_role.value) {
+// The process's own roles come first, grouped by side; every other role stays available under «Otros roles».
+function roleOptions(selected, blank) {
   const cat = categoryOf(caseForm.elements.category_id.value);
   const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-  const roles = window.JuanmaCaseMeta.partyRolesFor(cat?.name || "", type?.path || type?.name || "");
-  const opts = selected && !roles.includes(selected) ? [...roles, selected] : roles;
-  caseForm.elements.client_role.innerHTML = '<option value="">— Sin indicar —</option>' + opts.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
+  const r = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "");
+  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
+  const opt = (x) => `<option${x === selected ? " selected" : ""}>${escapeHtml(x)}</option>`;
+  const group = (label, list) => list.length ? `<optgroup label="${escapeHtml(label)}">${list.map(opt).join("")}</optgroup>` : "";
+  const known = [...r.activa, ...r.pasiva, ...r.others];
+  return `<option value="">${escapeHtml(blank)}</option>` + group(labels.activa, r.activa) + group(labels.pasiva, r.pasiva) +
+    group("Otros roles", r.others) + (selected && !known.includes(selected) ? opt(selected) : "");
+}
+function fillRoleSelect(selected = caseForm.elements.client_role.value) {
+  caseForm.elements.client_role.innerHTML = roleOptions(selected || "", "— Elija: demandante, demandado… —");
   caseForm.elements.client_role.value = selected || "";
 }
 const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : ""].filter(Boolean).join(" · ");
@@ -1580,23 +1588,32 @@ function renderParties() {
   const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
   const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
   const main = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value));
-  const mainSide = CMETA.sideOfRole(caseForm.elements.client_role.value);
+  const mainRole = caseForm.elements.client_role.value;
+  const mainSide = CMETA.sideOfRole(mainRole);
+  $("[data-main-name]", partyBox).textContent = main ? main.full_name : "";
+  caseForm.elements.client_role.classList.toggle("needs-choice", !mainRole);
   for (const side of ["activa", "pasiva"]) {
     const box = $(`[data-side="${side}"]`, partyBox);
     $("[data-side-title]", box).textContent = labels[side];
     $(".party-rows", box).innerHTML = (main && mainSide === side ? `<li class="party-row main"><span><strong>${escapeHtml(main.full_name)}</strong>
-        <span class="muted">${escapeHtml([main.id_type, main.id_number].filter(Boolean).join(" "))} · cliente principal</span></span><span class="follow ok">Nuestro cliente</span></li>` : "") +
+        <span class="muted">${escapeHtml([mainRole, main.id_type, main.id_number].filter(Boolean).join(" · "))} · cliente principal</span></span><span class="follow ok">Nuestro cliente</span></li>` : "") +
       partyRows.map((p, i) => p.side !== side ? "" : `<li class="party-row" data-i="${i}">
         <input data-p="name" list="party-clients" value="${escapeHtml(p.name)}" placeholder="Nombre o razón social" aria-label="Nombre" />
+        <button type="button" class="mini danger" data-del-party="${i}" aria-label="Quitar">✕</button>
+        <select data-p="role" aria-label="Rol en el proceso">${roleOptions(p.role || "", "— Rol —")}</select>
         <input data-p="id_number" value="${escapeHtml(p.id_number)}" placeholder="Cédula o NIT" aria-label="Documento" inputmode="numeric" />
-        <label class="inline"><input type="checkbox" data-p="ours" ${p.ours ? "checked" : ""} /> Nuestro cliente</label>
-        <button type="button" class="mini danger" data-del-party="${i}" aria-label="Quitar">✕</button></li>`).join("");
+        <label class="inline"><input type="checkbox" data-p="ours" ${p.ours ? "checked" : ""} /> Nuestro cliente</label></li>`).join("");
   }
   $(".hint", partyBox).hidden = false;
 }
 partyBox.addEventListener("click", (e) => {
   const add = e.target.closest("[data-add-party]");
-  if (add) { partyRows.push({ side: add.dataset.addParty, name: "", id_number: "", ours: false, client_id: null }); renderParties(); $$(`[data-side="${add.dataset.addParty}"] .party-row:last-child input`, partyBox)[0]?.focus(); }
+  if (add) {
+    // A new party starts with the first role of its column (Demandante, Demandado, Denunciado…).
+    const side = add.dataset.addParty, cat = categoryOf(caseForm.elements.category_id.value);
+    const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+    const role = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
+    partyRows.push({ side, role, name: "", id_number: "", ours: false, client_id: null }); renderParties(); $$(`[data-side="${add.dataset.addParty}"] .party-row:last-child input`, partyBox)[0]?.focus(); }
   const del = e.target.closest("[data-del-party]");
   if (del) { partyRows.splice(Number(del.dataset.delParty), 1); renderParties(); }
 });
@@ -1605,6 +1622,8 @@ partyBox.addEventListener("input", (e) => {
   if (!row) return;
   const p = partyRows[Number(row.dataset.i)], key = e.target.dataset.p;
   p[key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  // Choosing a role moves the party to its side (a demandado goes to the Demandados column).
+  if (key === "role") { if (p.role) p.side = CMETA.sideOfRole(p.role); renderParties(); return; }
   if (key === "name") {
     // Picking a registered client fills the document and marks it as ours.
     const c = state.clients.find((x) => x.full_name === p.name);
@@ -1663,7 +1682,7 @@ wireDialog($("#case-dialog"), async (form) => {
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, monitor: form.elements.monitor.checked,
-    parties: partyRows.filter((p) => p.name.trim()).map(({ side, name, id_number, ours, client_id }) => ({ side, name, id_number, ours, client_id })),
+    parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
   else await api("POST", "/cases", body);

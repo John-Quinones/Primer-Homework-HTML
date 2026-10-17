@@ -912,13 +912,14 @@
         </label>
       </div>
       <div class="grid2">
-        <label>Calidad del cliente principal <select name="client_role"></select></label>
         <label>Cliente afiliado
           <select name="affiliated"><option value="0">No</option><option value="1">Sí</option></select>
         </label>
       </div>
       <fieldset class="parties-box"><legend>Partes del proceso</legend>
-        <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
+        <label class="our-client-line">¿Qué es nuestro cliente <strong data-main-name></strong> en este proceso?
+          <select name="client_role"></select></label>
+        <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios), elija el <strong>rol</strong> de cada uno (demandante, demandado, denunciante, denunciado…) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
         <div class="parties-grid">
           <div class="party-side" data-side="activa"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="activa">+ Agregar</button></div>
           <div class="party-side" data-side="pasiva"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="pasiva">+ Agregar</button></div>

@@ -172,6 +172,12 @@ export function sideLabels(category, type = "") {
   if (roles.length < 2) return { activa: `${roles[0]}s`, pasiva: "Entidades o contrapartes" };
   return { activa: `${roles[0]}s`, pasiva: `${roles[1]}s` };
 }
+/** Roles of each side for a process, the process's own first: { activa: [...], pasiva: [...], others: [...] }. */
+export function sideRoles(category, type = "") {
+  const own = partyRolesFor(category, type);
+  return { activa: own.filter((r) => sideOfRole(r) === "activa"), pasiva: own.filter((r) => sideOfRole(r) === "pasiva"),
+    others: ALL_PARTY_ROLES.filter((r) => !own.includes(r)) };
+}
 /** Validated list of parties; returns { parties } or { error }. */
 export function cleanParties(list) {
   if (list == null) return { parties: [] };
@@ -180,8 +186,12 @@ export function cleanParties(list) {
   for (const p of list) {
     const name = String(p?.name ?? "").trim().replace(/\s+/g, " ").slice(0, 160);
     if (!name) continue;
-    if (!["activa", "pasiva"].includes(p.side)) return { error: "Indique si cada parte es demandante o demandada." };
-    parties.push({ side: p.side, name, id_type: String(p.id_type ?? "").trim().slice(0, 10), id_number: String(p.id_number ?? "").trim().slice(0, 30),
+    // Each party may carry its own role (version 2.15); the role decides the side.
+    const role = normPartyRole(p.role);
+    if (role === null) return { error: `Rol de la parte no válido: ${p.role}` };
+    const side = role ? sideOfRole(role) : p.side;
+    if (!["activa", "pasiva"].includes(side)) return { error: "Indique si cada parte es demandante o demandada." };
+    parties.push({ side, ...(role ? { role } : {}), name, id_type: String(p.id_type ?? "").trim().slice(0, 10), id_number: String(p.id_number ?? "").trim().slice(0, 30),
       ours: !!p.ours, client_id: Number.isInteger(Number(p.client_id)) && Number(p.client_id) > 0 ? Number(p.client_id) : null });
   }
   return { parties };
