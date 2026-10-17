@@ -35,9 +35,8 @@ function render(v) {
       const f = await call("GET", "/pdf");
       const bytes = Uint8Array.from(atob(f.base64), (c) => c.charCodeAt(0));
       pdfBytes = bytes;
-      const frame = $("#doc-pdf");
-      frame.src = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-      frame.hidden = false;
+      // Every page drawn on the page itself: an embedded PDF viewer shows only the first page on phones.
+      await JuanmaPdfView.render($("#doc-pdf"), bytes);
     }
   } catch (e) { show(e.message, true); }
 })();

@@ -19,6 +19,7 @@ import { mailRouter, mailPublicRouter } from "./mailtrace.js";
 import { paymentsRouter } from "./payments.js";
 import { microsoftRouter } from "./microsoft.js";
 import { consentRouter, consentPublicRouter } from "./consents.js";
+import { pdfjsClassic } from "./pdfjs-classic.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -80,6 +81,11 @@ export function createApp(db) {
   app.get("/vendor/jspdf.umd.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf/dist/jspdf.umd.min.js")));
   app.get("/vendor/jspdf.plugin.autotable.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js")));
   app.get("/vendor/pdf-lib.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pdf-lib/dist/pdf-lib.min.js")));
+  // PDF preview (version 2.3): pdf.js as classic scripts, built once.
+  let pdfjs = null;
+  const sendPdfjs = (key) => (_req, res) => { pdfjs ||= pdfjsClassic(root); res.type("text/javascript").send(pdfjs[key]); };
+  app.get("/vendor/pdfjs.js", sendPdfjs("lib"));
+  app.get("/vendor/pdfjs-worker.js", sendPdfjs("worker"));
   app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
   app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
   // Shared logic for the page (statuses, procedural roles, receivables math).

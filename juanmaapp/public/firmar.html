@@ -23,7 +23,7 @@
       <h2 id="title"></h2>
       <p id="intro" class="hint"></p>
       <article id="doc-text" class="document"></article>
-      <iframe id="doc-pdf" class="pdf-frame" title="Documento" hidden></iframe>
+      <div id="doc-pdf" class="pdf-view" aria-label="Documento PDF" hidden></div>
       <p class="hash">Huella del documento (SHA-256): <span id="hash"></span></p>
     </section>
     <section id="done" class="panel" hidden>
@@ -60,6 +60,7 @@
   <script src="vendor/purify.min.js"></script>
   <script src="sigpad.js"></script>
   <script src="pdf-tools.js"></script>
+  <script src="pdf-view.js"></script>
   <script src="page-nav.js"></script>
   <script src="firmar-page.js"></script>
 </body>

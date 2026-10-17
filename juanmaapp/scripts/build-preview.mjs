@@ -11,12 +11,14 @@ import { AREAS } from "../src/places.js";
 import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES, FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW } from "../src/templates-seed.js";
 import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
 import { readVersion, readNews } from "../src/version.js";
+import { pdfjsClassic } from "../src/pdfjs-classic.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(path.join(root, p), "utf8");
 // Keep inlined scripts from closing the <script> element early.
 const safe = (js) => js.replace(/<\/script/gi, "<\\/script");
 
+const PDFJS = pdfjsClassic(root);
 const logo = "data:image/png;base64," + readFileSync(path.join(root, "public/logo-t.png")).toString("base64");
 let html = read("public/index.html");
 
@@ -41,6 +43,10 @@ html = html
   // pdf-lib carries a literal U+FFFD inside some string literals; write it as an escape so the page has none.
   .replace('<script src="vendor/pdf-lib.min.js"></script>', () => `<script>${safe(read("node_modules/pdf-lib/dist/pdf-lib.min.js").replace(/\uFFFD/g, "\\uFFFD"))}</script>`)
   .replace('<script src="pdf-tools.js"></script>', () => `<script>${safe(read("public/pdf-tools.js"))}</script>`)
+  // PDF preview: pdf.js kept as plain text and started on first use (public/pdf-view.js), so it does not slow the opening.
+  .replace('<script src="pdf-view.js"></script>', () => `<script type="text/plain" id="pdfjs-worker-code">${safe(PDFJS.worker)}</script>
+<script type="text/plain" id="pdfjs-code">${safe(PDFJS.lib)}</script>
+<script>${safe(read("public/pdf-view.js"))}</script>`)
   .replace('<script src="display.js"></script>', () => `<script>${safe(read("public/display.js"))}</script>`)
   .replace('<script src="page-nav.js"></script>', () => `<script>${safe(read("public/page-nav.js"))}</script>`)
   .replace('<script src="help.js"></script>', () => `<script>${safe(read("public/help.js"))}</script>`)

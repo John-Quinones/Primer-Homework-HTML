@@ -363,9 +363,7 @@ async function openSignerPage(token) {
     renderSigner(v);
     if (v.doc_kind === "pdf") {
       const f = await api("GET", `/public/sign/${encodeURIComponent(token)}/pdf`);
-      const frame = $("#ps-pdf");
-      frame.src = URL.createObjectURL(new Blob([D.b64ToBytes(f.base64)], { type: "application/pdf" }));
-      frame.hidden = false;
+      await window.JuanmaPdfView.render($("#ps-pdf"), D.b64ToBytes(f.base64));
     }
   } catch (e) { $("#ps-doc").hidden = true; $("#ps-sign").hidden = true; signerMsg(e.message, true); }
 }
@@ -3290,8 +3288,32 @@ signForm.addEventListener("change", (e) => {
     const pdf = e.target.value === "pdf";
     signForm.elements.doc_text.hidden = pdf;
     signForm.elements.pdf.hidden = !pdf;
+    $("[data-pdf-box]", signForm).hidden = !pdf || !signForm.elements.pdf.files[0];
+    if (pdf && !signForm.elements.pdf.files[0]) signForm.elements.pdf.click();
   }
+  if (e.target.name === "pdf") guarded(() => previewSignPdf(e.target.files[0]));
 });
+// The chosen PDF is shown page by page before sending, so the firm sees exactly what will be signed.
+async function previewSignPdf(file) {
+  const box = $("[data-pdf-box]", signForm), info = $("[data-pdf-info]", signForm);
+  if (!file) { box.hidden = true; return; }
+  box.hidden = false;
+  const kb = file.size / 1024;
+  const size = kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(kb))} KB`;
+  info.textContent = `${file.name} · ${size}`;
+  try {
+    if (file.size > 10 * 1024 * 1024) throw new Error("El PDF debe pesar menos de 10 MB.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") throw new Error("El archivo no es un PDF válido.");
+    if (!signForm.elements.title.value.trim()) signForm.elements.title.value = file.name.replace(/\.pdf$/i, "");
+    const pages = await window.JuanmaPdfView.render($("#sign-pdf-view"), bytes);
+    info.textContent = `${file.name} · ${size} · ${pages} página${pages === 1 ? "" : "s"}. Revise el documento antes de enviarlo.`;
+  } catch (err) {
+    $("#sign-pdf-view").replaceChildren();
+    info.textContent = `${file.name}: ${err.message || "no se pudo mostrar."}`;
+    throw err;
+  }
+}
 
 async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   const cases = await api("GET", "/cases");
@@ -3301,6 +3323,8 @@ async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   signForm.elements.source.value = "text";
   signForm.elements.doc_text.hidden = false;
   signForm.elements.pdf.hidden = true;
+  $("[data-pdf-box]", signForm).hidden = true;
+  $("#sign-pdf-view").replaceChildren();
   $("#signer-rows").innerHTML = "";
   // The case's client is the usual first signer.
   const k = cases.find((x) => x.id === caseId);
@@ -3391,12 +3415,28 @@ async function openSignDetail(id) {
     <details><summary>Registro de eventos (${r.events.length})</summary>
       <table class="data-table"><tbody>${r.events.map((e) => `<tr><td class="nowrap">${escapeHtml(e.at)} UTC</td><td>${escapeHtml(e.event.replace(/_/g, " "))}</td><td>${escapeHtml(e.detail)}</td><td class="muted">${escapeHtml(e.ip)}</td></tr>`).join("")}</tbody></table>
     </details>`;
+  const prev = $("#sign-doc-preview");
+  prev.open = false;
+  delete prev.dataset.loaded;
+  $("[data-doc-view]", prev).replaceChildren();
   $('[data-sign-out="cancel"]', dlg).hidden = r.status !== "enviada";
   $('[data-sign-out="doc"]', dlg).hidden = r.status !== "completada";
   $('[data-sign-out="save"]', dlg).hidden = r.status !== "completada" || !r.case_id || !can("cases.write");
   if (!dlg.open) dlg.showModal();
 }
 
+// The document as it was sent (the PDF page by page, or the text), loaded when opened.
+$("#sign-doc-preview").addEventListener("toggle", (e) => {
+  const prev = e.currentTarget, view = $("[data-doc-view]", prev);
+  if (!prev.open || prev.dataset.loaded || !signCurrent) return;
+  prev.dataset.loaded = "1";
+  guarded(async () => {
+    if (signCurrent.doc_kind === "pdf") {
+      const f = await api("GET", `/esign/${signCurrent.id}/pdf`);
+      await window.JuanmaPdfView.render(view, D.b64ToBytes(f.base64));
+    } else view.innerHTML = `<article class="document">${DOMPurify.sanitize(marked.parse(signCurrent.doc_text || ""))}</article>`;
+  });
+});
 $("#sign-detail").addEventListener("click", (e) => {
   const remind = e.target.closest("[data-sign-remind]");
   const inperson = e.target.closest("[data-sign-inperson]");

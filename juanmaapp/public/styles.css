@@ -1014,3 +1014,9 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 .page-nav { align-items: center; }
 .page-nav-step { flex: 1; text-align: center; font-size: .85rem; color: var(--text-muted); min-width: 0; }
 .step-current { box-shadow: 0 0 0 2px var(--select-ring); border-radius: 10px; background: color-mix(in srgb, var(--brand-blue) 4%, transparent); scroll-margin-top: 16px; }
+/* PDF preview: every page as an image (version 2.3) */
+.pdf-view { display: grid; gap: 4px; max-height: 70vh; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--text-muted, #888) 12%, transparent); }
+.pdf-view .pdf-page { width: 100%; height: auto; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); border-radius: 2px; }
+.pdf-view .pdf-page-label { text-align: center; font-size: .75rem; color: var(--text-muted); margin: 0 0 8px; }
+#sign-doc-preview { margin-top: 12px; }
+#sign-doc-preview > summary { cursor: pointer; font-weight: 600; }

@@ -93,7 +93,7 @@
         <h2 id="ps-title"></h2>
         <p id="ps-intro" class="hint"></p>
         <article id="ps-text" class="document"></article>
-        <iframe id="ps-pdf" class="pdf-frame" title="Documento" hidden></iframe>
+        <div id="ps-pdf" class="pdf-view" aria-label="Documento PDF" hidden></div>
         <p class="hash">Huella del documento (SHA-256): <span id="ps-hash"></span></p>
       </section>
       <section id="ps-done" class="panel" hidden>
@@ -1017,7 +1017,11 @@
           <label class="inline"><input type="radio" name="source" value="pdf" /> Archivo PDF</label>
         </div>
         <textarea name="doc_text" rows="8" placeholder="Pegue o revise aquí el texto del documento"></textarea>
-        <input type="file" name="pdf" accept="application/pdf" hidden />
+        <input type="file" name="pdf" accept="application/pdf,.pdf" hidden />
+        <div data-pdf-box hidden>
+          <p class="hint" data-pdf-info></p>
+          <div id="sign-pdf-view" class="pdf-view" aria-label="Vista previa del PDF"></div>
+        </div>
       </fieldset>
       <fieldset><legend>Firmantes</legend>
         <div id="signer-rows"></div>
@@ -1062,6 +1066,7 @@
       <h3 data-title></h3>
       <p class="hint" data-sub></p>
       <div id="sign-detail-body"></div>
+      <details id="sign-doc-preview"><summary>Ver el documento enviado a firma</summary><div class="pdf-view" data-doc-view></div></details>
       <div class="dialog-actions">
         <button type="button" data-sign-out="cert" class="primary">Descargar certificado (PDF)</button>
         <button type="button" data-sign-out="doc">Descargar documento firmado (PDF con estampas)</button>
@@ -1553,6 +1558,7 @@
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
   <script src="pdf-tools.js"></script>
+  <script src="pdf-view.js"></script>
   <script src="shared.js"></script>
   <script src="display.js"></script>
   <script src="help.js"></script>
