@@ -263,6 +263,13 @@ async function boot() {
   const v = st.version || {};
   const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
+  // Technical version line at the foot of the side menu (change 63).
+  $$("[data-version-tech]").forEach((el) => {
+    el.hidden = !v.change;
+    el.title = v.sha ? `Versión ${v.sha}` : "";
+    el.querySelector("[data-version-number]").textContent = v.change || "";
+    el.querySelector("[data-version-short]").textContent = v.date ? v.date.slice(2).split("-").reverse().join(".") : "";
+  });
   // Version seal on the sign-in screen (change 62).
   $$("[data-version-seal]").forEach((el) => {
     el.hidden = !v.change;

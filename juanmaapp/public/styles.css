@@ -579,9 +579,7 @@ tr.voided td:not(:last-child) { text-decoration: line-through; }
 /* ---------- Version (numbered change) ---------- */
 .app-version { margin: 6px 0 0; font-size: .72rem; letter-spacing: .04em; color: var(--text-muted); text-align: center; }
 .auth-card .app-version { color: rgba(255, 255, 255, .6); }
-.nav-version { margin-top: auto; padding: 14px 10px 4px; color: rgba(255, 255, 255, .55); text-align: left; }
 .auth-card .app-version { margin: -14px 0 18px; }
-@media (max-width: 760px) { .nav-version { margin: 0; padding: 8px 12px; white-space: nowrap; align-self: center; } }
 
 /* ---------- Client: natural person / legal entity ---------- */
 fieldset.person-type { display: flex; flex-wrap: wrap; gap: 6px 18px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; margin: 0 0 10px; }
@@ -996,3 +994,17 @@ section.sec-current { scroll-margin-top: 64px; }
 .news-list em { display: block; font-style: normal; color: var(--text-muted); font-size: .76rem; margin-top: 2px; }
 .news-tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 999px; background: var(--brand-blue); color: #fff; font-size: .64rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; vertical-align: middle; }
 .news-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+
+/* ---------- Version line at the foot of the side menu (change 63) ---------- */
+.nav-version { position: sticky; bottom: 0; margin: auto -12px -18px; padding: 12px 22px 14px; background: var(--nav-foot-bg);
+  box-shadow: 0 -14px 14px var(--nav-foot-bg); color: rgba(196, 200, 203, .75);
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; font-size: .64rem; letter-spacing: .14em; text-transform: uppercase; }
+.nav-version[hidden] { display: none; }
+.nav-version-bar { display: block; height: 1px; margin-bottom: 9px; background: linear-gradient(90deg, rgba(2, 124, 198, .9), rgba(196, 200, 203, .25) 60%, transparent); }
+.nav-version-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.nav-version i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #3ddc84; margin-right: 7px; vertical-align: 1px; opacity: .85; }
+.nav-version b { color: #e6e9ee; font-weight: 500; }
+@media (max-width: 760px) {
+  .nav-version { position: static; margin: 0; padding: 8px 12px; background: none; box-shadow: none; white-space: nowrap; align-self: center; }
+  .nav-version-bar { display: none; }
+}

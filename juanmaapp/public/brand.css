@@ -45,6 +45,7 @@
   --radius: 14px;
   --shadow: 0 1px 2px rgba(0, 43, 106, .06), 0 8px 24px rgba(0, 43, 106, .08);
   --sidebar-bg: linear-gradient(180deg, #001c48 0%, var(--brand-navy) 55%, #013a86 100%);
+  --nav-foot-bg: #013a86;
   --sidebar-ink: #c4c8cb;
   --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .08), transparent 60%), var(--bg);
   --auth-bg: radial-gradient(900px 600px at 15% 10%, rgba(2, 124, 198, .55), transparent 60%),
@@ -74,6 +75,7 @@
     --link: #4fb0ee;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
     --sidebar-bg: linear-gradient(180deg, #050a14 0%, #001c48 100%);
+    --nav-foot-bg: #001c48;
     --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .12), transparent 60%), var(--bg);
   }
 }
@@ -91,5 +93,6 @@
   --link: #4fb0ee;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
     --sidebar-bg: linear-gradient(180deg, #050a14 0%, #001c48 100%);
+    --nav-foot-bg: #001c48;
     --app-bg: radial-gradient(1200px 600px at 100% 0%, rgba(2, 124, 198, .12), transparent 60%), var(--bg);
 }
