@@ -913,3 +913,36 @@ button.mini:active:not(:disabled) { box-shadow: inset 2px 2px 4px var(--neu-dark
   button, a.button, .file-btn, .sidenav a { transition: none; }
   button:active, a.button:active { transform: none; }
 }
+
+/* ---------- Change 59: Atrás / Adelante on every screen, and shading of what is selected ---------- */
+:root { --select-tint: color-mix(in srgb, var(--brand-blue) 11%, transparent); --select-ring: color-mix(in srgb, var(--brand-blue) 45%, transparent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --select-tint: color-mix(in srgb, var(--brand-blue) 20%, transparent); } }
+:root[data-theme="dark"] { --select-tint: color-mix(in srgb, var(--brand-blue) 20%, transparent); }
+
+.page-nav { display: flex; gap: 8px; margin: 0 0 12px; }
+.page-nav button { min-height: 36px; padding: 6px 14px; font-size: .85rem; }
+
+/* List rows and text-like buttons stay flat (they are not raised Neumorfismo buttons) */
+.item, .tpl-item, .client-link, .cm-close { box-shadow: none; min-height: 0; transform: none !important; }
+.item.selected, .tpl-item.selected { background: var(--select-tint); box-shadow: inset 3px 0 0 var(--brand-blue); }
+
+/* Fields being filled in: the field and its label are lightly shaded */
+form label:focus-within:not(.inline) { background: var(--select-tint); box-shadow: 0 0 0 6px var(--select-tint); border-radius: 6px; }
+input:focus, select:focus, textarea:focus { background-color: color-mix(in srgb, var(--brand-blue) 6%, var(--surface)); }
+
+/* Data of the client and of the case: the clicked datum stays shaded */
+.facts > div { border-radius: 6px; cursor: pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+.facts > div:hover { background: color-mix(in srgb, var(--brand-blue) 5%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand-blue) 5%, transparent); }
+.facts > div.is-selected { background: var(--select-tint); box-shadow: 0 0 0 6px var(--select-tint), 0 0 0 7px var(--select-ring); }
+.facts > div:focus-visible { outline: 3px solid var(--brand-blue); outline-offset: 6px; }
+
+/* "Ver:" tabs: the chosen one stays pressed and shaded, and so does its section */
+.sec-nav button[aria-current], .view-head button[aria-current], .tabs button.active, .tabs button[aria-selected="true"] {
+  background: var(--select-tint); color: var(--neu-ink); box-shadow: var(--neu-press); font-weight: 700;
+}
+.sec-current { box-shadow: 0 0 0 2px var(--select-ring), var(--shadow); background: color-mix(in srgb, var(--brand-blue) 4%, var(--surface)); }
+section.sec-current { scroll-margin-top: 64px; }
+#case-rows tr.row-link:hover td { background: var(--select-tint); }
+
+@media (prefers-reduced-motion: reduce) { .facts > div { transition: none; } }
+.public-nav { max-width: 860px; margin: 16px auto 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }

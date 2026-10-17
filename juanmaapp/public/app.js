@@ -433,6 +433,40 @@ function showView() {
 const refreshView = () => showView();
 window.addEventListener("hashchange", () => guarded(showView));
 
+// Change 59: every screen carries its own "‹ Atrás / Adelante ›" buttons (no longer in the top bar).
+for (const view of $$("main .view")) {
+  const nav = document.createElement("nav");
+  nav.className = "page-nav";
+  nav.setAttribute("aria-label", "Navegación entre pantallas");
+  nav.innerHTML = '<button type="button" class="mini" data-action="go-back" title="Volver a la pantalla anterior">‹ Atrás</button>'
+    + '<button type="button" class="mini" data-action="go-forward" title="Ir a la pantalla siguiente">Adelante ›</button>';
+  view.prepend(nav);
+}
+/** Greys out Atrás / Adelante when there is nowhere to go (browsers with the Navigation API). */
+function syncPageNav() {
+  const n = window.navigation;
+  if (!n || typeof n.canGoBack !== "boolean") return;
+  $$('.page-nav [data-action="go-back"]').forEach((b) => (b.disabled = !n.canGoBack));
+  $$('.page-nav [data-action="go-forward"]').forEach((b) => (b.disabled = !n.canGoForward));
+}
+window.addEventListener("hashchange", syncPageNav);
+syncPageNav();
+
+// Change 59: clicking a field of a client's or case's data shades it, so it is clear which datum is being read.
+function selectFact(row) {
+  const list = row.closest(".facts");
+  $$(".is-selected", list.closest(".view") || document).forEach((el) => el !== row && el.classList.remove("is-selected"));
+  row.classList.toggle("is-selected");
+}
+document.addEventListener("click", (e) => {
+  const row = e.target.closest(".facts > div");
+  if (row && !e.target.closest("a, button")) selectFact(row);
+});
+document.addEventListener("keydown", (e) => {
+  const row = e.target.closest?.(".facts > div");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selectFact(row); }
+});
+
 // ---------- Clientes ----------
 function renderClientList() {
   const ul = $("#client-list");
@@ -486,7 +520,7 @@ async function renderClientDetail() {
 }
 
 // ---------- Client screen: data, totals and the client's cases ----------
-const factRow = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
+const factRow = (label, v) => (v ? `<div tabindex="0"><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
 async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
@@ -677,7 +711,16 @@ wireDialog($("#revoke-dialog"), async (form) => {
 
 // ---------- Case screen: everything about one case, with the other modules ----------
 const fmtDue = (d) => escapeHtml(String(d || "").replace("T", " ").slice(0, 16));
-const goToSection = (sec) => document.getElementById(`sec-${sec}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+/** Opens a section of the client's or case's screen and shades it (and its "Ver:" tab) so it is clear which information is in view. */
+function goToSection(sec) {
+  const target = document.getElementById(`sec-${sec}`);
+  if (!target) return;
+  const view = target.closest(".view") || document;
+  $$(".sec-current", view).forEach((el) => el.classList.remove("sec-current"));
+  $$("[data-sec], [data-to]", view).forEach((b) => b.toggleAttribute("aria-current", b.dataset.sec ? b.dataset.sec === sec : b.dataset.to.endsWith(`-${sec}`)));
+  target.classList.add("sec-current");
+  target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
 const secId = (key, html) => html.replace('<section class="', `<section id="sec-${key}" class="`);
 /** "Ver …" buttons: each one opens a screen or a section of it; nothing opens by clicking elsewhere. */
 const VER_CASE = [["", "Ver expediente"], ["tareas", "Ver tareas"], ["actuaciones", "Ver actuaciones"], ["pagos", "Ver pagos"], ["correos", "Ver correos"], ["historial", "Ver historial"]];

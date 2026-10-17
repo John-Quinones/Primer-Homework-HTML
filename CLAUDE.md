@@ -47,3 +47,4 @@ In-app help (`public/help.js`: "?" per module, examples and tips per field). Cli
 
 ## Asked for, not started
 Funcionarios module, flyer creation, video creation.
+- Buttons (changes 58–59): Neumorfismo on light screens, Glassmorphism on dark brand areas (end of `public/styles.css`). Atrás/Adelante live inside every screen (`.page-nav`, injected in `app.js`; public pages load `public/page-nav.js`), not in the top bar. Selection is shaded (`--select-tint`): focused field, clicked datum (`.facts > div.is-selected`), chosen «Ver:» tab and its section (`goToSection`).
