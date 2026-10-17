@@ -53,7 +53,7 @@
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog"]) st[k] ||= [];
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -208,7 +208,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -330,6 +330,10 @@
     return { department, city, area: area || c?.area || "", court_id: courtId, court_name, court_email, radicado, monitor: radicado ? monitor : 0 };
   };
   const savedVisible = (r) => scope() === null || r.created_by === me().id || (r.case_id && s.cases.some((k) => k.id === r.case_id && inScope(k.office_id)));
+  const usedFolders = () => {
+    const ids = s.fields.filter((f) => CM.isFolderLabel(f.label)).map((f) => f.id);
+    return s.cases.flatMap((k) => ids.map((i) => str(k.field_values?.[i])).filter(Boolean).map((folder) => ({ case_id: k.id, folder })));
+  };
   const qs = (url) => Object.fromEntries(new URLSearchParams(url.split("?")[1] || ""));
   const tplMetaOut = (t) => ({ id: t.id, name: t.name, category: t.category, description: t.description, format: t.format, filename: t.filename,
     builtin: !!t.builtin, created_at: t.created_at, updated_at: t.updated_at, file_size: s.blobs[`tpl-${t.id}`] ? Math.round(s.blobs[`tpl-${t.id}`].length * 0.75) : null });
@@ -378,6 +382,13 @@
     return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
       radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
+  };
+  // Task history (version 2.18), same rows as the server's task_log; never changed or removed.
+  const logTask = (before, after) => {
+    const t = after || before;
+    for (const e of CM.taskLogEvents(before, after, (id) => shownName(s.users.find((u) => u.id === id)) || ""))
+      s.tasklog.push({ id: nextId(), at: stamp(), task_id: t.id, case_id: t.case_id, user_id: me().id, action: e.action, kind: t.kind, title: t.title,
+        detail: String(e.detail).slice(0, 500), assigned_user_id: t.assigned_user_id ?? null });
   };
   // Same as the server: the assignee hears about a new task in the bell.
   const tellAssignee = (t, before) => {
@@ -746,6 +757,7 @@
       const t = { id: nextId(), case_id: +b.case_id, created_by: me().id, created_at: stamp(), done_at: null, done_by: null, ...taskValues(b) };
       if (t.status === "hecha") Object.assign(t, { done_at: stamp(), done_by: me().id });
       s.tasks.push(t);
+      logTask(null, t);
       tellAssignee(t, null);
       return taskOut(t);
     }],
@@ -753,15 +765,38 @@
       need("cases.write");
       const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
       visibleCase(t.case_id);
-      const before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
+      const prev = clone(t), before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
       Object.assign(t, taskValues(b, t));
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
       t.done_by = t.status === "hecha" ? (wasDone ? t.done_by ?? null : me().id) : null;
+      logTask(prev, t);
       tellAssignee(t, assignee);
       if (before !== t.due_at) s.notes = s.notes.filter((n) => !String(n.key || "").startsWith(`task:${t.id}:`));
       return taskOut(t);
     }],
-    ["DELETE", /^\/tasks\/(\d+)$/, (m) => { need("cases.write"); s.tasks = s.tasks.filter((t) => t.id !== +m[1]); return null; }],
+    ["DELETE", /^\/tasks\/(\d+)$/, (m) => {
+      need("cases.write");
+      const t = s.tasks.find((x) => x.id === +m[1]);
+      if (t) { visibleCase(t.case_id); logTask(clone(t), null); }
+      s.tasks = s.tasks.filter((x) => x.id !== +m[1]);
+      return null;
+    }],
+    ["GET", /^\/task-log(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url), caseId = +q.caseId;
+      visibleCase(caseId);
+      const name = (id) => shownName(s.users.find((u) => u.id === id)) || "";
+      const rows = s.tasklog.filter((x) => x.case_id === caseId).map((x) => ({ ...clone(x), user_name: name(x.user_id), assigned_name: name(x.assigned_user_id) }));
+      const logged = new Set(rows.map((x) => `${x.action}:${x.task_id}`));
+      // Tasks from before version 2.18 show only what they kept: who created them and who closed them.
+      for (const t of s.tasks.filter((x) => x.case_id === caseId)) {
+        const base = { task_id: t.id, case_id: caseId, kind: t.kind, title: t.title, assigned_user_id: t.assigned_user_id ?? null, assigned_name: name(t.assigned_user_id), earlier: true };
+        if (t.created_at && !logged.has(`creada:${t.id}`)) rows.push({ ...base, at: t.created_at, user_id: t.created_by ?? null, user_name: name(t.created_by), action: "creada", detail: "" });
+        if (t.done_at && t.status === "hecha" && !logged.has(`hecha:${t.id}`)) rows.push({ ...base, at: t.done_at, user_id: t.done_by ?? null, user_name: name(t.done_by), action: "hecha", detail: t.done_notes || "" });
+      }
+      const uid = +q.userId || null;
+      return rows.filter((x) => !uid || x.user_id === uid || x.assigned_user_id === uid)
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)) || (b.id || 0) - (a.id || 0));
+    }],
     ["GET", /^\/notifications$/, () => {
       reminders();
       const mine = s.notes.filter((n) => n.user_id === me().id).sort((a, b) => b.id - a.id);
@@ -1050,6 +1085,32 @@
         assigned_user_id: "assigned_user_id" in b ? checkAssignee(b.assigned_user_id, officeId) : k.assigned_user_id,
         updated_at: stamp(), ...caseLocation(b, k), parties: "parties" in b ? caseParties(b.parties, k.client_id) : k.parties || [],
       });
+      return caseOut(k);
+    }],
+    // Folder numbers (version 2.18), same rules as the server.
+    ["GET", /^\/folders\/next$/, () => ({ next: CM.nextFolder(usedFolders().map((x) => x.folder)) })],
+    ["PUT", /^\/cases\/(\d+)\/folder$/, (m, b) => {
+      need("cases.write");
+      const k = visibleCase(+m[1]);
+      const folder = str(b.folder).slice(0, 40);
+      const catId = (s.types.find((t) => t.id === k.process_type_id) || fail("El subproceso no existe.")).category_id;
+      const mine = s.fields.filter((f) => f.category_id === catId && CM.isFolderLabel(f.label));
+      if (!folder && mine.some((f) => f.required)) fail("El número de carpeta es obligatorio en este tipo de proceso.");
+      if (folder) {
+        const other = usedFolders().find((x) => x.case_id !== k.id && CM.folderKey(x.folder) === CM.folderKey(folder));
+        if (other) {
+          const ok = s.cases.find((x) => x.id === other.case_id), oc = s.clients.find((c) => c.id === ok?.client_id);
+          fail(`La carpeta ${other.folder} ya está asignada ${oc && clientVisible(oc) ? `al expediente «${ok.title || caseOut(ok).type_name}» de ${oc.full_name}` : "a otro expediente"}. Escriba otro número.`);
+        }
+      }
+      const values = { ...k.field_values };
+      for (const f of mine) delete values[f.id];
+      if (folder) {
+        let f = mine[0];
+        if (!f) { f = { id: nextId(), category_id: catId, label: "No. Carpeta", field_type: "text", options: [], required: false, sort: s.fields.filter((x) => x.category_id === catId).length }; s.fields.push(f); }
+        values[f.id] = folder;
+      }
+      Object.assign(k, { field_values: values, updated_at: stamp() });
       return caseOut(k);
     }],
     ["DELETE", /^\/cases\/(\d+)$/, (m) => {

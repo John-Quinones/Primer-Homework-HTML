@@ -2,7 +2,7 @@
 import express from "express";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
-import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS } from "./case-meta.js";
+import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, taskLogEvents } from "./case-meta.js";
 import { notify } from "./monitor.js";
 const STATUSES = ["pendiente", "hecha", "cancelada"];
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -65,6 +65,14 @@ export function agendaRouter(db) {
     return v;
   }
 
+  // Task history (version 2.18): one row per thing done to a task, with who and when.
+  const shownName = (id) => db.prepare("SELECT name FROM users_shown WHERE id = ?").get(id)?.name || "";
+  function logTask(req, before, after) {
+    const t = after || before;
+    const ins = db.prepare("INSERT INTO task_log (task_id, case_id, user_id, action, kind, title, detail, assigned_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const e of taskLogEvents(before, after, shownName)) ins.run(t.id, t.case_id, req.user.id, e.action, t.kind, t.title, String(e.detail).slice(0, 500), t.assigned_user_id ?? null);
+  }
+
   // The person a task is assigned to hears about it in the bell, with a link to the case.
   function tellAssignee(req, t, before) {
     if (!t?.assigned_user_id || t.assigned_user_id === before || t.assigned_user_id === req.user.id || t.status !== "pendiente") return;
@@ -105,6 +113,7 @@ export function agendaRouter(db) {
       v.remind_days, v.status, req.user.id, done ? req.user.id : null, v.done_notes, v.delivered_at, v.response_at, v.response_notes,
       v.term_from, v.term_days, v.term_unit, v.term_label).lastInsertRowid;
     const t = visible(req, id);
+    logTask(req, null, out(t));
     tellAssignee(req, t, null);
     res.status(201).json(out(t));
   });
@@ -121,6 +130,7 @@ export function agendaRouter(db) {
       done_notes = ?, delivered_at = ?, response_at = ?, response_notes = ?, term_from = ?, term_days = ?, term_unit = ?, term_label = ? WHERE id = ?`)
       .run(v.kind, v.title, v.notes, v.due_at, v.location, v.assigned_user_id, v.remind_days, v.status, v.status, v.status,
         v.status, req.user.id, v.status, v.done_notes, v.delivered_at, v.response_at, v.response_notes, v.term_from, v.term_days, v.term_unit, v.term_label, cur.id);
+    logTask(req, out(cur), out(visible(req, cur.id)));
     tellAssignee(req, visible(req, cur.id), cur.assigned_user_id);
     // A rescheduled task gets fresh reminders.
     if (v.due_at !== cur.due_at) db.prepare("DELETE FROM notifications WHERE key LIKE ?").run(`task:${cur.id}:%`);
@@ -132,7 +142,26 @@ export function agendaRouter(db) {
     const cur = visible(req, Number(req.params.id));
     if (!cur) return err(res, 404, "La tarea no existe.");
     db.prepare("DELETE FROM tasks WHERE id = ?").run(cur.id);
+    logTask(req, out(cur), null);
     res.status(204).end();
+  });
+
+  // History of a case's tasks, newest first; ?userId= keeps what that person did or what was assigned to them.
+  // Tasks from before version 2.18 show only what they kept: who created them and who closed them.
+  r.get("/task-log", (req, res) => {
+    const caseId = Number(req.query.caseId);
+    if (!caseVisible(req, caseId)) return err(res, 404, "El expediente no existe.");
+    const rows = db.prepare(`SELECT l.*, u.name AS user_name, a.name AS assigned_name FROM task_log l LEFT JOIN users_shown u ON u.id = l.user_id
+      LEFT JOIN users_shown a ON a.id = l.assigned_user_id WHERE l.case_id = ? ORDER BY l.id DESC`).all(caseId).map((x) => ({ ...x }));
+    const logged = new Set(rows.map((x) => `${x.action}:${x.task_id}`));
+    for (const t of db.prepare(`${SELECT} WHERE t.case_id = ?`).all(caseId)) {
+      const base = { task_id: t.id, case_id: caseId, kind: t.kind, title: t.title, assigned_user_id: t.assigned_user_id, assigned_name: t.assigned_name, earlier: true };
+      if (t.created_at && !logged.has(`creada:${t.id}`)) rows.push({ ...base, at: t.created_at, user_id: t.created_by, user_name: t.created_by_name || "", action: "creada", detail: "" });
+      if (t.done_at && t.status === "hecha" && !logged.has(`hecha:${t.id}`)) rows.push({ ...base, at: t.done_at, user_id: t.done_by, user_name: t.done_by_name || "", action: "hecha", detail: t.done_notes || "" });
+    }
+    const uid = Number(req.query.userId) || null;
+    res.json(rows.filter((x) => !uid || x.user_id === uid || x.assigned_user_id === uid)
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)) || (b.id || 0) - (a.id || 0)));
   });
 
   r.get("/notifications", (req, res) => {

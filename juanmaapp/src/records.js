@@ -4,7 +4,7 @@ import express from "express";
 import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
-import { normStatus, normPartyRole, cleanParties } from "./case-meta.js";
+import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
@@ -449,6 +449,39 @@ export function recordsRouter(db) {
         loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
         "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), id);
     return getCase(req, id);
+  }));
+
+  // ----- Folder numbers (version 2.18): set or change them from the client screen -----
+  // The number lives in the "No. Carpeta" field of the case's process type; a type without
+  // that field gets it when its first number is assigned. A number is used by one case only.
+  const folderFields = () => db.prepare("SELECT id, category_id, label, required FROM custom_fields ORDER BY id").all().filter((f) => isFolderLabel(f.label));
+  const usedFolders = () => {
+    const ids = folderFields().map((f) => String(f.id));
+    return db.prepare(`SELECT k.id, k.client_id, k.title, k.field_values, c.full_name, ${typePath("pt")} AS type_name FROM cases k JOIN clients c ON c.id = k.client_id
+        JOIN process_types pt ON pt.id = k.process_type_id`).all()
+      .flatMap((k) => { const v = JSON.parse(k.field_values || "{}"); return ids.map((i) => str(v[i])).filter(Boolean).map((folder) => ({ case_id: k.id, client_id: k.client_id, client: k.full_name, name: k.title || k.type_name, folder })); });
+  };
+  r.get("/folders/next", h(() => ({ next: nextFolder(usedFolders().map((x) => x.folder)) })));
+  r.put("/cases/:id/folder", h((req) => {
+    checkPerm(req, "cases.write");
+    const cur = getCase(req, toInt(req.params.id, "id"));
+    const folder = str(req.body?.folder).slice(0, 40);
+    const catId = db.prepare("SELECT category_id FROM process_types WHERE id = ?").get(cur.process_type_id).category_id;
+    const mine = folderFields().filter((f) => f.category_id === catId);
+    if (!folder && mine.some((f) => f.required)) fail400("El número de carpeta es obligatorio en este tipo de proceso.");
+    if (folder) {
+      const other = usedFolders().find((x) => x.case_id !== cur.id && folderKey(x.folder) === folderKey(folder));
+      if (other) fail400(`La carpeta ${other.folder} ya está asignada ${clientVisible(req, other.client_id) ? `al expediente «${other.name}» de ${other.client}` : "a otro expediente"}. Escriba otro número.`);
+    }
+    const values = { ...cur.field_values };
+    for (const f of mine) delete values[f.id];
+    if (folder) {
+      const id = mine[0]?.id ?? db.prepare("INSERT INTO custom_fields (category_id, label, field_type, options, required, sort) VALUES (?, 'No. Carpeta', 'text', '[]', 0, ?)")
+        .run(catId, nextSort("custom_fields", "WHERE category_id = ?", catId)).lastInsertRowid;
+      values[id] = folder;
+    }
+    db.prepare("UPDATE cases SET field_values = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(values), cur.id);
+    return getCase(req, cur.id);
   }));
 
   // ----- Documents saved to a case (Word / PDF generated in Documentos) -----

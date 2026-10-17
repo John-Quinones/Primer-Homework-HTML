@@ -512,6 +512,14 @@ function migrate(db) {
     if (!new Set(db.prepare("PRAGMA table_info(tasks)").all().map((c) => c.name)).has(col)) db.exec(`ALTER TABLE tasks ADD COLUMN ${col} ${def}`);
   }
   db.exec(AUDIT_SCHEMA); // change 50
+  // Version 2.18: history of every task (who did what, when). Rows are only added, never changed or removed.
+  db.exec(`CREATE TABLE IF NOT EXISTS task_log (
+    id INTEGER PRIMARY KEY, at TEXT NOT NULL DEFAULT (datetime('now')), task_id INTEGER NOT NULL, case_id INTEGER NOT NULL,
+    user_id INTEGER, action TEXT NOT NULL, kind TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '',
+    assigned_user_id INTEGER);
+    CREATE INDEX IF NOT EXISTS task_log_case ON task_log(case_id, id);
+    CREATE TRIGGER IF NOT EXISTS task_log_no_update BEFORE UPDATE ON task_log BEGIN SELECT RAISE(ABORT, 'El historial de tareas no se modifica.'); END;
+    CREATE TRIGGER IF NOT EXISTS task_log_no_delete BEFORE DELETE ON task_log BEGIN SELECT RAISE(ABORT, 'El historial de tareas no se borra.'); END;`);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");

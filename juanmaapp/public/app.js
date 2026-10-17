@@ -83,6 +83,9 @@ const caseFolder = (k) => {
   }
   return "";
 };
+/** «Asignar carpeta» / «Editar carpeta» (version 2.18), for whoever can edit cases. */
+const folderButton = (k, cls = "mini") => can("cases.write")
+  ? `<button type="button" class="${cls}" data-action="edit-folder" data-id="${k.id}" data-folder="${escapeHtml(caseFolder(k))}">${caseFolder(k) ? "Editar carpeta" : "Asignar carpeta"}</button>` : "";
 const typeById = (typeId) => {
   for (const c of state.catalog) {
     const t = c.types.find((t) => t.id === Number(typeId));
@@ -667,6 +670,7 @@ async function renderClienteFicha(id) {
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
+        ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
         ${can("cases.write") ? `<button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>` : ""}
       </div>
@@ -689,17 +693,25 @@ async function renderClienteFicha(id) {
         </dl>
       </section>
       ${consents ? consentPanel(c, consents) : ""}
+      ${cases.length ? `<section id="sec-carpetas" class="panel ficha-wide">
+        <h3 class="panel-title">Números de carpeta <span class="count">${cases.filter((k) => caseFolder(k)).length} de ${cases.length}</span></h3>
+        <p class="hint">Cada expediente tiene su número de carpeta. Asígnelo o corríjalo aquí: la App avisa si el número ya está en otro expediente y sugiere el siguiente libre.</p>
+        <table class="data-table compact folder-table"><thead><tr><th>Carpeta</th><th>Expediente</th><th>Estado</th><th></th></tr></thead><tbody>${[...cases].sort((a, b) => a.id - b.id).map((k) => `<tr>
+          <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">Sin asignar</span>'}</td>
+          <td><strong>${escapeHtml(k.type_name)}</strong>${k.title ? `<br><span class="muted">${escapeHtml(k.title)}</span>` : ""}${k.radicado ? `<br><span class="muted">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
+          <td>${escapeHtml(k.status)}</td><td class="folder-act">${folderButton(k, caseFolder(k) ? "mini" : "mini primary")}</td></tr>`).join("")}</tbody></table>
+      </section>` : ""}
       <section id="sec-expedientes" class="panel ficha-wide">
         <h3 class="panel-title">Expedientes de ${escapeHtml(c.full_name)}</h3>
         ${cases.length ? `<ul class="case-open-list">${cases.map((k) => `
           <li class="case-open">
-            <span class="case-open-top">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : ""}<span class="pill">${escapeHtml(k.category_name)}</span><span class="status-tag">${escapeHtml(k.status)}</span></span>
+            <span class="case-open-top">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : '<span class="folder-tag none">Sin carpeta</span>'}<span class="pill">${escapeHtml(k.category_name)}</span><span class="status-tag">${escapeHtml(k.status)}</span></span>
             <strong>${escapeHtml(k.type_name)}</strong>
             ${k.title ? `<span>${escapeHtml(k.title)}</span>` : ""}
             ${k.client_id !== c.id ? `<span class="muted">Cliente principal: ${escapeHtml(k.client_name)}</span>` : ""}
             <span class="muted">${escapeHtml([k.court_name, k.radicado && formatRadicado(k.radicado)].filter(Boolean).join(" · ") || "Sin despacho ni radicado")}</span>
             <span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")} · ${escapeHtml(k.office_name || "")}</span>
-            <span class="toolbar case-open-actions">${verCaseButtons(k)}</span></li>`).join("")}</ul>`
+            <span class="toolbar case-open-actions">${verCaseButtons(k)}${folderButton(k)}</span></li>`).join("")}</ul>`
           : '<p class="empty">Este cliente no tiene expedientes. Créelo con «+ Nuevo expediente».</p>'}
       </section>
     </div>`;
@@ -873,7 +885,7 @@ async function renderExpedienteFicha(id) {
   await loadCatalog();
   const k = await api("GET", `/cases/${id}`);
   const quiet = (p) => p.catch(() => null);
-  const [client, tasks, acts, docs, charges, receipts, signs, mails, changes] = await Promise.all([
+  const [client, tasks, acts, docs, charges, receipts, signs, mails, changes, taskLog] = await Promise.all([
     quiet(api("GET", `/clients/${k.client_id}`)),
     quiet(api("GET", `/tasks?caseId=${id}`)),
     can("processes.consult") && k.radicado ? quiet(api("GET", `/monitor/cases/${id}/actuaciones`)) : null,
@@ -883,6 +895,7 @@ async function renderExpedienteFicha(id) {
     can("esign.use") ? quiet(api("GET", "/esign")) : null,
     can("mail.send") ? quiet(api("GET", `/mail?caseId=${id}`)) : null,
     quiet(api("GET", `/audit?caseId=${id}`)),
+    quiet(api("GET", `/task-log?caseId=${id}`)),
   ]);
   if (client && !state.clients.some((x) => x.id === client.id)) state.clients.push(client);
   if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
@@ -907,13 +920,14 @@ async function renderExpedienteFicha(id) {
         <p class="ficha-sub">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span>${k.title ? ` · ${escapeHtml(k.title)}` : ""}</p></div>
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+        ${folderButton(k, "")}
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
         ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
       </div>
     </div>
     <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
-      ${[["datos", "Datos"], ["responsable", "Responsable"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["portales", "Portales"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
+      ${[["datos", "Datos"], ["responsable", "Responsable"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["historialtareas", "Historial de tareas"], ["actuaciones", "Actuaciones"], ["portales", "Portales"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
         .map(([x, label]) => `<button type="button" class="mini" data-action="goto-sec" data-sec="${x}">${label}</button>`).join("")}
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
@@ -938,6 +952,7 @@ async function renderExpedienteFicha(id) {
       ${secId("oficios", wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
         : empty("Sin oficios, peticiones ni requerimientos. Registre la entrega y la app controla la respuesta y su plazo."),
         canWrite ? kindButtons(k.id, ["oficio", "peticion", "requerimiento"]) : "")))}
+      ${secId("historialtareas", wide(panel("Historial de tareas", (taskLog || []).length, taskLogView(taskLog || []))))}
       ${acts !== null ? secId("actuaciones", wide(panel("Actuaciones (consulta automática)", acts.length, `${portalCheckBox(k.id)}
           <p class="hint">${WEB ? "En este enlace de prueba no se puede consultar la Rama Judicial (no se conecta a sitios externos); en la versión del servidor (Azure) se consulta en automático y con «Consultar ahora»." : k.monitor ? "Se consulta en automático a las 7, 13 y 17 h." : "La consulta automática está desactivada para este expediente (actívela en Expedientes, columna «Consulta»)."}
             ${k.last_checked_at ? `Última consulta: ${escapeHtml(CMETA.utcToBogota(k.last_checked_at))}.` : "Aún no se ha consultado."} Con «Recordatorio» crea un término o tarea a partir de la actuación.</p>
@@ -1085,6 +1100,36 @@ function caseHistory({ k, tasks, acts, docs, charges, receipts, signs, mails, ch
     [`${e.device}${e.device_detail ? " (" + e.device_detail + ")" : ""}`, ...e.changes.map((c) => `${c.label}: ${c.before || "(vacío)"} → ${c.after || "(vacío)"}`)].join(" · "));
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
+/** Task history of a case (version 2.18): who did what on each task, and when, filterable by funcionario. */
+function taskLogView(rows) {
+  if (!rows.length) return '<p class="empty">Aún no hay movimientos de tareas en este expediente. Desde ahora queda registrado quién crea, edita, reasigna, cumple, cancela o elimina cada tarea, y cuándo.</p>';
+  const people = new Map();
+  for (const r of rows) {
+    if (r.user_id) people.set(r.user_id, r.user_name || "—");
+    if (r.assigned_user_id) people.set(r.assigned_user_id, r.assigned_name || "—");
+  }
+  const when = (r) => { try { return CMETA.utcToBogota(r.at); } catch { return String(r.at || "").slice(0, 16); } };
+  return `<div class="tlog-filter"><label>Ver por funcionario <select data-tlog-user>
+      <option value="">Todos (${rows.length})</option>${[...people].sort((a, b) => a[1].localeCompare(b[1], "es")).map(([uid, name]) => `<option value="${uid}">${escapeHtml(name)} (${rows.filter((r) => r.user_id === uid || r.assigned_user_id === uid).length})</option>`).join("")}
+    </select></label><span class="muted" data-tlog-count></span></div>
+    <div class="acts-scroll"><table class="data-table compact tlog-table"><thead><tr><th>Fecha y hora</th><th>Quién</th><th>Qué hizo</th><th>Tarea</th><th>Asignada a</th></tr></thead><tbody>${rows.map((r) => `
+      <tr data-tlog-who="${r.user_id || ""}" data-tlog-to="${r.assigned_user_id || ""}">
+        <td class="nowrap">${escapeHtml(when(r))}</td><td>${escapeHtml(r.user_name || "Sin registro")}</td>
+        <td><strong>${escapeHtml(CMETA.TASK_LOG_LABEL[r.action] || r.action)}</strong>${r.detail ? `<br><span class="muted">${escapeHtml(r.detail)}</span>` : ""}${r.earlier ? '<br><span class="muted">Dato guardado antes del historial</span>' : ""}</td>
+        <td>${escapeHtml(CMETA.TASK_KIND_LABEL[r.kind] || "")} · ${escapeHtml(r.title || "")}</td>
+        <td>${escapeHtml(r.assigned_name || "Responsable del expediente")}</td></tr>`).join("")}</tbody></table></div>
+    <p class="hint">«Ver por funcionario» muestra lo que hizo esa persona y lo que pasó con las tareas asignadas a ella. Este historial no se puede editar ni borrar.</p>`;
+}
+$("#ficha-expediente").addEventListener("change", (e) => {
+  const sel = e.target.closest("[data-tlog-user]");
+  if (!sel) return;
+  let n = 0;
+  for (const tr of $$("[data-tlog-who]", $("#ficha-expediente"))) {
+    tr.hidden = !!sel.value && tr.dataset.tlogWho !== sel.value && tr.dataset.tlogTo !== sel.value;
+    if (!tr.hidden) n++;
+  }
+  $("[data-tlog-count]", $("#ficha-expediente")).textContent = sel.value ? `${n} movimiento(s)` : "";
+});
 $("#ficha-expediente").addEventListener("click", (e) => {
   const h = e.target.closest("[data-hist]");
   if (h) {
@@ -1922,6 +1967,22 @@ document.addEventListener("click", (e) => {
     "task-for": () => {
       const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
       return openTaskDialog(null, id, "tarea", { assigned_user_id: uid });
+    },
+    "edit-folder": async () => {
+      const cur = btn.dataset.folder || "";
+      const next = (await api("GET", "/folders/next").catch(() => null))?.next || "";
+      let v = cur || next, problem = "";
+      // A number already in use shows why and asks again with what was typed.
+      for (;;) {
+        v = await ask({ title: cur ? `Editar carpeta ${cur}` : "Asignar número de carpeta",
+          message: problem || `${cur ? `Número actual: ${cur}. Escriba el nuevo número.` : "Escriba el número de carpeta de este expediente."}${next ? ` El siguiente libre es ${next}.` : ""} La App revisa que no esté asignado a otro expediente.`,
+          input: v, okLabel: "Guardar" });
+        if (!v || v === cur) return;
+        try { await api("PUT", `/cases/${id}/folder`, { folder: v }); break; }
+        catch (err) { problem = `${err.message}${next ? ` El siguiente libre es ${next}.` : ""}`; }
+      }
+      toast(cur ? `Carpeta cambiada de ${cur} a ${v}.` : `Carpeta ${v} asignada al expediente.`);
+      await refreshView();
     },
     "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
     "act-remind": () => {

@@ -91,6 +91,43 @@ export function filterCourts(list, want = {}) {
 
 // The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
 export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));
+/** Folder numbers compare without spaces, dots or case: "Carpeta 045-A" = "045a". */
+export const folderKey = (v) => nrm(v).replace(/^(n|no|nro|num|numero)?\.?\s*(de)?\s*carpeta\s*/, "").replace(/[^a-z0-9]/g, "");
+/** Next free folder number: one more than the highest purely numeric one in use. */
+export function nextFolder(values) {
+  const nums = values.map((v) => String(v ?? "").trim()).filter((v) => /^\d{1,9}$/.test(v)).map(Number);
+  return nums.length ? String(Math.max(...nums) + 1) : "1";
+}
+
+// ----- Task history (version 2.18): what each person did on each task, and when -----
+export const TASK_LOG_LABEL = {
+  creada: "Creó", editada: "Editó", reasignada: "Reasignó", reprogramada: "Cambió el plazo", hecha: "Marcó como hecha",
+  cancelada: "Canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
+};
+const TASK_EDIT_FIELDS = { kind: "tipo", title: "título", notes: "notas", location: "lugar", remind_days: "avisos", done_notes: "cumplimiento",
+  term_from: "término", term_days: "término", term_unit: "término", term_label: "término", response_notes: "detalle de la respuesta" };
+/** Events between two versions of a task (null before = created, null after = deleted). nameOf(userId) gives a person's name. */
+export function taskLogEvents(before, after, nameOf = () => "") {
+  const who = (id) => nameOf(id) || "un funcionario";
+  if (!before) {
+    const out = [{ action: "creada", detail: after.assigned_user_id ? `Asignada a ${who(after.assigned_user_id)} · plazo ${after.due_at}` : `Plazo ${after.due_at}` }];
+    if (after.status !== "pendiente") out.push({ action: after.status, detail: after.done_notes || "" });
+    return out;
+  }
+  if (!after) return [{ action: "eliminada", detail: "" }];
+  const out = [];
+  const same = (k) => JSON.stringify(before[k] ?? "") === JSON.stringify(after[k] ?? "");
+  // Notes written while closing the task go with "Marcó como hecha", not as an edit.
+  const edited = [...new Set(Object.keys(TASK_EDIT_FIELDS).filter((k) => !same(k) && !(k === "done_notes" && before.status !== after.status)).map((k) => TASK_EDIT_FIELDS[k]))];
+  if (edited.length) out.push({ action: "editada", detail: `Cambió ${edited.join(", ")}` });
+  if (!same("due_at")) out.push({ action: "reprogramada", detail: `De ${before.due_at} a ${after.due_at}` });
+  if ((before.assigned_user_id || null) !== (after.assigned_user_id || null)) out.push({ action: "reasignada",
+    detail: `${before.assigned_user_id ? `De ${who(before.assigned_user_id)}` : "Del responsable del expediente"} ${after.assigned_user_id ? `a ${who(after.assigned_user_id)}` : "al responsable del expediente"}` });
+  if (after.delivered_at && !same("delivered_at")) out.push({ action: "entregada", detail: `Entregada el ${after.delivered_at}` });
+  if (after.response_at && !same("response_at")) out.push({ action: "respondida", detail: [`Respuesta del ${after.response_at}`, after.response_notes].filter(Boolean).join(" · ") });
+  if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" ? after.done_notes || "" : "" });
+  return out;
+}
 
 // ----- Case tasks: kinds and follow-up (change 47) -----
 export const TASK_KINDS = ["tarea", "audiencia", "termino", "recurso", "requerimiento", "peticion", "oficio"];

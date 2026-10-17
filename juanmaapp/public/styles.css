@@ -1070,3 +1070,11 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
 .tpl-drop span { font-size: .85rem; opacity: .85; }
 .tpl-drop:hover, .tpl-drop.is-over { background: rgba(2, 124, 198, 0.14); }
 .tpl-drop:focus-within { outline: 3px solid var(--brand-blue, #027cc6); outline-offset: 3px; }
+
+/* Version 2.18: folder numbers on the client screen and the task history of a case */
+.folder-tag.none { border-style: dashed; border-color: var(--brand-silver); color: var(--text-muted); font-weight: 600; }
+.folder-table td.folder-act { text-align: right; white-space: nowrap; }
+.tlog-filter { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; }
+.tlog-filter label { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; }
+.tlog-filter select { min-width: 220px; }
+.tlog-table td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }

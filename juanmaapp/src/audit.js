@@ -43,6 +43,7 @@ export function audit(db, req, { user = req.user, action, module = "Acceso", ent
 // Rows read before and after a change, to know what changed.
 const SNAP = [
   [/^\/cases\/(\d+)$/, "SELECT * FROM cases WHERE id = ?"],
+  [/^\/cases\/(\d+)\/folder$/, "SELECT * FROM cases WHERE id = ?"],
   [/^\/clients\/(\d+)$/, "SELECT * FROM clients WHERE id = ?"],
   [/^\/tasks\/(\d+)$/, "SELECT * FROM tasks WHERE id = ?"],
   [/^\/payments\/charges\/(\d+)/, "SELECT * FROM charges WHERE id = ?"],
@@ -86,10 +87,10 @@ export function auditMiddleware(db) {
       const caseId = t.isCase ? t.id ?? created?.id ?? null : after?.case_id ?? before?.case_id ?? created?.case_id ?? (Number(req.body?.case_id) || null);
       const name = nameOf(after) || nameOf(before) || nameOf(created) || "";
       const verb = ok ? auditVerb(req.method, path) : "Intentó (sin permiso)";
-      const extra = path.match(/\/(void|cancel|resend|invite|monitor|documents)\b/)?.[1];
+      const extra = path.match(/\/(void|cancel|resend|invite|monitor|documents|folder)\b/)?.[1];
       audit(db, req, {
         action: verb, module: t.module, entity: t.entity, record_id: record, case_id: caseId, ok,
-        summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento" }[extra]})` : ""}`,
+        summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta" }[extra]})` : ""}`,
         changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : [],
       });
     });
