@@ -1,6 +1,8 @@
 # Registro de cambios de TecjuridicosApp (antes JuanMaApp)
 
-Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto. La app muestra el número que está corriendo (en la pantalla de ingreso y al pie del menú lateral). El número es la cantidad de cambios guardados en la carpeta `juanmaapp/` del repositorio, así que no se repite ni se salta.
+Desde el 17/10/2026 la App va en la **versión 2** y cada cambio publicado suma uno al segundo número: 2, 2.1, 2.2, 2.3… (después de 2.9 sigue 2.10). La app muestra la versión que está corriendo en el sello de la pantalla de ingreso, al pie del menú lateral y en la ventana «Novedades de la versión». Los números se calculan solos: la versión 2 es el cambio guardado n.º 64 en la carpeta `juanmaapp/` del repositorio, y cada cambio guardado después suma uno, así que no se repiten ni se saltan.
+
+## Cambios 1 a 63 (numeración anterior)
 
 | N.º | Fecha | Cambio |
 |---|---|---|
@@ -67,3 +69,9 @@ Cada cambio publicado lleva un número consecutivo desde el inicio del proyecto.
 | 61 | 17/10/2026 | **Firma por enlace con código OTP también en el enlace de prueba.** Ya no aparece «necesita la app instalada en el servidor»: al enviar a firma, la app prepara para cada firmante el **enlace privado** y, aparte, el **código de verificación de 6 dígitos** (vence en 24 horas, sirve una vez, máximo 5 intentos), con botones **Enviar por WhatsApp**, **Enviar por correo** o **Copiar mensaje**; en el enlace de prueba los mensajes salen desde el equipo de quien envía. El firmante abre el enlace (o escribe el código de la solicitud en «¿Le enviaron un documento para firmar?» en la pantalla de ingreso), ve el documento, escribe el código, su nombre y dibuja la firma; queda el registro con el medio de verificación y la huella SHA-256. «Enviar enlace y código» en el detalle genera unos nuevos. **Validación de los firmantes** (también en el servidor): la cédula lleva de 5 a 10 dígitos (pasaporte, letras y números), el celular 10 dígitos empezando por 3 (u otro país con +), el correo debe ser válido, documento y celular no pueden ser el mismo número y no se repiten documentos; el campo con el error queda marcado en rojo. |
 | 62 | 17/10/2026 | **Sello de versión y novedades.** En la pantalla de ingreso, debajo del logo, un sello de vidrio muestra «VERSIÓN», el número grande y «Actualizada el» con la fecha (reemplaza el texto pequeño «Cambio N · fecha»). La primera vez que cada usuario entra a una versión nueva se abre la ventana **«Novedades de la versión N»** con los últimos 3 cambios; con «Entendido» no vuelve a salir hasta la siguiente versión. El menú lateral sigue igual mientras se elige su diseño. |
 | 63 | 17/10/2026 | **Versión al pie del menú lateral.** Al final del menú, fija aunque el menú sea largo, una línea azul tenue y el texto técnico «● VERSIÓN 63 · 17.10.26» en letra pequeña color plata, sin brillo ni relieve. Reemplaza el texto «Cambio N · fecha» que quedaba escondido al final del menú. |
+
+## Versión 2 en adelante
+
+| Versión | Fecha | Cambio |
+|---|---|---|
+| 2 | 17/10/2026 | **La App pasa a la versión 2.** Desde ahora la numeración es 2, 2.1, 2.2… El sello de la pantalla de ingreso, la línea del pie del menú y la ventana de novedades muestran «Versión 2»; los cambios anteriores conservan su número (Cambio 1 a 63) en este registro. |

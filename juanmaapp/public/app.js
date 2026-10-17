@@ -230,17 +230,17 @@ async function enterApp(user, { fresh = true } = {}) {
 // «Novedades de la versión»: shown the first time each user enters a new version (change 62).
 function showNewsOnce() {
   const v = authInfo.version || {};
-  if (!v.change || !v.news?.length) return;
+  if (!v.name || !v.news?.length) return;
   const key = `juanma.newsSeen.${me.id}`;
-  try { if (localStorage.getItem(key) === String(v.change)) return; } catch {}
+  try { if (localStorage.getItem(key) === v.name) return; } catch {}
   const dlg = $("#news-dialog");
-  $$("[data-news-number]", dlg).forEach((el) => { el.textContent = v.change; });
+  $$("[data-news-number]", dlg).forEach((el) => { el.textContent = v.name; });
   $("[data-news-date]", dlg).textContent = v.date ? `Publicada el ${v.date.split("-").reverse().join("/")}` : "";
-  $(".news-list", dlg).innerHTML = v.news.map((c) => `<li class="${c.n === v.change ? "is-current" : ""}">
-    <span class="news-n">${c.n}</span>
-    <p><strong>${escapeHtml(c.title)}</strong>${c.n === v.change ? ' <span class="news-tag">Actual</span>' : ""}
-    <em>${escapeHtml(c.text)}${c.n === v.change ? "" : ` · ${escapeHtml(c.date)}`}</em></p></li>`).join("");
-  dlg.addEventListener("close", () => { try { localStorage.setItem(key, String(v.change)); } catch {} }, { once: true });
+  $(".news-list", dlg).innerHTML = v.news.map((c) => `<li class="${c.n === v.name ? "is-current" : ""}">
+    <span class="news-n">${escapeHtml(c.n)}</span>
+    <p><strong>${escapeHtml(c.title)}</strong>${c.n === v.name ? ' <span class="news-tag">Actual</span>' : ""}
+    <em>${escapeHtml(c.text)}${c.n === v.name ? "" : ` · ${escapeHtml(c.date)}`}</em></p></li>`).join("");
+  dlg.addEventListener("close", () => { try { localStorage.setItem(key, v.name); } catch {} }, { once: true });
   dlg.showModal();
 }
 $("#news-dialog [data-action=news-close]").addEventListener("click", () => $("#news-dialog").close());
@@ -261,20 +261,20 @@ async function boot() {
   authInfo = st;
   // Which numbered change of the project is running (see CAMBIOS.md).
   const v = st.version || {};
-  const label = v.change ? `Cambio ${v.change}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
+  const label = v.name ? `Versión ${v.name}${v.date ? " · " + v.date.split("-").reverse().join("/") : ""}` : "";
   $$("[data-version]").forEach((el) => { el.textContent = label; el.title = v.sha ? `Versión ${v.sha}` : ""; });
   // Technical version line at the foot of the side menu (change 63).
   $$("[data-version-tech]").forEach((el) => {
-    el.hidden = !v.change;
+    el.hidden = !v.name;
     el.title = v.sha ? `Versión ${v.sha}` : "";
-    el.querySelector("[data-version-number]").textContent = v.change || "";
+    el.querySelector("[data-version-number]").textContent = v.name || "";
     el.querySelector("[data-version-short]").textContent = v.date ? v.date.slice(2).split("-").reverse().join(".") : "";
   });
   // Version seal on the sign-in screen (change 62).
   $$("[data-version-seal]").forEach((el) => {
-    el.hidden = !v.change;
+    el.hidden = !v.name;
     el.title = v.sha ? `Versión ${v.sha}` : "";
-    el.querySelector("[data-version-number]").textContent = v.change || "";
+    el.querySelector("[data-version-number]").textContent = v.name || "";
     el.querySelector("[data-version-date]").textContent = v.date ? `Actualizada el ${v.date.split("-").reverse().join("/")}` : "";
   });
   // A password-reset link (#restablecer-TOKEN) opens the form to create a new password.
