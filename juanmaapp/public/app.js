@@ -1179,9 +1179,18 @@ function setPersonType(type) {
   }
 }
 clientForm.addEventListener("change", (e) => { if (e.target.name === "person_type") setPersonType(e.target.value); });
-// Names in proper case as soon as the user leaves the field (JoHN → John).
-clientForm.addEventListener("focusout", (e) => {
-  if (["first_names", "last_names", "legal_rep"].includes(e.target.name)) e.target.value = window.JuanmaPerson.properName(e.target.value);
+// Names and addresses in proper case as soon as the user leaves the field, in every form
+// (JOHN or john → John; "cra 5 no 12b-30" → "Cra 5 No. 12B-30"). Cities and departments
+// take their DANE spelling in the type-ahead (IBAGUE → Ibagué). Company names stay as written.
+const PERSON_NAME_FIELDS = '[name=first_names], [name=last_names], [name=legal_rep], [name=typed_name], [data-form=user] [name=name], #setup-name, [data-p=name], #signer-rows [data-k=name]';
+document.addEventListener("focusout", (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement) || !el.value.trim()) return;
+  const P = window.JuanmaPerson;
+  let v = el.value;
+  if (el.name === "address") v = P.properAddress(v);
+  else if (el.matches(PERSON_NAME_FIELDS) && !P.looksLikeCompany(v)) v = P.properName(v);
+  if (v !== el.value) { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); }
 });
 
 function openClientDialog(c) {

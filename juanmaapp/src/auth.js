@@ -9,6 +9,7 @@ import { VERSION } from "./version.js";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { publicBase } from "./public-url.js";
 import { canonicalDepartment, canonicalCity } from "./places.js";
+import { properAddress } from "./person.js";
 import { sendEmail, sendWhatsapp, channelsStatus, channelReady } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
 import { createHash as hashOf } from "node:crypto";
@@ -402,7 +403,7 @@ export function adminRouter(db) {
 
   const officeFields = (b) => {
     const department = canonicalDepartment(b.department);
-    return { name: str(b.name), department, city: canonicalCity(b.city, department), address: str(b.address), phone: str(b.phone), email: str(b.email) };
+    return { name: str(b.name), department, city: canonicalCity(b.city, department), address: properAddress(b.address), phone: str(b.phone), email: str(b.email) };
   };
 
   r.post("/offices", manage, (req, res) => {

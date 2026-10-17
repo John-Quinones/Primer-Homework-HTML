@@ -171,7 +171,7 @@
     const n = nrm(x);
     if (!n) return "";
     const code = DIV.departamentos.find((d) => d.name === dep)?.code;
-    return DIV.municipios.find((m) => (!code || m.dep === code) && nrm(m.name) === n)?.name || (n.startsWith("bogota") ? "Bogotá, D.C." : String(x).trim());
+    return DIV.municipios.find((m) => (!code || m.dep === code) && nrm(m.name) === n)?.name || (n.startsWith("bogota") ? "Bogotá, D.C." : window.JuanmaPerson.properName(x));
   };
   const AREA_RULES = [[/ejecucion de penas/, "Ejecución de Penas"], [/pequenas causas|competencia multiple/, "Pequeñas Causas y Competencia Múltiple"],
     [/restitucion de tierras/, "Restitución de Tierras"], [/adolescente/, "Penal para Adolescentes"], [/administrativ|contencioso/, "Administrativo"],
@@ -291,6 +291,7 @@
     if (c.department && !dep) fail("Departamento no reconocido.");
     c.department = dep;
     c.city = canonCity(c.city, dep);
+    c.address = PERSON.properAddress(c.address);
   };
   // Same rules as the server's caseLocation().
   const caseLocation = (b, cur = {}) => {
@@ -515,7 +516,7 @@
       const name = str(b.name) || fail("El nombre de la oficina es obligatorio.");
       uniq(s.offices, name);
       const department = canonDep(b.department);
-      const o = { id: nextId(), name, department, city: canonCity(b.city, department), address: str(b.address), phone: str(b.phone), email: str(b.email), is_main: false };
+      const o = { id: nextId(), name, department, city: canonCity(b.city, department), address: PERSON.properAddress(b.address), phone: str(b.phone), email: str(b.email), is_main: false };
       s.offices.push(o);
       return clone(o);
     }],
@@ -525,6 +526,7 @@
       for (const f of ["name", "department", "city", "address", "phone", "email"]) if (f in b) o[f] = str(b[f]);
       o.department = canonDep(o.department);
       o.city = canonCity(o.city, o.department);
+      o.address = PERSON.properAddress(o.address);
       o.name || fail("El nombre de la oficina es obligatorio.");
       uniq(s.offices, o.name, o.id);
       if (b.is_main === true) s.offices.forEach((x) => (x.is_main = x.id === o.id));

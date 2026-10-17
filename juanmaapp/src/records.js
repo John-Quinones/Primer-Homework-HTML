@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties } from "./case-meta.js";
-import { personFields, clientMatches } from "./person.js";
+import { personFields, clientMatches, properAddress } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
@@ -107,6 +107,7 @@ export function recordsRouter(db) {
     v.id_number = v.id_number.replace(/\s+/g, "");
     v.department = canonicalDepartment(v.department) || (v.department ? fail400("Departamento no reconocido.") : "");
     v.city = canonicalCity(v.city, v.department);
+    v.address = properAddress(v.address);
     v.office_id = officeFor(req, body.office_id, existing.office_id);
     return v;
   };

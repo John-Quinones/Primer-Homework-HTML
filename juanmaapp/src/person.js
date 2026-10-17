@@ -13,6 +13,25 @@ export function properName(s) {
   return words.map((w, i) => (i > 0 && PARTICLES.has(w) ? w : capWord(w))).join(" ");
 }
 
+// Addresses: each word with an initial capital, joining words in lower case
+// ("la", "las", "los" only after "de": "Calle de la Paz", "Barrio La Pola"), house numbers and the letters next to them in capitals, "No" with its dot.
+const ADDRESS_JOINERS = new Set(["de", "del", "y", "e", "o", "a", "al", "en", "por"]);
+const ADDRESS_UPPER = new Set(["ph", "bis"]);
+
+/** "CRA 5 no 12b-30 BARRIO la POLA" → "Cra 5 No. 12B-30 Barrio La Pola". */
+export function properAddress(s) {
+  const words = String(s ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es").split(" ").filter(Boolean);
+  return words.map((w, i) => {
+    const prev = words[i - 1] || "", next = words[i + 1] || "";
+    if (/\d/.test(w)) return w.toLocaleUpperCase("es");
+    if (/^[a-zñ]$/.test(w) && /\d/.test(prev)) return w.toLocaleUpperCase("es");
+    if (ADDRESS_UPPER.has(w)) return w === "bis" ? "Bis" : w.toUpperCase();
+    if ((w === "no" || w === "no.") && /^\d/.test(next)) return "No.";
+    if (i > 0 && (ADDRESS_JOINERS.has(w) || (/^(la|las|los)$/.test(w) && prev === "de"))) return w;
+    return capWord(w);
+  }).join(" ");
+}
+
 // Words that mark a company or public body, used only to guess the type of
 // records that arrive with a single name (old data, Excel imports).
 const COMPANY = /\b(s\.?\s?a\.?\s?s\.?|s\.?\s?a\.?|ltda\.?|limitada|e\.?\s?u\.?|s\.?\s?en\s?c\.?|cooperativa|coomul\w*|fundaci[oó]n|corporaci[oó]n|asociaci[oó]n|sociedad|empresa|banco|ministerio|polic[ií]a|ej[eé]rcito|naci[oó]n|instituto|caja|alcald[ií]a|gobernaci[oó]n|universidad|cl[ií]nica|hospital|eps|ips|fondo|administradora|direcci[oó]n|superintendencia|municipio|consorcio|uni[oó]n temporal|inversiones|comercializadora|constructora|urbanizadora|sucursal|cremil|colpensiones)\b/i;

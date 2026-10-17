@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { properName } from "./person.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DIVIPOLA = JSON.parse(readFileSync(path.join(here, "..", "public", "data", "divipola.json"), "utf8"));
@@ -24,7 +25,7 @@ export function canonicalDepartment(name) {
   return "";
 }
 
-/** Canonical municipality name within a department, or the input trimmed if not found. */
+/** Canonical municipality name within a department ("IBAGUE" → "Ibagué"), or the input in proper case if not found. */
 export function canonicalCity(name, department) {
   const n = norm(name).replace(/[.,]/g, "");
   if (!n) return "";
@@ -32,7 +33,7 @@ export function canonicalCity(name, department) {
   const hit = DIVIPOLA.municipios.find((m) => (!dep || m.dep === dep) && norm(m.name).replace(/[.,]/g, "") === n);
   if (hit) return hit.name;
   if (n.startsWith("bogota")) return "Bogotá, D.C.";
-  return String(name).trim();
+  return properName(name);
 }
 
 /** Department and city from a 23-digit radicado: its first five digits are the DANE municipality code. */

@@ -28,7 +28,7 @@
 
   /**
    * attach(input, { items: () => Promise<[{label, sub?, value?}]>|[...], onPick(item), strict })
-   * strict: on blur, a value that matches no option is cleared.
+   * strict: on blur, a typed value takes the option's spelling (IBAGUE → Ibagué; onMatch(item) when only one option has that name), and one that matches no option is cleared.
    */
   function attach(input, opts) {
     if (input._combo) return input._combo;
@@ -87,8 +87,8 @@
       setTimeout(close, 120);
       if (opts.strict && input.value) {
         const all = await Promise.resolve(opts.items());
-        const hit = all.find((it) => norm(it.label) === norm(input.value));
-        if (hit) input.value = hit.label; else { input.value = ""; opts.onClear?.(); }
+        const hits = all.filter((it) => norm(it.label) === norm(input.value));
+        if (hits.length) { input.value = hits[0].label; if (hits.length === 1) opts.onMatch?.(hits[0]); } else { input.value = ""; opts.onClear?.(); }
       }
     });
     input._combo = { open, close };
@@ -131,6 +131,7 @@
       attach(input, {
         items: () => cities(depInput()?.value || ""), strict: true, limit: 15,
         onPick: (it) => { const dep = depInput(); if (dep && !dep.value) dep.value = it.dep; },
+        onMatch: (it) => { const dep = depInput(); if (dep && !dep.value) dep.value = it.dep; },
       });
     }
   }
