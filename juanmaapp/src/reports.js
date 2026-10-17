@@ -2,6 +2,7 @@
 // limited to the user's offices; the page turns them into Excel or PDF.
 import express from "express";
 import { typePath } from "./sql.js";
+import { formatRadicado } from "./portals.js";
 import { scopeOf } from "./auth.js";
 import { paymentsReport } from "./payments.js";
 
@@ -135,7 +136,7 @@ export function reportsRouter(db) {
     res.json({
       type, title: REPORTS[type],
       columns: columns.map(([key, label]) => ({ key, label })),
-      rows: rows.map((row) => ({ ...row })),
+      rows: rows.map((row) => ("radicado" in row ? { ...row, radicado: formatRadicado(row.radicado) } : { ...row })),
       generatedAt: new Date().toISOString(),
       generatedBy: req.user.name,
     });

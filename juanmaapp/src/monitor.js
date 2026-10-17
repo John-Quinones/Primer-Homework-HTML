@@ -7,6 +7,7 @@ import { loadUser, scopeOf } from "./auth.js";
 import { LIVE_STATUSES } from "./case-meta.js";
 import { paymentReminders } from "./payments.js";
 import { withDecisions } from "./decision.js";
+import { formatRadicado } from "./portals.js";
 
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
 const OPEN = LIVE_STATUSES;
@@ -54,7 +55,7 @@ export async function checkCase(db, caseId) {
     if (newCount) {
       const users = new Set([k.assigned_user_id].filter(Boolean));
       for (const u of users) {
-        notify(db, u, "actuacion", `${newCount} actuación(es) nueva(s)`, `Radicado ${k.radicado}`, `#consulta`, null);
+        notify(db, u, "actuacion", `${newCount} actuación(es) nueva(s)`, `Radicado ${formatRadicado(k.radicado)}`, `#consulta`, null);
       }
     }
     return { caseId, ok: true, newCount, error: "" };
@@ -125,6 +126,7 @@ export function buildReport(db, userId, now = new Date()) {
     SELECT k.radicado, pc.error FROM cases k JOIN process_checks pc ON pc.id = (
       SELECT id FROM process_checks WHERE case_id = k.id ORDER BY id DESC LIMIT 1)
     WHERE k.id IN (${idList}) AND pc.ok = 0`).all();
+  for (const a of [...news, ...errors]) a.radicado = formatRadicado(a.radicado);
   const user = loadUser(db, userId);
   const sc = scopeOf(user);
   const officeCond = sc === null ? "1 = 1" : sc.length ? `k.office_id IN (${sc.join(",")})` : "0 = 1";

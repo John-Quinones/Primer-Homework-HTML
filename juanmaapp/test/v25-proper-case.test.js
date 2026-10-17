@@ -39,3 +39,11 @@ test("phones: mobile 322 253 1327 and landline 608 261 4172 however they are typ
   const o = await admin.call("POST", "/admin/offices", { name: "Sede Melgar", department: "Tolima", city: "Melgar", phone: "6082614172" });
   assert.equal(o.body.phone, "608 261 4172");
 });
+
+test("radicado shown with dashes 2-3-2-2-3-4-5-2, kept and queried as 23 digits", async () => {
+  const { formatRadicado, radicadoDigits } = await import("../src/portals.js");
+  assert.equal(formatRadicado("73001400300220080066400"), "73-001-40-03-002-2008-00664-00");
+  assert.equal(formatRadicado("73001-40-03-002-2008-00664-00"), "73-001-40-03-002-2008-00664-00");
+  assert.equal(radicadoDigits("73-001-40-03-002-2008-00664-00"), "73001400300220080066400");
+  assert.equal(formatRadicado("123"), "123");
+});

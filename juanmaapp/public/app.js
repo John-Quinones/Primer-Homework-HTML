@@ -1453,7 +1453,7 @@ function fillAssignees(officeId, selected) {
 }
 caseForm.elements.office_id.addEventListener("change", (e) => fillAssignees(e.target.value, Number(caseForm.elements.assigned_user_id.value)));
 
-const formatRadicado = (r) => (/^\d{23}$/.test(r) ? `${r.slice(0, 5)}-${r.slice(5, 7)}-${r.slice(7, 9)}-${r.slice(9, 12)}-${r.slice(12, 16)}-${r.slice(16, 21)}-${r.slice(21)}` : r);
+const formatRadicado = (r) => window.JuanmaPortals.formatRadicado(r);
 
 // Courts for the chosen department / city / area, cached per filter.
 const courtCache = new Map();
@@ -1487,6 +1487,8 @@ window.JuanmaCombo.attach(caseForm.elements.court_search, {
   },
   onType: () => { caseForm.elements.court_id.value = ""; showCourtEmail(null); },
 });
+// Written as the firm reads it (73-001-40-03-002-2008-00664-00); saved and queried as 23 digits.
+caseForm.elements.radicado.addEventListener("focusout", (e) => { e.target.value = formatRadicado(e.target.value.trim()); });
 caseForm.elements.radicado.addEventListener("input", async (e) => {
   const digits = e.target.value.replace(/\D/g, "");
   if (digits.length >= 5 && !caseForm.elements.department.value) {

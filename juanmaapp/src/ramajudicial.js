@@ -39,7 +39,7 @@ const day = (v) => (v ? String(v).slice(0, 10) : "");
 
 /** Processes registered under a 23-digit radicado. */
 export async function findByRadicado(radicado) {
-  const data = await getJson(`${BASE}/Procesos/Consulta/NumeroRadicacion?numero=${encodeURIComponent(radicado)}&SoloActivos=false&pagina=1`);
+  const data = await getJson(`${BASE}/Procesos/Consulta/NumeroRadicacion?numero=${encodeURIComponent(String(radicado).replace(/\D/g, ""))}&SoloActivos=false&pagina=1`);
   const list = pick(data, "procesos") || [];
   return list.map((p) => ({
     id: String(pick(p, "idProceso") ?? ""),

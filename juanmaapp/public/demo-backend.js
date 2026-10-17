@@ -333,7 +333,7 @@
       Object.assign(v, {
         "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number, "cliente.correo": c.email,
         "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
-        "expediente.radicado": /^\d{23}$/.test(k.radicado || "") ? k.radicado.replace(/^(\d{5})(\d{2})(\d{2})(\d{3})(\d{4})(\d{5})(\d{2})$/, "$1-$2-$3-$4-$5-$6-$7") : k.radicado,
+        "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
         "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.correo_despacho": k.court_email,
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
@@ -732,7 +732,7 @@
       const since = s.log.filter((l) => l.user_id === me().id).at(-1)?.ms || 0;
       const news = s.acts.filter((a) => ids.includes(a.case_id) && a.isNew && a.foundMs > since);
       const lines = [`TecjuridicosApp · Reporte de procesos · ${bogotaNow()} (hora Colombia)`, "", `Procesos consultados: ${ids.length}. Actuaciones nuevas: ${news.length}.`];
-      if (news.length) { lines.push("", "ACTUACIONES NUEVAS"); for (const a of news) lines.push(`• ${s.cases.find((k) => k.id === a.case_id).radicado} · ${a.fecha} · ${a.actuacion}`); }
+      if (news.length) { lines.push("", "ACTUACIONES NUEVAS"); for (const a of news) lines.push(`• ${window.JuanmaPortals.formatRadicado(s.cases.find((k) => k.id === a.case_id).radicado)} · ${a.fecha} · ${a.actuacion}`); }
       lines.push("", "Enlace de prueba: con la app instalada el reporte sale por correo y WhatsApp a las horas elegidas.");
       const channels = [p.by_email && { channel: "email", ok: false, detail: "Requiere la app instalada." }, p.by_whatsapp && { channel: "whatsapp", ok: false, detail: "Requiere la app instalada." }].filter(Boolean);
       s.log.push({ id: nextId(), user_id: me().id, sent_at: stamp(), ms: Date.now(), trigger: "manual", channels, summary: lines.join("\n") });
@@ -1049,7 +1049,7 @@
           && (!q.assignedUserId || k.assigned_user_id === +q.assignedUserId)).map((k) => {
           const c = s.clients.find((x) => x.id === k.client_id);
           return { office: k.office_name, client: k.client_name, doc: `${c.id_type} ${c.id_number}`.trim(), category: k.category_name, type: k.type_name,
-            title: k.title, radicado: k.radicado || "", role: k.client_role || "", affiliated: k.affiliated ? "Sí" : "No", status: k.status, assigned: k.assigned_name || "", counterparty: k.counterparty, created: day(k.created_at), updated: day(k.updated_at) };
+            title: k.title, radicado: window.JuanmaPortals.formatRadicado(k.radicado || ""), role: k.client_role || "", affiliated: k.affiliated ? "Sí" : "No", status: k.status, assigned: k.assigned_name || "", counterparty: k.counterparty, created: day(k.created_at), updated: day(k.updated_at) };
         });
       } else if (type === "clientes") {
         columns = [["office", "Oficina"], ["name", "Nombre"], ["doc", "Documento"], ["email", "Correo"], ["phone", "Teléfono"], ["city", "Ciudad"], ["cases", "Expedientes"], ["created", "Creado"]];

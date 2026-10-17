@@ -68,6 +68,16 @@ export function radicadoDigits(r) {
 }
 
 /**
+ * A radicado as the firm writes it: 2-3-2-2-3-4-5-2 digits with dashes
+ * ("73001400300220080066400" → "73-001-40-03-002-2008-00664-00"). Cases keep the
+ * 23 digits; the portals are queried with radicadoDigits(). Not 23 digits → as given.
+ */
+export function formatRadicado(r) {
+  const d = radicadoDigits(r);
+  return d ? d.replace(/^(\d{2})(\d{3})(\d{2})(\d{2})(\d{3})(\d{4})(\d{5})(\d{2})$/, "$1-$2-$3-$4-$5-$6-$7-$8") : String(r ?? "");
+}
+
+/**
  * Portal ids in the order to try them for this case: SAMAI first for administrative
  * processes (by radicado, or by the process type when there is no radicado), SIUGJ
  * first for labor processes filed from 2025, else the national query (Siglo XXI).

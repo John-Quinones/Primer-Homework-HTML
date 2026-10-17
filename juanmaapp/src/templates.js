@@ -1,6 +1,7 @@
 // Document templates: the firm's own Word (.docx) or text files plus the
 // starter ones, and the values a case provides to fill {{variables}}.
 import express from "express";
+import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
@@ -28,8 +29,7 @@ export function seedTemplates(db) {
   setFlag.run("templates_seeded");
 }
 
-const formatRadicado = (r) => (/^\d{23}$/.test(r || "")
-  ? `${r.slice(0, 5)}-${r.slice(5, 7)}-${r.slice(7, 9)}-${r.slice(9, 12)}-${r.slice(12, 16)}-${r.slice(16, 21)}-${r.slice(21)}` : r);
+
 
 /** Today in Colombia as "14 de octubre de 2026". */
 export function longDate(d = new Date()) {
