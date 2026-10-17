@@ -904,13 +904,13 @@ async function renderExpedienteFicha(id) {
       </div>
     </div>
     <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
-      ${[["datos", "Datos"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["portales", "Portales"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
+      ${[["datos", "Datos"], ["responsable", "Responsable"], ["partes", "Partes"], ["tareas", "Tareas"], ["oficios", "Oficios"], ["actuaciones", "Actuaciones"], ["portales", "Portales"], ["documentos", "Documentos"], ["pagos", "Pagos"], ["firmas", "Firmas"], ["correos", "Correos"], ["historial", "Historial"]]
         .map(([x, label]) => `<button type="button" class="mini" data-action="goto-sec" data-sec="${x}">${label}</button>`).join("")}
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
       <span class="chip-stat">Cliente <strong>${clientName(k.client_id, k.client_name)}</strong></span>
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
-      <span class="chip-stat">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></span>
+      <button type="button" class="chip-stat" data-action="goto-sec" data-sec="responsable" title="Ver o cambiar el funcionario responsable">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></button>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
@@ -922,6 +922,7 @@ async function renderExpedienteFicha(id) {
         ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
       </dl>`)))}
+      ${secId("responsable", wide(panel("Funcionario responsable", null, responsiblePanel(k, tasks || []))))}
       ${secId("partes", wide(panel("Partes del proceso", null, partiesView(k) || '<p class="empty">Registre las partes con «Editar» (sección «Partes del proceso»).</p>')))}
       ${secId("tareas", wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
         canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : "")))}
@@ -971,6 +972,32 @@ async function renderExpedienteFicha(id) {
   ACTS_CACHE = acts || [];
 }
 let ACTS_CACHE = [];
+
+// Funcionarios who can take a case: users of its office, plus roles that see every office.
+// A hidden user comes as «Asistente» in name and role (version 2.11): show it once, with no office.
+const staffLabel = (u) => u.role && u.role !== u.name ? `${escapeHtml(u.name)} · ${escapeHtml(u.role)}` : escapeHtml(u.name);
+const caseStaff = (officeId) => directory.filter((u) => u.scopeAll || u.offices.some((o) => o.id === Number(officeId)));
+
+/** The case's responsible funcionario: change it, or give a task to them (or to anyone of the office) without leaving the case. */
+function responsiblePanel(k, tasks) {
+  const staff = caseStaff(k.office_id);
+  const cur = directory.find((u) => u.id === k.assigned_user_id);
+  const open = (uid) => tasks.filter((t) => t.status === "pendiente" && (t.assigned_user_id || k.assigned_user_id) === uid);
+  const mine = cur ? open(cur.id) : [];
+  const late = mine.filter((t) => CMETA.taskFollowUp(t, bogotaNow()).key === "vencida").length;
+  const who = cur ? `<p class="resp-now"><strong>${escapeHtml(cur.name)}</strong>${cur.role !== cur.name ? ` <span class="muted">· ${escapeHtml(cur.role)}${cur.offices?.length ? " · " + escapeHtml(cur.offices.map((o) => o.name).join(", ")) : ""}</span>` : ""}<br>
+      <span class="muted">${mine.length ? `${mine.length} pendiente(s) en este expediente${late ? ` · <span class="follow bad">${late} vencida(s)</span>` : ""}` : "Sin tareas pendientes en este expediente."}</span></p>`
+    : `<p class="resp-now"><strong>Sin asignar.</strong> <span class="muted">Elija el funcionario que llevará este expediente.</span></p>`;
+  if (!can("cases.write")) return who;
+  return `${who}<div class="resp-pick" data-resp-case="${k.id}">
+      <label>Funcionario <select name="resp_user">${!staff.length ? '<option value="">— No hay funcionarios en esta oficina —</option>' : cur ? "" : '<option value="">— Elija un funcionario —</option>'}${staff.map((u) =>
+        `<option value="${u.id}" ${u.id === k.assigned_user_id ? "selected" : ""}>${staffLabel(u)}${open(u.id).length ? ` · ${open(u.id).length} pendiente(s)` : ""}</option>`).join("")}</select></label>
+      <span class="toolbar"><button type="button" class="mini primary" data-action="set-responsible" data-id="${k.id}">Asignar como responsable</button>
+        <button type="button" class="mini" data-action="task-for" data-id="${k.id}">+ Asignarle una tarea</button>
+        ${cur ? `<button type="button" class="mini" data-action="clear-responsible" data-id="${k.id}">Quitar responsable</button>` : ""}</span>
+    </div>
+    <p class="hint">«Asignar como responsable» deja al funcionario elegido a cargo del expediente. «+ Asignarle una tarea» abre una tarea, audiencia o término ya dirigido a ese funcionario; le llega el aviso y aparece en su Agenda.</p>`;
+}
 const CMETA = window.JuanmaCaseMeta;
 const HIST_TYPES = [["", "Todo"], ["actuacion", "Actuaciones"], ["tarea", "Tareas y oficios"], ["documento", "Documentos"], ["pago", "Pagos"], ["firma", "Firmas"], ["correo", "Correos"], ["cambio", "Cambios por funcionario"], ["expediente", "Expediente"]];
 const wide = (html) => html.replace('class="panel ficha-panel"', 'class="panel ficha-panel ficha-wide"');
@@ -1486,9 +1513,9 @@ caseForm.elements.process_type_id.addEventListener("change", () => fillRoleSelec
 // Responsible people: users of the chosen office, plus roles that see every office.
 function fillAssignees(officeId, selected) {
   const sel = caseForm.elements.assigned_user_id;
-  const people = directory.filter((u) => u.offices.some((o) => o.id === Number(officeId)) || u.scopeAll);
+  const people = caseStaff(officeId);
   sel.innerHTML = '<option value="">— Sin asignar —</option>' +
-    people.map((u) => `<option value="${u.id}">${escapeHtml(u.name)} · ${escapeHtml(u.role)}</option>`).join("");
+    people.map((u) => `<option value="${u.id}">${staffLabel(u)}</option>`).join("");
   sel.value = selected && people.some((u) => u.id === selected) ? String(selected) : "";
 }
 caseForm.elements.office_id.addEventListener("change", (e) => fillAssignees(e.target.value, Number(caseForm.elements.assigned_user_id.value)));
@@ -1849,6 +1876,25 @@ document.addEventListener("click", (e) => {
     "open-case": () => { location.hash = `#expediente-${id}`; },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
+    "set-responsible": async () => {
+      const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
+      if (!uid) { toast("Elija un funcionario.", true); return; }
+      const k = await api("PUT", `/cases/${id}`, { assigned_user_id: uid });
+      toast(`${k.assigned_name} quedó como funcionario responsable del expediente.`);
+      await refreshView();
+      goToSection("responsable");
+    },
+    "clear-responsible": async () => {
+      if (!(await confirmAsk("Quitar", "El expediente quedará sin funcionario responsable. Sus tareas no se borran."))) return;
+      await api("PUT", `/cases/${id}`, { assigned_user_id: null });
+      toast("El expediente quedó sin responsable.");
+      await refreshView();
+      goToSection("responsable");
+    },
+    "task-for": () => {
+      const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
+      return openTaskDialog(null, id, "tarea", { assigned_user_id: uid });
+    },
     "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
     "act-remind": () => {
       const a = ACTS_CACHE[Number(btn.dataset.act)];
@@ -3950,9 +3996,21 @@ taskForm.elements.delivered_at.addEventListener("change", () => syncTaskForm(tru
 taskForm.elements.done.addEventListener("change", () => syncTaskForm());
 taskForm.elements.due_at.addEventListener("input", () => (taskForm.elements.due_at.dataset.touched = "1"));
 
+/** Funcionario list of the task form for the chosen case; the empty option names the case's responsible. */
+function fillTaskAssignees(cases, selected) {
+  const k = cases.find((x) => x.id === Number(taskForm.elements.case_id.value));
+  const sel = taskForm.elements.assigned_user_id;
+  sel.innerHTML = `<option value="">— El responsable del expediente${k?.assigned_name ? ` (${escapeHtml(k.assigned_name)})` : ""} —</option>` +
+    caseStaff(k?.office_id).map((u) => `<option value="${u.id}">${staffLabel(u)}</option>`).join("");
+  sel.value = selected && [...sel.options].some((o) => o.value === String(selected)) ? String(selected) : "";
+}
+let taskCases = [];
+taskForm.elements.case_id.addEventListener("change", () => fillTaskAssignees(taskCases, taskForm.elements.assigned_user_id.value));
+
 async function openTaskDialog(t = null, caseId = null, kind = null, preset = {}, focus = "") {
   const cases = await api("GET", "/cases");
   if (!cases.length) { toast("Primero cree un expediente.", true); return; }
+  taskCases = cases;
   taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${caseFolder(k) ? "Carpeta " + escapeHtml(caseFolder(k)) + " · " : ""}${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
   const k0 = kind || "audiencia";
   openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : `Nuevo: ${KIND_LABEL[k0].toLowerCase()}`, t ? {
@@ -3968,10 +4026,7 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   if (t) taskForm.elements.due_at.dataset.touched = "1";
   taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
   taskForm.elements.case_id.disabled = !!t;
-  const officeOf = cases.find((k) => k.id === Number(taskForm.elements.case_id.value))?.office_id;
-  taskForm.elements.assigned_user_id.innerHTML = '<option value="">— El del expediente —</option>' +
-    directory.filter((u) => u.scopeAll || u.offices.some((o) => o.id === officeOf)).map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
-  taskForm.elements.assigned_user_id.value = t?.assigned_user_id ?? "";
+  fillTaskAssignees(cases, t?.assigned_user_id ?? preset.assigned_user_id ?? "");
   const days = t ? t.remind_days : k0 === "audiencia" ? [3, 1] : [1];
   $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
   taskForm.elements.done.checked = t?.status === "hecha";

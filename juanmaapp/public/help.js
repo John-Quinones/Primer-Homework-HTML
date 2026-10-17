@@ -8,7 +8,7 @@
       ["Persona natural: nombres y apellidos por separado; se corrigen solos a mayúscula inicial (JOHN → John).", "Persona jurídica: razón social, NIT con dígito de verificación y representante legal.", "Busque por nombre o número de documento en la casilla superior.", "Escriba el documento sin puntos ni espacios.",
         "Autorizaciones de datos (en la ficha del cliente): envíe el enlace por correo o WhatsApp, o use «Firmar en la oficina». Cada autorización (datos, sensibles, privacidad, cookies, centrales de riesgo y comunicaciones) se responde por separado; también al firmar por enlace un documento y queda el soporte con fecha, hora y medio; «Constancia PDF» lo descarga."]],
     expedientes: ["Expedientes", "Cada proceso o asunto de un cliente: tipo y subproceso, calidad del cliente (demandante, demandado, ejecutante…), estado, despacho, radicado y responsable.",
-      ["Filtre por departamento, ciudad o circuito, área y despacho: si marca Ibagué y Civil, ve los expedientes de los despachos civiles del circuito de Ibagué.", "El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior.", "La columna Carpeta muestra el número de carpeta física; búsquelo en la casilla «Buscar carpeta, cliente o radicado»."]],
+      ["Funcionario responsable: en la pantalla del expediente, recuadro «Funcionario responsable», elija el funcionario y toque «Asignar como responsable»; con «+ Asignarle una tarea» le deja una tarea, audiencia o término y le llega el aviso.", "Filtre por departamento, ciudad o circuito, área y despacho: si marca Ibagué y Civil, ve los expedientes de los despachos civiles del circuito de Ibagué.", "El radicado de 23 dígitos permite consultar el proceso en la Rama Judicial.", "Estado: Activo, Archivo provisional o Archivo definitivo.", "Filtre por oficina o por tipo de proceso en la parte superior.", "La columna Carpeta muestra el número de carpeta física; búsquelo en la casilla «Buscar carpeta, cliente o radicado»."]],
     agenda: ["Agenda", "Audiencias, términos, tareas, recursos, requerimientos, peticiones y oficios de cada expediente, asignados a un funcionario con plazo y recordatorio.",
       ["Escriba el título con la norma o etapa: «Audiencia inicial art. 77 CPTSS».", "Al asignar a un funcionario, le llega el aviso en la campana con el enlace al expediente.",
         "Marque «Cumplida» cuando se cumpla: queda quién la cumplió y si fue a tiempo o con retraso.", "Oficios y peticiones: registre la fecha de entrega; al llegar la respuesta use «Respuesta». Si vence el plazo sin respuesta, se avisa.",
@@ -107,7 +107,7 @@
 
   const SELECT_TIPS = {
     office_id: "Oficina que lleva el asunto; define quién puede verlo.",
-    assigned_user_id: "Abogado o auxiliar responsable.",
+    assigned_user_id: "Funcionario (abogado o auxiliar) a cargo del expediente o de la tarea.",
     category_id: "Área del proceso: Laboral, Civil, Familia, Penal…",
     process_type_id: "Clase concreta de proceso dentro del tipo.",
     status: "Activo mientras haya trámite; Archivo provisional si está suspendido; Archivo definitivo si terminó.",

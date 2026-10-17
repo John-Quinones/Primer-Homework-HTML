@@ -658,7 +658,13 @@ html[data-view="mobile"] body { max-width: 480px; margin: 0 auto; box-shadow: 0 
 .chip-stat { display: flex; flex-direction: column; gap: 2px; font-size: .78rem; color: var(--text-muted); text-decoration: none; padding: 8px 12px; border-radius: 10px; background: var(--surface-muted); border: 1px solid var(--border); min-width: 110px; }
 .chip-stat small { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
 .chip-stat strong { font-size: 1rem; color: var(--text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-a.chip-stat:hover { border-color: var(--brand-blue); }
+a.chip-stat:hover, button.chip-stat:hover { border-color: var(--brand-blue); }
+button.chip-stat { font: inherit; font-size: .78rem; text-align: left; cursor: pointer; box-shadow: none; align-items: flex-start; }
+/* Funcionario responsable panel on the case screen. */
+.resp-now { margin: 0 0 10px; }
+.resp-pick { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.resp-pick label { flex: 1 1 260px; max-width: 420px; }
+.resp-pick select { width: 100%; }
 a.chip-stat strong { color: var(--link); }
 .chip-stat.warn strong { color: var(--warn); }
 .ficha-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; }
