@@ -54,7 +54,7 @@
     "client.nit": ["", "NIT con guion y dígito de verificación: 900123456-7."],
     "client.legal_rep": ["", "Nombre completo del representante legal según el certificado de existencia."],
     "client.email": ["cliente@correo.com", "Correo donde el cliente recibe notificaciones, recibos y recordatorios."],
-    "client.phone": ["300 123 4567", "Celular con WhatsApp de preferencia, sin indicativo +57."],
+    "client.phone": ["300 123 4567", "Celular con WhatsApp de preferencia. Escríbalo como quiera: queda 322 253 1327 (celular) o 608 261 4172 (fijo)."],
     "client.city": ["Escriba: I… Ibagué", "Elija de la lista o escríbala como quiera (IBAGUE → Ibagué): queda el municipio oficial (DIVIPOLA) con su tilde."],
     "client.address": ["Ej. Calle 10 # 3-45, barrio Centro", "Dirección de notificación física. Se corrige a mayúscula inicial al salir (CRA 5 no 12b-30 → Cra 5 No. 12B-30)."],
     "client.notes": ["Ej. Prefiere contacto por WhatsApp en la tarde", "Datos útiles para atender al cliente; no escriba información reservada del proceso."],

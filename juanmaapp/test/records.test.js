@@ -25,7 +25,7 @@ test("client CRUD with validation", async () => {
   assert.equal(created.status, 201);
   assert.equal(created.body.id_type, "CC");
   const upd = await call("PUT", `/clients/${created.body.id}`, { phone: "3001234567" });
-  assert.equal(upd.body.phone, "3001234567");
+  assert.equal(upd.body.phone, "300 123 4567");
   assert.equal(upd.body.email, "ana@x.co");
   const list = await call("GET", "/clients?q=5212");
   assert.equal(list.body.length, 1);

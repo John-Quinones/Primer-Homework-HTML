@@ -293,6 +293,7 @@
     c.department = dep;
     c.city = canonCity(c.city, dep);
     c.address = PERSON.properAddress(c.address);
+    c.phone = PERSON.properPhone(c.phone);
   };
   // Same rules as the server's caseLocation().
   const caseLocation = (b, cur = {}) => {
@@ -518,7 +519,7 @@
       const name = str(b.name) || fail("El nombre de la oficina es obligatorio.");
       uniq(s.offices, name);
       const department = canonDep(b.department);
-      const o = { id: nextId(), name, department, city: canonCity(b.city, department), address: PERSON.properAddress(b.address), phone: str(b.phone), email: str(b.email), is_main: false };
+      const o = { id: nextId(), name, department, city: canonCity(b.city, department), address: PERSON.properAddress(b.address), phone: PERSON.properPhone(b.phone), email: str(b.email), is_main: false };
       s.offices.push(o);
       return clone(o);
     }],
@@ -529,6 +530,7 @@
       o.department = canonDep(o.department);
       o.city = canonCity(o.city, o.department);
       o.address = PERSON.properAddress(o.address);
+      o.phone = PERSON.properPhone(o.phone);
       o.name || fail("El nombre de la oficina es obligatorio.");
       uniq(s.offices, o.name, o.id);
       if (b.is_main === true) s.offices.forEach((x) => (x.is_main = x.id === o.id));
@@ -554,7 +556,7 @@
       s.roles.some((r) => r.name === b.role) || fail("Rol no válido.");
       (b.office_ids || []).length || fail("Asigne al menos una oficina.");
       s.users.some((u) => u.email === email) && fail("Ya existe un usuario con ese correo.");
-      const u = { id: nextId(), name, email, phone: str(b.phone), professional_card: str(b.professional_card), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
+      const u = { id: nextId(), name, email, phone: PERSON.properPhone(b.phone), professional_card: str(b.professional_card), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
         custom_permissions: !!b.custom_permissions, permissions: (b.permissions || []).filter((p) => p in AUTH.permissions) };
       s.users.push(u);
       return userOut(u);
@@ -572,7 +574,7 @@
       Array.isArray(b.office_ids) && !b.office_ids.length && fail("Asigne al menos una oficina.");
       const email = b.email ? str(b.email).toLowerCase() : u.email;
       s.users.some((x) => x.email === email && x.id !== u.id) && fail("Ya existe un usuario con ese correo.");
-      Object.assign(u, { name: str(b.name) || u.name, email, role, active, phone: "phone" in b ? str(b.phone) : u.phone,
+      Object.assign(u, { name: str(b.name) || u.name, email, role, active, phone: "phone" in b ? PERSON.properPhone(b.phone) : u.phone,
         professional_card: "professional_card" in b ? str(b.professional_card) : u.professional_card });
       if (b.custom_permissions !== undefined) {
         u.custom_permissions = !!b.custom_permissions;

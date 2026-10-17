@@ -9,7 +9,7 @@ import { VERSION } from "./version.js";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { publicBase } from "./public-url.js";
 import { canonicalDepartment, canonicalCity } from "./places.js";
-import { properAddress } from "./person.js";
+import { properAddress, properPhone } from "./person.js";
 import { sendEmail, sendWhatsapp, channelsStatus, channelReady } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
 import { createHash as hashOf } from "node:crypto";
@@ -403,7 +403,7 @@ export function adminRouter(db) {
 
   const officeFields = (b) => {
     const department = canonicalDepartment(b.department);
-    return { name: str(b.name), department, city: canonicalCity(b.city, department), address: properAddress(b.address), phone: str(b.phone), email: str(b.email) };
+    return { name: str(b.name), department, city: canonicalCity(b.city, department), address: properAddress(b.address), phone: properPhone(b.phone), email: str(b.email) };
   };
 
   r.post("/offices", manage, (req, res) => {
@@ -531,7 +531,7 @@ export function adminRouter(db) {
     try {
       // A password Gerencia assigns is temporary: the user changes it at the first sign-in.
       id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(name, email, str(b.phone), str(b.professional_card), noPassword ? "!" : await hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
+        .run(name, email, properPhone(b.phone), str(b.professional_card), noPassword ? "!" : await hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
       setOffices(id, b.office_ids);
       setUserPermissions(id, b.custom_permissions, b.permissions);
     } catch {
@@ -561,7 +561,7 @@ export function adminRouter(db) {
     const email = b.email ? str(b.email).toLowerCase() : cur.email;
     try {
       db.prepare("UPDATE users SET name = ?, email = ?, phone = ?, professional_card = ?, role = ?, active = ? WHERE id = ?")
-        .run(str(b.name) || cur.name, email, "phone" in b ? str(b.phone) : cur.phone,
+        .run(str(b.name) || cur.name, email, "phone" in b ? properPhone(b.phone) : cur.phone,
           "professional_card" in b ? str(b.professional_card) : cur.professional_card, role, active ? 1 : 0, id);
     } catch {
       return res.status(409).json({ error: "Ya existe un usuario con ese correo." });

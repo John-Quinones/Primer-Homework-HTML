@@ -32,6 +32,20 @@ export function properAddress(s) {
   }).join(" ");
 }
 
+/**
+ * Colombian phones written the same way whatever the user typed (spaces, dashes,
+ * dots, brackets, +57): mobile "322 253 1327", landline "608 261 4172".
+ * Anything else (foreign numbers, old 7-digit landlines, extensions) stays as written.
+ */
+export function properPhone(s) {
+  const raw = String(s ?? "").trim().replace(/\s+/g, " ");
+  if (/[a-z]/i.test(raw)) return raw;
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("57") && (raw.startsWith("+") || /^57[36]/.test(d))) d = d.slice(2);
+  if (raw.startsWith("+") && !raw.replace(/\s/g, "").startsWith("+57")) return raw;
+  return /^(3\d|60)\d{8}$/.test(d) ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : raw;
+}
+
 // Words that mark a company or public body, used only to guess the type of
 // records that arrive with a single name (old data, Excel imports).
 const COMPANY = /\b(s\.?\s?a\.?\s?s\.?|s\.?\s?a\.?|ltda\.?|limitada|e\.?\s?u\.?|s\.?\s?en\s?c\.?|cooperativa|coomul\w*|fundaci[oó]n|corporaci[oó]n|asociaci[oó]n|sociedad|empresa|banco|ministerio|polic[ií]a|ej[eé]rcito|naci[oó]n|instituto|caja|alcald[ií]a|gobernaci[oó]n|universidad|cl[ií]nica|hospital|eps|ips|fondo|administradora|direcci[oó]n|superintendencia|municipio|consorcio|uni[oó]n temporal|inversiones|comercializadora|constructora|urbanizadora|sucursal|cremil|colpensiones)\b/i;

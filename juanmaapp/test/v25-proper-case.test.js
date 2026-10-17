@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
-import { properName, properAddress } from "../src/person.js";
+import { properName, properAddress, properPhone } from "../src/person.js";
 import { canonicalCity } from "../src/places.js";
 
 let srv, admin;
@@ -27,4 +27,15 @@ test("clients and offices are saved with the city's accent and the address in pr
   assert.equal(r.body.address, "Calle 10 No. 3-45 Barrio Belén");
   const o = await admin.call("POST", "/admin/offices", { name: "Sede Espinal", department: "Tolima", city: "espinal", address: "carrera 6 # 8-20" });
   assert.equal(o.body.address, "Carrera 6 # 8-20");
+});
+
+test("phones: mobile 322 253 1327 and landline 608 261 4172 however they are typed", async () => {
+  for (const x of ["3222531327", "322-253-1327", "+57 322 253 1327", "573222531327", "(322) 2531327"]) assert.equal(properPhone(x), "322 253 1327");
+  for (const x of ["6082614172", "608-261-4172", "+57 (608) 261 4172"]) assert.equal(properPhone(x), "608 261 4172");
+  assert.equal(properPhone("+1 305 555 1234"), "+1 305 555 1234");
+  assert.equal(properPhone("2614172"), "2614172");
+  const r = await admin.call("POST", "/clients", { person_type: "natural", first_names: "Ana", last_names: "Ruiz", phone: "322-253-1327" });
+  assert.equal(r.body.phone, "322 253 1327");
+  const o = await admin.call("POST", "/admin/offices", { name: "Sede Melgar", department: "Tolima", city: "Melgar", phone: "6082614172" });
+  assert.equal(o.body.phone, "608 261 4172");
 });
