@@ -89,7 +89,7 @@
     <header class="topbar"><div class="brand"><img class="logo" src="logo-t.png" alt="" width="44" height="44" /><div><h1>Firma electrónica</h1><p class="tagline">TecjuridicosApp</p></div></div></header>
     <main class="public-wrap">
       <div id="ps-msg" class="status" hidden></div>
-      <section id="ps-doc" class="panel" hidden>
+      <section id="ps-doc" class="panel" data-step="Leer el documento" hidden>
         <h2 id="ps-title"></h2>
         <p id="ps-intro" class="hint"></p>
         <article id="ps-text" class="document"></article>
@@ -104,7 +104,7 @@
       <section id="ps-sign" class="panel" hidden>
         <h3 class="panel-title">Firmar</h3>
         <p class="hint" id="ps-otp-note"></p>
-        <form id="ps-form">
+        <form id="ps-form" data-step="Código, nombre y firma">
           <div class="grid2">
             <label>Código de verificación (6 dígitos) <input name="otp" inputmode="numeric" maxlength="6" pattern="\d{6}" required autocomplete="one-time-code" /></label>
             <label>Nombre completo <input name="typed_name" required /></label>
@@ -1557,6 +1557,7 @@
   <script src="display.js"></script>
   <script src="help.js"></script>
   <script src="email-suggest.js"></script>
+  <script src="page-nav.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

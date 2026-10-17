@@ -19,7 +19,7 @@
   <header class="topbar"><div class="brand"><img class="logo" src="logo-t.png" alt="" width="44" height="44" /><div><h1>Firma electrónica</h1><p class="tagline">TecjuridicosApp</p></div></div></header>
   <main class="public-wrap">
     <div id="msg" class="status" hidden></div>
-    <section id="doc" class="panel" hidden>
+    <section id="doc" class="panel" data-step="Leer el documento" hidden>
       <h2 id="title"></h2>
       <p id="intro" class="hint"></p>
       <article id="doc-text" class="document"></article>
@@ -37,11 +37,11 @@
         <li>Elija por dónde recibir el código de verificación y pídalo.</li>
         <li>Escriba el código, su nombre y dibuje su firma.</li>
       </ol>
-      <div class="toolbar">
+      <div class="toolbar" data-step="Pedir el código de verificación">
         <label>Recibir el código por <select id="otp-channel"></select></label>
         <button id="otp-btn" type="button">Enviarme el código</button>
       </div>
-      <form id="sign-form">
+      <form id="sign-form" data-step="Código, nombre y firma">
         <div class="grid2">
           <label>Código de 6 dígitos <input name="otp" inputmode="numeric" maxlength="6" required autocomplete="one-time-code" /></label>
           <label>Nombre completo <input name="typed_name" required /></label>

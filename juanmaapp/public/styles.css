@@ -1008,3 +1008,9 @@ section.sec-current { scroll-margin-top: 64px; }
   .nav-version { position: static; margin: 0; padding: 8px 12px; background: none; box-shadow: none; white-space: nowrap; align-self: center; }
   .nav-version-bar { display: none; }
 }
+
+/* ---------- Change 64: Atrás / Adelante inside every window ---------- */
+dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transparent); margin: 12px 0 0; padding-bottom: 0; bottom: -20px; }
+.page-nav { align-items: center; }
+.page-nav-step { flex: 1; text-align: center; font-size: .85rem; color: var(--text-muted); min-width: 0; }
+.step-current { box-shadow: 0 0 0 2px var(--select-ring); border-radius: 10px; background: color-mix(in srgb, var(--brand-blue) 4%, transparent); scroll-margin-top: 16px; }

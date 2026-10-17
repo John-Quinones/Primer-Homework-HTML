@@ -551,7 +551,8 @@ function syncPageNav() {
   const n = window.navigation;
   if (!n || typeof n.canGoBack !== "boolean") return;
   $$('.page-nav [data-action="go-back"]').forEach((b) => (b.disabled = !n.canGoBack));
-  $$('.page-nav [data-action="go-forward"]').forEach((b) => (b.disabled = !n.canGoForward));
+  const reopen = !!dlgNav && dlgNav.forward.some((d) => !d.open);
+  $$('.page-nav [data-action="go-forward"]').forEach((b) => (b.disabled = !n.canGoForward && !reopen));
 }
 window.addEventListener("hashchange", syncPageNav);
 syncPageNav();
@@ -1147,6 +1148,71 @@ function openDialog(dialog, title, values = {}) {
   dialog.showModal();
 }
 
+// ---------- Change 64: Atrás / Adelante inside every window (dialog) ----------
+// Atrás closes the window WITHOUT clearing what was typed and returns to the window it came from
+// (or to the screen); Adelante reopens it exactly as it was. A window opened right after another
+// one was saved (e.g. «Enviar a firma» → «Firma en persona») counts as its next step.
+var dlgNav = { forward: [], lastClosed: null, lastClosedAt: 0, navigating: false };
+const NO_DLG_NAV = new Set(["ask-dialog"]); // yes/no questions answer with their own buttons
+const nativeShowModal = HTMLDialogElement.prototype.showModal;
+HTMLDialogElement.prototype.showModal = function () {
+  if (!dlgNav.navigating) {
+    const below = $$("dialog[open]").filter((d) => d !== this).pop();
+    const recent = Date.now() - dlgNav.lastClosedAt < 2500 ? dlgNav.lastClosed : null;
+    this._navPrev = below || (recent !== this ? recent : null);
+    dlgNav.forward = dlgNav.forward.filter((d) => d !== this); // opened anew: no stale "Adelante" to it
+  }
+  const r = nativeShowModal.call(this);
+  syncDlgNav();
+  return r;
+};
+for (const dlg of $$("dialog")) {
+  if (NO_DLG_NAV.has(dlg.id)) continue;
+  const nav = document.createElement("nav");
+  nav.className = "page-nav dlg-nav";
+  nav.setAttribute("aria-label", "Navegación de la ventana");
+  nav.innerHTML = '<button type="button" class="mini" data-dlg-nav="back" title="Volver sin borrar lo escrito">‹ Atrás</button>'
+    + '<button type="button" class="mini" data-dlg-nav="forward" title="Volver a abrir la ventana tal como la dejó">Adelante ›</button>';
+  dlg.append(nav);
+  // Only a window closed by saving leads into the next one; one closed by hand does not.
+  dlg.addEventListener("close", () => {
+    if (Date.now() - (dlg._savedAt || 0) < 1500) { dlgNav.lastClosed = dlg; dlgNav.lastClosedAt = Date.now(); }
+    syncDlgNav();
+  });
+}
+function reopenDialog(dlg) {
+  dlgNav.navigating = true;
+  try { if (!dlg.open) dlg.showModal(); } finally { dlgNav.navigating = false; }
+}
+function dialogBack(dlg) {
+  if (dlg.dataset.forced) return; // a forced password change cannot be skipped
+  const prev = dlg._navPrev;
+  dlgNav.forward.push(dlg);
+  dlg.close("back");
+  if (prev && prev.isConnected && !prev.open) reopenDialog(prev);
+  syncDlgNav();
+}
+function dialogForward() {
+  const next = dlgNav.forward.pop();
+  if (next) reopenDialog(next);
+  syncDlgNav();
+}
+function syncDlgNav() {
+  const canFwd = dlgNav.forward.some((d) => !d.open);
+  $$('[data-dlg-nav="forward"]').forEach((b) => (b.disabled = !canFwd));
+  $$('[data-dlg-nav="back"]').forEach((b) => (b.disabled = !!b.closest("dialog")?.dataset.forced));
+  if (typeof syncPageNav === "function") syncPageNav();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-dlg-nav]");
+  if (!b) return;
+  e.preventDefault();
+  if (b.dataset.dlgNav === "back") dialogBack(b.closest("dialog"));
+  else dialogForward();
+});
+// Changing screens forgets windows closed with Atrás on the previous screen.
+window.addEventListener("hashchange", () => { dlgNav.forward = []; syncDlgNav(); });
+
 // Dialog forms close on submit by default; keep them open until the save succeeds.
 function wireDialog(dialog, onSave) {
   const form = $("form", dialog);
@@ -1155,6 +1221,7 @@ function wireDialog(dialog, onSave) {
     e.preventDefault();
     try {
       await onSave(form);
+      dialog._savedAt = Date.now();
       dialog.close();
     } catch (err) {
       const p = $(".form-error", dialog);
@@ -1725,7 +1792,7 @@ document.addEventListener("click", (e) => {
     "goto-sec": () => goToSection(btn.dataset.sec),
     "go-sec": () => goToSection(btn.dataset.sec),
     "go-back": () => history.back(),
-    "go-forward": () => history.forward(),
+    "go-forward": () => (dlgNav.forward.some((d) => !d.open) ? dialogForward() : history.forward()),
     "open-case": () => { location.hash = `#expediente-${id}`; },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
