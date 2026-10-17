@@ -177,3 +177,31 @@ test("a judgment that was not found is researched again", async () => {
   await call("POST", "/jurisprudencia/analyze", { reference: "T-999 de 2021" });
   assert.equal(stub.calls.length, 2);
 });
+
+test("AI errors without an HTTP status say what happened instead of 'undefined'", async () => {
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const { apiError } = await import("../src/jurisprudence-routes.js");
+  const mid = new Anthropic.APIError(undefined, { type: "error", error: { type: "invalid_request_error", message: "bad tool" } }, undefined, undefined, "invalid_request_error");
+  const [s1, m1] = apiError(mid);
+  assert.equal(s1, 502);
+  assert.match(m1, /invalid_request_error\): bad tool/);
+  assert.doesNotMatch(m1, /undefined/);
+  const [, m2] = apiError(new Anthropic.APIError(undefined, { error: { type: "overloaded_error" } }, undefined, undefined, "overloaded_error"));
+  assert.match(m2, /saturado/);
+  const [s3, m3] = apiError(new Anthropic.APIConnectionError({ cause: new Error("getaddrinfo ENOTFOUND api.anthropic.com") }));
+  assert.equal(s3, 502);
+  assert.match(m3, /ENOTFOUND/);
+  assert.match(apiError(new Anthropic.APIConnectionTimeoutError())[1], /tiempo agotado/);
+});
+
+test("a mid-stream overload is retried once; a bad request is not", async () => {
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const { withRetry } = await import("../src/jurisprudence.js");
+  let n = 0;
+  const overloaded = () => new Anthropic.APIError(undefined, { error: { type: "overloaded_error" } }, undefined, undefined, "overloaded_error");
+  assert.equal(await withRetry(async () => { if (n++ === 0) throw overloaded(); return "ok"; }, 0), "ok");
+  n = 0;
+  const bad = new Anthropic.APIError(undefined, { error: { type: "invalid_request_error" } }, undefined, undefined, "invalid_request_error");
+  await assert.rejects(withRetry(async () => { n++; throw bad; }, 0));
+  assert.equal(n, 1);
+});

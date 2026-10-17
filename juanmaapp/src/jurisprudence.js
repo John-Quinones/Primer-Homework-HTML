@@ -85,6 +85,22 @@ export function lastJsonBlock(text) {
   return JSON.parse(blocks.at(-1)[1]);
 }
 
+// An error sent in the middle of a streamed answer (no HTTP status: overloaded,
+// internal error, dropped connection) is not retried by the SDK; try once more.
+const TRANSIENT = new Set(["overloaded_error", "api_error"]);
+export async function withRetry(run, waitMs = 2000) {
+  try {
+    return await run();
+  } catch (err) {
+    const midStream = err instanceof Anthropic.APIError && err.status === undefined && !(err instanceof Anthropic.APIUserAbortError);
+    const type = err?.type || err?.error?.error?.type;
+    if (!midStream || (type && !TRANSIENT.has(type))) throw err;
+    console.error("Reintento de jurisprudencia tras error a mitad de respuesta:", type || err.message);
+    await new Promise((r) => setTimeout(r, waitMs));
+    return run();
+  }
+}
+
 /**
  * Official Corte Constitucional page for a reference like "T-760 de 2008",
  * "C-355/06" or "SU-214 de 2016", so the model reads it without searching.
@@ -108,7 +124,7 @@ async function research(prompt, { maxSearches = 6, maxFetches = 6 } = {}) {
   const messages = [{ role: "user", content: prompt }];
   const content = [];
   for (let i = 0; i < 5; i++) {
-    const msg = await client.beta.messages.stream({
+    const msg = await withRetry(() => client.beta.messages.stream({
       model: MODEL,
       max_tokens: 32000,
       betas: ["server-side-fallback-2026-07-01"],
@@ -117,7 +133,7 @@ async function research(prompt, { maxSearches = 6, maxFetches = 6 } = {}) {
       system: SYSTEM,
       tools,
       messages,
-    }).finalMessage();
+    }).finalMessage());
 
     content.push(...msg.content);
     if (msg.stop_reason === "refusal") throw new Error("El modelo no pudo atender esta consulta.");
@@ -186,7 +202,7 @@ If you cannot find it on an official site, return {"found": false, "notes": "why
 const flat = (x) => String(x || "").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 
 export async function analyzeText({ text, reference }) {
-  const msg = await client.beta.messages.stream({
+  const msg = await withRetry(() => client.beta.messages.stream({
     model: MODEL,
     max_tokens: 32000,
     betas: ["server-side-fallback-2026-07-01"],
@@ -206,7 +222,7 @@ Return:
  "legal_problem": "", "facts": "", "ratio_decidendi": "", "decision": "", "dissents": "or null",
  "cited_norms": [""], "summary": "150-250 palabras", "key_quotes": [{"text": "verbatim", "section": ""}], "notes": ""}
 \`\`\`` }],
-  }).finalMessage();
+  }).finalMessage());
   if (msg.stop_reason === "refusal") throw new Error("El modelo no pudo atender esta consulta.");
   const data = lastJsonBlock(msg.content.filter((b) => b.type === "text").map((b) => b.text).join(""));
   // Keep only quotes that really appear in the text.

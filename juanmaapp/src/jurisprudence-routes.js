@@ -17,11 +17,20 @@ const proofOk = (url, proof) => {
 };
 const withProof = (item) => (item?.verified && item.url ? { ...item, proof: proofFor(item.url) } : item);
 
-function apiError(err) {
+export function apiError(err) {
   if (/authentication method/i.test(err.message || "")) return [500, "El servidor no tiene configurada la clave de Anthropic (ANTHROPIC_API_KEY)."];
   if (err instanceof Anthropic.AuthenticationError) return [500, "Falta o es inválida la clave de Anthropic."];
   if (err instanceof Anthropic.RateLimitError) return [429, "Demasiadas consultas seguidas. Intente en un momento."];
-  if (err instanceof Anthropic.APIError) return [502, `Error del servicio de IA (${err.status}).`];
+  if (err instanceof Anthropic.APIConnectionTimeoutError) return [504, "El servicio de IA tardó demasiado en responder (tiempo agotado). Intente de nuevo."];
+  if (err instanceof Anthropic.APIConnectionError) return [502, `No se pudo conectar con el servicio de IA${err.cause?.message ? ` (${err.cause.message})` : ""}.`];
+  if (err instanceof Anthropic.APIError) {
+    // Errors sent in the middle of a streamed answer carry no HTTP status; the reason is in the body.
+    const type = err.type || err.error?.error?.type || "";
+    const detail = err.error?.error?.message || "";
+    if (type === "overloaded_error") return [503, "El servicio de IA está saturado en este momento. Intente en unos minutos."];
+    const what = [err.status, type].filter(Boolean).join(", ") || "sin código";
+    return [502, `Error del servicio de IA (${what})${detail ? `: ${detail}` : ""}.`];
+  }
   return [500, "Error interno del servidor."]; // details stay in the log (audit A10-001)
 }
 
