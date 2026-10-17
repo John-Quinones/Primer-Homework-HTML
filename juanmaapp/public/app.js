@@ -217,10 +217,18 @@ function showAuth(status = {}) {
   }
 }
 
+// Version 2.13: a case-law search sent from the test link ("#jurisprudencia?q=…") survives the sign-in,
+// also the round trip through Microsoft, which drops the address after "#".
+const JURIS_PENDING = "juanma.pendingJuris";
+if (/^#jurisprudencia\?/.test(location.hash)) try { sessionStorage.setItem(JURIS_PENDING, location.hash); } catch {}
+
 async function enterApp(user, { fresh = true } = {}) {
   me = user;
+  let pending = "";
+  try { pending = sessionStorage.getItem(JURIS_PENDING) || ""; sessionStorage.removeItem(JURIS_PENDING); } catch {}
   // A new sign-in starts on Inicio; a page reload keeps the current section.
-  if (fresh) history.replaceState(null, "", "#inicio");
+  if (pending) history.replaceState(null, "", location.pathname + location.search + pending);
+  else if (fresh) history.replaceState(null, "", "#inicio");
   await loadSessionData();
   $("#auth-screen").hidden = true;
   $("#app-root").hidden = false;
@@ -533,7 +541,7 @@ const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
   const m = location.hash.match(/^#(cliente|expediente)-(\d+)(?:-([a-z]+))?$/);
   if (m) return { name: m[1], id: Number(m[2]), sec: m[3] || "" };
-  const n = location.hash.slice(1);
+  const n = location.hash.slice(1).split("?")[0]; // "#jurisprudencia?q=…" carries a search (version 2.13)
   return { name: VIEWS.includes(n) ? n : "inicio" };
 }
 function showView() {
@@ -2431,12 +2439,64 @@ function showJTab(name) {
   $$("[data-jpanel]").forEach((p) => (p.hidden = p.dataset.jpanel !== name));
   if (name === "guardadas") guarded(renderSaved);
 }
-$(".tabs").addEventListener("click", (e) => {
+$("#juris-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("[data-jtab]");
   if (b) showJTab(b.dataset.jtab);
 });
 
-async function renderJurisprudencia() {}
+// Version 2.13: the test link cannot open the courts' sites, so «Buscar» and «Verificar citas» send the user
+// to the app on the server with the search already written ("#jurisprudencia?q=…"), where it runs at once.
+const SERVER_URL = (window.JUANMA_SERVER_URL || "").replace(/\/+$/, "");
+const JURIS_PARAMS = { q: "query", corte: "court", sala: "sala", desde: "yearFrom", hasta: "yearTo" };
+function serverJurisLink(params) {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+  return `${SERVER_URL}/#jurisprudencia${q.toString() ? "?" + q : ""}`;
+}
+function searchLink() {
+  const f = formData(jSearch);
+  return serverJurisLink(Object.fromEntries(Object.entries(JURIS_PARAMS).map(([k, name]) => [k, (f[name] || "").trim()])));
+}
+// Long documents do not fit in an address: they are opened only if short enough, otherwise pasted there.
+const VERIFY_LINK_MAX = 6000;
+function verifyLink() {
+  const text = $("#j-verify-text").value.trim();
+  return serverJurisLink({ tab: "verificar", texto: text.length <= VERIFY_LINK_MAX ? text : "" });
+}
+function serverNote(sel, href, label, extra = "") {
+  const el = $(sel);
+  el.hidden = false;
+  el.innerHTML = `<p><strong>En este enlace de pruebas no se puede consultar las relatorías oficiales.</strong>
+    Los sitios de la Corte Constitucional, la Corte Suprema, el Consejo de Estado y la Rama Judicial solo se consultan desde la App instalada en el servidor (Azure), con su usuario de siempre.${extra}</p>
+    ${SERVER_URL ? `<a class="button" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${label} ›</a>` : ""}`;
+}
+function showServerNotes() {
+  serverNote("#j-search-server", searchLink(), "Buscar en la App del servidor", " El botón abre allí esta misma búsqueda y la ejecuta.");
+  const long = $("#j-verify-text").value.trim().length > VERIFY_LINK_MAX;
+  serverNote("#j-verify-server", verifyLink(), "Verificar en la App del servidor",
+    long ? " El texto es largo para enviarlo en el enlace: cópielo y péguelo allí." : " El botón lleva allí el texto pegado y verifica sus citas.");
+}
+
+async function renderJurisprudencia() {
+  if (WEB) return showServerNotes();
+  const m = location.hash.match(/^#jurisprudencia\?(.*)$/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search + "#jurisprudencia"); // run it only once
+  const p = new URLSearchParams(m[1]);
+  if (p.get("tab") === "verificar") {
+    showJTab("verificar");
+    if (p.get("texto")) { $("#j-verify-text").value = p.get("texto"); await detectAndVerify(); }
+    return;
+  }
+  showJTab("buscar");
+  jSearch.reset();
+  jSearch.court.value = COURT_NAMES[p.get("corte")] ? p.get("corte") : "";
+  jSearch.court.dispatchEvent(new Event("change"));
+  if (CSJ_SALAS.includes(p.get("sala"))) jSearch.sala.value = p.get("sala");
+  jSearch.yearFrom.value = p.get("desde") || "";
+  jSearch.yearTo.value = p.get("hasta") || "";
+  jSearch.query.value = p.get("q") || "";
+  if (jSearch.query.value) jSearch.requestSubmit();
+}
 
 const verifiedBadge = (v) => v
   ? '<span class="badge ok">✓ Fuente oficial verificada</span>'
@@ -2459,8 +2519,17 @@ function setBox(sel, text, isError = false) {
   el.classList.toggle("error", isError);
 }
 
+jSearch.addEventListener("input", () => WEB && showServerNotes());
+jSearch.addEventListener("change", () => WEB && showServerNotes());
+$("#j-verify-text").addEventListener("input", () => WEB && showServerNotes());
+
 jSearch.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (WEB) { // nothing to search here: point at the server button instead of failing
+    showServerNotes();
+    $("#j-search-server a")?.focus();
+    return;
+  }
   const btn = $("button", jSearch);
   btn.disabled = true;
   $("#j-results").innerHTML = "";
@@ -2552,6 +2621,11 @@ const VERDICT = {
 const chip = ([cls, label]) => (label ? `<span class="badge ${cls}">${label}</span>` : "");
 
 async function detectAndVerify() {
+  if (WEB) {
+    showServerNotes();
+    $("#j-verify-server a")?.focus();
+    return;
+  }
   const text = $("#j-verify-text").value;
   const cites = window.JuanmaCitations.extractCitations(text);
   $("#j-detect-info").textContent = cites.length ? `${cites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";

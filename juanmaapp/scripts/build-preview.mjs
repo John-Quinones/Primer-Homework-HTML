@@ -19,6 +19,8 @@ const read = (p) => readFileSync(path.join(root, p), "utf8");
 const safe = (js) => js.replace(/<\/script/gi, "<\\/script");
 
 const PDFJS = pdfjsClassic(root);
+// The app on the server (Azure); the link sends there what it cannot do itself.
+const SERVER_URL = process.env.JUANMA_SERVER_URL || "https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net";
 const logo = "data:image/png;base64," + readFileSync(path.join(root, "public/logo-t.png")).toString("base64");
 let html = read("public/index.html");
 
@@ -60,6 +62,8 @@ window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: D
     `<script>window.JUANMA_VERSION = ${JSON.stringify({ ...readVersion(), news: readNews() })};</script>`,
     // Address of the published link, for signers' links (#firmar-CODE); filled only in the web-link version below.
     `<script>window.JUANMA_LINK_URL = "";</script>`,
+    // The app on the server, for what the link cannot do (case-law search, version 2.13).
+    `<script>window.JUANMA_SERVER_URL = ${JSON.stringify(SERVER_URL)};</script>`,
     `<script>window.JUANMA_PROMPT = ${JSON.stringify(read("prompts/nomosai-system-prompt.md"))};</script>`,
     `<script>${safe(read("public/web-store.js"))}</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,

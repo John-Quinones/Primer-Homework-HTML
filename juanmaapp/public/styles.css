@@ -477,6 +477,10 @@ dialog h3 { margin: 0 0 14px; color: var(--heading); font-size: 1rem; }
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .status { padding: 8px 12px; border-radius: 6px; background: var(--surface-muted); margin: 10px 0; font-size: .9rem; }
 .status.error { color: var(--error); }
+/* Version 2.13: test-link notice that sends a case-law search to the server app. */
+.server-note { border-left: 4px solid var(--brand-blue, #027cc6); margin: 12px 0; }
+.server-note p { margin: 0 0 10px; line-height: 1.5; }
+.server-note a.button { display: inline-block; text-decoration: none; }
 .audit { margin: 10px 0; font-size: .88rem; }
 .audit ul { margin: 6px 0 0; padding-left: 20px; }
 .audit .ok { color: var(--ok); font-weight: 600; }

@@ -607,7 +607,7 @@
       <section id="view-jurisprudencia" class="view" hidden>
         <div class="view-head"><h2>Jurisprudencia</h2></div>
         <p class="hint">Consulta solo los sitios oficiales de la Corte Constitucional, la Corte Suprema de Justicia, el Consejo de Estado y la Rama Judicial (tribunales). Una sentencia se marca <span class="badge ok">Fuente oficial verificada</span> únicamente si se encontró en esos sitios durante la consulta.</p>
-        <div class="tabs" role="tablist">
+        <div class="tabs" role="tablist" id="juris-tabs">
           <button role="tab" data-jtab="buscar" class="active">Buscar</button>
           <button role="tab" data-jtab="analizar">Analizar sentencia</button>
           <button role="tab" data-jtab="verificar">Verificar citas</button>
@@ -633,6 +633,7 @@
             </div>
             <button class="primary">Buscar sentencias</button>
           </form>
+          <div id="j-search-server" class="panel server-note" hidden></div>
           <div id="j-search-status" class="status" hidden></div>
           <div id="j-results" class="results"></div>
         </div>
@@ -670,6 +671,7 @@
               <span id="j-detect-info" class="muted"></span>
             </div>
           </div>
+          <div id="j-verify-server" class="panel server-note" hidden></div>
           <ul id="j-verify-list" class="verify-list"></ul>
         </div>
 
