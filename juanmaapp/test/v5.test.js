@@ -87,7 +87,7 @@ test("templates: starter set, case data, uploads, permissions", async () => {
   assert.equal((await abo.call("DELETE", `/templates/${md.body.id}`)).status, 403);
   assert.equal((await admin.call("DELETE", `/templates/${md.body.id}`)).status, 204);
   const roles = (await admin.call("GET", "/admin/roles")).body;
-  assert.ok(roles.matrix["Director Jurídico"].includes("templates.manage"));
+  assert.ok(!roles.matrix["Director Jurídico"].includes("templates.manage"), "managing templates is for Gerencia only (version 2.16)");
   assert.ok(!roles.matrix.Abogado.includes("templates.manage"));
 });
 

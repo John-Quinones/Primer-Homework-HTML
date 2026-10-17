@@ -125,8 +125,8 @@ const VIEW_PERMS = {
 
 // Only Gerencia deletes (change 24); every delete button carries data-action="delete-…" or data-jact="delete-…".
 const isGerencia = () => me?.role === "Gerencia";
-// Gerencia-only permissions (src/auth.js GERENCIA_ONLY): deleting, and creating process types, sub-processes and fields.
-const GERENCIA_PERMS = ["clients.delete", "cases.delete", "catalog.manage"];
+// Gerencia-only permissions (src/auth.js GERENCIA_ONLY): deleting, creating process types, sub-processes and fields, and managing templates.
+const GERENCIA_PERMS = ["clients.delete", "cases.delete", "catalog.manage", "templates.manage"];
 
 // What each shortcut of the side menu does (shown under its name, and as a tooltip).
 const NAV_DESC = {
@@ -2036,6 +2036,9 @@ document.addEventListener("click", (e) => {
       dlg.showModal();
     },
     "prepare-blanks": async () => tplActive?.format === "docx" && openBlanksDialog(tplActive),
+    "download-template": async () => downloadTemplate(id),
+    "replace-template": async () => { replaceFor = id; $("#tpl-replace-file").click(); },
+    "tpl-markers": async () => openMarkers(),
     "case-docs": async () => openCaseDocs(id),
     "delete-casedoc": async () => {
       if (!(await ask({ title: "Eliminar documento", message: "El documento se borrará del expediente.", okLabel: "Eliminar", danger: true }))) return;
@@ -3110,7 +3113,10 @@ function renderTplList() {
     <ul class="tpl-items">${ts.map((t) => `<li><button type="button" class="tpl-item ${tplActive?.id === t.id ? "selected" : ""}" data-tpl="${t.id}">
       <strong>${escapeHtml(t.name)}</strong>
       <span>${t.format === "docx" ? "Word" : "Texto"}${t.builtin ? " · ejemplo TecjuridicosApp" : ""}${t.description ? " · " + escapeHtml(t.description) : ""}</span></button>
-      ${can("templates.manage") ? `<span class="tpl-tools">${t.format === "markdown" ? `<button class="mini" data-action="edit-template" data-id="${t.id}">Editar</button>` : ""}
+      ${can("templates.manage") ? `<span class="tpl-tools">
+        <button class="mini" data-action="download-template" data-id="${t.id}" title="Descarga la plantilla en Word, con sus {{marcadores}}, para actualizarla">Descargar</button>
+        <button class="mini" data-action="replace-template" data-id="${t.id}" title="Sube el Word actualizado en lugar de esta plantilla">Reemplazar</button>
+        ${t.format === "markdown" ? `<button class="mini" data-action="edit-template" data-id="${t.id}">Editar</button>` : ""}
         <button class="mini danger" data-action="delete-template" data-id="${t.id}" aria-label="Eliminar plantilla">✕</button></span>` : ""}</li>`).join("")}</ul>`).join("")
     || '<p class="empty">No hay plantillas con ese filtro.</p>';
 }
@@ -3442,6 +3448,80 @@ $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
   // A firm's own form usually has blanks instead of {{variables}}: offer to map them.
   if (tplActive?.format === "docx" && !tplActive.vars.length) await openBlanksDialog(tplActive);
 }));
+// ----- Version 2.16: Gerencia downloads a template to update it in Word, and uploads it back -----
+/** The template as it is, {{markers}} included: the firm's own Word file, or a text template turned into Word. */
+async function downloadTemplate(id) {
+  const t = await api("GET", `/templates/${id}`);
+  if (t.format === "docx") {
+    const f = await api("GET", `/templates/${id}/file`);
+    const name = /\.docx$/i.test(f.filename || "") ? f.filename : `${safeName(t.name)}.docx`;
+    return saveFile(name, new Blob([D.b64ToBytes(f.base64)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+  }
+  await saveFile(`${safeName(t.name)}.docx`, D.markdownToDocx(t.body || "", t.name));
+}
+let replaceFor = null;
+$("#tpl-replace-file").addEventListener("change", (e) => guarded(async () => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  const id = replaceFor;
+  replaceFor = null;
+  if (!file || !id) return;
+  if (!file.name.toLowerCase().endsWith(".docx")) throw new Error("Use el archivo de Word (.docx) actualizado.");
+  if (file.size > 8 * 1024 * 1024) throw new Error("El archivo debe pesar menos de 8 MB.");
+  const t = tplList.find((x) => x.id === id) || (await api("GET", `/templates/${id}`));
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const vars = D.docxVariables(bytes);
+  if (!(await ask({ title: "Reemplazar plantilla", okLabel: "Reemplazar",
+    message: `“${t.name}” quedará con el Word “${file.name}” (${vars.length} marcador(es) {{…}}). Los documentos ya creados con la versión anterior no cambian.` }))) return;
+  await api("PUT", `/templates/${id}`, { filename: file.name, file_base64: bytesToB64(bytes),
+    description: vars.length ? `${vars.length} variable(s)` : "Sin variables {{…}}: se descargará tal cual" });
+  toast(`Plantilla “${t.name}” actualizada con “${file.name}”.`);
+  await renderBorradores();
+  await openTemplate(id);
+}));
+/** Every {{marker}} a template can use: the fixed ones and the custom fields of the catalog. */
+async function markerList() {
+  if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
+  const list = tplMeta.variables.map((v) => ({ key: v.key, label: v.label, group: v.group }));
+  try {
+    const seen = new Set(list.map((v) => v.key));
+    for (const c of await api("GET", "/catalog")) for (const f of c.fields || []) {
+      const key = `campo.${f.label}`;
+      if (!seen.has(key)) { seen.add(key); list.push({ key, label: f.label, group: "Campos del tipo de proceso" }); }
+    }
+  } catch {}
+  return list;
+}
+let markersShown = [];
+async function openMarkers() {
+  markersShown = await markerList();
+  $("#markers-search").value = "";
+  renderMarkers();
+  $("#markers-dialog").showModal();
+}
+function renderMarkers() {
+  const q = window.JuanmaCombo.norm($("#markers-search").value);
+  const rows = markersShown.filter((v) => !q || window.JuanmaCombo.norm(`${v.group} ${v.label} ${v.key}`).includes(q));
+  let group = "";
+  $("#markers-dialog tbody").innerHTML = rows.map((v) => {
+    const head = v.group !== group ? `<tr class="group-row"><th colspan="3">${escapeHtml((group = v.group))}</th></tr>` : "";
+    return `${head}<tr><td>${escapeHtml(v.label)}</td><td><code>{{${escapeHtml(v.key)}}}</code></td>
+      <td><button type="button" class="mini" data-copy-marker="{{${escapeHtml(v.key)}}}">Copiar</button></td></tr>`;
+  }).join("") || '<tr><td colspan="3" class="empty">Ningún marcador coincide.</td></tr>';
+}
+$("#markers-search").addEventListener("input", renderMarkers);
+$("#markers-dialog").addEventListener("click", (e) => {
+  const c = e.target.closest("[data-copy-marker]");
+  if (c) return guarded(async () => toast((await copyText(c.dataset.copyMarker)) ? `${c.dataset.copyMarker} copiado. Péguelo en su Word.` : "No se pudo copiar: selecciónelo y cópielo a mano."));
+  if (e.target.closest("[data-markers-download]")) guarded(async () => {
+    const groups = new Map();
+    for (const v of markersShown) { if (!groups.has(v.group)) groups.set(v.group, []); groups.get(v.group).push(v); }
+    const md = "# MARCADORES DISPONIBLES PARA LAS PLANTILLAS\n\nEscriba cada marcador tal cual, con las dos llaves, donde debe ir el dato.\n\n"
+      + [...groups].map(([g, vs]) => `## ${g}\n\n${vs.map((v) => `${v.label}: {{${v.key}}}`).join("\n")}`).join("\n\n") + "\n";
+    await saveFile("Marcadores disponibles TecjuridicosApp.docx", D.markdownToDocx(md, "Marcadores disponibles"));
+  });
+});
+
 // Word forms (minutas): each blank (____, XXXX, [NOMBRE], highlighted text) gets a client or case datum.
 const bytesToB64 = (bytes) => {
   let bin = "";

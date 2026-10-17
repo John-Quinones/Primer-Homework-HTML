@@ -983,11 +983,15 @@
       if ("name" in b) t.name = str(b.name) || fail("Escriba el nombre de la plantilla.");
       if ("category" in b) { TPL.categories.includes(b.category) || fail("Categoría no válida."); t.category = b.category; }
       if ("description" in b) t.description = str(b.description);
-      if ("body" in b && t.format === "markdown") t.body = String(b.body).trim() ? String(b.body) : fail("La plantilla está vacía.");
-      if (b.file_base64 && t.format === "docx") {
+      if ("body" in b && t.format === "markdown" && !b.file_base64) t.body = String(b.body).trim() ? String(b.body) : fail("La plantilla está vacía.");
+      // Replacing with an updated Word file (version 2.16): a text template becomes a Word one.
+      if (b.file_base64) {
         atob(String(b.file_base64).slice(0, 8)).slice(0, 2) !== "PK" && fail("El archivo no es un documento de Word (.docx) válido.");
         b.file_base64.length > 11200000 && fail("El archivo debe pesar menos de 8 MB.");
         s.blobs[`tpl-${t.id}`] = b.file_base64;
+        t.filename = str(b.filename) || t.filename || `${t.name}.docx`;
+        t.format = "docx";
+        t.body = null;
       }
       t.updated_at = stamp();
       return { ...tplMetaOut(t), body: t.body };

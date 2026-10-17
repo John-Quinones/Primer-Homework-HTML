@@ -383,6 +383,8 @@
           <div class="toolbar" id="tpl-manage-bar">
             <button data-action="new-template">+ Nueva plantilla</button>
             <label class="file-btn" title="Suba sus minutas de Word: la app encuentra los espacios en blanco y los llena con los datos del cliente">Cargar minuta de Word o plantilla (.docx, .md, .txt)<input type="file" id="tpl-file" accept=".docx,.md,.txt" hidden /></label>
+            <button type="button" data-action="tpl-markers" title="Los {{marcadores}} que puede escribir en sus plantillas de Word para que la App los llene">Marcadores disponibles</button>
+            <input type="file" id="tpl-replace-file" accept=".docx" hidden />
           </div>
         </div>
         <div class="tabs" role="tablist" id="doc-tabs">
@@ -1222,6 +1224,22 @@
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button class="primary" value="save">Guardar campos</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Marcadores disponibles para las plantillas (versión 2.16) -->
+  <dialog id="markers-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>Marcadores disponibles</h3>
+      <p class="hint">Escriba el marcador tal cual, con las dos llaves, en su documento de Word (por ejemplo <code>{{cliente.nombre}}</code>). Al crear el documento desde un expediente, la App lo reemplaza por el dato. Lo que falte sale como [FILL: …] para completarlo a mano.</p>
+      <input type="search" id="markers-search" placeholder="Buscar marcador" aria-label="Buscar marcador" />
+      <div class="table-scroll">
+        <table class="data-table markers-table"><thead><tr><th>Dato</th><th>Marcador</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" data-markers-download>Descargar lista en Word</button>
+        <button value="cancel" formnovalidate class="primary">Cerrar</button>
       </div>
     </form>
   </dialog>
