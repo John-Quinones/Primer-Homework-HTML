@@ -1061,3 +1061,12 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 .hidden-users-bar .hidden-users-text { flex: 1 1 280px; }
 .hidden-users-bar .row-actions { display: flex; flex-wrap: wrap; gap: 8px; white-space: normal; }
 tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparent); }
+
+/* Version 2.17: upload box for templates (Gerencia) */
+.tpl-drop { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding: 14px 16px; border: 2px dashed var(--brand-blue, #027cc6);
+  border-radius: 14px; background: rgba(2, 124, 198, 0.06); color: var(--brand-primary, #002b6a); cursor: pointer; text-align: center; }
+.tpl-drop[hidden] { display: none; }
+.tpl-drop strong { font-size: 1rem; }
+.tpl-drop span { font-size: .85rem; opacity: .85; }
+.tpl-drop:hover, .tpl-drop.is-over { background: rgba(2, 124, 198, 0.14); }
+.tpl-drop:focus-within { outline: 3px solid var(--brand-blue, #027cc6); outline-offset: 3px; }

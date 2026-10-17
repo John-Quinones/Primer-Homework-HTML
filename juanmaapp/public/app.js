@@ -172,6 +172,7 @@ function applyPermissions() {
   if (createCat.disabled) createCat.checked = false;
   $("#portal-probe").hidden = !can("users.manage");
   $("#tpl-manage-bar").hidden = !can("templates.manage");
+  $("#tpl-drop").hidden = !can("templates.manage");
   $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
   $$('[data-tpl-out="mail"]').forEach((b) => (b.hidden = !can("mail.send")));
   $("#user-offices").textContent = can("scope.all") ? "Todas las oficinas" : `Oficina: ${me.offices.map((o) => o.name).join(", ")}`;
@@ -3448,6 +3449,19 @@ $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
   // A firm's own form usually has blanks instead of {{variables}}: offer to map them.
   if (tplActive?.format === "docx" && !tplActive.vars.length) await openBlanksDialog(tplActive);
 }));
+// Version 2.17: a visible box to upload a template (click or drop a file on it); same path as the toolbar button.
+const tplDrop = $("#tpl-drop");
+tplDrop.addEventListener("dragover", (e) => { e.preventDefault(); tplDrop.classList.add("is-over"); });
+tplDrop.addEventListener("dragleave", () => tplDrop.classList.remove("is-over"));
+tplDrop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  tplDrop.classList.remove("is-over");
+  if (!e.dataTransfer?.files?.length) return;
+  const input = $("#tpl-file");
+  input.files = e.dataTransfer.files;
+  input.dispatchEvent(new Event("change"));
+});
+
 // ----- Version 2.16: Gerencia downloads a template to update it in Word, and uploads it back -----
 /** The template as it is, {{markers}} included: the firm's own Word file, or a text template turned into Word. */
 async function downloadTemplate(id) {
