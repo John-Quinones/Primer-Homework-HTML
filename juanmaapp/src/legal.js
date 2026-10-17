@@ -12,7 +12,7 @@ export const FIRM = {
   brand: "TEC Jurídicos",
   legal_name: "Tecjuridicos S.A.S.",
   nit: "901.269.714-4",
-  address: "",
+  address: "Carrera 5 No. 29-32, Oficina 290, Centro Comercial La Quinta",
   city: "Ibagué (Tolima)",
   email: "gerencia@tecjuridicos.com",
   phone: "314 415 6914",
@@ -118,7 +118,7 @@ ${CONTACT()}
 </ul>
 
 <h3>10. Consultas y reclamos</h3>
-<p>El titular, sus causahabientes o su representante pueden presentar consultas y reclamos al correo ${F("email")} o por escrito en ${F("address")}, indicando su nombre, documento, datos de contacto, la descripción de lo que pide y los documentos que quiera hacer valer.</p>
+<p>El titular, sus causahabientes o su representante pueden presentar consultas y reclamos al correo ${F("email")} o por escrito en ${F("address")}, ${esc(FIRM.city)}, indicando su nombre, documento, datos de contacto, la descripción de lo que pide y los documentos que quiera hacer valer.</p>
 <ul>
   <li><strong>Consultas:</strong> se responden en máximo diez (10) días hábiles desde su recibo. Si no es posible, se informa el motivo y la nueva fecha, que no superará cinco (5) días hábiles adicionales.</li>
   <li><strong>Reclamos</strong> (corrección, actualización, supresión o incumplimiento): se responden en máximo quince (15) días hábiles, prorrogables por ocho (8) días hábiles más con aviso al titular. Si el reclamo está incompleto, se pide completarlo dentro de los cinco (5) días siguientes; pasados dos (2) meses sin respuesta, se entiende desistido. Mientras se tramita, el dato se marca como «reclamo en trámite».</li>
@@ -303,7 +303,7 @@ ${META(false)}
 <p>Conozco que la información negativa permanece en los bancos de datos por el doble del tiempo de la mora, sin exceder cuatro (4) años contados desde la fecha en que se pague o se extinga la obligación, conforme al artículo 13 de la Ley 1266 de 2008, modificado por la Ley 2157 de 2021, y que la información positiva permanece de manera indefinida.</p>
 
 <h3>5. Mis derechos</h3>
-<p>Puedo conocer, actualizar y rectificar la información reportada, y presentar peticiones, consultas y reclamos ante EL ACREEDOR, como fuente, y ante el operador. Las consultas se responden en máximo diez (10) días hábiles y los reclamos en máximo quince (15) días hábiles, prorrogables en los casos que prevé la ley. Si no recibo respuesta oportuna o no estoy conforme, puedo acudir a la Superintendencia de Industria y Comercio. Las peticiones a EL ACREEDOR se presentan a ${F("email")} o en ${F("address")}.</p>
+<p>Puedo conocer, actualizar y rectificar la información reportada, y presentar peticiones, consultas y reclamos ante EL ACREEDOR, como fuente, y ante el operador. Las consultas se responden en máximo diez (10) días hábiles y los reclamos en máximo quince (15) días hábiles, prorrogables en los casos que prevé la ley. Si no recibo respuesta oportuna o no estoy conforme, puedo acudir a la Superintendencia de Industria y Comercio. Las peticiones a EL ACREEDOR se presentan a ${F("email")} o en ${F("address")}, ${esc(FIRM.city)}.</p>
 
 <h3>6. Alcance y vigencia</h3>
 <p>Esta autorización es independiente de las demás autorizaciones de tratamiento de datos; puedo concederla o negarla sin que ello afecte las otras. Estará vigente mientras subsista cualquier obligación a mi cargo con EL ACREEDOR y durante el término de permanencia de la información que establece la ley. Su revocatoria no procede respecto de obligaciones vigentes o en mora, por existir un deber legal y contractual de reportar su estado.</p>`;
