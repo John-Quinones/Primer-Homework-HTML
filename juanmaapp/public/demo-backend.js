@@ -23,7 +23,7 @@
     const now = stamp();
     const st = { offices: [], users: [], matrix: JSON.parse(JSON.stringify(AUTH.matrix)), roles: AUTH.roles.map((name) => ({ name, builtin: true })),
       clients: [], categories: [], types: [], fields: [], cases: [], saved: [], courts: [], tasks: [], notes: [], acts: [], checks: [],
-      prefs: {}, log: [], templates: [], signs: [], consents: [], consentTexts: {}, blobs: {}, info: { created: now } };
+      prefs: {}, log: [], templates: [], signs: [], consents: [], blobs: {}, info: { created: now } };
     st.offices.push({ id: nextId(), name: "Ibagué", department: "Tolima", city: "Ibagué", address: "", phone: "", email: "", is_main: true });
     SEED.forEach(([name, types], i) => {
       const cat = { id: nextId(), name, sort: i };
@@ -54,7 +54,7 @@
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
     for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents"]) st[k] ||= [];
-    st.consentTexts ||= {}; // change 56: exact text of each answered authorization, by its SHA-256
+    delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
       if (c.person_type) continue;
@@ -70,6 +70,7 @@
     for (const r of st.signs) for (const e of r.events || []) e.at ??= e.created_at;
     for (const t of st.templates) if (t.builtin && t.body) t.body = t.body.replaceAll("JuanMaApp", "TecjuridicosApp");
     if (TPL.feeClause) for (const t of st.templates) if (t.builtin && t.body?.includes(TPL.feeClause[0])) t.body = t.body.replace(TPL.feeClause[0], TPL.feeClause[1]);
+    for (const [from, to] of TPL.firmFixes || []) for (const t of st.templates) if (t.builtin && t.body?.includes(from)) t.body = t.body.split(from).join(to);
     if (TPL.contractHead) for (const t of st.templates) if (t.builtin && t.body?.startsWith(TPL.contractHead[0])) t.body = TPL.contractHead[1] + t.body.slice(TPL.contractHead[0].length);
     // Starter templates added in later versions arrive once (one the firm deleted does not come back).
     if (!Array.isArray(st.info.seededTemplates)) st.info = { ...st.info, seededTemplates: st.templates.filter((t) => t.builtin).map((t) => t.name) };
@@ -439,18 +440,19 @@
   const consentClient = (id) => s.clients.find((x) => x.id === id && clientVisible(x)) || fail("El cliente no existe.");
   const consentsOut = (cid) => {
     const records = clone(s.consents.filter((r) => r.client_id === cid));
-    return { version: LEGAL.LEGAL_VERSION, items: LEGAL.CONSENT_ITEMS, methods: LEGAL.CONSENT_METHODS, status: LEGAL.consentStatus(records), records, requests: [] };
+    return { version: LEGAL.legalVersion().name, items: LEGAL.CONSENT_ITEMS, methods: LEGAL.CONSENT_METHODS, status: LEGAL.consentStatus(records), records, requests: [] };
   };
   async function recordConsents(c, answers, ctx) {
     const keys = LEGAL.CONSENT_ITEMS.map((i) => i.key).filter((k) => typeof answers[k] === "boolean");
     keys.length || fail("Marque o desmarque al menos una autorización.");
-    const at = stamp(), u = me();
+    const at = stamp(), u = ctx.byClient ? { id: null, name: "" } : me(); // the signer's own page has no signed-in user
     for (const key of keys) {
       const text = LEGAL.consentText(key), docSha = await shaText(text);
-      s.consentTexts[docSha] ||= { version: LEGAL.LEGAL_VERSION, item: key, text };
+      // The exact text, once per version, kept with the stored files (it does not fit in one database document).
+      s.blobs[`ctext-${docSha}`] ||= btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify({ version: LEGAL.legalVersion().name, item: key, text }))));
       const prev = s.consents.length ? s.consents[s.consents.length - 1].hash : "";
       const r = { id: nextId(), client_id: c.id, client_name: c.full_name, client_id_number: [c.id_type, c.id_number].filter(Boolean).join(" "), item: key,
-        granted: answers[key] ? 1 : 0, method: ctx.method, doc_version: LEGAL.LEGAL_VERSION, doc_sha256: docSha, at, ip: "", user_agent: str(ctx.user_agent).slice(0, 400),
+        granted: answers[key] ? 1 : 0, method: ctx.method, doc_version: LEGAL.legalVersion().name, doc_sha256: docSha, at, ip: "", user_agent: str(ctx.user_agent).slice(0, 400),
         typed_name: str(ctx.typed_name).slice(0, 200), typed_id: str(ctx.typed_id).slice(0, 40), signature_png: ctx.signature_png || "", note: str(ctx.note).slice(0, 1000),
         registered_by: u.id, registered_by_name: u.name, request_id: null, prev_hash: prev };
       r.hash = await shaText(LEGAL.consentCanonical(r, prev) + r.signature_png);
@@ -1133,12 +1135,23 @@
     const firm = paySettings().firm_name || "TEC Jurídicos";
     const link_text = [`${firm}: ${r.message || "le enviamos un documento para firmar electrónicamente."}`, "", `Documento: «${r.title}»`,
       link ? `Ábralo aquí: ${link}` : "", `Código de la solicitud: ${token} (si la página se lo pide, escríbalo en «¿Le enviaron un documento para firmar?»).`,
+      ...(signerClient(r, x) ? ["", `Políticas de datos personales (versión ${LEGAL.legalVersion().name}). En la página de firma decidirá por separado si acepta o no cada una:`,
+        ...LEGAL.CONSENT_ITEMS.map((i) => `☐ ${i.title}`)] : []),
       "", `En un mensaje aparte le llegará su código de verificación de 6 dígitos por ${VIA[codeVia]}.`].filter((l, i, a) => l || a[i - 1]).join("\n");
     const code_text = `${firm}: su código para firmar «${r.title.slice(0, 60)}» es ${otp}. Vence en ${OTP_HOURS} horas. No lo comparta.`;
     signEvent(r, x.id, "enlace_generado", `Enlace por ${VIA[linkVia]} (${linkVia === "email" ? maskMail(x.email) : maskTel(x.phone)}) y código por ${VIA[codeVia]} (${codeVia === "email" ? maskMail(x.email) : maskTel(x.phone)}); los envía ${me().name} desde su equipo.`);
     return { signer_id: x.id, name: x.name, ok: true, manual: true, token, otp, link, link_via: linkVia, code_via: codeVia,
       email: x.email, wa: PERSON.mobileDigits(x.phone), subject: `Documento para firmar: ${r.title}`, link_text, code_text, hours: OTP_HOURS };
   }
+  // Same as the server's clientForSigner: the signer is a client of the firm (same document, or the case's client with the same e-mail).
+  const digitsOf = (v) => String(v || "").replace(/\D/g, "");
+  const signerClient = (r, x) => {
+    const d = digitsOf(x.id_number);
+    if (d.length >= 5) { const c = s.clients.find((y) => digitsOf(y.id_number) === d); if (c) return c; }
+    const k = r.case_id && s.cases.find((y) => y.id === r.case_id);
+    const c = k && s.clients.find((y) => y.id === k.client_id);
+    return c && x.email && c.email && c.email.toLowerCase() === x.email.toLowerCase() ? c : null;
+  };
   async function bySignToken(token) {
     await syncSigns();
     const code = normSignToken(token);
@@ -1151,6 +1164,7 @@
     title: r.title, message: r.message, doc_kind: r.doc_kind, doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, doc_hash: r.doc_hash,
     request_status: r.status, signed: r.status === "completada",
     signer: { name: x.name, status: x.status, signed_at: x.signed_at, otp_channel: x.otp_channel, email: maskMail(x.email), phone: maskTel(x.phone) },
+    consent: x.status === "pendiente" && r.status === "enviada" && signerClient(r, x) ? { items: LEGAL.CONSENT_ITEMS, version: LEGAL.legalVersion().name } : undefined,
   });
   async function finishIfAll(r) {
     if (!r.signers.every((y) => y.status === "firmado")) return;
@@ -1210,6 +1224,8 @@
       (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(b.signature_png || "") || b.signature_png.length > 400000) && fail("Dibuje su firma.");
       str(b.typed_name).length >= 3 || fail("Escriba su nombre completo.");
       b.accept || fail("Debe aceptar el documento para firmarlo.");
+      const client = signerClient(r, x);
+      if (client) for (const i of LEGAL.CONSENT_ITEMS) typeof b.consents?.[i.key] === "boolean" || fail(`Responda si acepta o no: ${i.title}.`);
       if ((await shaText(`${x.id}:${String(b.otp ?? "").replace(/\D/g, "")}`)) !== x.otp_hash) {
         x.otp_attempts = (x.otp_attempts || 0) + 1;
         signEvent(r, x.id, "codigo_incorrecto", `Intento ${x.otp_attempts} de 5`);
@@ -1221,6 +1237,12 @@
         signed_at: stamp(), user_agent: navigator.userAgent.slice(0, 300), typed_name: str(b.typed_name), otp_hash: null });
       s.blobs[`sig-${r.id}-${x.id}`] = b.signature_png;
       signEvent(r, x.id, "firmado", `OTP verificado por ${via} · SHA-256 ${r.doc_hash}`);
+      if (client) {
+        await window.JuanmaStore.refresh?.("consents").then((now) => { if (now) s.consents = now.items; });
+        await recordConsents(client, b.consents, { method: "firma", byClient: true, user_agent: navigator.userAgent, typed_name: b.typed_name, typed_id: x.id_number,
+          note: `Firma de «${r.title}» (solicitud N.º ${r.id})` });
+        signEvent(r, x.id, "politicas_respondidas", LEGAL.CONSENT_ITEMS.map((i) => `${i.key}: ${b.consents[i.key] ? "sí" : "no"}`).join(" · "));
+      }
       await finishIfAll(r);
       return signerView(r, x);
     }],
@@ -1333,11 +1355,16 @@
   );
 
   // ----- payments: charges, receipts, portfolio, reminders (same rules as src/payments.js) -----
-  const PAY_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "TEC Jurídicos", firm_nit: "", channels: ["email"], receipt_start: LG.RECEIPT_START };
+  const PAY_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "Tecjuridicos S.A.S.", firm_nit: "901.269.714-4", channels: ["email"], receipt_start: LG.RECEIPT_START };
   const DATE = /^\d{4}-\d{2}-\d{2}$/;
   const money = (v) => (typeof v === "number" ? Math.round(v) : Number(String(v ?? "").replace(/[^\d]/g, "")));
   const todayCO = () => bogotaNow().slice(0, 10);
-  const paySettings = () => ({ ...PAY_DEFAULTS, ...(s.payset || {}) });
+  const paySettings = () => {
+    const saved = { ...(s.payset || {}) };
+    if (!saved.firm_name || saved.firm_name === "TEC Jurídicos") delete saved.firm_name; // version 2.4: legal name and NIT by default
+    if (!saved.firm_nit) delete saved.firm_nit;
+    return { ...PAY_DEFAULTS, ...saved };
+  };
   const ledger = (clientId = null, officeId = null) => {
     const ok = (x) => inScope(x.office_id) && (!clientId || x.client_id === clientId) && (!officeId || x.office_id === officeId);
     const receipts = s.receipts.filter(ok);
@@ -1511,7 +1538,7 @@
     ["PUT", /^\/payments\/settings$/, (m, b) => {
       need("payments.manage");
       s.payset = { auto: !!b.auto, days_before: Math.min(30, Math.max(0, Number(b.days_before) || 0)), repeat_days: Math.min(60, Math.max(1, Number(b.repeat_days) || 7)),
-        pay_info: str(b.pay_info).slice(0, 1500), firm_name: str(b.firm_name) || PAY_DEFAULTS.firm_name, firm_nit: str(b.firm_nit),
+        pay_info: str(b.pay_info).slice(0, 1500), firm_name: str(b.firm_name) || PAY_DEFAULTS.firm_name, firm_nit: str(b.firm_nit) || PAY_DEFAULTS.firm_nit,
         channels: (b.channels || ["email"]).filter((x) => ["email", "whatsapp"].includes(x)),
         receipt_start: Math.max(1, Math.round(Number(b.receipt_start) || paySettings().receipt_start)) };
       return paySettings();

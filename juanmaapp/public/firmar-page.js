@@ -25,7 +25,16 @@ function render(v) {
   $("#sign").hidden = !pending;
   if (!pending) show(v.signer.status === "firmado" ? `Firmado el ${JuanmaPdf.colombiaTime(v.signer.signed_at)}. Gracias.` : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
   if (pending && !pad) pad = JuanmaSigPad($("#pad"));
+  // A client of the firm answers each data policy on its own, Sí or No, before signing (version 2.4).
+  consentItems = pending && v.consent ? v.consent.items : null;
+  const box = $("#consent-box");
+  box.hidden = !consentItems;
+  if (consentItems && !box.childElementCount) {
+    box.innerHTML = JuanmaLegal.consentChecklistHtml(consentItems);
+    box.querySelectorAll("[data-legal]").forEach((a) => { a.target = "_blank"; a.rel = "noopener"; });
+  }
 }
+let consentItems = null;
 (async () => {
   if (!token) return show("El enlace está incompleto. Ábralo de nuevo desde el correo.", true);
   try {
@@ -63,7 +72,13 @@ $("#sign-form").addEventListener("submit", async (e) => {
   err.hidden = true;
   if (pad.isEmpty()) { err.textContent = "Dibuje su firma."; err.hidden = false; return; }
   try {
-    render(await call("POST", "/sign", { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: pad.toPng() }));
+    let consents;
+    if (consentItems) {
+      const c = JuanmaLegal.consentAnswers(f, consentItems);
+      if (c.missing.length) { err.textContent = `Responda Sí o No en: ${c.missing.join(", ")}.`; err.hidden = false; return; }
+      consents = c.answers;
+    }
+    render(await call("POST", "/sign", { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: pad.toPng(), consents }));
   } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 });
 $("#reject").addEventListener("click", async () => {

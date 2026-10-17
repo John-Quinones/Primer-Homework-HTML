@@ -5,12 +5,13 @@
 // Dependency-free: served to the page as window.JuanmaLegal (browser-module.js).
 
 // Firm data. An empty value shows as [COMPLETAR: …] in every document until
-// Gerencia fills it in here. Changing any text needs a new LEGAL_VERSION, so
-// each stored authorization keeps pointing at the exact text that was accepted.
+// Gerencia fills it in here. The documents carry the App's version (each new
+// version is a new version of the documents), and each stored authorization
+// keeps the SHA-256 of the exact text that was accepted.
 export const FIRM = {
   brand: "TEC Jurídicos",
-  legal_name: "",
-  nit: "",
+  legal_name: "Tecjuridicos S.A.S.",
+  nit: "901.269.714-4",
   address: "",
   city: "Ibagué (Tolima)",
   email: "",
@@ -18,8 +19,19 @@ export const FIRM = {
   website: "",
   privacy_officer: "",
 };
-export const LEGAL_VERSION = "1.0";
-export const LEGAL_DATE = "15 de octubre de 2026";
+
+const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+let appVersion = null;
+/** The server passes the App's version (src/version.js); the page reads window.JUANMA_VERSION. */
+export function setLegalVersion(v) { appVersion = v || null; }
+/** Version of the legal documents = version of the App (2.4, …) and the date it was published. */
+export function legalVersion() {
+  const v = appVersion || (typeof window !== "undefined" && window.JUANMA_VERSION) || {};
+  const [y, m, d] = String(v.date || "").split("-").map(Number);
+  return { name: String(v.name || v.change || "local"), date: y && m && d ? `${d} de ${MONTHS[m - 1]} de ${y}` : "" };
+}
+const V = () => legalVersion();
+const META = (since = true) => `<p class="legal-meta">Versión ${V().name} de TecjuridicosApp${V().date ? ` · ${since ? "vigente desde el " : ""}${V().date}` : ""}</p>`;
 
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const LABELS = { legal_name: "razón social", nit: "NIT", address: "dirección de la sede principal", email: "correo para datos personales",
@@ -35,13 +47,13 @@ const CONTACT = () => `<ul>
 const LINK = (id, text) => `<a href="legal.html#${id}" data-legal="${id}">${text}</a>`;
 
 const tratamiento = () => `
-<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+${META()}
 <h3>1. Responsable del tratamiento</h3>
 <p>${WHO()}, firma de abogados con domicilio en ${esc(FIRM.city)}, es responsable del tratamiento de los datos personales que recoge en la prestación de sus servicios jurídicos y en el uso de TecjuridicosApp, su sistema de gestión de clientes y expedientes. Datos de contacto:</p>
 ${CONTACT()}
 
 <h3>2. Marco legal</h3>
-<p>Esta política aplica el artículo 15 de la Constitución Política (habeas data), la Ley Estatutaria 1581 de 2012, el Decreto Único 1074 de 2015 (capítulo 25, que compiló el Decreto 1377 de 2013), la Ley 1266 de 2008 en lo relativo a información financiera y crediticia, el artículo 74 de la Constitución y el numeral 9 del artículo 28 de la Ley 1123 de 2007 (secreto profesional del abogado), la Ley 527 de 1999 (mensajes de datos y firma electrónica) y la Ley 2300 de 2023 (canales y horarios de contacto para cobranza).</p>
+<p>Esta política aplica el artículo 15 de la Constitución Política (habeas data), la Ley Estatutaria 1581 de 2012, el Decreto Único 1074 de 2015 (capítulo 25, que compiló el Decreto 1377 de 2013), la Ley Estatutaria 1266 de 2008, modificada por la Ley 2157 de 2021, en lo relativo a información financiera, crediticia y comercial, el artículo 74 de la Constitución y el numeral 9 del artículo 28 de la Ley 1123 de 2007 (secreto profesional del abogado), la Ley 527 de 1999 (mensajes de datos y firma electrónica) y la Ley 2300 de 2023 (canales y horarios de contacto para cobranza).</p>
 
 <h3>3. Definiciones</h3>
 <ul>
@@ -74,6 +86,7 @@ ${CONTACT()}
   <li>Celebrar y ejecutar el contrato de prestación de servicios: facturar, registrar pagos, expedir recibos, gestionar la cartera y enviar recordatorios de pago según la Ley 2300 de 2023.</li>
   <li>Enviar documentos para firma electrónica y correos con trazabilidad, y conservar la evidencia de cada envío, firma, apertura y acuse.</li>
   <li>Preparar borradores de documentos con herramientas de inteligencia artificial bajo la revisión de un abogado de la firma.</li>
+  <li>Con autorización separada del titular, consultar su información en las centrales de riesgo, reportar el cumplimiento o el incumplimiento de las obligaciones derivadas del contrato de servicios y mantener actualizada esa información, conforme a la ${LINK("centrales", "Autorización para centrales de riesgo")}.</li>
   <li>Cumplir obligaciones legales, contables, tributarias y disciplinarias, y atender requerimientos de autoridades.</li>
   <li>Garantizar la seguridad de la información: control de accesos por rol y oficina, bitácora de auditoría y prevención de fraudes.</li>
   <li>Gestionar la relación con funcionarios, contratistas y proveedores.</li>
@@ -127,10 +140,10 @@ ${CONTACT()}
 <p>Los datos se conservan mientras dure la relación con el titular y, después, el tiempo necesario para atender reclamaciones, responder por la gestión profesional y cumplir obligaciones legales: los soportes contables, diez (10) años (artículo 28 de la Ley 962 de 2005), y los expedientes, en principio diez (10) años desde la terminación del encargo. La prueba de las autorizaciones se conserva mientras se traten los datos y por el mismo término.</p>
 
 <h3>15. Vigencia y cambios</h3>
-<p>Esta política rige desde el ${LEGAL_DATE}. Los cambios sustanciales se informan a los titulares antes de aplicarlos, por correo o en la propia aplicación, y cada versión queda identificada con su número y fecha.</p>`;
+<p>Esta política rige desde el ${V().date || "día de su publicación"}, con la versión ${V().name} de TecjuridicosApp. Los cambios sustanciales se informan a los titulares antes de aplicarlos, por correo o en la propia aplicación, y cada versión queda identificada con su número y fecha.</p>`;
 
 const privacidad = () => `
-<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+${META()}
 <p>Esta política explica, en lenguaje sencillo, qué información maneja ${WHO()} en TecjuridicosApp y en sus páginas públicas (firma electrónica, acuse de correo, verificación de documentos y autorizaciones), y cómo la protege. Complementa la ${LINK("tratamiento", "Política de tratamiento de datos personales")}.</p>
 
 <h3>1. Qué información recogemos</h3>
@@ -170,7 +183,7 @@ const privacidad = () => `
 <p>Si cambiamos esta política se lo informaremos antes de aplicar el cambio. Cada versión queda numerada y fechada.</p>`;
 
 const cookies = () => `
-<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+${META()}
 <p>Las cookies son pequeños archivos que un sitio guarda en su navegador. TecjuridicosApp usa <strong>solo cookies técnicas, necesarias para funcionar</strong>, y almacenamiento local del navegador para recordar preferencias. <strong>No usamos cookies de publicidad, de analítica ni de redes sociales</strong>, y no rastreamos su navegación en otros sitios.</p>
 
 <h3>1. Cookies que usamos</h3>
@@ -205,7 +218,7 @@ const cookies = () => `
 <p>En Colombia la información que se obtiene mediante cookies, cuando identifica a una persona, se rige por la Ley 1581 de 2012. Cualquier cookie nueva que no sea técnica se informará y se pedirá su autorización antes de usarla.</p>`;
 
 const terminos = () => `
-<p class="legal-meta">Versión ${LEGAL_VERSION} · vigente desde el ${LEGAL_DATE}</p>
+${META()}
 <h3>1. Objeto</h3>
 <p>Estos términos regulan el uso de TecjuridicosApp, el sistema de gestión jurídica de ${WHO()}, por sus funcionarios y contratistas, y el uso de sus páginas públicas por clientes y terceros. Usar la aplicación implica aceptarlos.</p>
 
@@ -247,7 +260,7 @@ const terminos = () => `
 <p>La firma puede actualizar estos términos; cada versión queda numerada y fechada y se informa en la aplicación.</p>`;
 
 const aviso = () => `
-<p class="legal-meta">Versión ${LEGAL_VERSION} · ${LEGAL_DATE}</p>
+${META(false)}
 <p><strong>Responsable:</strong> ${WHO()}, ${F("address")}, ${esc(FIRM.city)}. Correo: ${F("email")}. Teléfono: ${F("phone")}.</p>
 <p><strong>Finalidades:</strong> sus datos personales se usarán para prestarle los servicios jurídicos contratados; llevar su expediente y consultar sus procesos; comunicarle actuaciones, audiencias y términos; ejecutar el contrato, registrar pagos y enviarle recordatorios de cobro; firmar documentos electrónicamente y conservar su evidencia; preparar borradores con herramientas tecnológicas revisadas por un abogado; y cumplir obligaciones legales.</p>
 <p><strong>Datos sensibles:</strong> no está obligado(a) a autorizar el tratamiento de datos sensibles (como los de salud) ni a responder preguntas sobre ellos o sobre niños, niñas y adolescentes. Si los autoriza, solo se usarán para su caso.</p>
@@ -256,24 +269,48 @@ const aviso = () => `
 <p><strong>Política completa:</strong> consulte la ${LINK("tratamiento", "Política de tratamiento de datos personales")}, la ${LINK("privacidad", "Política de privacidad")} y la ${LINK("cookies", "Política de cookies")}.</p>`;
 
 const autorizacion = () => `
-<p class="legal-meta">Versión ${LEGAL_VERSION} · ${LEGAL_DATE}</p>
+${META(false)}
 <p>Como titular de los datos, de manera libre, previa, expresa e informada, y luego de leer el ${LINK("aviso", "Aviso de privacidad")} y la ${LINK("tratamiento", "Política de tratamiento de datos personales")} de ${WHO()}, respondo <strong>por separado</strong> cada una de las siguientes autorizaciones:</p>
 <ol>
   <li><strong>Tratamiento de datos personales</strong> para las finalidades de la política: prestación de los servicios jurídicos, expediente, consulta de procesos, contrato, pagos y cumplimiento legal.</li>
   <li><strong>Datos sensibles</strong> (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es <strong>facultativa</strong>.</li>
   <li><strong>Política de privacidad</strong>, incluida la evidencia técnica que se registra cuando uso las páginas de la firma.</li>
   <li><strong>Política de cookies</strong> de la aplicación y sus páginas públicas.</li>
+  <li><strong>Centrales de riesgo:</strong> consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización, conforme a la ${LINK("centrales", "Autorización para centrales de riesgo")} (Ley 1266 de 2008, modificada por la Ley 2157 de 2021).</li>
   <li><strong>Comunicaciones</strong> por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023.</li>
 </ol>
 <p>Sé que puedo conocer, actualizar, rectificar y suprimir mis datos y revocar cualquiera de estas autorizaciones escribiendo a ${F("email")}, y que la firma conserva la prueba de esta respuesta: el texto aceptado o rechazado, su versión, la fecha y hora y el medio por el que respondí.</p>`;
 
+const centrales = () => `
+${META(false)}
+<p>En mi calidad de titular de la información, actuando de manera libre, voluntaria, previa, expresa e informada, autorizo a ${WHO()}, o a quien en el futuro ostente la calidad de acreedor por cesión o subrogación de las obligaciones a mi cargo (en adelante, <strong>EL ACREEDOR</strong>), para que, conforme a la Ley Estatutaria 1266 de 2008, modificada por la Ley 2157 de 2021, y a la Ley 1581 de 2012, realice las siguientes actividades:</p>
+
+<h3>1. Consulta</h3>
+<p>Consultar, solicitar y verificar, en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) o en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, mi comportamiento y mi capacidad de pago, con el fin de analizar, celebrar y hacer seguimiento a la relación contractual de prestación de servicios profesionales.</p>
+
+<h3>2. Reporte</h3>
+<p>Reportar a dichos operadores datos sobre el nacimiento, la modificación, el cumplimiento, el incumplimiento y la extinción de las obligaciones dinerarias que adquiera con EL ACREEDOR, en especial las derivadas del contrato de prestación de servicios profesionales y de sus honorarios. Ningún reporte negativo se hará sin la <strong>comunicación previa</strong> que exige el artículo 12 de la Ley 1266 de 2008, enviada con al menos veinte (20) días calendario de anticipación a la dirección física, al correo electrónico o al teléfono que tenga registrados, para que pueda pagar la obligación o controvertir el monto, la cuota o la fecha de exigibilidad.</p>
+
+<h3>3. Actualización y rectificación</h3>
+<p>Actualizar y rectificar la información reportada cada vez que cambie la situación de la obligación (abonos, pagos, acuerdos, refinanciaciones o extinción), en los términos que fija la ley, de manera que lo reportado sea veraz, completo, exacto, actualizado y comprobable.</p>
+
+<h3>4. Permanencia de la información</h3>
+<p>Conozco que la información negativa permanece en los bancos de datos por el doble del tiempo de la mora, sin exceder cuatro (4) años contados desde la fecha en que se pague o se extinga la obligación, conforme al artículo 13 de la Ley 1266 de 2008, modificado por la Ley 2157 de 2021, y que la información positiva permanece de manera indefinida.</p>
+
+<h3>5. Mis derechos</h3>
+<p>Puedo conocer, actualizar y rectificar la información reportada, y presentar peticiones, consultas y reclamos ante EL ACREEDOR, como fuente, y ante el operador. Las consultas se responden en máximo diez (10) días hábiles y los reclamos en máximo quince (15) días hábiles, prorrogables en los casos que prevé la ley. Si no recibo respuesta oportuna o no estoy conforme, puedo acudir a la Superintendencia de Industria y Comercio. Las peticiones a EL ACREEDOR se presentan a ${F("email")} o en ${F("address")}.</p>
+
+<h3>6. Alcance y vigencia</h3>
+<p>Esta autorización es independiente de las demás autorizaciones de tratamiento de datos; puedo concederla o negarla sin que ello afecte las otras. Estará vigente mientras subsista cualquier obligación a mi cargo con EL ACREEDOR y durante el término de permanencia de la información que establece la ley. Su revocatoria no procede respecto de obligaciones vigentes o en mora, por existir un deber legal y contractual de reportar su estado.</p>`;
+
 export const LEGAL_DOCS = [
-  { id: "tratamiento", title: "Política de tratamiento de datos personales", short: "Datos personales", html: tratamiento() },
-  { id: "privacidad", title: "Política de privacidad", short: "Privacidad", html: privacidad() },
-  { id: "cookies", title: "Política de cookies", short: "Cookies", html: cookies() },
-  { id: "terminos", title: "Términos y condiciones de uso", short: "Términos", html: terminos() },
-  { id: "aviso", title: "Aviso de privacidad", short: "Aviso", html: aviso() },
-  { id: "autorizacion", title: "Autorización para el tratamiento de datos personales", short: "Autorización", html: autorizacion() },
+  { id: "tratamiento", title: "Política de tratamiento de datos personales", short: "Datos personales", get html() { return tratamiento(); } },
+  { id: "privacidad", title: "Política de privacidad", short: "Privacidad", get html() { return privacidad(); } },
+  { id: "cookies", title: "Política de cookies", short: "Cookies", get html() { return cookies(); } },
+  { id: "terminos", title: "Términos y condiciones de uso", short: "Términos", get html() { return terminos(); } },
+  { id: "aviso", title: "Aviso de privacidad", short: "Aviso", get html() { return aviso(); } },
+  { id: "centrales", title: "Autorización para consulta, reporte y actualización en centrales de riesgo", short: "Centrales de riesgo", get html() { return centrales(); } },
+  { id: "autorizacion", title: "Autorización para el tratamiento de datos personales", short: "Autorización", get html() { return autorizacion(); } },
 ];
 
 // What a client authorizes, each item on its own: one checkbox, one stored answer.
@@ -286,11 +323,13 @@ export const CONSENT_ITEMS = [
     label: `Leí y acepto la Política de privacidad de ${FIRM.brand}, incluida la evidencia técnica (fecha, hora, dirección IP y navegador) que se registra cuando uso sus páginas.` },
   { key: "cookies", doc: "cookies", title: "Política de cookies",
     label: `Leí y acepto la Política de cookies: la aplicación y sus páginas usan solo cookies técnicas y almacenamiento local para funcionar, sin publicidad ni analítica.` },
+  { key: "centrales", doc: "centrales", title: "Consulta, reporte y actualización en centrales de riesgo",
+    label: `Autorizo a ${FIRM.legal_name} (${FIRM.brand}), NIT ${FIRM.nit}, o a quien ostente en el futuro la calidad de acreedor, para consultar mi información en las centrales de riesgo, reportar el cumplimiento o el incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y mantener actualizada esa información, conforme a la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.` },
   { key: "comunicaciones", doc: "aviso", title: "Comunicaciones por correo, WhatsApp y llamada",
     label: `Autorizo que ${FIRM.brand} me contacte por correo electrónico, WhatsApp y llamada para informarme sobre mi caso y mis pagos, en los horarios que permite la Ley 2300 de 2023.` },
 ];
 
-export const CONSENT_METHODS = { enlace: "Enlace privado", presencial: "En la oficina (firma en pantalla)", revocacion: "Revocación registrada por la firma" };
+export const CONSENT_METHODS = { firma: "Al firmar un documento por enlace", enlace: "Enlace privado", presencial: "En la oficina (firma en pantalla)", revocacion: "Revocación registrada por la firma" };
 
 export const legalDoc = (id) => LEGAL_DOCS.find((d) => d.id === id) || null;
 export const consentItem = (key) => CONSENT_ITEMS.find((i) => i.key === key) || null;
@@ -305,7 +344,7 @@ export function consentText(key) {
   const item = consentItem(key);
   const doc = item && legalDoc(item.doc);
   if (!doc) return "";
-  return `${item.title}\n${item.label}\n\n${doc.title} · versión ${LEGAL_VERSION} (${LEGAL_DATE})\n${legalPlain(doc.html)}`;
+  return `${item.title}\n${item.label}\n\n${doc.title} · versión ${V().name} de TecjuridicosApp${V().date ? ` (${V().date})` : ""}\n${legalPlain(doc.html)}`;
 }
 
 /** Latest answer per item from a client's records (oldest first or any order). */
@@ -321,3 +360,27 @@ export function consentStatus(records) {
 /** Canonical form of one record for the hash chain: any later edit breaks the chain (the drawn signature is appended to it). */
 export const consentCanonical = (r, prevHash) => JSON.stringify([prevHash || "", r.client_name, r.client_id_number, r.item, r.granted ? 1 : 0,
   r.method, r.doc_version, r.doc_sha256, r.at, r.ip || "", r.user_agent || "", r.typed_name || "", r.typed_id || "", r.note || "", r.registered_by_name || ""]);
+
+/** The checklist shown before signing a document by link: each policy with its own Sí / No, nothing chosen beforehand. */
+export function consentChecklistHtml(items, prefix = "cs") {
+  return `<fieldset class="consent-fieldset"><legend>Políticas de datos personales</legend>
+  <p class="hint">Antes de firmar, decida <strong>por separado</strong> si acepta o no cada política. Su respuesta no cambia el documento que firma y queda guardada como soporte, con la fecha y la hora.</p>
+  <ul class="consent-list">${items.map((i) => {
+    const d = legalDoc(i.doc);
+    return `<li class="consent-card"><h4>${esc(i.title)}</h4><p class="consent-label">${esc(i.label)}</p>
+    <div class="consent-choice" role="radiogroup" aria-label="${esc(i.title)}">
+      <label><input type="radio" name="${prefix}_${i.key}" value="si" required /> Sí acepto</label>
+      <label><input type="radio" name="${prefix}_${i.key}" value="no" required /> No acepto</label>
+    </div>
+    <details><summary>Leer: ${esc(d.title)}</summary><div class="legal-doc">${d.html}</div></details></li>`;
+  }).join("")}</ul></fieldset>`;
+}
+/** Answers of that checklist: { answers: { datos: true, … }, missing: [titles not answered] }. */
+export function consentAnswers(form, items, prefix = "cs") {
+  const answers = {}, missing = [];
+  for (const i of items) {
+    const v = form.elements[`${prefix}_${i.key}`]?.value;
+    if (v === "si" || v === "no") answers[i.key] = v === "si"; else missing.push(i.title);
+  }
+  return { answers, missing };
+}

@@ -9,6 +9,8 @@ import { can, scopeOf } from "./auth.js";
 import { sendEmail, sendSms, sendWhatsapp, sendWhatsappCode, channelReady } from "./notify.js";
 import { buildSignedPdf } from "./signed-pdf.js";
 import { newVerifyCode, normVerifyCode } from "./verify-code.js";
+import { clientForSigner, signConsentAnswers, recordConsents } from "./consents.js";
+import { CONSENT_ITEMS, legalVersion, legalDoc } from "./legal.js";
 import { signersProblem } from "./person.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
@@ -44,13 +46,21 @@ async function sendLink(db, req, request, signer, token) {
   const link = `${publicUrl(req)}/firmar.html#${token}`;
   const via = signer.email ? "email" : signer.otp_channel !== "email" ? signer.otp_channel : "email";
   const codeVia = CHANNEL_LABEL[signer.otp_channel] || "correo";
-  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}\n\nAl firmar le enviaremos un código de verificación por ${codeVia}.\n\nTecjuridicosApp`;
+  // A client of the firm also gets the data policies as a checklist: on the page they accept or not each one, separately (version 2.4).
+  const caseId = request.case_id ?? db.prepare("SELECT case_id FROM sign_requests WHERE id = ?").get(request.id)?.case_id;
+  const client = clientForSigner(db, caseId, signer);
+  const policies = client ? CONSENT_ITEMS.map((i) => ({ title: i.title, url: `${publicUrl(req)}/legal.html#${i.doc}`, doc: legalDoc(i.doc).title })) : [];
+  const listText = policies.length ? `\n\nPolíticas de datos personales (versión ${legalVersion().name}). En la página de firma decidirá por separado si acepta o no cada una:\n${policies.map((p) => `[ ] ${p.title}: ${p.url}`).join("\n")}` : "";
+  const listHtml = policies.length ? `<p><strong>Políticas de datos personales</strong> (versión ${esc(legalVersion().name)}). En la página de firma decidirá <strong>por separado</strong> si acepta o no cada una:</p>
+    <ul style="list-style:none;padding-left:0">${policies.map((p) => `<li style="margin:4px 0">&#9744; ${esc(p.title)} · <a href="${esc(p.url)}">leer ${esc(p.doc)}</a></li>`).join("")}</ul>` : "";
+  const text = `Hola ${signer.name}:\n\n${request.message || "Le enviamos un documento para su firma electrónica."}\n\nDocumento: ${request.title}\nPara leerlo y firmarlo, abra este enlace:\n${link}${listText}\n\nAl firmar le enviaremos un código de verificación por ${codeVia}.\n\nTecjuridicosApp`;
   const html = `<div style="font-family:Arial,sans-serif;color:#101010"><p>Hola ${esc(signer.name)}:</p><p>${esc(request.message || "Le enviamos un documento para su firma electrónica.")}</p>
     <p><strong>Documento:</strong> ${esc(request.title)}</p>
     <p><a href="${esc(link)}" style="display:inline-block;background:#002b6a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Leer y firmar</a></p>
+    ${listHtml}
     <p style="color:#666;font-size:12px">Al firmar le enviaremos un código de verificación por ${esc(codeVia)}. Si no esperaba este mensaje, ignórelo.</p></div>`;
   const r = await deliver(via, signer, `Documento para firmar: ${request.title}`, via === "email" ? text : `${request.title}: para leerlo y firmarlo abra ${link}`, html);
-  event(db, request.id, signer.id, r.ok ? "enlace_enviado" : "enlace_no_enviado", r.ok ? `${CHANNEL_LABEL[via]} ${via === "email" ? signer.email : maskPhone(signer.phone)}` : r.detail);
+  event(db, request.id, signer.id, r.ok ? "enlace_enviado" : "enlace_no_enviado", r.ok ? `${CHANNEL_LABEL[via]} ${via === "email" ? signer.email : maskPhone(signer.phone)}${policies.length ? " · con las políticas de datos" : ""}` : r.detail);
   return r;
 }
 
@@ -231,7 +241,7 @@ export function esignRouter(db) {
     for (const s of signers) {
       const token = randomBytes(24).toString("base64url");
       const sid = ins.run(id, s.name, s.id_type, s.id_number, s.email, s.phone, sha(token), s.otp_channel).lastInsertRowid;
-      if (remote) delivery.push(await sendLink(db, req, { id, title, message: str(b.message) }, { id: sid, ...s }, token));
+      if (remote) delivery.push(await sendLink(db, req, { id, title, message: str(b.message), case_id: Number(b.case_id) || null }, { id: sid, ...s }, token));
     }
     res.status(201).json({ ...requestOut(db, db.prepare("SELECT * FROM sign_requests WHERE id = ?").get(id)), delivery });
   });
@@ -297,6 +307,8 @@ export function esignPublicRouter(db) {
       signer: { name: s.name, id_type: s.id_type, id_number: s.id_number, email: maskEmail(s.email), phone: maskPhone(s.phone), status: s.status, signed_at: s.signed_at,
         otp_channel: s.otp_channel, otp_channels: otpChannels(s) },
     };
+    // A client of the firm answers the data policies, each on its own, together with the signature.
+    if (s.status === "pendiente" && x.status === "enviada" && clientForSigner(db, x.case_id, s)) v.consent = { items: CONSENT_ITEMS, version: legalVersion().name };
     // Once everybody signed, the signer can download the signed document (stamps + certificate).
     if (x.status === "completada") {
       // Only names and dates of the others: their documents, IPs and signatures are in the signed PDF itself (audit A01-002).
@@ -363,11 +375,21 @@ export function esignPublicRouter(db) {
     if (!PNG.test(b.signature_png || "") || b.signature_png.length > 400000) return res.status(400).json({ error: "Dibuje su firma." });
     if (!str(b.typed_name)) return res.status(400).json({ error: "Escriba su nombre completo." });
     if (!b.accept) return res.status(400).json({ error: "Debe aceptar el documento para firmarlo." });
+    const client = clientForSigner(db, f.x.case_id, s);
+    let consents = null;
+    if (client) {
+      try { consents = signConsentAnswers(b.consents); } catch (err) { return res.status(400).json({ error: err.message }); }
+    }
     db.prepare(`UPDATE sign_signers SET status = 'firmado', method = 'enlace_otp', signed_at = datetime('now'), ip = ?, user_agent = ?,
       typed_name = ?, signature_png = ?, otp_hash = NULL WHERE id = ?`)
       .run(clientIp(req), String(req.get("user-agent") || "").slice(0, 300), str(b.typed_name), b.signature_png, s.id);
     const via = s.otp_channel === "email" ? `correo ${s.email}` : `${CHANNEL_LABEL[s.otp_channel]} ${maskPhone(s.phone)}`;
     event(db, f.x.id, s.id, "firmado", `OTP verificado por ${via} · SHA-256 ${f.x.doc_hash}`, clientIp(req));
+    if (consents) {
+      const recs = recordConsents(db, client, consents, { method: "firma", ip: clientIp(req), user_agent: req.get("user-agent"), typed_name: b.typed_name,
+        typed_id: s.id_number, note: `Firma de «${f.x.title}» (solicitud N.º ${f.x.id})` });
+      event(db, f.x.id, s.id, "politicas_respondidas", recs.map((x) => `${x.item}: ${x.granted ? "sí" : "no"}`).join(" · "), clientIp(req));
+    }
     const done = finishIfDone(db, f.x.id);
     res.json(view(bySigner(req.params.token)));
     (done ? notifyCompleted(db, req, f.x.id) : notifySigned(db, f.x.id, s.name)).catch((err) => console.error("esign notice:", err.message));

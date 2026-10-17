@@ -56,7 +56,7 @@ export const SEED_TEMPLATES = [
 
 {{fecha.ciudad_y_fecha}}
 
-Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **{{oficina.nombre}}** (TEC Jurídicos), o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:
+Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:
 
 1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.
 2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.
@@ -85,12 +85,12 @@ Huella: [FILL: Huella del índice derecho, si se firma en físico]` + FOOTER,
   {
     name: "Autorización para el tratamiento de datos personales",
     category: "Autorización",
-    description: "Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies y comunicaciones), para firmar en papel.",
+    description: "Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies, centrales de riesgo y comunicaciones), para firmar en papel.",
     body: `# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES
 
 {{fecha.ciudad_y_fecha}}
 
-Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **{{oficina.nombre}}** (TEC Jurídicos), en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:
+Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:
 
 | Autorización | SÍ | NO |
 |---|---|---|
@@ -98,7 +98,8 @@ Yo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. *
 | 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |
 | 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |
 | 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |
-| 5. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |
+| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |
+| 6. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |
 
 ## DERECHOS DEL TITULAR
 
@@ -121,7 +122,7 @@ Huella: [FILL: Huella del índice derecho, si se firma en físico]` + FOOTER,
 
 {{fecha.ciudad_y_fecha}}
 
-Entre **{{oficina.nombre}}** (TEC Jurídicos), en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:
+Entre **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:
 
 ## PRIMERA. Información confidencial
 
@@ -167,7 +168,7 @@ C.C. [FILL: Número de documento]` + FOOTER,
     description: "Honorarios, alcance del mandato, obligaciones de las partes y terminación.",
     body: `# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}
 
-Entre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:
+Entre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:
 
 ## PRIMERA. OBJETO
 
@@ -372,3 +373,10 @@ export const FEE_CLAUSE_NEW = "1. Una suma fija de **{{honorarios.valor}}** ({{h
 // Change 40: the starter contract carries the case's folder number.
 export const CONTRACT_HEAD_OLD = "# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n";
 export const CONTRACT_HEAD_NEW = "# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n";
+
+// Version 2.4: the firm is named by its legal name and NIT in the starter templates.
+export const FIRM_FIXES = [
+  ["**{{oficina.nombre}}** (TEC Jurídicos),", "**Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4,"],
+  ["| 5. **Comunicaciones**", "| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones**"],
+  ["quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante", "quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante"],
+];

@@ -1020,3 +1020,10 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 .pdf-view .pdf-page-label { text-align: center; font-size: .75rem; color: var(--text-muted); margin: 0 0 8px; }
 #sign-doc-preview { margin-top: 12px; }
 #sign-doc-preview > summary { cursor: pointer; font-weight: 600; }
+/* Version 2.4: data policies answered Sí / No before signing by link */
+.consent-fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px 12px; margin: 10px 0; }
+.consent-fieldset legend { font-weight: 700; padding: 0 6px; color: var(--heading); }
+.consent-label { margin: 0 0 8px; font-size: .9rem; }
+.consent-choice { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.consent-choice label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
+.consent-choice input { width: 18px; height: 18px; }

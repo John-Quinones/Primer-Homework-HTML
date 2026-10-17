@@ -13,11 +13,15 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (v) => (typeof v === "number" ? Math.round(v) : Number(String(v ?? "").replace(/[^\d]/g, "")));
 const today = (now = new Date()) => bogota(now).slice(0, 10);
 
-export const PAYMENT_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "TEC Jurídicos", firm_nit: "", channels: ["email"], receipt_start: RECEIPT_START };
+export const PAYMENT_DEFAULTS = { auto: false, days_before: 3, repeat_days: 7, pay_info: "", firm_name: "Tecjuridicos S.A.S.", firm_nit: "901.269.714-4", channels: ["email"], receipt_start: RECEIPT_START };
 
 export function paymentSettings(db) {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'payments'").get();
-  return { ...PAYMENT_DEFAULTS, ...(row ? JSON.parse(row.value) : {}) };
+  const saved = row ? JSON.parse(row.value) : {};
+  // Version 2.4: settings saved with the old default name or without NIT take the firm's legal name and NIT.
+  if (!saved.firm_name || saved.firm_name === "TEC Jurídicos") delete saved.firm_name;
+  if (!saved.firm_nit) delete saved.firm_nit;
+  return { ...PAYMENT_DEFAULTS, ...saved };
 }
 
 // Current time for the Ley 2300 window; tests fix it.
@@ -305,7 +309,7 @@ export function paymentsRouter(db) {
       auto: !!b.auto,
       days_before: Math.min(30, Math.max(0, Number(b.days_before) || 0)),
       repeat_days: Math.min(60, Math.max(1, Number(b.repeat_days) || 7)),
-      pay_info: str(b.pay_info).slice(0, 1500), firm_name: str(b.firm_name) || PAYMENT_DEFAULTS.firm_name, firm_nit: str(b.firm_nit),
+      pay_info: str(b.pay_info).slice(0, 1500), firm_name: str(b.firm_name) || PAYMENT_DEFAULTS.firm_name, firm_nit: str(b.firm_nit) || PAYMENT_DEFAULTS.firm_nit,
       channels: (Array.isArray(b.channels) ? b.channels : ["email"]).filter((x) => ["email", "whatsapp"].includes(x)),
       receipt_start: Math.max(1, Math.round(Number(b.receipt_start) || paymentSettings(db).receipt_start)),
     };

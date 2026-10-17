@@ -18,9 +18,9 @@ after(() => srv.close());
 
 test("every legal document exists and each consent item points at one", () => {
   const ids = LEGAL_DOCS.map((d) => d.id);
-  for (const id of ["tratamiento", "privacidad", "cookies", "terminos", "aviso", "autorizacion"]) assert.ok(ids.includes(id), id);
+  for (const id of ["tratamiento", "privacidad", "cookies", "terminos", "aviso", "centrales", "autorizacion"]) assert.ok(ids.includes(id), id);
   for (const i of CONSENT_ITEMS) assert.ok(ids.includes(i.doc) && consentText(i.key).includes(i.label), i.key);
-  assert.deepEqual(CONSENT_ITEMS.map((i) => i.key), ["datos", "sensibles", "privacidad", "cookies", "comunicaciones"]);
+  assert.deepEqual(CONSENT_ITEMS.map((i) => i.key), ["datos", "sensibles", "privacidad", "cookies", "centrales", "comunicaciones"]);
   assert.ok(SEED_TEMPLATES.some((t) => /tratamiento de datos personales/i.test(t.name)));
 });
 
@@ -34,7 +34,7 @@ test("in the office: each item is stored separately with the signature and who r
   const r = await admin.call("POST", `/clients/${client.id}/consents`, { answers: { datos: true, sensibles: false, privacidad: true, cookies: true, comunicaciones: false },
     typed_name: "Ana Rojas", typed_id: "1110222", signature_png: SIG });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.equal(r.body.records.length, 5);
+  assert.equal(r.body.records.length, 5); // the five answered in this submission
   assert.equal(r.body.status.datos.granted, 1);
   assert.equal(r.body.status.sensibles.granted, 0);
   assert.equal(r.body.status.datos.method, "presencial");
@@ -53,12 +53,12 @@ test("by private link: the client answers each item, the document number must ma
   const pub = (method, body) => fetch(`${srv.base}/public/consent/${token}`, { method, headers: { "Content-Type": "application/json", "User-Agent": "Prueba/1.0" }, body: body && JSON.stringify(body) });
   const view = await (await pub("GET")).json();
   assert.equal(view.client_name, "Ana Rojas");
-  assert.equal(view.items.length, 5);
+  assert.equal(view.items.length, CONSENT_ITEMS.length);
   assert.equal((await pub("POST", { typed_name: "Ana Rojas", typed_id: "999", answers: { datos: true } })).status, 400);
   const ok = await pub("POST", { typed_name: "Ana Rojas", typed_id: "1110222", answers: { datos: true, privacidad: true, cookies: false, sensibles: true } });
   assert.equal(ok.status, 200);
   const done = await ok.json();
-  assert.equal(done.answers.length, 5);
+  assert.equal(done.answers.length, 6);
   assert.equal(done.answers.find((a) => a.item === "cookies").granted, 0);
   assert.equal(done.answers.find((a) => a.item === "comunicaciones").granted, 0, "unchecked means not authorized");
   assert.equal((await pub("POST", { typed_name: "Ana Rojas", typed_id: "1110222", answers: {} })).status, 409);
@@ -91,4 +91,18 @@ test("deleting the client keeps the evidence with the name and document", async 
   assert.equal(kept.length, 1);
   assert.equal(kept[0].client_id, null);
   assert.deepEqual(verifyConsentChain(srv.db), { ok: true });
+});
+
+test("version 2.4: the legal documents carry the App's version and the firm's legal name and NIT", async () => {
+  const { legalDoc, legalVersion } = await import("../src/legal.js");
+  const { VERSION } = await import("../src/version.js");
+  assert.equal(legalVersion().name, String(VERSION.name));
+  const html = legalDoc("tratamiento").html;
+  assert.match(html, new RegExp(`Versión ${VERSION.name.replace(".", "\\.")} de TecjuridicosApp`));
+  assert.match(html, /Tecjuridicos S\.A\.S\., NIT 901\.269\.714-4/);
+  const r = (await admin.call("GET", `/clients/${client.id}/consents`)).body;
+  assert.equal(r.version, String(VERSION.name));
+  const tpl = (await admin.call("GET", "/templates")).body;
+  const auth = (tpl.templates || tpl).find((t) => t.name === "Autorización para el tratamiento de datos personales");
+  assert.ok(auth, "starter authorization template");
 });

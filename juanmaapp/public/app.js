@@ -351,7 +351,12 @@ function renderSigner(v) {
   else signerMsg(v.signer.status === "firmado" ? `Firmado el ${window.JuanmaPdf.colombiaTime(v.signer.signed_at)}. Gracias.`
     : v.signer.status === "rechazado" ? "Usted decidió no firmar este documento." : "Este documento ya no está disponible para firma.");
   if (pending && !signerPad) signerPad = window.JuanmaSigPad($("#ps-pad"));
+  // A client of the firm answers each data policy on its own before signing (version 2.4).
+  signerConsent = pending && v.consent ? v.consent.items : null;
+  $("#ps-consent").hidden = !signerConsent;
+  if (signerConsent) $("#ps-consent").innerHTML = window.JuanmaLegal.consentChecklistHtml(signerConsent);
 }
+let signerConsent = null;
 async function openSignerPage(token) {
   signerToken = token;
   history.replaceState(null, "", location.pathname);
@@ -374,8 +379,14 @@ $("#ps-form").addEventListener("submit", async (e) => {
   err.hidden = true;
   try {
     if (!signerPad || signerPad.isEmpty()) throw new Error("Dibuje su firma.");
+    let consents;
+    if (signerConsent) {
+      const c = window.JuanmaLegal.consentAnswers(f, signerConsent);
+      if (c.missing.length) throw new Error(`Responda Sí o No en: ${c.missing.join(", ")}.`);
+      consents = c.answers;
+    }
     renderSigner(await api("POST", `/public/sign/${encodeURIComponent(signerToken)}/sign`,
-      { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: signerPad.toPng() }));
+      { otp: f.otp.value, typed_name: f.typed_name.value, accept: f.accept.checked, signature_png: signerPad.toPng(), consents }));
     toast("Documento firmado.");
   } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 });

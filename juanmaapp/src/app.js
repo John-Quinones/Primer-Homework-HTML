@@ -21,6 +21,7 @@ import { microsoftRouter } from "./microsoft.js";
 import { consentRouter, consentPublicRouter } from "./consents.js";
 import { pdfjsClassic } from "./pdfjs-classic.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
+import { VERSION } from "./version.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -89,7 +90,9 @@ export function createApp(db) {
   app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
   app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
   // Shared logic for the page (statuses, procedural roles, receivables math).
-  const shared = SHARED_MODULES.map(([file, name]) => asGlobal(path.join(root, file), name)).join("\n");
+  // Public pages (legal.html, autorizar.html) learn the App's version here: it is the version of the legal documents.
+  const shared = `window.JUANMA_VERSION = window.JUANMA_VERSION || ${JSON.stringify({ change: VERSION.change, name: VERSION.name, date: VERSION.date })};\n`
+    + SHARED_MODULES.map(([file, name]) => asGlobal(path.join(root, file), name)).join("\n");
   app.get("/shared.js", (_req, res) => res.type("text/javascript").send(shared));
   app.get("/vendor/purify.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/dompurify/dist/purify.min.js")));
 

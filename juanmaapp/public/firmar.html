@@ -49,6 +49,7 @@
         <label>Firma (dibuje con el dedo o el mouse)</label>
         <canvas class="sig-canvas" id="pad"></canvas>
         <p><button type="button" id="clear" class="mini">Borrar firma</button></p>
+        <div id="consent-box" hidden></div>
         <label class="inline"><input type="checkbox" name="accept" required /> Leí el documento y lo firmo electrónicamente. Entiendo que esta firma tiene la misma validez que mi firma manuscrita.</label>
         <p class="form-error" hidden></p>
         <div class="toolbar"><button class="primary">Firmar documento</button> <button type="button" id="reject" class="danger">No firmar</button></div>
@@ -62,6 +63,7 @@
   <script src="pdf-tools.js"></script>
   <script src="pdf-view.js"></script>
   <script src="page-nav.js"></script>
+  <script src="shared.js"></script>
   <script src="firmar-page.js"></script>
 </body>
 </html>
