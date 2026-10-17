@@ -1487,6 +1487,9 @@ $("#case-rows").addEventListener("change", (e) => guarded(async () => {
 }));
 
 const caseForm = $("#case-dialog form");
+// Client pickers are search boxes: any letter or word of the name or the document filters the list.
+const clientOption = (c) => `<option value="${c.id}" data-sub="${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}">${escapeHtml(c.full_name)}</option>`;
+window.JuanmaCombo.searchSelect(caseForm.elements.client_id);
 
 function fillTypeSelect(catId, selectedTypeId) {
   const cat = categoryOf(catId);
@@ -1686,8 +1689,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = state.clients
-    .map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}</option>`).join("");
+  caseForm.elements.client_id.innerHTML = state.clients.map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -4601,7 +4603,7 @@ async function renderPagos() {
   const [sum, clients] = await Promise.all([api("GET", "/payments/summary"), api("GET", "/clients")]);
   payClients = clients;
   const sel = $("#pay-client");
-  sel.innerHTML = '<option value="">Todos los clientes</option>' + clients.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}</option>`).join("");
+  sel.innerHTML = '<option value="">Todos los clientes</option>' + clients.map(clientOption).join("");
   sel.value = clientId;
   $("#pay-balance").textContent = cop(sum.totals.balance);
   $("#pay-overdue").textContent = cop(sum.totals.overdue);
@@ -4681,15 +4683,19 @@ $("#pay-tabs").addEventListener("click", (e) => {
   if (b) { payTab = b.dataset.ptab; guarded(renderPayTab); }
 });
 $("#pay-client").addEventListener("change", () => guarded(renderPagos));
+window.JuanmaCombo.searchSelect($("#pay-client"), { showEmpty: true, placeholder: "Todos los clientes · escriba para buscar" });
 $("#pay-state").addEventListener("change", () => guarded(renderPayTab));
 
 // ----- Charge dialog -----
 const chargeForm = $("#charge-dialog form");
+window.JuanmaCombo.searchSelect(chargeForm.elements.client_id);
 async function fillClientSelect(select, selected) {
   if (!payClients.length) payClients = await api("GET", "/clients");
   if (!payClients.length) throw new Error("Primero cree un cliente.");
-  select.innerHTML = payClients.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}${c.id_number ? " · " + escapeHtml(c.id_number) : ""}</option>`).join("");
-  if (selected) select.value = selected;
+  select.innerHTML = payClients.map(clientOption).join("");
+  // defaultSelected: openDialog resets the form, and the client chosen in Pagos must survive it.
+  const opt = selected && [...select.options].find((o) => o.value === String(selected));
+  if (opt) { opt.defaultSelected = true; select.value = opt.value; }
 }
 async function fillChargeCases(selected) {
   const cases = await api("GET", `/cases?clientId=${chargeForm.elements.client_id.value}`);
@@ -4738,6 +4744,7 @@ wireDialog($("#charge-dialog"), async (form) => {
 
 // ----- Receipt dialog -----
 const receiptForm = $("#receipt-dialog form");
+window.JuanmaCombo.searchSelect(receiptForm.elements.client_id);
 let receiptCharges = [];
 async function fillReceiptCharges(selected) {
   receiptCharges = await api("GET", `/payments/charges?clientId=${receiptForm.elements.client_id.value}&state=abiertos`);

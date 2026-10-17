@@ -54,7 +54,7 @@
     };
     async function open() {
       const all = await Promise.resolve(opts.items());
-      shown = filter(all, input.value, opts.limit || 12);
+      shown = (opts.filter || filter)(all, input.value, opts.limit || 12);
       box.innerHTML = shown.map((it, i) => `<li role="option" data-i="${i}"><span>${esc(it.label)}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</li>`).join("")
         || `<li class="combo-empty">${esc(opts.emptyText || "Sin coincidencias")}</li>`;
       box.hidden = false;
@@ -93,6 +93,85 @@
     });
     input._combo = { open, close };
     return input._combo;
+  }
+
+  /**
+   * Items whose name or document holds every typed word, anywhere (accents and case ignored;
+   * "1234567" also finds "CC 1.234.567"). Names that start with the text come first.
+   */
+  function filterAnywhere(items, q, limit = 50) {
+    const words = norm(q).split(/\s+/).filter(Boolean);
+    if (!words.length) return items.slice(0, limit);
+    const starts = [], wordStarts = [], inside = [];
+    const nq = norm(q);
+    for (const it of items) {
+      const l = norm(it.label), hay = l + " " + norm(it.sub), digits = (it.label + " " + (it.sub || "")).replace(/\D/g, "");
+      const ok = words.every((w) => hay.includes(w) || (/^\d[\d.,\s-]*$/.test(w) && digits.includes(w.replace(/\D/g, ""))));
+      if (!ok) continue;
+      if (l.startsWith(nq)) starts.push(it);
+      else if (l.split(/[\s,.()-]+/).some((w) => w.startsWith(words[0]))) wordStarts.push(it);
+      else inside.push(it);
+    }
+    return [...starts, ...wordStarts, ...inside].slice(0, limit);
+  }
+
+  /**
+   * Turn a <select> into a search box: a text field shows the chosen option and, while typing any
+   * letter or word, lists the options whose text (or data-sub, e.g. the document number) holds it.
+   * The <select> stays in the form (hidden) and keeps its value and "change" event, so code that
+   * reads or sets select.value, refills its options or disables it keeps working.
+   */
+  function searchSelect(select, opts = {}) {
+    if (select._search) return select._search;
+    const wrap = document.createElement("span");
+    wrap.className = "select-search";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.placeholder = opts.placeholder || "Escriba nombre o documento para buscar…";
+    input.setAttribute("aria-label", opts.label || "Buscar cliente");
+    select.before(wrap);
+    wrap.append(input, select);
+    select.classList.add("select-search-native");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
+
+    const chosenLabel = () => select.selectedOptions[0]?.textContent.trim() || "";
+    // While the user is typing the text stays; otherwise the field shows the chosen option (selected, so typing replaces it).
+    const sync = () => {
+      input.disabled = select.disabled;
+      if (input.dataset.typed) return;
+      input.value = select.value || opts.showEmpty ? chosenLabel() : "";
+      if (document.activeElement === input) input.select();
+    };
+    const items = () => [...select.options].map((o) => ({ label: o.textContent.trim(), sub: o.dataset.sub || "", value: o.value }));
+
+    attach(input, {
+      items, limit: opts.limit || 60, emptyText: "Ningún cliente coincide con lo escrito",
+      // Right after focusing, the field still shows the chosen name: list everything until the user types.
+      filter: (all, q, limit) => filterAnywhere(all, input.dataset.typed ? q : "", limit),
+      onType: () => { input.dataset.typed = "1"; },
+      onPick: (it) => {
+        delete input.dataset.typed;
+        select.value = it.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        input.value = it.label;
+      },
+    });
+    input.addEventListener("focus", () => { delete input.dataset.typed; input.select(); });
+    input.addEventListener("change", (e) => e.stopPropagation()); // the select's own change is the one that counts
+    // Leaving the field without picking puts back the client that is chosen.
+    input.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== input) { delete input.dataset.typed; sync(); } }, 150));
+
+    const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+    Object.defineProperty(select, "value", { configurable: true, get() { return desc.get.call(this); }, set(v) { desc.set.call(this, v); sync(); } });
+    new MutationObserver(sync).observe(select, { childList: true, attributes: true, attributeFilter: ["disabled"] });
+    select.addEventListener("change", sync);
+    select.form?.addEventListener("reset", () => setTimeout(sync));
+    select._search = { input, sync };
+    sync();
+    return select._search;
   }
 
   async function departments() {
@@ -136,5 +215,5 @@
     }
   }
 
-  window.JuanmaCombo = { attach, filter, norm, departments, cities, placeFromRadicado, wirePlaces, loadPlaces };
+  window.JuanmaCombo = { attach, filter, filterAnywhere, searchSelect, norm, departments, cities, placeFromRadicado, wirePlaces, loadPlaces };
 })();
