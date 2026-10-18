@@ -1143,3 +1143,8 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
 .recipient-box { margin: 10px 0; }
 .recipient-box .recipient-preview { align-self: end; padding: 8px 10px; border-left: 3px solid var(--blue, #027cc6); background: var(--select-tint, rgba(2,124,198,.06)); border-radius: 6px; font-size: .92em; line-height: 1.35; }
 .recipient-box .recipient-preview:empty { display: none; }
+/* Version 2.32: Atrás / Adelante also in the sign-in card and in the pop-up lists (notifications, user menu, client menu) */
+.auth-nav { position: static; background: none; margin: 14px 0 0; padding: 10px 0 0; border-top: 1px solid var(--glass-border); }
+.pop-nav { background: linear-gradient(to top, var(--surface) 70%, transparent); margin: 6px 0 0; padding: 8px 0; }
+.bell-pop .pop-nav { padding: 8px 12px; }
+.user-pop .pop-nav button { width: auto; }

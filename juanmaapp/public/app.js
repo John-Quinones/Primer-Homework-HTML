@@ -317,9 +317,38 @@ async function boot() {
 }
 
 // ----- Forgotten password (installed app) -----
-const authSwap = (show) => { for (const id of ["#login-form", "#forgot-form", "#reset-form"]) if ($(id)) $(id).hidden = id !== show; };
-$("#forgot-open")?.addEventListener("click", () => authSwap("#forgot-form"));
+const authSwap = (show) => { for (const id of ["#login-form", "#forgot-form", "#reset-form"]) if ($(id)) $(id).hidden = id !== show; syncAuthNav(); };
+$("#forgot-open")?.addEventListener("click", () => { authAhead = null; authSwap("#forgot-form"); });
 $("#forgot-back")?.addEventListener("click", () => authSwap("#login-form"));
+// Version 2.32: the sign-in screen carries Atrás / Adelante too. From «¿Olvidó su contraseña?» (or the new
+// password form) Atrás returns to «Ingresar» keeping what was typed, and Adelante opens that form again.
+var authAhead = null;
+{
+  const nav = document.createElement("nav");
+  nav.className = "page-nav auth-nav";
+  nav.setAttribute("aria-label", "Navegación de la pantalla de ingreso");
+  nav.innerHTML = '<button type="button" class="mini" data-auth-nav="back" title="Volver a la pantalla anterior sin borrar lo escrito">‹ Atrás</button>'
+    + '<button type="button" class="mini" data-auth-nav="forward" title="Ir a la pantalla siguiente">Adelante ›</button>';
+  $(".auth-card").append(nav);
+  nav.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-auth-nav]");
+    if (!b) return;
+    const side = ["#forgot-form", "#reset-form"].find((id) => $(id) && !$(id).hidden);
+    if (b.dataset.authNav === "back") {
+      if (side) { authAhead = side; authSwap("#login-form"); } else history.back();
+    } else if (authAhead) { const to = authAhead; authAhead = null; authSwap(to); } else history.forward();
+  });
+  window.addEventListener("hashchange", () => syncAuthNav());
+}
+function syncAuthNav() {
+  const back = $('[data-auth-nav="back"]'), fwd = $('[data-auth-nav="forward"]');
+  if (!back) return;
+  const n = window.navigation, known = n && typeof n.canGoBack === "boolean";
+  const side = ["#forgot-form", "#reset-form"].some((id) => $(id) && !$(id).hidden);
+  back.disabled = !side && known && !n.canGoBack;
+  fwd.disabled = !authAhead && known && !n.canGoForward;
+}
+syncAuthNav();
 $("#forgot-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const err = $(".form-error", e.target);
@@ -583,7 +612,7 @@ function syncPageNav() {
   const n = window.navigation;
   if (!n || typeof n.canGoBack !== "boolean") return;
   $$('.page-nav [data-action="go-back"]').forEach((b) => (b.disabled = !n.canGoBack));
-  const reopen = !!dlgNav && dlgNav.forward.some((d) => !d.open);
+  const reopen = !!dlgNav && (dlgNav.forward.some((d) => !d.open) || !!dlgNav.reopenPop);
   $$('.page-nav [data-action="go-forward"]').forEach((b) => (b.disabled = !n.canGoForward && !reopen));
 }
 window.addEventListener("hashchange", syncPageNav);
@@ -1211,6 +1240,9 @@ async function openClientMenu(anchor, clientId) {
   pop.innerHTML = '<p class="muted">Cargando…</p>';
   document.body.append(pop);
   clientMenu = pop;
+  pop._reopen = () => openClientMenu(anchor, clientId);
+  dlgNav.reopenPop = null;
+  syncPageNav();
   placeClientMenu(pop, anchor);
   const [c, cases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
   if (clientMenu !== pop) return;
@@ -1228,7 +1260,8 @@ async function openClientMenu(anchor, clientId) {
       <span><strong>${escapeHtml(k.type_name)}</strong>${caseFolder(k) ? ` <span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span>` : ""}
         <br><span class="muted">${escapeHtml([k.title, k.status, k.radicado && formatRadicado(k.radicado)].filter(Boolean).join(" · "))}${k.client_id !== c.id ? " · cliente principal: " + escapeHtml(k.client_name) : ""}</span></span>
       <button class="mini" data-action="go" data-to="#expediente-${k.id}">Ver expediente</button></li>`).join("")}</ul>`
-      : '<p class="empty">Este cliente no tiene expedientes.</p>'}`;
+      : '<p class="empty">Este cliente no tiene expedientes.</p>'}${POP_NAV}`;
+  syncPageNav();
   placeClientMenu(pop, anchor);
 }
 document.addEventListener("click", (e) => {
@@ -1256,11 +1289,15 @@ function openDialog(dialog, title, values = {}) {
 // Atrás closes the window WITHOUT clearing what was typed and returns to the window it came from
 // (or to the screen); Adelante reopens it exactly as it was. A window opened right after another
 // one was saved (e.g. «Enviar a firma» → «Firma en persona») counts as its next step.
-var dlgNav = { forward: [], lastClosed: null, lastClosedAt: 0, navigating: false };
-const NO_DLG_NAV = new Set(["ask-dialog"]); // yes/no questions answer with their own buttons
+var dlgNav = { forward: [], lastClosed: null, lastClosedAt: 0, navigating: false, reopenPop: null };
+// Version 2.32: yes/no questions also carry the bar (Atrás = answer «Cancelar» and go back), but they are never
+// reopened with Adelante: the question they asked is already answered.
+const NO_REOPEN = new Set(["ask-dialog"]);
 const nativeShowModal = HTMLDialogElement.prototype.showModal;
 HTMLDialogElement.prototype.showModal = function () {
+  addDlgNav(this); // windows built later (e.g. the «?» help) get the bar the first time they open
   if (!dlgNav.navigating) {
+    dlgNav.reopenPop = null;
     const below = $$("dialog[open]").filter((d) => d !== this).pop();
     const recent = Date.now() - dlgNav.lastClosedAt < 2500 ? dlgNav.lastClosed : null;
     this._navPrev = below || (recent !== this ? recent : null);
@@ -1270,8 +1307,8 @@ HTMLDialogElement.prototype.showModal = function () {
   syncDlgNav();
   return r;
 };
-for (const dlg of $$("dialog")) {
-  if (NO_DLG_NAV.has(dlg.id)) continue;
+function addDlgNav(dlg) {
+  if (dlg.querySelector(":scope > .dlg-nav")) return;
   const nav = document.createElement("nav");
   nav.className = "page-nav dlg-nav";
   nav.setAttribute("aria-label", "Navegación de la ventana");
@@ -1284,6 +1321,7 @@ for (const dlg of $$("dialog")) {
     syncDlgNav();
   });
 }
+$$("dialog").forEach(addDlgNav);
 function reopenDialog(dlg) {
   dlgNav.navigating = true;
   try { if (!dlg.open) dlg.showModal(); } finally { dlgNav.navigating = false; }
@@ -1291,7 +1329,7 @@ function reopenDialog(dlg) {
 function dialogBack(dlg) {
   if (dlg.dataset.forced) return; // a forced password change cannot be skipped
   const prev = dlg._navPrev;
-  dlgNav.forward.push(dlg);
+  if (!NO_REOPEN.has(dlg.id)) dlgNav.forward.push(dlg);
   dlg.close("back");
   if (prev && prev.isConnected && !prev.open) reopenDialog(prev);
   syncDlgNav();
@@ -1315,7 +1353,40 @@ document.addEventListener("click", (e) => {
   else dialogForward();
 });
 // Changing screens forgets windows closed with Atrás on the previous screen.
-window.addEventListener("hashchange", () => { dlgNav.forward = []; syncDlgNav(); });
+window.addEventListener("hashchange", () => { dlgNav.forward = []; dlgNav.reopenPop = null; syncDlgNav(); });
+
+// ---------- Version 2.32: Atrás / Adelante in the pop-up lists ----------
+// The notifications list, the user menu and a client's menu (a sheet from the bottom on phones) end with the
+// same bar: Atrás closes the list and returns to the screen; Adelante, at the foot of the screen, opens it again.
+const POP_NAV = '<nav class="page-nav pop-nav" aria-label="Navegación de la lista">'
+  + '<button type="button" class="mini" data-pop-nav="back" title="Cerrar y volver a la pantalla">‹ Atrás</button>'
+  + '<button type="button" class="mini" data-action="go-forward" title="Ir a la pantalla siguiente">Adelante ›</button></nav>';
+for (const pop of $$(".bell-pop, .user-pop")) {
+  pop.insertAdjacentHTML("beforeend", POP_NAV);
+  pop.closest("details").addEventListener("toggle", (e) => { if (e.target.open) { dlgNav.reopenPop = null; syncPageNav(); } });
+}
+function reopenPopup() {
+  const again = dlgNav.reopenPop;
+  dlgNav.reopenPop = null;
+  again?.();
+  syncPageNav();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest('[data-pop-nav="back"]');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const details = b.closest("details");
+  if (details) {
+    details.open = false;
+    dlgNav.reopenPop = () => { details.open = true; };
+  } else {
+    const again = clientMenu?._reopen;
+    closeClientMenu();
+    dlgNav.reopenPop = again || null;
+  }
+  syncPageNav();
+}, true);
 
 // Dialog forms close on submit by default; keep them open until the save succeeds.
 function wireDialog(dialog, onSave) {
@@ -2244,7 +2315,7 @@ document.addEventListener("click", (e) => {
     "goto-sec": () => goToSection(btn.dataset.sec),
     "go-sec": () => goToSection(btn.dataset.sec),
     "go-back": () => history.back(),
-    "go-forward": () => (dlgNav.forward.some((d) => !d.open) ? dialogForward() : history.forward()),
+    "go-forward": () => (dlgNav.reopenPop ? reopenPopup() : dlgNav.forward.some((d) => !d.open) ? dialogForward() : history.forward()),
     "open-case": () => { location.hash = `#expediente-${id}`; },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
