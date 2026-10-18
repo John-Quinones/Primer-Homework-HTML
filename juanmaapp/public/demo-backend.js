@@ -69,6 +69,11 @@
       }
       st.info.radFromNumber = true;
     }
+    // Version 2.39 (user: «yo decido cuáles consultar»): those radicados do not keep the consultation on.
+    if (!st.info.monitorOffFromNumber) {
+      for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
+      st.info.monitorOffFromNumber = true;
+    }
     for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog"]) st[k] ||= [];
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.

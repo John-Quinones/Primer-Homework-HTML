@@ -41,3 +41,30 @@ test("radicadosFromNumbers reports the repeated numbers it skipped", () => {
   assert.deepEqual(r.out, [{ id: 1, radicado: "73001418900220160117900" }]);
   assert.deepEqual(r.skipped, [{ id: 2, radicado: "73001418900220160117900" }]);
 });
+
+test("version 2.39: the consultation that version 2.35 turned on is turned off once; boxes ticked later stay", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "jm-monoff-"));
+  const file = path.join(dir, "old.db");
+  try {
+    let db = openDb(file);
+    const officeId = db.prepare("SELECT id FROM offices LIMIT 1").get()?.id ?? db.prepare("INSERT INTO offices (name) VALUES ('Ibagué')").run().lastInsertRowid;
+    const typeId = db.prepare("SELECT id FROM process_types LIMIT 1").get().id;
+    const clientId = db.prepare("INSERT INTO clients (full_name, office_id) VALUES ('Ana Ruiz', ?)").run(officeId).lastInsertRowid;
+    const add = (num, rad, monitor) => db.prepare("INSERT INTO cases (client_id, process_type_id, office_id, case_number, radicado, monitor) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(clientId, typeId, officeId, num, rad, monitor).lastInsertRowid;
+    const auto = add("730014189002201601179", "73001418900220160117900", 1);
+    const own = add("", "73001400300220080066400", 1);
+    db.exec("DELETE FROM app_flags WHERE key = 'monitor-off-from-number'"); // as the server was with version 2.35
+    db.close();
+    db = openDb(file);
+    const mon = (id) => db.prepare("SELECT monitor FROM cases WHERE id = ?").get(id).monitor;
+    assert.equal(mon(auto), 0);
+    assert.equal(mon(own), 1, "a case whose radicado was not taken from the number keeps its consultation");
+    assert.deepEqual(db.prepare("SELECT case_id FROM monitor_off_log").all().map((x) => x.case_id), [auto]);
+    db.prepare("UPDATE cases SET monitor = 1 WHERE id = ?").run(auto); // ticked again by the user
+    db.close();
+    db = openDb(file);
+    assert.equal(mon(auto), 1, "runs only once");
+    db.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

@@ -617,6 +617,15 @@ function migrate(db) {
     }
     db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('radicado-from-number')").run();
   }
+  // Version 2.39 (user: «yo decido cuáles consultar»): version 2.35 turned the consultation on for the
+  // radicados it took from the case number; turn it off once. The ids stay in monitor_off_log.
+  if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'monitor-off-from-number'").get()) {
+    db.exec("CREATE TABLE IF NOT EXISTS monitor_off_log (case_id INTEGER NOT NULL, at TEXT NOT NULL DEFAULT (datetime('now')))");
+    const ids = db.prepare("SELECT id FROM cases WHERE monitor = 1 AND case_number != '' AND radicado = case_number || '00'").all().map((x) => x.id);
+    const off = db.prepare("UPDATE cases SET monitor = 0 WHERE id = ?"), log = db.prepare("INSERT INTO monitor_off_log (case_id) VALUES (?)");
+    for (const id of ids) { off.run(id); log.run(id); }
+    db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('monitor-off-from-number')").run();
+  }
   // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
   for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],
     ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def);
