@@ -1,9 +1,11 @@
 // Display preferences of this device: font size, layout (automatic, mobile or
-// web) and day / night theme. They are a per-device convenience, kept in the
+// web), day / night theme and the motion effects (crossfade, magnification, blur). They are a per-device convenience, kept in the
 // browser; nothing here touches the firm's data.
 (function () {
   const KEY = "tecjuridicos-display-v1";
-  const DEFAULTS = { font: "normal", view: "auto", theme: "auto" };
+  const DEFAULTS = { font: "normal", view: "auto", theme: "auto", fx: "siempre" };
+  // «Efectos»: siempre (default: the user asked for them), equipo (off when the device asks for reduced motion), no.
+  const lessMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const FONT = { normal: "100%", mediana: "112.5%", grande: "125%" };
   const MOBILE_MAX = 760;
   let prefs = { ...DEFAULTS };
@@ -46,6 +48,7 @@
     if (prefs.theme === "auto") { if (root.dataset.themeByApp) { root.removeAttribute("data-theme"); delete root.dataset.themeByApp; } }
     else { root.dataset.theme = prefs.theme === "noche" ? "dark" : "light"; root.dataset.themeByApp = "1"; }
     root.dataset.view = prefs.view;
+    root.dataset.fx = prefs.fx === "no" || (prefs.fx === "equipo" && lessMotion.matches) ? "off" : "on";
     applyView();
     const badge = document.getElementById("view-badge");
     if (badge) badge.textContent = `Vista: ${currentView()}`;
@@ -56,6 +59,7 @@
     apply();
   }
   window.addEventListener("resize", () => { if (prefs.view === "auto") apply(); });
+  lessMotion.addEventListener?.("change", apply);
   window.JuanmaDisplay = { get: () => ({ ...prefs }), set, apply, currentView };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
 })();

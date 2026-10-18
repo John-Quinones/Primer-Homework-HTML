@@ -460,11 +460,11 @@ $("#ps-exit").addEventListener("click", () => { $("#sign-screen").hidden = true;
 const prefsForm = $("#prefs-dialog form");
 function openPrefs() {
   const p = window.JuanmaDisplay.get();
-  for (const k of ["font", "view", "theme"]) prefsForm.elements[k].value = p[k];
+  for (const k of ["font", "view", "theme", "fx"]) prefsForm.elements[k].value = p[k];
   $("#prefs-dialog").showModal();
 }
 prefsForm.addEventListener("change", () => window.JuanmaDisplay.set({
-  font: prefsForm.elements.font.value, view: prefsForm.elements.view.value, theme: prefsForm.elements.theme.value }));
+  font: prefsForm.elements.font.value, view: prefsForm.elements.view.value, theme: prefsForm.elements.theme.value, fx: prefsForm.elements.fx.value }));
 wireDialog($("#email-dialog"), async (form) => {
   const out = await api("POST", "/auth/email", formData(form));
   me = out.user;
@@ -603,9 +603,9 @@ function showView() {
 const refreshView = () => showView();
 // Crossfade (version 2.34): changing screens fades the old one out while the new one fades in
 // (View Transitions; browsers without it, or with reduced motion, just switch). Not while a window is open.
-const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Version 2.40: they follow Pantalla → «Efectos» (display.js sets <html data-fx>), on by default even when the device asks for less motion.
 function crossfade(update) {
-  if (!document.startViewTransition || reduceMotion() || document.hidden || $("dialog[open]")) return update();
+  if (!document.startViewTransition || document.documentElement.dataset.fx !== "on" || document.hidden || $("dialog[open]")) return update();
   const t = document.startViewTransition(update);
   t.ready.catch(() => {});
   t.finished.catch(() => {});
