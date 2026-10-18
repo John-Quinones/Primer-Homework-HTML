@@ -600,7 +600,17 @@ function showView() {
 }
 /** Re-render whatever screen is open (after a dialog saves). */
 const refreshView = () => showView();
-window.addEventListener("hashchange", () => guarded(showView));
+// Crossfade (version 2.34): changing screens fades the old one out while the new one fades in
+// (View Transitions; browsers without it, or with reduced motion, just switch). Not while a window is open.
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+function crossfade(update) {
+  if (!document.startViewTransition || reduceMotion() || document.hidden || $("dialog[open]")) return update();
+  const t = document.startViewTransition(update);
+  t.ready.catch(() => {});
+  t.finished.catch(() => {});
+  return t.updateCallbackDone;
+}
+window.addEventListener("hashchange", () => guarded(() => crossfade(showView)));
 
 // Changes 59–60: every screen carries its own "‹ Atrás / Adelante ›" buttons at its foot (not in the top bar); the bar sticks to the bottom of the window.
 for (const view of $$("main .view")) {
@@ -3566,7 +3576,7 @@ function showDTab(name) {
 $("#doc-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("[data-dtab]");
   if (!b) return;
-  showDTab(b.dataset.dtab);
+  crossfade(() => showDTab(b.dataset.dtab));
   if (b.dataset.dtab === "nomos") guarded(renderNomos);
 });
 
