@@ -610,7 +610,7 @@ function migrate(db) {
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'radicado-from-number'").get()) {
     const all = db.prepare("SELECT id, radicado, case_number, department, city FROM cases").all();
     const byId = new Map(all.map((k) => [k.id, k]));
-    const setRad = db.prepare("UPDATE cases SET radicado = ?, monitor = 1, department = ?, city = ? WHERE id = ?");
+    const setRad = db.prepare("UPDATE cases SET radicado = ?, department = ?, city = ? WHERE id = ?"); // monitor stays off (v2.38)
     for (const { id, radicado } of radicadosFromNumbers(all).out) {
       const k = byId.get(id), place = !k.department ? placeFromRadicado(radicado) : null;
       setRad.run(radicado, place?.department || k.department || "", place ? k.city || place.city : k.city || "", id);

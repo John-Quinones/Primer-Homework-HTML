@@ -1714,6 +1714,7 @@ function renderRadRows() {
             aria-label="Radicado del expediente de ${escapeHtml(k.client_name)}" value="${escapeHtml(k.radicado ? formatRadicado(k.radicado) : "")}" data-saved="${escapeHtml(k.radicado || "")}" />
           <button type="button" class="mini primary" data-rad-save>Guardar</button>
         </div>
+        <label class="inline rad-monitor"><input type="checkbox" data-rad-monitor ${k.monitor ? "checked" : ""} /> Consulta automática en la Rama Judicial</label>
         <span class="rad-note muted" aria-live="polite">${k.radicado ? `Guardado · consulta automática ${k.monitor ? "activada" : "pausada"}` : "Sin radicado"}</span>
         ${old ? `<span class="rad-old muted">Venía en el Excel: <span class="mono">${escapeHtml(old)}</span></span>` : ""}
       </td>
@@ -1761,7 +1762,7 @@ async function saveRadicado(tr) {
   }
   btn.disabled = true;
   try {
-    const out = await api("PUT", `/cases/${id}/radicado`, { radicado: digits, replace: !!saved });
+    const out = await api("PUT", `/cases/${id}/radicado`, { radicado: digits, replace: !!saved, monitor: $("[data-rad-monitor]", tr).checked });
     if (k) Object.assign(k, out);
     inp.dataset.saved = out.radicado || "";
     tr.classList.toggle("has-rad", !!out.radicado);
@@ -1786,6 +1787,18 @@ $("#rad-rows").addEventListener("keydown", (e) => {
   const tr = inp.closest("tr");
   guarded(async () => { if (await saveRadicado(tr)) { const n = nextRadInput(tr); n.focus(); n.select(); } });
 });
+// Version 2.38: the box is the only way the consultation turns on. On a row with a saved radicado it applies at once.
+$("#rad-rows").addEventListener("change", (e) => guarded(async () => {
+  const box = e.target.closest("[data-rad-monitor]");
+  if (!box) return;
+  const tr = box.closest("tr"), id = Number(tr.dataset.radCase), note = $(".rad-note", tr);
+  if (!$(".rad-input", tr).dataset.saved) { note.className = "rad-note muted"; note.textContent = box.checked ? "Se activará al guardar el radicado." : "Sin radicado"; return; }
+  try { await api("PUT", `/monitor/cases/${id}/monitor`, { monitor: box.checked }); } catch (err) { box.checked = !box.checked; throw err; }
+  const k = state.cases.find((x) => x.id === id);
+  if (k) k.monitor = box.checked ? 1 : 0;
+  note.className = "rad-note ok";
+  note.textContent = `✓ Consulta automática ${box.checked ? "activada" : "pausada"}`;
+}));
 $("#rad-rows").addEventListener("click", (e) => {
   const b = e.target.closest("[data-rad-save]");
   if (b) guarded(() => saveRadicado(b.closest("tr")));
@@ -2073,7 +2086,7 @@ async function openCaseDialog(k = null, clientId = null) {
     court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0",
   } : { affiliated: "0" });
   caseForm.elements.client_role.innerHTML = "";
-  caseForm.elements.monitor.checked = k ? !!k.monitor || !k.radicado : true;
+  caseForm.elements.monitor.checked = !!k?.monitor; // v2.38: off until the user ticks it
   showCourtEmail(k?.court_name ? { email: k.court_email } : null);
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();

@@ -24,7 +24,7 @@ test("a 21-digit case number + 00 becomes the radicado once; repeats and saved r
 
     db = openDb(file);
     const row = (id) => db.prepare("SELECT radicado, monitor, department, city, case_number FROM cases WHERE id = ?").get(id);
-    assert.deepEqual({ ...row(a) }, { radicado: "73001418900220160117900", monitor: 1, department: "Tolima", city: "Ibagué", case_number: "730014189002201601179" });
+    assert.deepEqual({ ...row(a) }, { radicado: "73001418900220160117900", monitor: 0, department: "Tolima", city: "Ibagué", case_number: "730014189002201601179" });
     assert.equal(row(twin).radicado, "", "the same radicado is not given to a second case");
     assert.equal(row(saved).radicado, "73001333300820150027801", "a saved radicado stays");
     assert.equal(row(odd).radicado, "");

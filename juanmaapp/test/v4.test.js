@@ -41,7 +41,7 @@ test("a case with a 23-digit radicado gets department and city; court fills name
   const court = (await admin.call("GET", "/courts?city=Ibagu%C3%A9&area=Laboral")).body[0];
   assert.equal((await admin.call("POST", "/cases", { client_id: client.id, process_type_id: lab.types[0].id, radicado: "123" })).status, 400);
   const k = (await admin.call("POST", "/cases", {
-    client_id: client.id, process_type_id: lab.types[0].id, radicado: "73001-31-05-001-2023-00123-00", court_id: court.id,
+    client_id: client.id, process_type_id: lab.types[0].id, radicado: "73001-31-05-001-2023-00123-00", court_id: court.id, monitor: true,
     assigned_user_id: (await admin.call("GET", "/auth/status")).body.user.id,
   })).body;
   caseId = k.id;

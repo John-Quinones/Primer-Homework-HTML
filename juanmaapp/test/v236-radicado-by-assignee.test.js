@@ -21,7 +21,7 @@ test("the responsible funcionario types and changes the radicado by hand; others
   const set = await s.call("PUT", `/cases/${k.id}/radicado`, { radicado: "73-001-41-89-002-2016-01179-00" });
   assert.equal(set.status, 200);
   assert.equal(set.body.radicado, "73001418900220160117900");
-  assert.equal(set.body.monitor, 1);
+  assert.equal(set.body.monitor, 0, "only the box turns the consultation on (v2.38)");
   const changed = await s.call("PUT", `/cases/${k.id}/radicado`, { radicado: "73001418900220160117901", replace: true });
   assert.equal(changed.body.radicado, "73001418900220160117901");
 

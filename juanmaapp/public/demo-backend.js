@@ -65,7 +65,7 @@
     if (!st.info.radFromNumber) {
       for (const { id, radicado } of CM.radicadosFromNumbers(st.cases).out) {
         const k = st.cases.find((x) => x.id === id), place = !k.department ? placeFromRad(radicado) : null;
-        Object.assign(k, { radicado, monitor: 1, department: place?.department || k.department || "", city: place ? k.city || place.city : k.city || "" });
+        Object.assign(k, { radicado, department: place?.department || k.department || "", city: place ? k.city || place.city : k.city || "" });
       }
       st.info.radFromNumber = true;
     }
@@ -346,7 +346,7 @@
     let court_name = pick("court_name"), court_email = pick("court_email");
     const c = courtId ? s.courts.find((x) => x.id === courtId) || fail("El despacho no existe en el directorio.") : null;
     if (c) { court_name = c.name; court_email = c.email; department ||= c.department; city ||= c.city; }
-    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? (radicado ? 1 : 0);
+    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? 0; // v2.38: only the box turns it on
     return { department, city, area: area || c?.area || "", court_id: courtId, court_name, court_email, radicado, monitor: radicado ? monitor : 0,
       judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
   };
@@ -1256,7 +1256,7 @@
         fail(`El radicado ${fmt(radicado)} ya está en ${oc && clientVisible(oc) ? `el expediente «${other.title || caseOut(other).type_name}» de ${oc.full_name}` : "otro expediente"}.`);
       }
       const place = radicado && !k.department ? placeFromRad(radicado) : null;
-      const monitor = !radicado ? 0 : k.radicado ? (k.monitor ? 1 : 0) : 1;
+      const monitor = !radicado ? 0 : "monitor" in b ? (b.monitor ? 1 : 0) : k.monitor ? 1 : 0; // v2.38: only the box
       Object.assign(k, { radicado, monitor, department: place?.department || k.department || "", city: place ? k.city || place.city : k.city || "", updated_at: stamp() });
       return caseOut(k);
     }],

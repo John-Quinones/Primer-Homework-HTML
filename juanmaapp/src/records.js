@@ -387,7 +387,8 @@ export function recordsRouter(db) {
       department ||= c.department;
       city ||= c.city;
     }
-    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? (radicado ? 1 : 0);
+    // Version 2.38 (user's rule): only the «Consulta automática» box turns it on.
+    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? 0;
     return { department, city, area: area || (courtId ? db.prepare("SELECT area FROM courts WHERE id = ?").get(courtId).area : ""),
       court_id: courtId, court_name: courtName, court_email: courtEmail, radicado, monitor: radicado ? monitor : 0,
       judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
@@ -532,8 +533,9 @@ export function recordsRouter(db) {
       if (other) fail400(`El radicado ${formatRadicado(radicado)} ya está en ${clientVisible(req, other.client_id) ? `el expediente «${other.title || other.type_name}» de ${other.full_name}` : "otro expediente"}.`);
     }
     const place = radicado && !cur.department ? placeFromRadicado(radicado) : null;
-    // A new radicado turns the automatic consultation on; a changed one keeps what the case had.
-    const monitor = !radicado ? 0 : cur.radicado ? (cur.monitor ? 1 : 0) : 1;
+    // Version 2.38 (user's rule): saving a radicado never turns the automatic consultation on by itself;
+    // only the box does (sent as monitor), otherwise the case keeps what it had.
+    const monitor = !radicado ? 0 : req.body && "monitor" in req.body ? (req.body.monitor ? 1 : 0) : cur.monitor ? 1 : 0;
     db.prepare("UPDATE cases SET radicado = ?, monitor = ?, department = ?, city = ?, updated_at = datetime('now') WHERE id = ?")
       .run(radicado, monitor, place?.department || cur.department || "", place ? cur.city || place.city : cur.city || "", cur.id);
     return getCase(req, cur.id);

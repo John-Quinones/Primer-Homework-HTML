@@ -309,7 +309,7 @@
             <select id="rad-office" aria-label="Oficina"><option value="">Todas mis oficinas</option></select>
           </div>
         </div>
-        <p class="hint">Escriba o pegue el número de expediente (radicado de 23 dígitos) en la casilla de cada expediente (con o sin guiones) y pulse <strong>Enter</strong> o <strong>Guardar</strong>: queda guardado con el formato 73-001-40-03-002-2008-00664-00, se activa la consulta automática en la Rama Judicial y el cursor pasa al siguiente. La App no deja repetir un radicado que ya está en otro expediente y pide confirmación antes de cambiar uno ya guardado.</p>
+        <p class="hint">Escriba o pegue el número de expediente (radicado de 23 dígitos) en la casilla de cada expediente (con o sin guiones) y pulse <strong>Enter</strong> o <strong>Guardar</strong>: queda guardado con el formato 73-001-40-03-002-2008-00664-00 y el cursor pasa al siguiente. La consulta automática en la Rama Judicial se activa solo si marca la casilla «Consulta automática» de esa fila. La App no deja repetir un radicado que ya está en otro expediente y pide confirmación antes de cambiar uno ya guardado.</p>
         <p class="rad-progress" id="rad-progress" aria-live="polite"></p>
         <div class="panel min0">
           <div class="table-scroll">
@@ -1017,7 +1017,7 @@
           <label>Nombre del juez <input name="judge_name" autocomplete="off" maxlength="200" placeholder="Elija el nombre sugerido o escríbalo a mano" /></label>
           <div id="judge-suggest" class="judge-suggest" aria-live="polite"></div>
         </div>
-        <label class="inline"><input type="checkbox" name="monitor" checked /> Consultar este proceso automáticamente en la Rama Judicial</label>
+        <label class="inline"><input type="checkbox" name="monitor" /> Consultar este proceso automáticamente en la Rama Judicial (solo si marca esta casilla)</label>
       </fieldset>
       <div class="grid2">
         <label>Oficina * <select name="office_id" required></select></label>
