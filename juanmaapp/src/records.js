@@ -388,7 +388,8 @@ export function recordsRouter(db) {
     }
     const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? (radicado ? 1 : 0);
     return { department, city, area: area || (courtId ? db.prepare("SELECT area FROM courts WHERE id = ?").get(courtId).area : ""),
-      court_id: courtId, court_name: courtName, court_email: courtEmail, radicado, monitor: radicado ? monitor : 0 };
+      court_id: courtId, court_name: courtName, court_email: courtEmail, radicado, monitor: radicado ? monitor : 0,
+      judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
   };
 
   // The responsible person must be an active user of the case's office (or see all offices).
@@ -437,11 +438,11 @@ export function recordsRouter(db) {
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);
     const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
-        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
+        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, judge_name, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
       .run(clientId, typeId, str(b.title), normStatus(b.status), str(b.counterparty), str(b.facts),
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
-        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId),
+        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId), loc.judge_name,
         // Imported cases keep the date they were opened in the previous system.
         /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : null).lastInsertRowid;
     res.status(201);
@@ -462,12 +463,12 @@ export function recordsRouter(db) {
     const loc = caseLocation(b, cur);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
       field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
-      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, updated_at = datetime('now') WHERE id = ?`)
+      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, judge_name = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) ? normStatus(b.status) : cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
         loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
-        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), id);
+        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), loc.judge_name, id);
     return getCase(req, id);
   }));
 

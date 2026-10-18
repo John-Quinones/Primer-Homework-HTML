@@ -73,3 +73,22 @@ export async function actuaciones(processId, { maxPages = 5 } = {}) {
   }
   return out;
 }
+
+/** Details of a process; "ponente" is the judge (or reporting magistrate) in charge. */
+export async function processDetail(processId) {
+  const d = await getJson(`${BASE}/Proceso/Detalle/${encodeURIComponent(processId)}`);
+  return {
+    judge: String(pick(d, "ponente") ?? "").replace(/\s+/g, " ").trim(),
+    court: String(pick(d, "despacho") ?? "").trim(),
+  };
+}
+
+/** Judge of the process under a radicado (latest one when several share it): { judge, court } or null. */
+export async function judgeByRadicado(radicado) {
+  const digits = String(radicado).replace(/\D/g, "");
+  const found = (await findByRadicado(digits)).filter((p) => !p.radicado || p.radicado === digits);
+  if (!found.length) return null;
+  found.sort((a, b) => (b.lastAction || "").localeCompare(a.lastAction || ""));
+  const d = await processDetail(found[0].id);
+  return { judge: d.judge, court: d.court || found[0].court };
+}

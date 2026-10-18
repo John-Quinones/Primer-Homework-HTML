@@ -344,6 +344,12 @@ button.danger-solid { background: var(--error); border-color: var(--error); colo
 .court-line { font-size: .8rem; color: var(--text-muted); }
 .court-fields { background: color-mix(in srgb, var(--brand-blue) 5%, transparent); }
 #court-email { margin: 0 0 8px; }
+/* Version 2.27: judge of the court, suggested or typed. */
+.judge-box { margin: 0 0 10px; }
+.judge-options { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; }
+.judge-options li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--brand-blue) 7%, transparent); }
+.judge-options li > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+.judge-suggest .hint { margin: 4px 0; }
 
 /* ---------- Despachos, roles, misc ---------- */
 .file-btn {

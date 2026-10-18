@@ -531,6 +531,8 @@ function migrate(db) {
   add("saved_rulings", "created_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL");
   add("clients", "department", "TEXT NOT NULL DEFAULT ''");
   add("courts", "circuit", "TEXT NOT NULL DEFAULT ''");
+  // Version 2.27: the judge of a court (directory file, when it has the column) and the judge chosen on each case.
+  add("courts", "judge", "TEXT NOT NULL DEFAULT ''");
   // Certified e-mail evidence (change 39): the exact message sent (.eml) with several digests, attachment digests, trusted timestamp.
   for (const [col, def] of [["raw", "BLOB"], ["raw_sha1", "TEXT NOT NULL DEFAULT ''"], ["raw_sha256", "TEXT NOT NULL DEFAULT ''"], ["raw_sha512", "TEXT NOT NULL DEFAULT ''"],
     ["raw_sha3_512", "TEXT NOT NULL DEFAULT ''"], ["attach_mode", "TEXT NOT NULL DEFAULT 'adjunto'"], ["tsa_url", "TEXT NOT NULL DEFAULT ''"], ["tsa_reply", "TEXT"],
@@ -580,7 +582,7 @@ function migrate(db) {
     ["monitor", "INTEGER NOT NULL DEFAULT 0"], ["ext_process_id", "TEXT NOT NULL DEFAULT ''"],
     ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"],
     ["client_role", "TEXT NOT NULL DEFAULT ''"], ["affiliated", "INTEGER NOT NULL DEFAULT 0"],
-    ["parties", "TEXT NOT NULL DEFAULT '[]'"]]) add("cases", col, def); // parties: JSON list (change 49)
+    ["parties", "TEXT NOT NULL DEFAULT '[]'"], ["judge_name", "TEXT NOT NULL DEFAULT ''"]]) add("cases", col, def); // parties: JSON list (change 49)
   // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
   for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],
     ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def);

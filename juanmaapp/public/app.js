@@ -942,7 +942,7 @@ async function renderExpedienteFicha(id) {
     </div>
     <div class="ficha-grid">
       ${secId("datos", wide(panel("Datos del expediente", null, `<dl class="facts">
-        ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Correo del despacho", k.court_email)}
+        ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Juez", k.judge_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
         ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
@@ -1852,8 +1852,56 @@ window.JuanmaCombo.attach(caseForm.elements.court_search, {
     if (!caseForm.elements.department.value) caseForm.elements.department.value = it.court.department;
     if (!caseForm.elements.city.value) caseForm.elements.city.value = it.court.city;
     showCourtEmail(it.court);
+    suggestJudge();
   },
   onType: () => { caseForm.elements.court_id.value = ""; showCourtEmail(null); },
+});
+caseForm.elements.court_search.addEventListener("change", () => suggestJudge());
+
+// Version 2.27: when a court is chosen, show the judge's name the Rama Judicial has for the
+// radicado («ponente»), plus the directory's and the ones used in other cases of that court.
+// Nothing is filled in by itself: «Usar este nombre» copies it, or the user types it.
+let judgeAsk = 0;
+async function suggestJudge() {
+  const box = $("#judge-suggest");
+  const courtId = caseForm.elements.court_id.value, courtName = caseForm.elements.court_search.value.trim();
+  const radicado = caseForm.elements.radicado.value.replace(/\D/g, "");
+  if (!courtId && !courtName) { box.innerHTML = ""; return; }
+  const ask = ++judgeAsk;
+  box.innerHTML = `<p class="hint">${radicado.length === 23 ? "Consultando el nombre del juez en la Rama Judicial…" : "Buscando el nombre del juez…"}</p>`;
+  let r;
+  try {
+    r = await api("GET", `/courts/judge?${new URLSearchParams({ court_id: courtId, court_name: courtName, radicado })}`);
+  } catch (err) {
+    r = { rama: null, rama_error: err.message, directory: "", others: [] };
+  }
+  if (ask !== judgeAsk) return;
+  const current = plainText(caseForm.elements.judge_name.value);
+  const seen = new Set();
+  const opts = [];
+  const add = (name, source) => {
+    const key = plainText(name);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    opts.push({ name: window.JuanmaPerson.properName(name), source });
+  };
+  if (r.rama?.judge) add(r.rama.judge, "Rama Judicial (consulta del radicado)");
+  add(r.directory, "Directorio de despachos");
+  for (const n of r.others || []) add(n, "Usado en otros expedientes de este despacho");
+  const otherCourt = r.rama?.court && plainText(r.rama.court) !== plainText(courtName)
+    ? `<p class="hint">La Rama Judicial registra este radicado en: <strong>${escapeHtml(r.rama.court)}</strong>.</p>` : "";
+  box.innerHTML = (opts.length ? `<ul class="judge-options">${opts.map((o) => `<li><span><strong>${escapeHtml(o.name)}</strong>
+      <span class="muted">${escapeHtml(o.source)}</span></span>${plainText(o.name) === current
+        ? `<span class="follow ok">Elegido</span>` : `<button type="button" class="mini" data-use-judge="${escapeHtml(o.name)}">Usar este nombre</button>`}</li>`).join("")}</ul>` : "")
+    + otherCourt + (r.rama_error ? `<p class="hint">${escapeHtml(r.rama_error)}</p>` : "")
+    + `<p class="hint">Si el nombre no aparece o cambió, escríbalo a mano en «Nombre del juez».</p>`;
+}
+$("#judge-suggest").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-use-judge]");
+  if (!b) return;
+  caseForm.elements.judge_name.value = b.dataset.useJudge;
+  toast("Nombre del juez elegido. Se guarda al guardar el expediente.");
+  suggestJudge();
 });
 // Written as the firm reads it (73-001-40-03-002-2008-00664-00); saved and queried as 23 digits.
 caseForm.elements.radicado.addEventListener("focusout", (e) => { e.target.value = formatRadicado(e.target.value.trim()); });
@@ -1863,6 +1911,7 @@ caseForm.elements.radicado.addEventListener("input", async (e) => {
     const place = await window.JuanmaCombo.placeFromRadicado(digits);
     if (place) { caseForm.elements.department.value = place.department; caseForm.elements.city.value = place.city; }
   }
+  if (digits.length === 23 && (caseForm.elements.court_id.value || caseForm.elements.court_search.value.trim())) suggestJudge();
 });
 
 // ----- Parties of the case (change 49) -----
@@ -1932,11 +1981,13 @@ async function openCaseDialog(k = null, clientId = null) {
   openDialog($("#case-dialog"), k ? `Editar expediente${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}` : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
     radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
-    court_search: k.court_name, court_id: k.court_id ?? "", affiliated: k.affiliated ? "1" : "0",
+    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0",
   } : { affiliated: "0" });
   caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = k ? !!k.monitor || !k.radicado : true;
   showCourtEmail(k?.court_name ? { email: k.court_email } : null);
+  $("#judge-suggest").innerHTML = "";
+  if (k?.court_name) suggestJudge();
   caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
   caseForm.elements.client_id.disabled = !!k;
   caseForm.elements.office_id.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
@@ -1965,7 +2016,7 @@ wireDialog($("#case-dialog"), async (form) => {
     client_role: d.client_role, affiliated: d.affiliated === "1",
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
-    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, monitor: form.elements.monitor.checked,
+    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);
@@ -4954,7 +5005,7 @@ const COURT_COLS = {
   department: ["departamento", "depto", "distrito"], city: ["ciudad", "municipio", "ciudad municipio", "sede"],
   name: ["despacho", "nombre despacho", "nombre del despacho", "juzgado", "dependencia", "nombre"],
   area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
-  code: ["codigo", "codigo despacho", "cod despacho"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
+  code: ["codigo", "codigo despacho", "cod despacho"], judge: ["juez", "nombre juez", "nombre del juez", "titular", "funcionario", "nombre funcionario", "nombre del funcionario", "magistrado", "ponente"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
 };
 $("#courts-file").addEventListener("change", (e) => guarded(async () => {
   const file = e.target.files[0];

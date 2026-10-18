@@ -999,6 +999,10 @@
         </div>
         <input type="hidden" name="court_id" />
         <p class="hint" id="court-email"></p>
+        <div class="judge-box">
+          <label>Nombre del juez <input name="judge_name" autocomplete="off" maxlength="200" placeholder="Elija el nombre sugerido o escríbalo a mano" /></label>
+          <div id="judge-suggest" class="judge-suggest" aria-live="polite"></div>
+        </div>
         <label class="inline"><input type="checkbox" name="monitor" checked /> Consultar este proceso automáticamente en la Rama Judicial</label>
       </fieldset>
       <div class="grid2">

@@ -22,6 +22,7 @@ export const VARIABLES = [
   ["expediente.contraparte", "Contraparte / entidad", "Expediente"],
   ["expediente.hechos", "Hechos", "Expediente"],
   ["expediente.despacho", "Despacho", "Expediente"],
+  ["expediente.juez", "Juez del despacho", "Expediente"],
   ["expediente.correo_despacho", "Correo del despacho", "Expediente"],
   ["expediente.area", "Área", "Expediente"],
   ["expediente.ciudad", "Ciudad del proceso", "Expediente"],

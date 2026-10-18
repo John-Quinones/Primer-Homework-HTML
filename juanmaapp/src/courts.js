@@ -3,6 +3,7 @@
 import express from "express";
 import { can } from "./auth.js";
 import { courtCircuit, filterCourts } from "./case-meta.js";
+import { judgeByRadicado } from "./ramajudicial.js";
 import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
@@ -39,6 +40,33 @@ export function courtsRouter(db) {
     res.json(filterCourts(rows, want).slice(0, limit).map((x) => ({ ...x })));
   });
 
+  // Version 2.27: judge suggestions for a court. The Rama Judicial's record of the radicado
+  // ("ponente") comes first; the directory file and other cases of the same court follow.
+  // The user always chooses or types the name: nothing is filled in by itself.
+  r.get("/judge", async (req, res) => {
+    const courtId = Number(req.query.court_id) || null;
+    const court = courtId ? db.prepare("SELECT id, name, judge FROM courts WHERE id = ?").get(courtId) : null;
+    const courtName = court?.name || str(req.query.court_name);
+    const out = { rama: null, rama_error: "", directory: court?.judge || "", others: [] };
+    if (courtName) {
+      out.others = db.prepare(`SELECT judge_name AS name, COUNT(*) AS n FROM cases WHERE judge_name != '' AND (court_id = ? OR court_name = ?)
+        GROUP BY judge_name ORDER BY n DESC, name LIMIT 5`).all(courtId ?? -1, courtName).map((x) => x.name);
+    }
+    const radicado = str(req.query.radicado).replace(/\D/g, "");
+    if (radicado.length === 23) {
+      try {
+        out.rama = await judgeByRadicado(radicado);
+        if (!out.rama) out.rama_error = "La Rama Judicial no tiene registrado este radicado.";
+        else if (!out.rama.judge) out.rama_error = "La Rama Judicial no trae el nombre del juez para este proceso.";
+      } catch (err) {
+        out.rama_error = err.message;
+      }
+    } else {
+      out.rama_error = "Escriba el radicado de 23 dígitos para traer el nombre del juez de la Rama Judicial.";
+    }
+    res.json(out);
+  });
+
   // Rows come from the page, already mapped to our fields from the official file.
   r.post("/import", (req, res) => {
     if (!can(req, "catalog.manage")) return res.status(403).json({ error: "Su rol no tiene permiso para esta acción." });
@@ -49,11 +77,11 @@ export function courtsRouter(db) {
     if (rows.length > 20000) return res.status(400).json({ error: "Máximo 20.000 despachos por carga." });
     const out = { created: 0, updated: 0, skipped: [] };
     const find = db.prepare("SELECT id FROM courts WHERE name = ? AND city = ?");
-    const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, circuit, area, email, phone, address)
-      VALUES (:code, :name, :department, :city, :city_code, :circuit, :area, :email, :phone, :address)`);
+    const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, circuit, area, email, phone, address, judge)
+      VALUES (:code, :name, :department, :city, :city_code, :circuit, :area, :email, :phone, :address, :judge)`);
     const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city_code = :city_code, circuit = :circuit, area = :area,
       email = CASE WHEN :email != '' THEN :email ELSE email END, phone = CASE WHEN :phone != '' THEN :phone ELSE phone END,
-      address = CASE WHEN :address != '' THEN :address ELSE address END, updated_at = datetime('now') WHERE id = :id`);
+      address = CASE WHEN :address != '' THEN :address ELSE address END, judge = CASE WHEN :judge != '' THEN :judge ELSE judge END, updated_at = datetime('now') WHERE id = :id`);
     db.exec("BEGIN");
     try {
       if (req.body?.replace) db.prepare("DELETE FROM courts").run(); // Gerencia only, checked above (audit A01-001)
@@ -68,6 +96,7 @@ export function courtsRouter(db) {
         const v = {
           code: str(row.code), name, department, city, city_code: cityCode(city, department), circuit: courtCircuit(name, row.circuit),
           area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address),
+          judge: str(row.judge).replace(/\s+/g, " "),
         };
         const hit = find.get(name, city);
         if (hit) {

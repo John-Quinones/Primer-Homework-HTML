@@ -331,7 +331,8 @@
     const c = courtId ? s.courts.find((x) => x.id === courtId) || fail("El despacho no existe en el directorio.") : null;
     if (c) { court_name = c.name; court_email = c.email; department ||= c.department; city ||= c.city; }
     const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? (radicado ? 1 : 0);
-    return { department, city, area: area || c?.area || "", court_id: courtId, court_name, court_email, radicado, monitor: radicado ? monitor : 0 };
+    return { department, city, area: area || c?.area || "", court_id: courtId, court_name, court_email, radicado, monitor: radicado ? monitor : 0,
+      judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
   };
   const savedVisible = (r) => scope() === null || r.created_by === me().id || (r.case_id && s.cases.some((k) => k.id === r.case_id && inScope(k.office_id)));
   const usedFolders = () => {
@@ -358,7 +359,7 @@
         "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
         "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
-        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.correo_despacho": k.court_email,
+        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.correo_despacho": k.court_email,
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
       });
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
@@ -748,6 +749,16 @@
         { department: q.department, city: q.city, area: q.area })
         .sort((a, b) => (a.department + a.city + a.area + a.name).localeCompare(b.department + b.city + b.area + b.name, "es")).slice(0, Number(q.limit) || 500).map(clone);
     }],
+    // Version 2.27: the link cannot open the Rama Judicial's site; the directory and other cases still suggest a name.
+    ["GET", /^\/courts\/judge(?:\?(.*))?$/, (m, b, url) => {
+      const q = qs(url);
+      const c = s.courts.find((x) => x.id === Number(q.court_id));
+      const courtName = c?.name || str(q.court_name);
+      const count = new Map();
+      if (courtName) for (const k of s.cases) if (k.judge_name && ((c && k.court_id === c.id) || k.court_name === courtName)) count.set(k.judge_name, (count.get(k.judge_name) || 0) + 1);
+      return { rama: null, directory: c?.judge || "", others: [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es")).slice(0, 5).map((x) => x[0]),
+        rama_error: "El enlace de pruebas no puede abrir la página de la Rama Judicial. En la App del servidor (Azure) el nombre del juez se trae con el radicado; aquí escríbalo a mano." };
+    }],
     ["POST", /^\/courts\/import$/, (m, b) => {
       need("catalog.manage");
       if (b.replace && me().role !== "Gerencia") fail("Solo Gerencia puede reemplazar todo el directorio.");
@@ -756,9 +767,9 @@
         const name = str(row.name), department = canonDep(row.department);
         if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
         const city = canonCity(row.city, department);
-        const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), updated_at: stamp() };
+        const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), judge: str(row.judge).replace(/\s+/g, " "), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city);
-        if (hit) { Object.assign(hit, v); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
+        if (hit) { Object.assign(hit, { ...v, judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
       });
       return out;
     }],

@@ -64,6 +64,7 @@
     "case.counterparty": ["Ej. Colpensiones", "Nombre de la parte contraria o entidad accionada."],
     "case.facts": ["1. El 3 de marzo de 2024 el cliente…", "Hechos en orden cronológico, con fechas y cifras; NomosAI los usa para los borradores."],
     "case.court_search": ["", "Escriba ciudad y especialidad: «Ibagué laboral 3»."],
+    "case.judge_name": ["Ana María Ruiz", "Al elegir el despacho la App sugiere el juez que registra la Rama Judicial para el radicado: toque «Usar este nombre» o escríbalo a mano."],
     "user.name": ["Ej. Laura Gómez Rojas", "Nombres y apellidos completos."],
     "user.email": ["nombre@tecjuridicos.com", "Correo de Microsoft 365 si va a entrar con Microsoft."],
     "user.password": ["Mínimo 10 caracteres", "Mezcle letras, números y signos. Puede dejarla vacía si entra con Microsoft."],
