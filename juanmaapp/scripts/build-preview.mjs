@@ -14,6 +14,12 @@ import { readVersion, readNews } from "../src/version.js";
 import { pdfjsClassic } from "../src/pdfjs-classic.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// The published link must show the real version: refuse to build without it (e.g. from a shallow clone).
+if (!readVersion().change) {
+  console.error("No se pudo calcular la versión: el repositorio no tiene el historial completo. Ejecute `git fetch --unshallow` y vuelva a intentar.");
+  process.exit(1);
+}
 const read = (p) => readFileSync(path.join(root, p), "utf8");
 // Keep inlined scripts from closing the <script> element early.
 const safe = (js) => js.replace(/<\/script/gi, "<\\/script");

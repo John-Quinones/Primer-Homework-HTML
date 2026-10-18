@@ -30,6 +30,8 @@ function readChange() {
   } catch {}
   try {
     const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    // A shallow clone counts only the fetched commits and would show a wrong, smaller version (2.5 instead of 2.29).
+    if (git("rev-parse", "--is-shallow-repository") === "true") throw new Error("shallow clone");
     // Uncommitted work in juanmaapp/ is the next change (the build runs right before the commit).
     const pending = git("status", "--porcelain", "--", ".") !== "";
     const change = Number(git("rev-list", "--count", "HEAD", "--", ".")) + (pending ? 1 : 0);
