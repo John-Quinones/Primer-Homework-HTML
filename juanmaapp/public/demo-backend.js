@@ -876,6 +876,7 @@
     ["PUT", /^\/monitor\/cases\/(\d+)\/monitor$/, (m, b) => { need("processes.consult"); visibleCase(+m[1]).monitor = b.monitor ? 1 : 0; return { id: +m[1], monitor: !!b.monitor }; }],
     ["POST", /^\/monitor\/check$/, () => { need("processes.consult"); fail(NEEDS_SERVER.rama); }],
     ["POST", /^\/monitor\/cases\/(\d+)\/check-all$/, () => { need("processes.consult"); fail(NEEDS_SERVER.rama); }],
+    ["POST", /^\/monitor\/cases\/(\d+)\/rama$/, () => { need("processes.consult"); fail(NEEDS_SERVER.rama); }],
     ["GET", /^\/monitor\/portal-probe$/, () => fail("La prueba de conexión con los portales se hace desde la app en Azure (este enlace no se conecta a sitios externos).")],
     ["GET", /^\/monitor\/prefs$/, () => { need("processes.consult"); return prefsOf(me().id); }],
     ["PUT", /^\/monitor\/prefs$/, (m, b) => {

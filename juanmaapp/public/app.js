@@ -925,6 +925,7 @@ async function renderExpedienteFicha(id) {
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${folderButton(k, "")}
+        <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
         ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
         ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
@@ -965,7 +966,7 @@ async function renderExpedienteFicha(id) {
             <td>${escapeHtml(String(a.anotacion || "").slice(0, 300))}</td>
             <td>${canWrite ? `<button class="mini" data-action="act-remind" data-case="${k.id}" data-act="${i}">Recordatorio</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`
           : empty(k.last_checked_at ? "La consulta no ha encontrado actuaciones." : "Use «↻ Consultar ahora» para traer las actuaciones de la Rama Judicial.")}`,
-        `<span class="toolbar"><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar en todas las plataformas</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`)))
+        `<span class="toolbar"><button class="mini" data-action="rama-case" data-id="${k.id}">⚖ Consultar en Rama Judicial</button><button class="mini" data-action="consult-case" data-id="${k.id}">↻ Consultar en todas las plataformas</button><button class="mini" data-action="view-acts" data-id="${k.id}">Ver con decisiones</button></span>`)))
         : !k.radicado ? secId("actuaciones", wide(panel("Actuaciones", null, `${portalCheckBox(k.id)}${empty("Agregue el radicado (botón «Editar») para consultar las actuaciones en automático.")}`))) : ""}
       ${secId("documentos", panel("Documentos guardados", (docs || []).length, (docs || []).length ? `<ul class="ficha-list">${docs.map((d) => `<li>
           <strong>${escapeHtml(d.name)}</strong> <span class="muted">${escapeHtml(d.filename)} · ${escapeHtml(String(d.created_at).slice(0, 10))}</span>
@@ -2299,6 +2300,7 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "read-all": async () => { await api("POST", "/notifications/read", {}); await refreshBell(); },
+    "rama-case": () => showRama(id),
     "view-acts": () => showActuaciones(id),
     "portals": async () => showPortals(state.cases.find((k) => k.id === id) || await api("GET", `/cases/${id}`)),
     "add-radicado": () => { location.hash = "#radicados"; },
@@ -4957,6 +4959,56 @@ document.addEventListener("click", (e) => {
   const value = a.dataset.portalCopyWhat === "court" ? k.court_name : window.JuanmaPortals.radicadoDigits(k.radicado) || k.radicado;
   if (value) copyText(value).then((ok) => ok && toast(a.dataset.portalCopyWhat === "court" ? "Despacho copiado: búsquelo en Publicaciones Procesales." : "Radicado copiado: péguelo en el buscador del portal."));
 });
+// «Consultar en Rama Judicial» for one case: the server (Azure) queries the national
+// service now and shows the process and its actuaciones; the test link cannot reach
+// external sites, so it copies the radicado and opens the official query.
+async function showRama(id) {
+  const k = state.cases.find((x) => x.id === id) || await api("GET", `/cases/${id}`);
+  if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
+  const { PORTALS, radicadoDigits } = window.JuanmaPortals;
+  const url = PORTALS.find((p) => p.id === "cpnu").url;
+  const rad = radicadoDigits(k.radicado) || k.radicado || "";
+  const live = !WEB && can("processes.consult") && !!rad;
+  let opened = false;
+  if (rad) copyText(rad);
+  if (rad && !live) {
+    // "noopener" would make window.open return null; drop the opener by hand to know the tab opened.
+    const tab = window.open(url, "_blank");
+    if (tab) { tab.opener = null; opened = true; }
+  }
+  const dlg = $("#rama-dialog");
+  $("[data-title]", dlg).textContent = `Consultar en Rama Judicial${caseFolder(k) ? " · Carpeta " + caseFolder(k) : ""}`;
+  $("[data-sub]", dlg).textContent = [k.client_name, k.court_name || "Despacho sin identificar"].filter(Boolean).join(" · ");
+  $("[data-portal-box]", dlg).dataset.portalCase = k.id;
+  $("[data-rama-rad]", dlg).innerHTML = `${rad ? `<span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span> <button type="button" class="mini" data-copy-value="${escapeHtml(rad)}">Copiar radicado</button>` : '<span class="muted">Sin radicado</span>'}
+    <a class="button${live ? "" : " primary"}" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" data-portal-open data-portal-copy-what="rad">Abrir la consulta oficial</a>`;
+  const body = $("[data-rama-body]", dlg);
+  if (!rad) {
+    body.innerHTML = `<p class="empty">Este expediente no tiene radicado de 23 dígitos. Cárguelo para consultar el proceso; en la consulta oficial también se puede buscar por el nombre de las partes.</p>
+      ${can("cases.write") ? '<p><button value="cancel" data-action="add-radicado">Cargar radicado</button></p>' : ""}`;
+  } else if (!live) {
+    body.innerHTML = `<p class="hint">${opened ? "Se abrió la Consulta Nacional Unificada de la Rama Judicial en otra pestaña" : "Pulse «Abrir la consulta oficial» para abrir la Consulta Nacional Unificada de la Rama Judicial"} y el radicado quedó copiado: péguelo en «Número de radicación» y pulse «Consultar».</p>
+      <p class="hint">${WEB ? "En este enlace de prueba la App no puede traer las actuaciones (no se conecta a sitios externos). En la versión del servidor (Azure) este botón consulta el proceso al momento y muestra aquí el despacho, las partes y las actuaciones." : "Su usuario no tiene el permiso de consulta de procesos; puede revisar el proceso en la consulta oficial."}</p>`;
+  } else {
+    body.innerHTML = '<p class="hint">Consultando la Rama Judicial…</p>';
+  }
+  dlg.showModal();
+  if (!live) return;
+  let r;
+  try { r = await api("POST", `/monitor/cases/${k.id}/rama`); }
+  catch (err) { r = { ok: false, error: err.message, processes: [], acts: [] }; }
+  const p = r.processes[0];
+  const acts = r.acts || [];
+  body.innerHTML = `${r.ok ? `<p class="hint">Consultado ${escapeHtml(bogotaNow())} (hora Colombia). ${r.first ? `Primera consulta de este proceso: se trajeron ${acts.length} actuación(es).` : r.newCount ? `<strong>${r.newCount} actuación(es) nueva(s).</strong>` : "Sin actuaciones nuevas desde la consulta anterior."} Las actuaciones quedan guardadas en el expediente.</p>`
+      : `<p class="form-error">${escapeHtml(/Rama Judicial/.test(r.error || "") ? r.error : `No se pudo consultar la Rama Judicial: ${r.error || "sin respuesta"}`).replace(/\.?$/, ".")} Use «Abrir la consulta oficial»: el radicado quedó copiado.${acts.length ? " Abajo están las actuaciones ya guardadas en el expediente." : ""}</p>`}
+    ${p ? `<dl class="facts">${factRow("Despacho", p.court)}${factRow("Juez o ponente", p.judge)}${factRow("Departamento", p.department)}${factRow("Fecha de radicación", p.filed)}${factRow("Última actuación", p.lastAction)}${p.parties ? `<div tabindex="0" class="fact-wide"><dt>Sujetos procesales</dt><dd>${p.parties.split(/\s*\|\s*/).filter(Boolean).map(escapeHtml).join("<br>")}</dd></div>` : ""}</dl>` : ""}
+    ${acts.length ? `<div class="table-scroll acts-scroll"><table class="data-table compact"><thead><tr><th>Fecha</th><th>Actuación</th><th>Anotación</th><th>Términos</th></tr></thead><tbody>${acts.map((a) => `<tr>
+      <td class="nowrap">${escapeHtml(String(a.fecha || "").slice(0, 10))}</td><td><strong>${escapeHtml(a.actuacion || "")}</strong>${a.decision ? `<br><span class="muted">Decisión: ${escapeHtml(a.decision)}</span>` : ""}</td>
+      <td>${escapeHtml(a.anotacion || "")}</td><td class="nowrap">${a.fecha_inicial ? escapeHtml(a.fecha_inicial + " a " + a.fecha_final) : ""}</td></tr>`).join("")}</tbody></table></div>`
+      : r.ok ? '<p class="empty">La Rama Judicial no muestra actuaciones para este radicado.</p>' : ""}`;
+  if (r.ok && (location.hash === `#expediente-${k.id}` || location.hash.startsWith(`#expediente-${k.id}-`))) await refreshView();
+}
+
 function showPortals(k) {
   const dlg = $("#portals-dialog");
   if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);

@@ -242,6 +242,7 @@ blockquote cite { display: block; font-size: .8rem; color: var(--text-muted); fo
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 20px; margin: 14px 0; }
 .facts dt { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts > .fact-wide { grid-column: 1 / -1; }
 
 .case-cards { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .case-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }

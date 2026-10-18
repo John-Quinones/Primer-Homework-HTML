@@ -2,10 +2,12 @@
 import express from "express";
 import { typePath } from "./sql.js";
 import { scopeOf } from "./auth.js";
-import { checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS } from "./monitor.js";
+import { checkCase, checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS } from "./monitor.js";
 import { channelsStatus } from "./notify.js";
 import { withDecisions } from "./decision.js";
 import { checkAllPortals, probePortals } from "./portal-check.js";
+import { findByRadicado, processDetail } from "./ramajudicial.js";
+import { PORTALS } from "./portals.js";
 
 export function monitorRouter(db) {
   const r = express.Router();
@@ -60,6 +62,27 @@ export function monitorRouter(db) {
     const k = db.prepare(`SELECT k.id FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(Number(req.params.id));
     if (!k) return res.status(404).json({ error: "El expediente no existe." });
     res.json(await checkAllPortals(db, k.id));
+  });
+
+  // «Consultar en Rama Judicial» (version 2.N): the national query (CPNU) right now, for one case.
+  // Saves the actuaciones like the automatic check and returns the process data the portal shows.
+  r.post("/cases/:id/rama", async (req, res) => {
+    const k = db.prepare(`SELECT k.id, k.radicado FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(Number(req.params.id));
+    if (!k) return res.status(404).json({ error: "El expediente no existe." });
+    const url = PORTALS.find((p) => p.id === "cpnu").url;
+    if (!k.radicado) return res.json({ ok: false, error: "El expediente no tiene radicado.", url, processes: [], acts: [], newCount: 0, first: false });
+    const first = !db.prepare("SELECT 1 FROM process_checks WHERE case_id = ? AND ok = 1").get(k.id);
+    const check = await checkCase(db, k.id);
+    let processes = [];
+    if (check.ok) {
+      try {
+        processes = (await findByRadicado(k.radicado)).filter((p) => !p.radicado || p.radicado === k.radicado);
+        processes.sort((a, b) => (b.lastAction || "").localeCompare(a.lastAction || ""));
+        if (processes[0]) processes[0].judge = (await processDetail(processes[0].id)).judge;
+      } catch { /* the actuaciones are what matters */ }
+    }
+    const acts = withDecisions(db.prepare("SELECT * FROM actuaciones WHERE case_id = ? ORDER BY fecha DESC, id DESC").all(k.id).map((x) => ({ ...x })));
+    res.json({ ok: check.ok, error: check.error, newCount: check.newCount, first: check.ok && first, url, processes, acts });
   });
 
   // Connection test with the portals, from the server (Gerencia).
