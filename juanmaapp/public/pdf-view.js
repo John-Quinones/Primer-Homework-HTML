@@ -44,8 +44,12 @@
       canvas.className = "pdf-page";
       canvas.setAttribute("role", "img");
       canvas.setAttribute("aria-label", `Página ${n} de ${doc.numPages}`);
+      // Each page sits in its own sheet, so the signature spot can be drawn and moved over it (version 2.25).
+      const sheet = Object.assign(document.createElement("div"), { className: "pdf-sheet" });
+      Object.assign(sheet.dataset, { page: n, w: base.width, h: base.height });
+      sheet.append(canvas);
       const label = Object.assign(document.createElement("p"), { className: "pdf-page-label", textContent: `Página ${n} de ${doc.numPages}` });
-      box.append(canvas, label);
+      box.append(sheet, label);
       await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
     }
     if (doc.numPages > shown) box.append(Object.assign(document.createElement("p"), { className: "hint", textContent: `Se muestran las primeras ${shown} de ${doc.numPages} páginas.` }));
@@ -53,5 +57,35 @@
     return doc.numPages;
   }
 
-  window.JuanmaPdfView = { render, load };
+  /** Pages (numbers) that get the stamps for r.stamp_page, as JuanmaPdf.signedPdf picks them. */
+  function stampPages(where, total) {
+    where = String(where || "last");
+    if (where === "all") return Array.from({ length: total }, (_, i) => i + 1);
+    if (where === "first") return [1];
+    if (/^\d+$/.test(where)) return [Math.min(total, Math.max(1, Number(where)))];
+    return where === "new" ? [] : [total];
+  }
+
+  /**
+   * Draws where the signatures will be stamped (dashed boxes) over the pages shown in `box`.
+   * { page, pos, n, label }: stamp_page, stamp_pos, number of signers. Returns the boxes drawn.
+   */
+  function markStamps(box, { page, pos, n = 1, label = "Aquí va la firma" } = {}) {
+    box.querySelectorAll(".stamp-mark").forEach((m) => m.remove());
+    const sheets = [...box.querySelectorAll(".pdf-sheet")];
+    const marks = [];
+    for (const p of stampPages(page, sheets.length)) {
+      const sheet = sheets[p - 1], W = Number(sheet.dataset.w), H = Number(sheet.dataset.h);
+      window.JuanmaPdf.stampBoxes(W, H, Math.max(1, n), pos || "br").forEach((b, i) => {
+        const m = Object.assign(document.createElement("div"), { className: "stamp-mark", textContent: n > 1 ? `${label} (${i + 1})` : label });
+        Object.assign(m.style, { left: `${(b.x / W) * 100}%`, top: `${((H - b.y - b.h) / H) * 100}%`, width: `${(b.w / W) * 100}%`, height: `${(b.h / H) * 100}%` });
+        m.dataset.page = p;
+        sheet.append(m);
+        marks.push(m);
+      });
+    }
+    return marks;
+  }
+
+  window.JuanmaPdfView = { render, load, markStamps, stampPages };
 })();

@@ -388,6 +388,8 @@ async function openSignerPage(token) {
     if (v.doc_kind === "pdf") {
       const f = await api("GET", `/public/sign/${encodeURIComponent(token)}/pdf`);
       await window.JuanmaPdfView.render($("#ps-pdf"), D.b64ToBytes(f.base64));
+      // The signer sees where the signature will be stamped (version 2.25).
+      window.JuanmaPdfView.markStamps($("#ps-pdf"), { page: v.stamp_page, pos: v.stamp_pos, n: v.signers_count, label: "Aquí va la firma" });
     }
   } catch (e) { $("#ps-doc").hidden = true; $("#ps-sign").hidden = true; signerMsg(e.message, true); }
 }
@@ -3966,6 +3968,8 @@ signForm.addEventListener("change", (e) => {
     if (pdf && !signForm.elements.pdf.files[0]) signForm.elements.pdf.click();
   }
   if (e.target.name === "pdf") guarded(() => previewSignPdf(e.target.files[0]));
+  if (e.target.name === "source" && e.target.value === "text" || e.target.name === "stamp_pos") guarded(() => ensureSpotPreview());
+  drawStampMarks();
 });
 // The e-mail to the signer: the office leaves out the parts it does not want this time (version 2.8).
 function renderMailBox() {
@@ -4013,12 +4017,107 @@ async function previewSignPdf(file) {
     if (!signForm.elements.title.value.trim()) signForm.elements.title.value = file.name.replace(/\.pdf$/i, "");
     const pages = await window.JuanmaPdfView.render($("#sign-pdf-view"), bytes);
     info.textContent = `${file.name} · ${size} · ${pages} página${pages === 1 ? "" : "s"}. Revise el documento antes de enviarlo.`;
+    drawStampMarks();
   } catch (err) {
     $("#sign-pdf-view").replaceChildren();
     info.textContent = `${file.name}: ${err.message || "no se pudo mostrar."}`;
     throw err;
   }
 }
+
+// Where the signature goes (version 2.25): the dashed boxes over the preview show it for any choice;
+// with «En el lugar que yo marque» the sender clicks the spot and drags the box to adjust it.
+let signSpot = null; // { fx, fy }: top-left corner of the first stamp, as a fraction of the page
+const spotChosen = () => signForm.elements.stamp_pos.value === "spot";
+const signSpotPos = () => `at:${signSpot.fx.toFixed(4)},${signSpot.fy.toFixed(4)}`;
+function signStampPage() {
+  const f = signForm.elements;
+  return f.stamp_page.value === "num" ? String(Math.max(1, Number(f.stamp_num.value) || 1)) : f.stamp_page.value;
+}
+function signerCount() {
+  return Math.max(1, $$("#signer-rows .signer-row").filter((row) => $$("input", row).some((i) => i.value.trim())).length);
+}
+function drawStampMarks() {
+  const view = $("#sign-pdf-view"), sheets = $$(".pdf-sheet", view);
+  const picking = spotChosen();
+  view.classList.toggle("stamp-picking", picking);
+  $("[data-stamp-spot]", signForm).hidden = !picking;
+  if (!sheets.length) return;
+  if (picking && !signSpot) {
+    // Starts where «Abajo a la derecha» puts it, on the page chosen above.
+    const p = window.JuanmaPdfView.stampPages(signStampPage(), sheets.length)[0] || sheets.length;
+    const W = Number(sheets[p - 1].dataset.w), H = Number(sheets[p - 1].dataset.h);
+    const b = window.JuanmaPdf.stampBoxes(W, H, 1, "br")[0];
+    signSpot = { fx: b.x / W, fy: (H - b.y - b.h) / H };
+  }
+  const marks = window.JuanmaPdfView.markStamps(view, { page: signStampPage(), pos: picking ? signSpotPos() : signForm.elements.stamp_pos.value, n: signerCount(), label: "Firma" });
+  if (picking) marks.slice(0, 1).forEach((m) => { m.tabIndex = 0; m.setAttribute("role", "button"); m.setAttribute("aria-label", "Lugar de la firma: arrástrelo o muévalo con las flechas"); });
+}
+// A text document is shown as the PDF it will become, so the spot can be marked on it too.
+let spotTextTimer = null;
+async function ensureSpotPreview() {
+  if (!spotChosen() || signForm.elements.source.value !== "text") return;
+  $("[data-pdf-box]", signForm).hidden = false;
+  $("[data-pdf-info]", signForm).textContent = "Así quedará el texto en PDF. Marque dónde va la firma.";
+  await window.JuanmaPdfView.render($("#sign-pdf-view"), new Uint8Array(await markdownToPdf(signForm.elements.doc_text.value || " ").arrayBuffer()));
+  drawStampMarks();
+}
+signForm.elements.doc_text.addEventListener("input", () => {
+  clearTimeout(spotTextTimer);
+  if (spotChosen()) spotTextTimer = setTimeout(() => guarded(ensureSpotPreview), 900);
+});
+$("#signer-rows").addEventListener("click", () => setTimeout(drawStampMarks));
+$("#add-signer").addEventListener("click", () => setTimeout(drawStampMarks));
+// Puts the first stamp at (fx, fy) of page n; the page select follows unless «Todas las páginas».
+function placeSpot(n, fx, fy, sheet) {
+  const W = Number(sheet.dataset.w), H = Number(sheet.dataset.h);
+  signSpot = { fx: Math.min(Math.max(0, fx), Math.max(0, 1 - window.JuanmaPdf.STAMP.w / W)), fy: Math.min(Math.max(0, fy), Math.max(0, 1 - window.JuanmaPdf.STAMP.h / H)) };
+  const f = signForm.elements;
+  if (f.stamp_page.value !== "all") {
+    f.stamp_page.value = "num";
+    f.stamp_num.value = n;
+    $("[data-stamp-num]", signForm).hidden = false;
+  }
+  drawStampMarks();
+}
+let spotDrag = null;
+$("#sign-pdf-view").addEventListener("pointerdown", (e) => {
+  if (!spotChosen()) return;
+  const sheet = e.target.closest(".pdf-sheet");
+  if (!sheet) return;
+  const r = sheet.getBoundingClientRect(), W = Number(sheet.dataset.w), H = Number(sheet.dataset.h);
+  const mark = e.target.closest(".stamp-mark");
+  if (mark) {
+    // Drag keeps the pointer at the same distance from the first stamp's corner.
+    const first = $(".stamp-mark", sheet).getBoundingClientRect();
+    spotDrag = { dx: e.clientX - first.left, dy: e.clientY - first.top, id: e.pointerId };
+    e.currentTarget.classList.add("stamp-dragging");
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    return;
+  }
+  // A click on the page centres the first stamp there.
+  placeSpot(Number(sheet.dataset.page), (e.clientX - r.left) / r.width - window.JuanmaPdf.STAMP.w / W / 2, (e.clientY - r.top) / r.height - window.JuanmaPdf.STAMP.h / H / 2, sheet);
+});
+$("#sign-pdf-view").addEventListener("pointermove", (e) => {
+  if (!spotDrag || e.pointerId !== spotDrag.id) return;
+  const sheet = document.elementFromPoint(e.clientX, e.clientY)?.closest("#sign-pdf-view .pdf-sheet");
+  if (!sheet) return;
+  const r = sheet.getBoundingClientRect();
+  placeSpot(Number(sheet.dataset.page), (e.clientX - spotDrag.dx - r.left) / r.width, (e.clientY - spotDrag.dy - r.top) / r.height, sheet);
+});
+const endSpotDrag = (e) => { if (!spotDrag) return; spotDrag = null; e.currentTarget.classList.remove("stamp-dragging"); };
+$("#sign-pdf-view").addEventListener("pointerup", endSpotDrag);
+$("#sign-pdf-view").addEventListener("pointercancel", endSpotDrag);
+$("#sign-pdf-view").addEventListener("keydown", (e) => {
+  const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  const sheet = e.target.closest?.(".stamp-mark") && e.target.closest(".pdf-sheet");
+  if (!step || !sheet || !signSpot) return;
+  e.preventDefault();
+  const k = e.shiftKey ? 0.05 : 0.01;
+  placeSpot(Number(sheet.dataset.page), signSpot.fx + step[0] * k, signSpot.fy + step[1] * k, sheet);
+  $(".stamp-mark", sheet)?.focus();
+});
 
 async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   const cases = await api("GET", "/cases");
@@ -4037,6 +4136,8 @@ async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
   $("#signer-rows").append(signerRow(c ? { name: c.full_name, id_number: c.id_number, email: c.email, phone: c.phone } : {}));
   signForm.elements.stamp_page.value = "last";
   signForm.elements.stamp_pos.value = "br";
+  signSpot = null;
+  drawStampMarks();
   signForm.elements.notify.checked = true;
   $("[data-stamp-num]", signForm).hidden = true;
   if (!remoteSignOk()) signForm.elements.mode.value = "presencial";
@@ -4054,11 +4155,10 @@ wireDialog($("#sign-dialog"), async (form) => {
   const rows = $$("#signer-rows .signer-row").filter((row) => $$("input", row).some((i) => i.value.trim()));
   const signers = rows.map((row) => Object.fromEntries($$("input, select", row).map((i) => [i.dataset.k, i.value.trim()])));
   checkSigners(rows, signers, form.elements.mode.value !== "presencial");
-  const page = form.elements.stamp_page.value;
   const body = { title: form.elements.title.value, case_id: Number(form.elements.case_id.value) || null, signers,
     message: form.elements.message.value, mode: form.elements.mode.value,
-    stamp_page: page === "num" ? String(Math.max(1, Number(form.elements.stamp_num.value) || 1)) : page,
-    stamp_pos: form.elements.stamp_pos.value, notify: form.elements.notify.checked, mail: mailChoice() };
+    stamp_page: signStampPage(),
+    stamp_pos: spotChosen() ? (signSpot ? signSpotPos() : "br") : form.elements.stamp_pos.value, notify: form.elements.notify.checked, mail: mailChoice() };
   if (form.elements.source.value === "pdf") {
     const f = form.elements.pdf.files[0];
     if (!f) throw new Error("Elija el archivo PDF.");
@@ -4140,6 +4240,7 @@ $("#sign-doc-preview").addEventListener("toggle", (e) => {
     if (signCurrent.doc_kind === "pdf") {
       const f = await api("GET", `/esign/${signCurrent.id}/pdf`);
       await window.JuanmaPdfView.render(view, D.b64ToBytes(f.base64));
+      window.JuanmaPdfView.markStamps(view, { page: signCurrent.stamp_page, pos: signCurrent.stamp_pos, n: signCurrent.signers?.length || 1, label: "Firma" });
     } else view.innerHTML = `<article class="document">${DOMPurify.sanitize(marked.parse(signCurrent.doc_text || ""))}</article>`;
   });
 });

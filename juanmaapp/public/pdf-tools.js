@@ -85,11 +85,53 @@
   // pdf-lib's standard fonts write WinAnsi: drop what it cannot encode instead of failing.
   const ansi = (t) => String(t ?? "").replace(/[^\x20-\x7E -ÿ–—‘’“”•…€]/g, "");
 
+  const STAMP = { w: 170, h: 78, gap: 8, margin: 26, footer: 28 };
+  // "at:X,Y": top-left corner of the first stamp as a fraction (0–1) of the page width and height,
+  // measured from the top-left corner, as the sender placed it on the preview (version 2.25).
+  function stampSpot(pos) {
+    const m = /^at:([01](?:\.\d{1,4})?),([01](?:\.\d{1,4})?)$/.exec(String(pos || ""));
+    if (!m) return null;
+    const fx = Number(m[1]), fy = Number(m[2]);
+    return fx <= 1 && fy <= 1 ? { fx, fy } : null;
+  }
+  /**
+   * Where each of `n` signature stamps goes on a page (PDF points, origin bottom-left).
+   * Corners line the stamps up from that corner; a chosen spot puts the first stamp
+   * there and the rest to its right, then below, always inside the page and above
+   * the verification footer.
+   */
+  function stampBoxes(width, height, n, pos = "br", top = 0) {
+    const { w, h, gap, margin, footer } = STAMP, out = [];
+    const spot = stampSpot(pos);
+    if (spot) {
+      const x0 = Math.min(Math.max(0, spot.fx * width), Math.max(0, width - w));
+      const perRow = Math.max(1, Math.floor((width - x0 + gap) / (w + gap)));
+      const rows = Math.ceil(n / perRow), tall = rows * (h + gap) - gap;
+      const yTop = Math.max(0, Math.min(spot.fy * height, height - footer - tall));
+      for (let i = 0; i < n; i++) {
+        const row = Math.floor(i / perRow), col = i % perRow;
+        out.push({ x: x0 + col * (w + gap), y: height - yTop - h - row * (h + gap), w, h });
+      }
+      return out;
+    }
+    const perRow = Math.max(1, Math.floor((width - 2 * margin + gap) / (w + gap)));
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / perRow), col = i % perRow;
+      const inRow = Math.min(perRow, n - row * perRow);
+      const span = inRow * (w + gap) - gap;
+      const x0 = pos.endsWith("l") ? margin : pos.endsWith("r") ? width - margin - span : (width - span) / 2;
+      const y = pos.startsWith("t") ? height - margin - top - h - row * (h + gap) : margin + 14 + row * (h + gap);
+      out.push({ x: x0 + col * (w + gap), y, w, h });
+    }
+    return out;
+  }
+
   /**
    * The signed document: original PDF (or the text as PDF), one stamp per
    * signer on the chosen page(s) and corner, a verification footer on every
    * page, and the certificate pages at the end.
-   * r.stamp_page: "last" | "first" | "all" | "new" | page number; r.stamp_pos: "br" | "bc" | "bl" | "tr" | "tl".
+   * r.stamp_page: "last" | "first" | "all" | "new" | page number;
+   * r.stamp_pos: "br" | "bc" | "bl" | "tr" | "tl" | "at:X,Y" (spot chosen on the preview, see stampBoxes).
    */
   async function signedPdf(r, originalBytes = null) {
     const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
@@ -113,22 +155,16 @@
       p.drawText("FIRMAS ELECTRÓNICAS", { x: 48, y: height - 60, size: 14, font: bold, color: navy });
       p.drawText(ansi(`${r.title} · Solicitud N.º ${r.id}`), { x: 48, y: height - 78, size: 9, font, color: gray });
       targets = [{ page: p, top: 100 }];
-      pos = "tl";
+      if (!stampSpot(pos)) pos = "tl";
     } else {
       const n = /^\d+$/.test(where) ? Math.min(pages.length, Math.max(1, Number(where))) - 1 : null;
       targets = (where === "all" ? pages : where === "first" ? [pages[0]] : n !== null ? [pages[n]] : [pages.at(-1)]).map((page) => ({ page, top: 0 }));
     }
-    const boxW = 170, boxH = 78, gap = 8, margin = 26;
     for (const { page, top } of targets) {
       const { width, height } = page.getSize();
-      const perRow = Math.max(1, Math.floor((width - 2 * margin + gap) / (boxW + gap)));
-      signed.forEach((s, i) => {
-        const row = Math.floor(i / perRow), col = i % perRow;
-        const inRow = Math.min(perRow, signed.length - row * perRow);
-        const span = inRow * (boxW + gap) - gap;
-        const x0 = pos.endsWith("l") ? margin : pos.endsWith("r") ? width - margin - span : (width - span) / 2;
-        const x = x0 + col * (boxW + gap);
-        const y = pos.startsWith("t") ? height - margin - top - boxH - row * (boxH + gap) : margin + 14 + row * (boxH + gap);
+      const boxW = STAMP.w, boxH = STAMP.h;
+      stampBoxes(width, height, signed.length, pos, top).forEach(({ x, y }, i) => {
+        const s = signed[i];
         page.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1, 1, 1), opacity: 0.94, borderColor: blue, borderWidth: 0.8 });
         const img = images[i];
         if (img) {
@@ -150,5 +186,5 @@
     return new Blob([await pdf.save()], { type: "application/pdf" });
   }
 
-  window.JuanmaPdf = { markdownToPdf, signatureCertificate, signedPdf, colombiaTime: co };
+  window.JuanmaPdf = { markdownToPdf, signatureCertificate, signedPdf, stampBoxes, stampSpot, STAMP, colombiaTime: co };
 })();

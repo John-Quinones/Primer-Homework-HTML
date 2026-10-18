@@ -46,6 +46,8 @@ let consentItems = null;
       pdfBytes = bytes;
       // Every page drawn on the page itself: an embedded PDF viewer shows only the first page on phones.
       await JuanmaPdfView.render($("#doc-pdf"), bytes);
+      // Where the signature will be stamped (version 2.25).
+      JuanmaPdfView.markStamps($("#doc-pdf"), { page: v.stamp_page, pos: v.stamp_pos, n: v.signers_count, label: "Aquí va la firma" });
     }
   } catch (e) { show(e.message, true); }
 })();

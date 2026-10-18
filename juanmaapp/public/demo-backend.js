@@ -1353,6 +1353,7 @@
   const signerView = (r, x) => ({
     title: r.title, message: r.message, doc_kind: r.doc_kind, doc_text: r.doc_kind === "markdown" ? s.blobs[`signtxt-${r.id}`] || "" : null, doc_hash: r.doc_hash,
     request_status: r.status, signed: r.status === "completada",
+    stamp_page: r.stamp_page, stamp_pos: r.stamp_pos, signers_count: r.signers.length,
     signer: { name: x.name, status: x.status, signed_at: x.signed_at, otp_channel: x.otp_channel, email: maskMail(x.email), phone: maskTel(x.phone) },
     consent: x.status === "pendiente" && r.status === "enviada" && policiesFor(r, x) ? { items: policiesFor(r, x).items, version: LEGAL.legalVersion().name } : undefined,
   });
@@ -1495,7 +1496,7 @@
       const r = { id: nextId(), title, case_id: +b.case_id || null, office_id: officeId, doc_kind: kind, doc_name: str(b.doc_name), doc_hash: hash,
         message: str(b.message), status: "enviada", created_by: me().id, created_at: stamp(), completed_at: null, signers: [], events: [],
         stamp_page: /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last",
-        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br", notify: b.notify !== false, verify_code: newVerifyCode(),
+        stamp_pos: ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) || /^at:(0(\.\d{1,4})?|1(\.0{1,4})?),(0(\.\d{1,4})?|1(\.0{1,4})?)$/.test(str(b.stamp_pos)) ? str(b.stamp_pos) : "br", notify: b.notify !== false, verify_code: newVerifyCode(),
         mail_opts: LEGAL.mailOptions(b.mail) };
       for (const x of signers) r.signers.push({ id: nextId(), ...x, status: "pendiente", method: null, signed_at: null, ip: "", user_agent: "", typed_name: "", reject_reason: null, otp_sent_at: null });
       if (pdf) s.blobs[`signpdf-${r.id}`] = pdf; else s.blobs[`signtxt-${r.id}`] = text;

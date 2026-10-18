@@ -228,7 +228,8 @@ export function esignRouter(db) {
     officeId ||= req.user.offices[0]?.id ?? null;
     const hash = sha(file || Buffer.from(text, "utf8"));
     const stampPage = /^(last|first|all|new|\d{1,3})$/.test(str(b.stamp_page)) ? str(b.stamp_page) : "last";
-    const stampPos = ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) ? b.stamp_pos : "br";
+    // A corner, or "at:X,Y": the spot the sender marked on the preview (fractions of the page, version 2.25).
+    const stampPos = ["br", "bc", "bl", "tr", "tl"].includes(b.stamp_pos) || /^at:(0(\.\d{1,4})?|1(\.0{1,4})?),(0(\.\d{1,4})?|1(\.0{1,4})?)$/.test(str(b.stamp_pos)) ? str(b.stamp_pos) : "br";
     const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_file, doc_name, doc_hash, message, created_by, stamp_page, stamp_pos, notify, verify_code, mail_opts)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, Number(b.case_id) || null, officeId, kind, text, file, str(b.doc_name), hash, str(b.message), req.user.id,
       stampPage, stampPos, b.notify === false ? 0 : 1, newVerifyCode(), JSON.stringify(mailOptions(b.mail))).lastInsertRowid;
@@ -301,6 +302,9 @@ export function esignPublicRouter(db) {
     const v = {
       title: x.title, message: x.message, doc_kind: x.doc_kind, doc_text: x.doc_text, doc_name: x.doc_name, doc_hash: x.doc_hash,
       request_status: x.status,
+      // Where the signatures will be stamped, so the signer sees it on the preview.
+      stamp_page: x.stamp_page, stamp_pos: x.stamp_pos,
+      signers_count: db.prepare("SELECT COUNT(*) AS n FROM sign_signers WHERE request_id = ?").get(x.id).n,
       signer: { name: s.name, id_type: s.id_type, id_number: s.id_number, email: maskEmail(s.email), phone: maskPhone(s.phone), status: s.status, signed_at: s.signed_at,
         otp_channel: s.otp_channel, otp_channels: otpChannels(s) },
     };

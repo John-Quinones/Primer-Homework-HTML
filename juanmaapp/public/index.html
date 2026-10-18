@@ -1121,10 +1121,12 @@
             <select name="stamp_pos">
               <option value="br">Abajo a la derecha</option><option value="bc">Abajo al centro</option><option value="bl">Abajo a la izquierda</option>
               <option value="tr">Arriba a la derecha</option><option value="tl">Arriba a la izquierda</option>
+              <option value="spot">En el lugar que yo marque en la vista previa</option>
             </select>
           </label>
           <label data-stamp-num hidden>Número de página <input name="stamp_num" type="number" min="1" max="999" value="1" /></label>
         </div>
+        <p class="hint" data-stamp-spot hidden>Haga clic en la vista previa del documento (arriba) donde quiere la firma y arrastre el recuadro punteado para ajustarlo; también se mueve con las flechas del teclado. La página cambia sola a la que marque. Si hay varios firmantes, las demás firmas van a la derecha y luego debajo.</p>
         <p class="hint">Cada firmante queda estampado con su firma dibujada, nombre, documento, fecha y hora y el medio con que se verificó. Todas las páginas llevan al pie el número de la solicitud y la huella SHA-256, y al final va el certificado.</p>
         <label class="inline"><input type="checkbox" name="notify" checked /> Notificar por correo a los firmantes cuando todos firmen (con el enlace para descargar el documento firmado) y avisarme si alguien no firma</label>
       </fieldset>

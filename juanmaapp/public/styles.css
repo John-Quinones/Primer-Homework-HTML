@@ -1036,6 +1036,15 @@ dialog .dlg-nav { background: linear-gradient(to top, var(--surface) 70%, transp
 /* PDF preview: every page as an image (version 2.3) */
 .pdf-view { display: grid; gap: 4px; max-height: 70vh; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--text-muted, #888) 12%, transparent); }
 .pdf-view .pdf-page { width: 100%; height: auto; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); border-radius: 2px; }
+/* Signature spot over the preview (version 2.25): dashed box, moved by dragging when it is being chosen. */
+.pdf-view .pdf-sheet { position: relative; line-height: 0; }
+.pdf-view .stamp-mark { position: absolute; box-sizing: border-box; border: 2px dashed #027cc6; background: rgba(2, 124, 198, .14); color: #002b6a;
+  font: 600 clamp(9px, 1.4vw, 12px)/1.2 system-ui, sans-serif; display: flex; align-items: center; justify-content: center; text-align: center; padding: 2px; border-radius: 3px; pointer-events: none; }
+.pdf-view.stamp-picking .pdf-sheet { cursor: crosshair; }
+.pdf-view.stamp-picking .stamp-mark { pointer-events: auto; cursor: grab; touch-action: none; background: rgba(2, 124, 198, .22); }
+.pdf-view.stamp-dragging .stamp-mark { pointer-events: none; }
+.pdf-view .stamp-mark:focus-visible { outline: 3px solid #002b6a; outline-offset: 1px; }
+.pdf-view.stamp-picking .stamp-mark:active { cursor: grabbing; }
 .pdf-view .pdf-page-label { text-align: center; font-size: .75rem; color: var(--text-muted); margin: 0 0 8px; }
 #sign-doc-preview { margin-top: 12px; }
 #sign-doc-preview > summary { cursor: pointer; font-weight: 600; }
