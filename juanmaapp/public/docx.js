@@ -96,7 +96,8 @@
   function fillText(text, data, labels = {}) {
     return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key) => {
       const v = data[key];
-      return v !== undefined && v !== null && String(v).trim() !== "" ? String(v) : `[FILL: ${labels[key] || key}]`;
+      // A multi-line value (the addressee block) keeps its lines: Markdown hard breaks.
+      return v !== undefined && v !== null && String(v).trim() !== "" ? (String(v).includes("\n") ? String(v).replace(/\n/g, "  \n") + "  " : String(v)) : `[FILL: ${labels[key] || key}]`;
     });
   }
   const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => m[1].trim()))];

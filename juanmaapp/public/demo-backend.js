@@ -38,7 +38,7 @@
   // Bring stored data up to the current structure without losing anything.
   function migrate(st) {
     st = JSON.parse(JSON.stringify(st)); // never change the loaded objects in place (they can be read-only)
-    for (const k of ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks", "notes", "acts", "checks", "log", "templates", "signs"]) st[k] ||= [];
+    for (const k of ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks", "notes", "acts", "checks", "log", "templates", "signs", "authorities"]) st[k] ||= [];
     st.prefs ||= {}; st.blobs ||= {}; st.info ||= {};
     st.matrix ||= JSON.parse(JSON.stringify(AUTH.matrix));
     st.roles ||= AUTH.roles.map((name) => ({ name, builtin: true }));
@@ -343,6 +343,15 @@
   const tplMetaOut = (t) => ({ id: t.id, name: t.name, category: t.category, description: t.description, format: t.format, filename: t.filename,
     builtin: !!t.builtin, created_at: t.created_at, updated_at: t.updated_at, file_size: s.blobs[`tpl-${t.id}`] ? Math.round(s.blobs[`tpl-${t.id}`].length * 0.75) : null });
   const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const authorityWriter = () => ["cases.write", "mail.send", "drafts.generate"].some((p) => me().permissions.includes(p)) || fail("Su rol no tiene permiso para esta acción.");
+  function authorityInput(b) {
+    const entity = str(b?.entity).slice(0, 200);
+    CM.entityKey(entity) || fail("Escriba la entidad o el despacho.");
+    const email = str(b?.email).toLowerCase().slice(0, 200);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("El correo no es válido.");
+    return { entity, entity_key: CM.entityKey(entity), treatment: CM.TREATMENTS.includes(str(b?.treatment)) ? str(b.treatment) : "Señor(a)",
+      name: str(b?.name).slice(0, 200), title: str(b?.title).slice(0, 200), email, city: str(b?.city).slice(0, 100) };
+  }
   // Same mapping as the server's templateData().
   function templateData(caseId) {
     const u = me();
@@ -365,6 +374,7 @@
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
       const folder = s.fields.find((f) => f.category_id === o.category_id && CM.isFolderLabel(f.label) && String(k.field_values[f.id] ?? "").trim());
       if (folder) v["expediente.carpeta"] = String(k.field_values[folder.id]).trim();
+      Object.assign(v, CM.recipientVariables(CM.caseRecipient(k, s.authorities)));
       Object.assign(v, LG.feeVariables(s.charges.filter((x) => x.case_id === k.id), s.receipts.filter((x) => x.case_id === k.id)));
       if (k.assigned_user_id) lawyer = s.users.find((x) => x.id === k.assigned_user_id) || lawyer;
       office = s.offices.find((x) => x.id === k.office_id);
@@ -773,6 +783,32 @@
       });
       return out;
     }],
+
+    // ----- officials per entity (version 2.27), same rules as src/authorities.js -----
+    ["GET", /^\/authorities(?:\?(.*))?$/, (m, b, url) => {
+      const q = CM.entityKey(qs(url).q || "");
+      return s.authorities.filter((x) => !q || (CM.entityKey(x.entity) + " " + CM.entityKey(x.name)).includes(q))
+        .sort((a, b) => a.entity.localeCompare(b.entity, "es")).map(clone);
+    }],
+    ["POST", /^\/authorities$/, (m, b) => {
+      authorityWriter();
+      const v = authorityInput(b);
+      const hit = s.authorities.find((x) => CM.entityKey(x.entity) === v.entity_key);
+      if (hit) { Object.assign(hit, v, { updated_by: me().id, updated_at: stamp() }); return { ...clone(hit), updated: true }; }
+      const row = { id: nextId(), ...v, updated_by: me().id, updated_at: stamp() };
+      s.authorities.push(row);
+      return clone(row);
+    }],
+    ["PUT", /^\/authorities\/(\d+)$/, (m, b) => {
+      authorityWriter();
+      const row = s.authorities.find((x) => x.id === +m[1]) || fail("No existe.");
+      const v = authorityInput(b);
+      const other = s.authorities.find((x) => x.id !== row.id && CM.entityKey(x.entity) === v.entity_key);
+      if (other) fail(`Ya hay un funcionario guardado para «${other.entity}».`);
+      Object.assign(row, v, { updated_by: me().id, updated_at: stamp() });
+      return clone(row);
+    }],
+    ["DELETE", /^\/authorities\/(\d+)$/, (m) => { s.authorities = s.authorities.filter((x) => x.id !== +m[1]); return null; }],
 
     // ----- agenda -----
     ["GET", /^\/tasks(?:\?(.*))?$/, (m, b, url) => {
@@ -1825,7 +1861,7 @@
       `Jurisdiction: ${req.jurisdiction || "Colombia"}`, "", "Client:",
       `- Full name: ${req.client?.fullName || "[not provided]"}`, `- ID number: ${req.client?.idNumber || "[not provided]"}`,
       `- Email: ${req.client?.email || "[not provided]"}`, `- Address: ${req.client?.address || "[not provided]"}`, "",
-      `Counterparty / addressee: ${req.counterparty || "[not provided]"}`, "",
+      `Counterparty / addressee: ${req.counterparty || "[not provided]"}`, ...CM.recipientPrompt(req.recipient), "",
     ];
     if (req.process) {
       lines.push(`Process: ${req.process.category} › ${req.process.type}${req.process.title ? ` (${req.process.title})` : ""}`,

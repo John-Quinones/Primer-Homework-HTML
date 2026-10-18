@@ -2218,7 +2218,16 @@ document.addEventListener("click", (e) => {
     "open-sign": () => openSignDetail(id),
     "new-mail": () => openMailDialog({}),
     "mail-case": () => openMailDialog({ caseId: Number(btn.dataset.case) }),
-    "mail-court": () => openMailDialog({ to: btn.dataset.to }),
+    "mail-court": () => openMailDialog({ to: btn.dataset.to, entity: btn.dataset.entity || "" }),
+    "new-authority": () => openAuthority(),
+    "edit-authority": () => openAuthority(authorityCache.find((a) => a.id === Number(btn.dataset.id))),
+    "delete-authority": async () => {
+      const a = authorityCache.find((x) => x.id === Number(btn.dataset.id));
+      if (!a || !(await confirmAsk("Eliminar funcionario", `Se eliminará el funcionario guardado para «${a.entity}»${a.name ? ` (${a.name})` : ""}. Los correos y documentos ya enviados no cambian.`))) return;
+      await api("DELETE", `/authorities/${a.id}`);
+      toast("Funcionario eliminado.");
+      await renderAuthorities();
+    },
     "mail-proof": async () => {
       const m = await api("GET", `/mail/${id}`);
       await saveFile(`Constancia de envio - ${safeName(m.subject)}.pdf`, mailProof(m));
@@ -2481,14 +2490,26 @@ function applyCaseToDraft() {
   const summary = $("#case-summary");
   $("#manual-client").hidden = !!k;
   summary.hidden = !k;
-  if (!k) return;
+  if (!k) { fillDraftRecipient(null); return; }
   summary.textContent = `Se usarán los datos de ${k.client_name} y del expediente ${k.category_name} › ${k.type_name}. Lo que escriba abajo complementa o reemplaza los hechos guardados.`;
   draftForm.counterparty.value = k.counterparty || "";
   draftForm.facts.value = "";
   draftForm.facts.placeholder = k.facts ? `Hechos guardados: ${k.facts.slice(0, 140)}…` : "Instrucciones adicionales";
   // A right of petition is the natural first document for petition-type processes.
   if (/petici/i.test(k.type_name + k.category_name)) draftForm.documentType.value = "PETITION";
+  fillDraftRecipient(k);
 }
+// A petition goes to the entity (the counterparty); the other documents to the case's court.
+const draftRecipient = $("[data-recipient=draft]");
+function fillDraftRecipient(k) {
+  const entity = draftForm.documentType.value === "PETITION" ? draftForm.counterparty.value.trim() : "";
+  return guarded(() => fillRecipient(draftRecipient, k || null, entity));
+}
+draftForm.counterparty.addEventListener("change", () => {
+  const r = readRecipient(draftRecipient);
+  if (!r.name || CMETA.findAuthority(authorityCache, r.entity)) fillDraftRecipient(state.cases.find((x) => x.id === Number(draftForm.caseId.value)));
+});
+for (const radio of draftForm.querySelectorAll("[name=documentType]")) radio.addEventListener("change", () => fillDraftRecipient(state.cases.find((x) => x.id === Number(draftForm.caseId.value))));
 draftForm.caseId.addEventListener("change", applyCaseToDraft);
 
 function setStatus(text, isError = false) {
@@ -2550,6 +2571,7 @@ function collectDraft() {
       email: f.email.value.trim(), address: f.address.value.trim(),
     },
     counterparty: f.counterparty.value.trim(),
+    recipient: readRecipient(draftRecipient),
     facts: f.facts.value.trim(),
     payment: { required: f.paymentRequired.checked, items: f.paymentItems.value.trim() },
   };
@@ -3535,9 +3557,18 @@ async function openTemplate(id) {
   await loadTplData();
 }
 
+const tplRecipient = $("[data-recipient=tpl]");
 async function loadTplData() {
   const caseId = $("#tpl-case").value;
   tplData = await api("GET", `/templates/data${caseId ? `?caseId=${caseId}` : ""}`);
+  // Templates with {{destinatario.*}} show the addressee box, filled like the server filled tplData.
+  tplRecipient.hidden = !tplActive?.vars.some((k) => k.startsWith("destinatario."));
+  if (!tplRecipient.hidden) {
+    // A petition goes to the entity (the counterparty), the other documents to the case's court.
+    const k = await caseById(Number(caseId) || null);
+    await fillRecipient(tplRecipient, k, tplActive.category === "Derecho de petición" ? k?.counterparty || "" : "");
+    tplRecipient.dispatchEvent(new CustomEvent("recipientchange"));
+  }
   renderFees();
   applyDraftFees();
 }
@@ -3588,18 +3619,27 @@ $("#tpl-fees-save").addEventListener("click", () => guarded(async () => {
   await loadTplData();
 }));
 $("#tpl-case").addEventListener("change", () => guarded(async () => { tplOverrides = {}; await loadTplData(); }));
+tplRecipient.addEventListener("recipientchange", () => {
+  // The box is the source of the addressee: it replaces what the case gave and any typed value.
+  for (const key of Object.keys(tplData)) if (key.startsWith("destinatario.") && key !== "destinatario.correo") delete tplData[key];
+  for (const key of Object.keys(tplOverrides)) if (key.startsWith("destinatario.") && key !== "destinatario.correo") delete tplOverrides[key];
+  for (const [key, v] of Object.entries(CMETA.recipientVariables(readRecipient(tplRecipient)))) if (v && key !== "destinatario.correo") tplData[key] = v;
+  renderTplVars();
+  if (!$("#tpl-edit-mode").checked) renderTplDoc();
+});
 
 const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
 const tplValues = () => ({ ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, v]) => v !== "")) });
 
 function renderTplVars() {
   const vals = tplValues();
-  const missing = tplActive.vars.filter((k) => !vals[k]);
+  const missing = tplActive.vars.filter((k) => !vals[k] && (tplRecipient.hidden || !k.startsWith("destinatario.")));
   $("#tpl-missing").textContent = missing.length ? `${missing.length} por completar` : "Completo";
   $("#tpl-missing").className = `badge ${missing.length ? "warn" : "ok"}`;
   $("#tpl-vars-box").open = missing.length > 0;
   // Missing data first, so what needs attention is at the top.
-  const ordered = [...tplActive.vars].sort((a, b) => Number(!!vals[a]) - Number(!!vals[b]));
+  // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
+  const ordered = tplActive.vars.filter((k) => tplRecipient.hidden || !k.startsWith("destinatario.")).sort((a, b) => Number(!!vals[a]) - Number(!!vals[b]));
   $("#tpl-vars").innerHTML = ordered.map((k) => `<label>${escapeHtml(varLabel(k))}
     <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="Falta" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
     || '<p class="muted">Esta plantilla no tiene variables.</p>';
@@ -3645,6 +3685,7 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
   if (!action) return;
   guarded(async () => {
     if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
+      if (!tplRecipient.hidden) await saveRecipientIfAsked(tplRecipient);
       const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name));
       await exportDocument(action, {
         name: tplActive.name, base: tplFileBase(), caseId: Number($("#tpl-case").value) || null, word,
@@ -4370,7 +4411,27 @@ async function renderCorreo() {
 }
 
 const mailForm = $("#mail-dialog form");
-async function openMailDialog({ caseId = null, subject = "", files = [], to = "" } = {}) {
+const mailRecipient = $("[data-recipient=mail]");
+// The addressee block at the top of the message follows the box while the user has not changed it.
+function putMailRecipient(force = false) {
+  const body = mailForm.elements.body;
+  const block = CMETA.recipientText(readRecipient(mailRecipient));
+  const prev = mailForm._block || "";
+  if (prev && body.value.startsWith(prev)) body.value = (block ? block + "\n\n" : "") + body.value.slice(prev.length).replace(/^\n+/, "");
+  else if (force || !body.value.trim()) body.value = block ? block + "\n\n" + body.value.replace(/^\n+/, "") : body.value;
+  else return;
+  mailForm._block = block;
+}
+// «Para» follows the entity too (its saved e-mail, or the court's) while the user has not typed another address.
+function followMailTo() {
+  const to = mailForm.elements.to, r = readRecipient(mailRecipient), k = mailRecipient._case;
+  const auto = CMETA.findAuthority(authorityCache, r.entity)?.email
+    || (k?.court_email && CMETA.entityKey(r.entity) === CMETA.entityKey(k.court_name) ? k.court_email : "");
+  if (auto && (!to.value.trim() || to.value.trim() === mailForm._autoTo)) { to.value = auto; mailForm._autoTo = auto; }
+}
+mailRecipient.addEventListener("recipientchange", () => { putMailRecipient(); followMailTo(); });
+$("#mail-put-recipient").addEventListener("click", () => putMailRecipient(true));
+async function openMailDialog({ caseId = null, subject = "", files = [], to = "", entity = "" } = {}) {
   const cases = await api("GET", "/cases");
   mailForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
     `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
@@ -4384,6 +4445,10 @@ async function openMailDialog({ caseId = null, subject = "", files = [], to = ""
   hint.textContent = k?.court_email ? `Correo del despacho del expediente: ${k.court_email}` : "";
   mailFiles = files;
   renderMailFiles();
+  mailForm._block = "";
+  mailForm._autoTo = mailForm.elements.to.value.trim();
+  await fillRecipient(mailRecipient, k || null, entity);
+  putMailRecipient();
 }
 function renderMailFiles() {
   $("#mail-pending-atts").innerHTML = mailFiles.map((f, i) => `<li>${escapeHtml(f.name)} · ${Math.ceil(f.size / 1024)} KB <button type="button" class="mini" data-rm-att="${i}">Quitar</button></li>`).join("");
@@ -4392,13 +4457,17 @@ mailForm.elements.files.addEventListener("change", (e) => { mailFiles.push(...e.
 $("#mail-pending-atts").addEventListener("click", (e) => { const b = e.target.closest("[data-rm-att]"); if (b) { mailFiles.splice(Number(b.dataset.rmAtt), 1); renderMailFiles(); } });
 mailForm.elements.case_id.addEventListener("change", async (e) => {
   const k = (await api("GET", "/cases")).find((x) => x.id === Number(e.target.value));
-  if (k?.court_email && !mailForm.elements.to.value) mailForm.elements.to.value = k.court_email;
+  await fillRecipient(mailRecipient, k || null);
+  putMailRecipient();
+  followMailTo();
 });
 
 wireDialog($("#mail-dialog"), async (form) => {
   const attachments = [];
   for (const f of mailFiles) attachments.push({ filename: f.name, mime: f.type || "application/octet-stream", base64: await fileToBase64(f) });
   const d = formData(form);
+  // The official is kept even if the e-mail then fails to go out.
+  await saveRecipientIfAsked(mailRecipient, d.to.split(",").length === 1 ? d.to.trim() : "");
   const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments, attach_mode: d.attach_mode });
   toast(`Correo enviado a ${m.to_addr}.`);
   if (FICHAS[route().name]) await refreshView();
@@ -5027,6 +5096,7 @@ async function renderDespachos() {
     ? `${meta.total.toLocaleString("es-CO")} despachos en el directorio · actualizado ${meta.updated.slice(0, 10)}. Fuente: directorio oficial de la Rama Judicial cargado por Gerencia.`
     : "El directorio está vacío. Descargue el directorio de despachos judiciales (correos electrónicos) del sitio de la Rama Judicial y cárguelo aquí.";
   await searchCourts();
+  await renderAuthorities();
 }
 let courtsTimer = null;
 async function searchCourts() {
@@ -5040,7 +5110,7 @@ async function searchCourts() {
   $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
     <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
     <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml([c.circuit && c.circuit !== c.city ? "Circuito de " + c.circuit : "", c.department].filter(Boolean).join(" · "))}</span></td>
-    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}">Escribir</button>` : ""}` : ""}</td>
+    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}" data-entity="${escapeHtml(c.name)}">Escribir</button>` : ""}` : ""}</td>
     <td>${escapeHtml(c.phone)}</td></tr>`).join("");
 }
 for (const sel of ["#courts-dep", "#courts-city", "#courts-area"]) $(sel).addEventListener("change", () => guarded(searchCourts));
@@ -5084,6 +5154,113 @@ $("#courts-file").addEventListener("change", (e) => guarded(async () => {
   toast(`Directorio cargado: ${out.created} nuevos, ${out.updated} actualizados${out.skipped.length ? `, ${out.skipped.length} omitidos` : ""}.`);
   await renderDespachos();
 }));
+
+// ---------- Addressee: the official an e-mail, petition or template goes to (version 2.27) ----------
+// The judge recorded in the case for a court; otherwise the official saved for the entity
+// (Despachos → Funcionarios por entidad). Always editable before sending.
+let authorityCache = null;
+async function loadAuthorities(force = false) {
+  if (force || !authorityCache) authorityCache = await api("GET", "/authorities");
+  $("#authority-list").innerHTML = [...new Set([...authorityCache.map((a) => a.entity), ...state.cases.map((k) => k.court_name).filter(Boolean)])]
+    .slice(0, 800).map((e) => `<option value="${escapeHtml(e)}"></option>`).join("");
+  return authorityCache;
+}
+const treatmentOptions = () => CMETA.TREATMENTS.map((t) => `<option>${escapeHtml(t)}</option>`).join("");
+for (const box of $$("[data-recipient]")) {
+  box.innerHTML = `<legend>Destinatario: funcionario de la autoridad</legend>
+    <div class="grid2">
+      <label>Entidad o despacho <input data-r="entity" list="authority-list" autocomplete="off" placeholder="Ej. Colpensiones · Juzgado 002 Civil Municipal de Ibagué" /></label>
+      <label>Tratamiento <select data-r="treatment">${treatmentOptions()}</select></label>
+      <label>Nombre y apellido del funcionario <input data-r="name" autocomplete="off" placeholder="Ej. Ana María Pérez Rojas" /></label>
+      <label>Cargo <input data-r="title" autocomplete="off" placeholder="Ej. Juez · Director(a) de Prestaciones Económicas" /></label>
+      <label>Ciudad <input data-r="city" autocomplete="off" placeholder="Ej. Ibagué" /></label>
+      <div class="recipient-preview" data-r-preview aria-live="polite"></div>
+    </div>
+    <p class="hint" data-r-source></p>
+    <label class="inline"><input type="checkbox" data-r="save" /> Guardar este funcionario para la entidad (la próxima vez se llena solo)</label>`;
+  box.addEventListener("input", (e) => {
+    const f = e.target.dataset.r;
+    if (!f || f === "save") return;
+    if (f === "name" || f === "title" || f === "treatment") $("[data-r=save]", box).checked = !!readRecipient(box).name && differsFromSaved(box);
+    showRecipient(box);
+    box.dispatchEvent(new CustomEvent("recipientchange", { bubbles: false }));
+  });
+  // A different entity brings its saved official (or the case's judge for the case's court).
+  box.addEventListener("change", (e) => {
+    if (e.target.dataset.r !== "entity") return;
+    fillRecipient(box, box._case, e.target.value).then(() => box.dispatchEvent(new CustomEvent("recipientchange")));
+  });
+}
+const rField = (box, f) => $(`[data-r=${f}]`, box);
+function readRecipient(box) {
+  return Object.fromEntries(["treatment", "name", "title", "entity", "city"].map((f) => [f, rField(box, f).value.trim()]));
+}
+function differsFromSaved(box) {
+  const r = readRecipient(box), a = CMETA.findAuthority(authorityCache, r.entity);
+  return !a || ["treatment", "name", "title", "city"].some((f) => (a[f] || "") !== r[f]);
+}
+function showRecipient(box) {
+  const r = readRecipient(box);
+  const lines = CMETA.recipientLines(r);
+  $("[data-r-preview]", box).innerHTML = lines.length
+    ? `<span class="muted">Así queda en el documento:</span><br>${lines.map(escapeHtml).join("<br>")}` : "";
+  if (r.entity && !r.name) $("[data-r-source]", box).textContent = `No hay un funcionario guardado para «${r.entity}». Escriba su nombre y apellido y marque «Guardar» para que quede para la próxima vez.`;
+}
+/** Fill the box from a case (judge of its court, or the official saved for the entity). */
+async function fillRecipient(box, k = null, entity = "") {
+  box._case = k;
+  const list = await loadAuthorities();
+  const r = CMETA.caseRecipient(k || {}, list, entity);
+  for (const f of ["treatment", "name", "title", "entity", "city"]) rField(box, f).value = r[f] || (f === "treatment" ? "Señor(a)" : "");
+  rField(box, "save").checked = false;
+  const saved = CMETA.findAuthority(list, r.entity);
+  $("[data-r-source]", box).textContent = r.source === "expediente" ? `Nombre del juez tomado del expediente${k?.court_name ? ` (${k.court_name})` : ""}. Corríjalo aquí si cambió.`
+    : r.source === "directorio" ? `Funcionario guardado para esta entidad${saved?.updated_at ? ` (actualizado el ${saved.updated_at.slice(0, 10)})` : ""}. Corríjalo aquí si cambió.`
+    : r.entity ? "" : "Escriba la entidad o el despacho: si ya tiene un funcionario guardado, se llena solo.";
+  showRecipient(box);
+  return r;
+}
+/** Saves the official for the entity when «Guardar» is checked. */
+async function saveRecipientIfAsked(box, email = "") {
+  const r = readRecipient(box);
+  if (!rField(box, "save").checked || !r.entity) return;
+  const prev = CMETA.findAuthority(authorityCache, r.entity);
+  await api("POST", "/authorities", { ...r, email: email || prev?.email || "" });
+  rField(box, "save").checked = false;
+  await loadAuthorities(true);
+  $("[data-r-source]", box).textContent = `Funcionario guardado para ${r.entity}: la próxima vez se llena solo.`;
+  toast(`Funcionario guardado para ${r.entity}.`);
+}
+const caseById = async (id) => (id ? state.cases.find((x) => x.id === id) || (await api("GET", "/cases")).find((x) => x.id === id) || null : null);
+
+// Officials per entity, in Despachos.
+async function renderAuthorities() {
+  const list = await loadAuthorities(true);
+  const q = CMETA.entityKey($("#authorities-q").value);
+  const rows = list.filter((a) => !q || (CMETA.entityKey(a.entity) + " " + CMETA.entityKey(a.name)).includes(q));
+  $("#authorities-empty").hidden = list.length > 0;
+  $("#authorities-table tbody").innerHTML = rows.map((a) => `<tr>
+    <td><strong>${escapeHtml(a.entity)}</strong>${a.city ? `<br><span class="muted">${escapeHtml(a.city)}</span>` : ""}</td>
+    <td>${escapeHtml([a.treatment, a.name].filter(Boolean).join(" ")) || '<span class="muted">Sin nombre</span>'}</td>
+    <td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.email)}</td><td class="nowrap">${escapeHtml((a.updated_at || "").slice(0, 10))}</td>
+    <td class="row-actions"><button class="mini" data-action="edit-authority" data-id="${a.id}">Editar</button>
+      <button class="mini danger" data-action="delete-authority" data-id="${a.id}" data-gerencia-only>Eliminar</button></td></tr>`).join("");
+}
+$("#authorities-q").addEventListener("input", () => guarded(renderAuthorities));
+$("#authority-dialog [name=treatment]").innerHTML = treatmentOptions();
+function openAuthority(a = null) {
+  openDialog($("#authority-dialog"), a ? "Editar funcionario" : "Agregar funcionario", a ? { ...a } : { treatment: "Señor(a)" });
+}
+const authorityForm = $("#authority-dialog form");
+authorityForm.elements.entity.addEventListener("change", (e) => {
+  if (!authorityForm.elements.title.value) authorityForm.elements.title.value = CMETA.officialTitle(e.target.value);
+});
+wireDialog($("#authority-dialog"), async (form) => {
+  const d = formData(form);
+  await api(d.id ? "PUT" : "POST", d.id ? `/authorities/${d.id}` : "/authorities", d);
+  toast(`Funcionario guardado para ${d.entity}.`);
+  await renderAuthorities();
+});
 
 // ---------- Pagos y cartera ----------
 const L = window.JuanmaLedger;

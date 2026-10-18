@@ -1138,3 +1138,8 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
 .notice-results li { padding: .5rem .75rem; border-radius: 10px; background: rgba(2, 124, 198, .06); }
 .notice-results li .follow { margin-right: .4rem; }
 .notice-text pre { white-space: pre-wrap; font: inherit; font-size: .9rem; max-height: 14rem; overflow: auto; background: rgba(0, 43, 106, .05); padding: .6rem; border-radius: 8px; }
+
+/* Addressee of e-mails, petitions and templates (version 2.27) */
+.recipient-box { margin: 10px 0; }
+.recipient-box .recipient-preview { align-self: end; padding: 8px 10px; border-left: 3px solid var(--blue, #027cc6); background: var(--select-tint, rgba(2,124,198,.06)); border-radius: 6px; font-size: .92em; line-height: 1.35; }
+.recipient-box .recipient-preview:empty { display: none; }

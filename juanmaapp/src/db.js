@@ -523,6 +523,12 @@ function migrate(db) {
   // Version 2.22: optional client photo, in its own table so client lists stay light. Existing clients simply have none.
   db.exec(`CREATE TABLE IF NOT EXISTS client_photos (
     client_id INTEGER PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE, photo TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  // Version 2.27: the firm's list of officials per entity (who signs at Colpensiones, the judge of a court…),
+  // used as the addressee of e-mails, petitions and templates. New table: nothing existing changes.
+  db.exec(`CREATE TABLE IF NOT EXISTS authorities (
+    id INTEGER PRIMARY KEY, entity TEXT NOT NULL, entity_key TEXT NOT NULL UNIQUE, treatment TEXT NOT NULL DEFAULT 'Señor(a)',
+    name TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '',
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");

@@ -11,6 +11,7 @@ import { jurisprudenceRouter } from "./jurisprudence-routes.js";
 import { sessionMiddleware, authRouter, adminRouter, requireAuth, requirePerm, scopeOf } from "./auth.js";
 import { reportsRouter } from "./reports.js";
 import { courtsRouter } from "./courts.js";
+import { authoritiesRouter } from "./authorities.js";
 import { agendaRouter } from "./agenda-routes.js";
 import { monitorRouter } from "./monitor-routes.js";
 import { templatesRouter } from "./templates.js";
@@ -114,6 +115,7 @@ export function createApp(db) {
   app.use("/api/jurisprudencia", requirePerm("jurisprudence.use"), jurisprudenceRouter(db));
   app.use("/api/reports", requirePerm("reports.view"), reportsRouter(db));
   app.use("/api/courts", courtsRouter(db));
+  app.use("/api/authorities", authoritiesRouter(db));
   app.use("/api", agendaRouter(db));
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
   app.use("/api/templates", requirePerm("drafts.generate"), templatesRouter(db));

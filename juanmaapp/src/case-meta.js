@@ -284,6 +284,7 @@ const AUDIT_ENTITIES = [
   [/^\/admin/, "Configuración", "ajuste"],
   [/^\/(categories|types|fields|catalog)(?:\/(\d+))?/, "Configuración", "catálogo de procesos"],
   [/^\/courts/, "Despachos", "despacho"],
+  [/^\/authorities(?:\/(\d+))?/, "Despachos", "funcionario de entidad"],
   [/^\/templates/, "Documentos", "plantilla"],
   [/^\/generate/, "Documentos", "borrador"],
   [/^\/monitor\/check/, "Consulta de procesos", "consulta en la Rama Judicial"],
@@ -313,6 +314,7 @@ export const AUDIT_FIELDS = {
   kind: "Tipo", due_at: "Plazo", location: "Lugar", remind_days: "Avisos", done_notes: "Cumplimiento", delivered_at: "Entregado", response_at: "Respuesta",
   response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
   concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",
+  entity: "Entidad", treatment: "Tratamiento",
   name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", custom_permissions: "Permisos propios",
 };
 /** Field-by-field differences between two rows: [{ field, label, before, after }]. */
@@ -326,4 +328,93 @@ export function auditDiff(before, after) {
     if (a !== b) out.push({ field: k, label: AUDIT_FIELDS[k], before: a, after: b });
   }
   return out;
+}
+
+// ---------- Addressee of an e-mail, petition or letter (version 2.27) ----------
+// The official's name comes from the case (the judge chosen in the case) or from
+// the firm's own list of officials per entity; it is always editable before sending.
+export const TREATMENTS = ["Señor(a)", "Señor", "Señora", "Doctor(a)", "Doctor", "Doctora"];
+
+/** Comparison key of an entity name: no accents, case, punctuation or extra spaces. */
+export const entityKey = (x) => nrm(x).replace(/[^a-z0-9ñ ]+/g, " ").replace(/\s+/g, " ").trim();
+
+/** Usual title of whoever heads a court or authority, from its name ("" when unknown). */
+export function officialTitle(entity) {
+  const n = nrm(entity);
+  if (!n) return "";
+  if (/^juzgado|\bjuzgado\b/.test(n)) return "Juez";
+  if (/consejo de estado/.test(n)) return "Consejero(a) ponente";
+  if (/tribunal|corte|sala\b|comision (nacional |seccional )?de disciplina/.test(n)) return "Magistrado(a) ponente";
+  if (/fiscalia/.test(n)) return "Fiscal";
+  if (/procuraduria/.test(n)) return "Procurador(a)";
+  if (/personeria/.test(n)) return "Personero(a)";
+  if (/notaria/.test(n)) return "Notario(a)";
+  if (/alcaldia/.test(n)) return "Alcalde(sa)";
+  if (/gobernacion/.test(n)) return "Gobernador(a)";
+  if (/inspeccion/.test(n)) return "Inspector(a)";
+  if (/comisaria/.test(n)) return "Comisario(a) de Familia";
+  return "";
+}
+export const isJudicialEntity = (entity) => /juzgado|tribunal|corte|consejo de estado|sala\b|comision (nacional |seccional )?de disciplina/.test(nrm(entity));
+
+/** Saved official for an entity name, from the list of officials per entity. */
+export function findAuthority(list, entity) {
+  const key = entityKey(entity);
+  return key ? (list || []).find((a) => entityKey(a.entity) === key) || null : null;
+}
+
+/**
+ * Addressee for a case: the court and the judge recorded in the case first,
+ * then the official saved for that entity. `entity` overrides the case's court
+ * (e.g. a petition to Colpensiones from a case before a court).
+ */
+export function caseRecipient(k, authorities = [], entity = "") {
+  const court = String(k?.court_name || "").trim();
+  const target = String(entity || "").trim() || court || String(k?.counterparty || "").trim();
+  const saved = findAuthority(authorities, target);
+  const sameCourt = !!court && entityKey(target) === entityKey(court);
+  const judge = sameCourt ? String(k?.judge_name || "").trim() : "";
+  return {
+    treatment: saved?.treatment || "Señor(a)",
+    name: judge || saved?.name || "",
+    title: saved?.title || officialTitle(target),
+    entity: saved?.entity || target,
+    email: (sameCourt && k?.court_email) || saved?.email || "",
+    city: saved?.city || (sameCourt ? k?.city || "" : ""),
+    source: judge ? "expediente" : saved?.name ? "directorio" : "",
+  };
+}
+
+/** The addressee block that opens the letter: treatment, name, title, entity, city. */
+export function recipientLines(r) {
+  if (!r || !(r.name || r.entity)) return [];
+  const lines = [r.treatment || "Señor(a)"];
+  if (r.name) lines.push(r.name);
+  if (r.title) lines.push(r.title);
+  if (r.entity) lines.push(r.entity);
+  if (r.city && !nrm(r.entity).includes(nrm(r.city))) lines.push(r.city);
+  if (isJudicialEntity(r.entity)) lines.push("E. S. D.");
+  return lines;
+}
+export const recipientText = (r) => recipientLines(r).join("\n");
+/** One line for the AI engine and for a subject: "Señor(a) Ana Pérez, Juez, Juzgado …". */
+export const recipientInline = (r) => (r && (r.name || r.entity)
+  ? [`${r.treatment || "Señor(a)"} ${r.name || ""}`.trim(), r.title, r.entity, r.city && !nrm(r.entity).includes(nrm(r.city)) ? r.city : ""].filter(Boolean).join(", ") : "");
+
+/** Template markers {{destinatario.*}} from an addressee. */
+export function recipientVariables(r) {
+  if (!r || !(r.name || r.entity)) return {};
+  return {
+    "destinatario.tratamiento": r.treatment || "Señor(a)", "destinatario.nombre": r.name || "", "destinatario.cargo": r.title || "",
+    "destinatario.entidad": r.entity || "", "destinatario.ciudad": r.city || "", "destinatario.correo": r.email || "",
+    "destinatario.bloque": recipientText(r),
+  };
+}
+
+/** Lines for the drafting engine: the official the document is addressed to, as the user checked it. */
+export function recipientPrompt(r) {
+  if (!r || typeof r !== "object") return [];
+  const t = (x) => String(x ?? "").trim().slice(0, 200);
+  const line = recipientInline({ treatment: t(r.treatment), name: t(r.name), title: t(r.title), entity: t(r.entity), city: t(r.city) });
+  return line ? [`Addressee official (address the document to this person exactly as written; never invent another name): ${line}`] : [];
 }

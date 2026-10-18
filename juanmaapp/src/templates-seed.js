@@ -27,6 +27,13 @@ export const VARIABLES = [
   ["expediente.area", "Área", "Expediente"],
   ["expediente.ciudad", "Ciudad del proceso", "Expediente"],
   ["expediente.departamento", "Departamento del proceso", "Expediente"],
+  ["destinatario.bloque", "Destinatario completo (Señor(a), nombre, cargo, entidad, ciudad)", "Destinatario"],
+  ["destinatario.tratamiento", "Tratamiento (Señor(a), Doctor(a)…)", "Destinatario"],
+  ["destinatario.nombre", "Nombre y apellido del funcionario", "Destinatario"],
+  ["destinatario.cargo", "Cargo del funcionario (Juez, Magistrado(a) ponente…)", "Destinatario"],
+  ["destinatario.entidad", "Entidad o despacho destinatario", "Destinatario"],
+  ["destinatario.ciudad", "Ciudad del destinatario", "Destinatario"],
+  ["destinatario.correo", "Correo del destinatario", "Destinatario"],
   ["abogado.nombre", "Nombre del abogado responsable", "Abogado"],
   ["abogado.tarjeta_profesional", "Tarjeta profesional", "Abogado"],
   ["abogado.correo", "Correo del abogado", "Abogado"],
@@ -227,10 +234,7 @@ EL ABOGADO${FOOTER}`,
     description: "Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.",
     body: `{{fecha.ciudad_y_fecha}}
 
-Señor(a)
-**{{expediente.despacho}}**
-{{expediente.ciudad}}
-E. S. D.
+{{destinatario.bloque}}
 
 **Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}
 **Demandante:** {{cliente.nombre}}
@@ -261,8 +265,7 @@ T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
     description: "Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.",
     body: `{{fecha.ciudad_y_fecha}}
 
-Señores
-**{{expediente.contraparte}}**
+{{destinatario.bloque}}
 **[FILL: Dirección o correo de radicación de la entidad]**
 
 **Asunto:** Derecho de petición — {{expediente.asunto}}
@@ -380,4 +383,7 @@ export const FIRM_FIXES = [
   ["**{{oficina.nombre}}** (TEC Jurídicos),", "**Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4,"],
   ["| 5. **Comunicaciones**", "| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones**"],
   ["quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante", "quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante"],
+  // Version 2.27: the petition and the power of attorney open with the named official (Señor(a), name, title, entity).
+  ["Señores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**", "{{destinatario.bloque}}\n**[FILL: Dirección o correo de radicación de la entidad]**"],
+  ["Señor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:**", "{{destinatario.bloque}}\n\n**Referencia:**"],
 ];

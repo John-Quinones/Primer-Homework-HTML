@@ -402,6 +402,18 @@
             <table class="data-table" id="courts-table"><thead><tr><th>Despacho</th><th>Área</th><th>Ciudad</th><th>Correo</th><th>Teléfono</th></tr></thead><tbody></tbody></table>
           </div>
         </div>
+        <div class="panel" id="authorities-panel">
+          <div class="view-head">
+            <h3>Funcionarios por entidad</h3>
+            <div class="toolbar"><button type="button" data-action="new-authority">+ Agregar funcionario</button></div>
+          </div>
+          <p class="hint">Nombre y apellido de quien recibe los correos y peticiones en cada entidad o despacho (Colpensiones, una EPS, la Alcaldía, un juzgado…). Al escribir un correo, una petición o una plantilla dirigida a esa entidad, la App pone «Señor(a) nombre, cargo, entidad» sola; siempre se puede corregir antes de enviar. Para los juzgados se usa primero el juez registrado en el expediente.</p>
+          <label>Buscar <input id="authorities-q" type="search" placeholder="Entidad o nombre del funcionario" /></label>
+          <div class="table-scroll">
+            <table class="data-table" id="authorities-table"><thead><tr><th>Entidad o despacho</th><th>Funcionario</th><th>Cargo</th><th>Correo</th><th>Actualizado</th><th></th></tr></thead><tbody></tbody></table>
+          </div>
+          <p class="muted" id="authorities-empty" hidden>Todavía no hay funcionarios guardados. Se agregan aquí o con «Guardar este funcionario para la entidad» al escribir un correo o una petición.</p>
+        </div>
       </section>
 
       <!-- ============ BORRADORES ============ -->
@@ -462,6 +474,7 @@
                   </div>
                   <div class="toolbar"><button type="button" class="primary" id="tpl-fees-save">Registrar honorarios en Pagos</button></div>
                 </fieldset>
+                <fieldset class="recipient-box" data-recipient="tpl" hidden></fieldset>
                 <details id="tpl-vars-box">
                   <summary>Datos del documento <span id="tpl-missing" class="badge warn"></span></summary>
                   <p class="hint">Corrija o complete cualquier dato; el documento se actualiza al instante.</p>
@@ -517,6 +530,7 @@
             <label>Contraparte / entidad destinataria
               <input name="counterparty" placeholder="Ej. Secretaría de Movilidad de Bogotá" />
             </label>
+            <fieldset class="recipient-box" data-recipient="draft"></fieldset>
 
             <label>Hechos e instrucciones
               <textarea name="facts" rows="6" placeholder="Hechos en orden cronológico, lo que se pide, facultades del apoderado, condiciones del contrato…"></textarea>
@@ -1200,6 +1214,8 @@
         <label>Asunto * <input name="subject" required /></label>
       </div>
       <p class="hint" id="mail-court-hint" hidden></p>
+      <fieldset class="recipient-box" data-recipient="mail"></fieldset>
+      <div class="toolbar"><button type="button" class="mini" id="mail-put-recipient" title="Escribe al comienzo del mensaje: Señor(a), nombre, cargo y entidad">Poner el destinatario al inicio del mensaje</button></div>
       <label>Mensaje * <textarea name="body" rows="8" required></textarea></label>
       <label>Adjuntos <input type="file" name="files" multiple /></label>
       <ul id="mail-pending-atts" class="muted"></ul>
@@ -1217,6 +1233,28 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Funcionario de una entidad (versión 2.27) -->
+  <dialog id="authority-dialog">
+    <form method="dialog" data-form="authority">
+      <h3 data-title>Funcionario de la entidad</h3>
+      <input type="hidden" name="id" />
+      <div class="grid2">
+        <label class="span2">Entidad o despacho * <input name="entity" required list="authority-list" autocomplete="off" placeholder="Ej. Colpensiones · Juzgado 002 Civil Municipal de Ibagué" /></label>
+        <label>Tratamiento <select name="treatment"></select></label>
+        <label>Nombre y apellido <input name="name" placeholder="Ej. Ana María Pérez Rojas" /></label>
+        <label>Cargo <input name="title" placeholder="Ej. Director(a) de Prestaciones Económicas" /></label>
+        <label>Ciudad <input name="city" placeholder="Ej. Ibagué" /></label>
+        <label class="span2">Correo <input name="email" type="email" placeholder="notificaciones@entidad.gov.co" /></label>
+      </div>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+  <datalist id="authority-list"></datalist>
 
   <!-- Plantilla -->
   <dialog id="tpl-dialog" class="wide-dialog">

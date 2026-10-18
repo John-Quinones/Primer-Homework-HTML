@@ -5,7 +5,8 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { isFolderLabel } from "./case-meta.js";
+import { isFolderLabel, caseRecipient, recipientVariables } from "./case-meta.js";
+import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
 
 const MAX_FILE = 8 * 1024 * 1024;
@@ -62,6 +63,8 @@ export function templateData(db, user, caseId) {
     for (const f of fields) v[`campo.${f.label}`] = values[f.id] ?? "";
     const folder = fields.find((f) => isFolderLabel(f.label) && String(values[f.id] ?? "").trim());
     if (folder) v["expediente.carpeta"] = String(values[folder.id]).trim();
+    // Addressee (version 2.27): the judge of the case or the official saved for the entity.
+    Object.assign(v, recipientVariables(caseRecipient(k, allAuthorities(db))));
     // Fees of the contract = the case's charges in Pagos.
     Object.assign(v, feeVariables(db.prepare("SELECT amount, due_date, status FROM charges WHERE case_id = ?").all(k.id),
       db.prepare("SELECT amount, voided_at FROM receipts WHERE case_id = ?").all(k.id)));

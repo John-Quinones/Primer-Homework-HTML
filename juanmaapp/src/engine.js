@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { recipientPrompt } from "./case-meta.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PROMPT = readFileSync(path.join(here, "..", "prompts", "nomosai-system-prompt.md"), "utf8");
@@ -35,6 +36,7 @@ function buildUserMessage(req, transactionId) {
     `- Address: ${req.client?.address || "[not provided]"}`,
     "",
     `Counterparty / addressee: ${req.counterparty || "[not provided]"}`,
+    ...recipientPrompt(req.recipient),
     "",
   ];
   if (req.process) {
