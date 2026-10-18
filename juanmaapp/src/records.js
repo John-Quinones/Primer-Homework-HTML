@@ -327,13 +327,14 @@ export function recordsRouter(db) {
   // ---------- Cases ----------
   const CASE_SELECT = `
     SELECT k.*, c.full_name AS client_name, ${typePath("t")} AS type_name, t.category_id,
-           g.name AS category_name, o.name AS office_name, u.name AS assigned_name
+           g.name AS category_name, o.name AS office_name, u.name AS assigned_name, COALESCE(cr.address, '') AS court_address
     FROM cases k
     JOIN clients c ON c.id = k.client_id
     JOIN process_types t ON t.id = k.process_type_id
     JOIN process_categories g ON g.id = t.category_id
     LEFT JOIN offices o ON o.id = k.office_id
-    LEFT JOIN users_shown u ON u.id = k.assigned_user_id`;
+    LEFT JOIN users_shown u ON u.id = k.assigned_user_id
+    LEFT JOIN courts cr ON cr.id = k.court_id`;
 
   const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated, parties: JSON.parse(row.parties || "[]") });
   // Our clients among the parties are linked to their client record (given, or found by document number).

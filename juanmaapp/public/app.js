@@ -2218,7 +2218,7 @@ document.addEventListener("click", (e) => {
     "open-sign": () => openSignDetail(id),
     "new-mail": () => openMailDialog({}),
     "mail-case": () => openMailDialog({ caseId: Number(btn.dataset.case) }),
-    "mail-court": () => openMailDialog({ to: btn.dataset.to, entity: btn.dataset.entity || "" }),
+    "mail-court": () => openMailDialog({ to: btn.dataset.to, entity: btn.dataset.entity || "", court: { court_name: btn.dataset.entity || "", court_email: btn.dataset.to, court_address: btn.dataset.address || "", city: btn.dataset.city || "" } }),
     "new-authority": () => openAuthority(),
     "edit-authority": () => openAuthority(authorityCache.find((a) => a.id === Number(btn.dataset.id))),
     "delete-authority": async () => {
@@ -3621,9 +3621,9 @@ $("#tpl-fees-save").addEventListener("click", () => guarded(async () => {
 $("#tpl-case").addEventListener("change", () => guarded(async () => { tplOverrides = {}; await loadTplData(); }));
 tplRecipient.addEventListener("recipientchange", () => {
   // The box is the source of the addressee: it replaces what the case gave and any typed value.
-  for (const key of Object.keys(tplData)) if (key.startsWith("destinatario.") && key !== "destinatario.correo") delete tplData[key];
-  for (const key of Object.keys(tplOverrides)) if (key.startsWith("destinatario.") && key !== "destinatario.correo") delete tplOverrides[key];
-  for (const [key, v] of Object.entries(CMETA.recipientVariables(readRecipient(tplRecipient)))) if (v && key !== "destinatario.correo") tplData[key] = v;
+  for (const key of Object.keys(tplData)) if (key.startsWith("destinatario.")) delete tplData[key];
+  for (const key of Object.keys(tplOverrides)) if (key.startsWith("destinatario.")) delete tplOverrides[key];
+  for (const [key, v] of Object.entries(CMETA.recipientVariables(readRecipient(tplRecipient)))) if (v) tplData[key] = v;
   renderTplVars();
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
 });
@@ -4424,14 +4424,13 @@ function putMailRecipient(force = false) {
 }
 // «Para» follows the entity too (its saved e-mail, or the court's) while the user has not typed another address.
 function followMailTo() {
-  const to = mailForm.elements.to, r = readRecipient(mailRecipient), k = mailRecipient._case;
-  const auto = CMETA.findAuthority(authorityCache, r.entity)?.email
-    || (k?.court_email && CMETA.entityKey(r.entity) === CMETA.entityKey(k.court_name) ? k.court_email : "");
+  const to = mailForm.elements.to, r = readRecipient(mailRecipient);
+  const auto = r.email;
   if (auto && (!to.value.trim() || to.value.trim() === mailForm._autoTo)) { to.value = auto; mailForm._autoTo = auto; }
 }
 mailRecipient.addEventListener("recipientchange", () => { putMailRecipient(); followMailTo(); });
 $("#mail-put-recipient").addEventListener("click", () => putMailRecipient(true));
-async function openMailDialog({ caseId = null, subject = "", files = [], to = "", entity = "" } = {}) {
+async function openMailDialog({ caseId = null, subject = "", files = [], to = "", entity = "", court = null } = {}) {
   const cases = await api("GET", "/cases");
   mailForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
     `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
@@ -4447,7 +4446,8 @@ async function openMailDialog({ caseId = null, subject = "", files = [], to = ""
   renderMailFiles();
   mailForm._block = "";
   mailForm._autoTo = mailForm.elements.to.value.trim();
-  await fillRecipient(mailRecipient, k || null, entity);
+  // From the court directory, the court's own e-mail and address fill the addressee.
+  await fillRecipient(mailRecipient, k || court, entity);
   putMailRecipient();
 }
 function renderMailFiles() {
@@ -5110,7 +5110,7 @@ async function searchCourts() {
   $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
     <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
     <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml([c.circuit && c.circuit !== c.city ? "Circuito de " + c.circuit : "", c.department].filter(Boolean).join(" · "))}</span></td>
-    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}" data-entity="${escapeHtml(c.name)}">Escribir</button>` : ""}` : ""}</td>
+    <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}" data-entity="${escapeHtml(c.name)}" data-address="${escapeHtml(c.address || "")}" data-city="${escapeHtml(c.city || "")}">Escribir</button>` : ""}` : ""}</td>
     <td>${escapeHtml(c.phone)}</td></tr>`).join("");
 }
 for (const sel of ["#courts-dep", "#courts-city", "#courts-area"]) $(sel).addEventListener("change", () => guarded(searchCourts));
@@ -5173,6 +5173,8 @@ for (const box of $$("[data-recipient]")) {
       <label>Tratamiento <select data-r="treatment">${treatmentOptions()}</select></label>
       <label>Nombre y apellido del funcionario <input data-r="name" autocomplete="off" placeholder="Ej. Ana María Pérez Rojas" /></label>
       <label>Cargo <input data-r="title" autocomplete="off" placeholder="Ej. Juez · Director(a) de Prestaciones Económicas" /></label>
+      <label>Dirección <input data-r="address" autocomplete="off" placeholder="Ej. Carrera 2 No. 8-90, Palacio de Justicia, piso 3" /></label>
+      <label>Correo de la autoridad <input data-r="email" type="email" autocomplete="off" placeholder="Ej. notificacionesjudiciales@entidad.gov.co" /></label>
       <label>Ciudad <input data-r="city" autocomplete="off" placeholder="Ej. Ibagué" /></label>
       <div class="recipient-preview" data-r-preview aria-live="polite"></div>
     </div>
@@ -5181,7 +5183,7 @@ for (const box of $$("[data-recipient]")) {
   box.addEventListener("input", (e) => {
     const f = e.target.dataset.r;
     if (!f || f === "save") return;
-    if (f === "name" || f === "title" || f === "treatment") $("[data-r=save]", box).checked = !!readRecipient(box).name && differsFromSaved(box);
+    if (["name", "title", "treatment", "address", "email", "city"].includes(f)) $("[data-r=save]", box).checked = !!readRecipient(box).name && differsFromSaved(box);
     showRecipient(box);
     box.dispatchEvent(new CustomEvent("recipientchange", { bubbles: false }));
   });
@@ -5193,11 +5195,11 @@ for (const box of $$("[data-recipient]")) {
 }
 const rField = (box, f) => $(`[data-r=${f}]`, box);
 function readRecipient(box) {
-  return Object.fromEntries(["treatment", "name", "title", "entity", "city"].map((f) => [f, rField(box, f).value.trim()]));
+  return Object.fromEntries(["treatment", "name", "title", "entity", "address", "email", "city"].map((f) => [f, rField(box, f).value.trim()]));
 }
 function differsFromSaved(box) {
   const r = readRecipient(box), a = CMETA.findAuthority(authorityCache, r.entity);
-  return !a || ["treatment", "name", "title", "city"].some((f) => (a[f] || "") !== r[f]);
+  return !a || ["treatment", "name", "title", "address", "email", "city"].some((f) => (a[f] || "") !== r[f]);
 }
 function showRecipient(box) {
   const r = readRecipient(box);
@@ -5211,7 +5213,7 @@ async function fillRecipient(box, k = null, entity = "") {
   box._case = k;
   const list = await loadAuthorities();
   const r = CMETA.caseRecipient(k || {}, list, entity);
-  for (const f of ["treatment", "name", "title", "entity", "city"]) rField(box, f).value = r[f] || (f === "treatment" ? "Señor(a)" : "");
+  for (const f of ["treatment", "name", "title", "entity", "address", "email", "city"]) rField(box, f).value = r[f] || (f === "treatment" ? "Señor(a)" : "");
   rField(box, "save").checked = false;
   const saved = CMETA.findAuthority(list, r.entity);
   $("[data-r-source]", box).textContent = r.source === "expediente" ? `Nombre del juez tomado del expediente${k?.court_name ? ` (${k.court_name})` : ""}. Corríjalo aquí si cambió.`
@@ -5225,7 +5227,7 @@ async function saveRecipientIfAsked(box, email = "") {
   const r = readRecipient(box);
   if (!rField(box, "save").checked || !r.entity) return;
   const prev = CMETA.findAuthority(authorityCache, r.entity);
-  await api("POST", "/authorities", { ...r, email: email || prev?.email || "" });
+  await api("POST", "/authorities", { ...r, email: r.email || email || prev?.email || "" });
   rField(box, "save").checked = false;
   await loadAuthorities(true);
   $("[data-r-source]", box).textContent = `Funcionario guardado para ${r.entity}: la próxima vez se llena solo.`;
@@ -5242,7 +5244,7 @@ async function renderAuthorities() {
   $("#authorities-table tbody").innerHTML = rows.map((a) => `<tr>
     <td><strong>${escapeHtml(a.entity)}</strong>${a.city ? `<br><span class="muted">${escapeHtml(a.city)}</span>` : ""}</td>
     <td>${escapeHtml([a.treatment, a.name].filter(Boolean).join(" ")) || '<span class="muted">Sin nombre</span>'}</td>
-    <td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.email)}</td><td class="nowrap">${escapeHtml((a.updated_at || "").slice(0, 10))}</td>
+    <td>${escapeHtml(a.title)}</td><td>${escapeHtml(a.address)}</td><td>${escapeHtml(a.email)}</td><td class="nowrap">${escapeHtml((a.updated_at || "").slice(0, 10))}</td>
     <td class="row-actions"><button class="mini" data-action="edit-authority" data-id="${a.id}">Editar</button>
       <button class="mini danger" data-action="delete-authority" data-id="${a.id}" data-gerencia-only>Eliminar</button></td></tr>`).join("");
 }

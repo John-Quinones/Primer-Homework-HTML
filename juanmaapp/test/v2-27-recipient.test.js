@@ -16,7 +16,7 @@ test("the addressee of a case: the judge of its court first, then the official s
   const r = caseRecipient(k, []);
   assert.equal(r.source, "expediente");
   assert.equal(r.title, "Juez");
-  assert.equal(recipientText(r), `Señor(a)\nAna María Pérez Rojas\nJuez\n${court}\nE. S. D.`);
+  assert.equal(recipientText(r), `Señor(a)\nAna María Pérez Rojas\nJuez\n${court}\nCorreo: j02cmibague@cendoj.ramajudicial.gov.co\nE. S. D.`);
   const saved = [{ entity: "COLPENSIONES", treatment: "Doctor", name: "Jaime Dussán", title: "Presidente", email: "notificaciones@colpensiones.gov.co", city: "Bogotá" }];
   const p = caseRecipient(k, saved, "colpensiones");
   assert.deepEqual([p.source, p.name, p.title, p.email], ["directorio", "Jaime Dussán", "Presidente", "notificaciones@colpensiones.gov.co"]);
@@ -54,4 +54,20 @@ test("officials per entity are saved once per entity, fill the templates and onl
   assert.equal((await p.call("DELETE", `/authorities/${a.body.id}`)).status, 403);
   assert.equal((await admin.call("DELETE", `/authorities/${a.body.id}`)).status, 204);
   assert.equal((await admin.call("GET", "/authorities")).body.length, 0);
+});
+
+test("the addressee carries the authority's address and e-mail (version 2.30)", async () => {
+  const r = caseRecipient({ court_name: "Juzgado 001 Civil Municipal de Ibagué", court_email: "j01cmiba@cendoj.ramajudicial.gov.co",
+    court_address: "Carrera 2 No. 8-90, Palacio de Justicia", judge_name: "Luis Pérez", city: "Ibagué" }, []);
+  assert.equal(recipientText(r), "Señor(a)\nLuis Pérez\nJuez\nJuzgado 001 Civil Municipal de Ibagué\nCarrera 2 No. 8-90, Palacio de Justicia\nCorreo: j01cmiba@cendoj.ramajudicial.gov.co\nE. S. D.");
+  assert.equal(recipientPrompt(r).length, 3);
+  const a = await admin.call("POST", "/authorities", { entity: "Nueva EPS", name: "Marta Gil", address: "Calle 60 No. 5-20, Ibagué", email: "notificaciones@nuevaeps.com.co" });
+  assert.equal(a.body.address, "Calle 60 No. 5-20, Ibagué");
+  const client = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Rosa", last_names: "Peña", id_type: "CC", id_number: "65111333", office_id: office })).body;
+  const type = (await admin.call("GET", "/catalog")).body[0].types[0];
+  const k = (await admin.call("POST", "/cases", { client_id: client.id, process_type_id: type.id, office_id: office, title: "Tutela salud", counterparty: "Nueva EPS" })).body;
+  const v = (await admin.call("GET", `/templates/data?caseId=${k.id}`)).body;
+  assert.equal(v["destinatario.direccion"], "Calle 60 No. 5-20, Ibagué");
+  assert.equal(v["destinatario.correo"], "notificaciones@nuevaeps.com.co");
+  assert.match(v["destinatario.bloque"], /Calle 60 No\. 5-20, Ibagué\nCorreo: notificaciones@nuevaeps\.com\.co$/);
 });

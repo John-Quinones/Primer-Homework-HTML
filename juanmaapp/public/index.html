@@ -407,10 +407,10 @@
             <h3>Funcionarios por entidad</h3>
             <div class="toolbar"><button type="button" data-action="new-authority">+ Agregar funcionario</button></div>
           </div>
-          <p class="hint">Nombre y apellido de quien recibe los correos y peticiones en cada entidad o despacho (Colpensiones, una EPS, la Alcaldía, un juzgado…). Al escribir un correo, una petición o una plantilla dirigida a esa entidad, la App pone «Señor(a) nombre, cargo, entidad» sola; siempre se puede corregir antes de enviar. Para los juzgados se usa primero el juez registrado en el expediente.</p>
+          <p class="hint">Nombre y apellido, dirección y correo de quien recibe los correos y peticiones en cada entidad o despacho (Colpensiones, una EPS, la Alcaldía, un juzgado…). Al escribir un correo, una petición o una plantilla dirigida a esa entidad, la App pone «Señor(a) nombre, cargo, entidad» sola; siempre se puede corregir antes de enviar. Para los juzgados se usa primero el juez registrado en el expediente.</p>
           <label>Buscar <input id="authorities-q" type="search" placeholder="Entidad o nombre del funcionario" /></label>
           <div class="table-scroll">
-            <table class="data-table" id="authorities-table"><thead><tr><th>Entidad o despacho</th><th>Funcionario</th><th>Cargo</th><th>Correo</th><th>Actualizado</th><th></th></tr></thead><tbody></tbody></table>
+            <table class="data-table" id="authorities-table"><thead><tr><th>Entidad o despacho</th><th>Funcionario</th><th>Cargo</th><th>Dirección</th><th>Correo</th><th>Actualizado</th><th></th></tr></thead><tbody></tbody></table>
           </div>
           <p class="muted" id="authorities-empty" hidden>Todavía no hay funcionarios guardados. Se agregan aquí o con «Guardar este funcionario para la entidad» al escribir un correo o una petición.</p>
         </div>
@@ -1245,6 +1245,7 @@
         <label>Nombre y apellido <input name="name" placeholder="Ej. Ana María Pérez Rojas" /></label>
         <label>Cargo <input name="title" placeholder="Ej. Director(a) de Prestaciones Económicas" /></label>
         <label>Ciudad <input name="city" placeholder="Ej. Ibagué" /></label>
+        <label class="span2">Dirección <input name="address" placeholder="Ej. Carrera 5 No. 41-16, piso 2" /></label>
         <label class="span2">Correo <input name="email" type="email" placeholder="notificaciones@entidad.gov.co" /></label>
       </div>
       <p class="form-error" hidden></p>

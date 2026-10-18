@@ -64,7 +64,8 @@ export function templateData(db, user, caseId) {
     const folder = fields.find((f) => isFolderLabel(f.label) && String(values[f.id] ?? "").trim());
     if (folder) v["expediente.carpeta"] = String(values[folder.id]).trim();
     // Addressee (version 2.27): the judge of the case or the official saved for the entity.
-    Object.assign(v, recipientVariables(caseRecipient(k, allAuthorities(db))));
+    const courtAddress = k.court_id ? db.prepare("SELECT address FROM courts WHERE id = ?").get(k.court_id)?.address || "" : "";
+    Object.assign(v, recipientVariables(caseRecipient({ ...k, court_address: courtAddress }, allAuthorities(db))));
     // Fees of the contract = the case's charges in Pagos.
     Object.assign(v, feeVariables(db.prepare("SELECT amount, due_date, status FROM charges WHERE case_id = ?").all(k.id),
       db.prepare("SELECT amount, voided_at FROM receipts WHERE case_id = ?").all(k.id)));

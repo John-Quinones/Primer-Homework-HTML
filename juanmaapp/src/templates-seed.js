@@ -32,6 +32,7 @@ export const VARIABLES = [
   ["destinatario.nombre", "Nombre y apellido del funcionario", "Destinatario"],
   ["destinatario.cargo", "Cargo del funcionario (Juez, Magistrado(a) ponente…)", "Destinatario"],
   ["destinatario.entidad", "Entidad o despacho destinatario", "Destinatario"],
+  ["destinatario.direccion", "Dirección del destinatario", "Destinatario"],
   ["destinatario.ciudad", "Ciudad del destinatario", "Destinatario"],
   ["destinatario.correo", "Correo del destinatario", "Destinatario"],
   ["abogado.nombre", "Nombre del abogado responsable", "Abogado"],
@@ -266,7 +267,6 @@ T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
     body: `{{fecha.ciudad_y_fecha}}
 
 {{destinatario.bloque}}
-**[FILL: Dirección o correo de radicación de la entidad]**
 
 **Asunto:** Derecho de petición — {{expediente.asunto}}
 
@@ -386,4 +386,6 @@ export const FIRM_FIXES = [
   // Version 2.27: the petition and the power of attorney open with the named official (Señor(a), name, title, entity).
   ["Señores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**", "{{destinatario.bloque}}\n**[FILL: Dirección o correo de radicación de la entidad]**"],
   ["Señor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:**", "{{destinatario.bloque}}\n\n**Referencia:**"],
+  // Version 2.30: the addressee block carries the entity's address and e-mail.
+  ["{{destinatario.bloque}}\n**[FILL: Dirección o correo de radicación de la entidad]**", "{{destinatario.bloque}}"],
 ];

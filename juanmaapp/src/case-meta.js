@@ -314,7 +314,7 @@ export const AUDIT_FIELDS = {
   kind: "Tipo", due_at: "Plazo", location: "Lugar", remind_days: "Avisos", done_notes: "Cumplimiento", delivered_at: "Entregado", response_at: "Respuesta",
   response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
   concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",
-  entity: "Entidad", treatment: "Tratamiento",
+  entity: "Entidad", treatment: "Tratamiento", court_address: "Dirección del despacho",
   name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", custom_permissions: "Permisos propios",
 };
 /** Field-by-field differences between two rows: [{ field, label, before, after }]. */
@@ -379,20 +379,23 @@ export function caseRecipient(k, authorities = [], entity = "") {
     name: judge || saved?.name || "",
     title: saved?.title || officialTitle(target),
     entity: saved?.entity || target,
+    address: saved?.address || (sameCourt ? k?.court_address || "" : ""),
     email: (sameCourt && k?.court_email) || saved?.email || "",
     city: saved?.city || (sameCourt ? k?.city || "" : ""),
     source: judge ? "expediente" : saved?.name ? "directorio" : "",
   };
 }
 
-/** The addressee block that opens the letter: treatment, name, title, entity, city. */
+/** The addressee block that opens the letter: treatment, name, title, entity, address, e-mail, city. */
 export function recipientLines(r) {
   if (!r || !(r.name || r.entity)) return [];
   const lines = [r.treatment || "Señor(a)"];
   if (r.name) lines.push(r.name);
   if (r.title) lines.push(r.title);
   if (r.entity) lines.push(r.entity);
-  if (r.city && !nrm(r.entity).includes(nrm(r.city))) lines.push(r.city);
+  if (r.address) lines.push(r.address);
+  if (r.email) lines.push(`Correo: ${r.email}`);
+  if (r.city && !nrm(`${r.entity} ${r.address}`).includes(nrm(r.city))) lines.push(r.city);
   if (isJudicialEntity(r.entity)) lines.push("E. S. D.");
   return lines;
 }
@@ -406,7 +409,7 @@ export function recipientVariables(r) {
   if (!r || !(r.name || r.entity)) return {};
   return {
     "destinatario.tratamiento": r.treatment || "Señor(a)", "destinatario.nombre": r.name || "", "destinatario.cargo": r.title || "",
-    "destinatario.entidad": r.entity || "", "destinatario.ciudad": r.city || "", "destinatario.correo": r.email || "",
+    "destinatario.entidad": r.entity || "", "destinatario.direccion": r.address || "", "destinatario.ciudad": r.city || "", "destinatario.correo": r.email || "",
     "destinatario.bloque": recipientText(r),
   };
 }
@@ -416,5 +419,7 @@ export function recipientPrompt(r) {
   if (!r || typeof r !== "object") return [];
   const t = (x) => String(x ?? "").trim().slice(0, 200);
   const line = recipientInline({ treatment: t(r.treatment), name: t(r.name), title: t(r.title), entity: t(r.entity), city: t(r.city) });
-  return line ? [`Addressee official (address the document to this person exactly as written; never invent another name): ${line}`] : [];
+  if (!line) return [];
+  return [`Addressee official (address the document to this person exactly as written; never invent another name): ${line}`,
+    ...(t(r.address) ? [`Addressee postal address: ${t(r.address)}`] : []), ...(t(r.email) ? [`Addressee e-mail: ${t(r.email)}`] : [])];
 }

@@ -270,7 +270,7 @@
     const cl = s.clients.find((x) => x.id === k.client_id);
     const u = s.users.find((x) => x.id === k.assigned_user_id);
     return clone({ parties: [], ...k, client_name: cl.full_name, type_name: typePath(t), category_id: c.id, category_name: c.name,
-      office_name: officeName(k.office_id), assigned_name: shownName(u) });
+      office_name: officeName(k.office_id), assigned_name: shownName(u), court_address: (k.court_id && s.courts.find((x) => x.id === k.court_id)?.address) || "" });
   };
   // Same as the server: our clients among the parties are linked to their client record.
   const isPartyClient = (k, clientId) => (k.parties || []).some((p) => p.ours && p.client_id === clientId);
@@ -350,7 +350,7 @@
     const email = str(b?.email).toLowerCase().slice(0, 200);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("El correo no es válido.");
     return { entity, entity_key: CM.entityKey(entity), treatment: CM.TREATMENTS.includes(str(b?.treatment)) ? str(b.treatment) : "Señor(a)",
-      name: str(b?.name).slice(0, 200), title: str(b?.title).slice(0, 200), email, city: str(b?.city).slice(0, 100) };
+      name: str(b?.name).slice(0, 200), title: str(b?.title).slice(0, 200), address: str(b?.address).slice(0, 200), email, city: str(b?.city).slice(0, 100) };
   }
   // Same mapping as the server's templateData().
   function templateData(caseId) {
@@ -374,7 +374,7 @@
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
       const folder = s.fields.find((f) => f.category_id === o.category_id && CM.isFolderLabel(f.label) && String(k.field_values[f.id] ?? "").trim());
       if (folder) v["expediente.carpeta"] = String(k.field_values[folder.id]).trim();
-      Object.assign(v, CM.recipientVariables(CM.caseRecipient(k, s.authorities)));
+      Object.assign(v, CM.recipientVariables(CM.caseRecipient(o, s.authorities)));
       Object.assign(v, LG.feeVariables(s.charges.filter((x) => x.case_id === k.id), s.receipts.filter((x) => x.case_id === k.id)));
       if (k.assigned_user_id) lawyer = s.users.find((x) => x.id === k.assigned_user_id) || lawyer;
       office = s.offices.find((x) => x.id === k.office_id);

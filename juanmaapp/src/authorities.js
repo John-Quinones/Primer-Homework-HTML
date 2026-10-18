@@ -15,7 +15,7 @@ export function authorityInput(b) {
   const email = str(b?.email).toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("El correo no es válido.");
   const treatment = TREATMENTS.includes(str(b?.treatment)) ? str(b.treatment) : "Señor(a)";
-  return { entity, entity_key: entityKey(entity), treatment, name: str(b?.name), title: str(b?.title), email, city: str(b?.city, 100) };
+  return { entity, entity_key: entityKey(entity), treatment, name: str(b?.name), title: str(b?.title), address: str(b?.address), email, city: str(b?.city, 100) };
 }
 
 export function authoritiesRouter(db) {
@@ -35,12 +35,12 @@ export function authoritiesRouter(db) {
     try { v = authorityInput(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
     const hit = db.prepare("SELECT id FROM authorities WHERE entity_key = ?").get(v.entity_key);
     if (hit) {
-      db.prepare(`UPDATE authorities SET entity = :entity, treatment = :treatment, name = :name, title = :title, email = :email, city = :city,
+      db.prepare(`UPDATE authorities SET entity = :entity, treatment = :treatment, name = :name, title = :title, address = :address, email = :email, city = :city,
         updated_by = :by, updated_at = datetime('now') WHERE id = :id`).run({ ...without(v, "entity_key"), by: req.user.id, id: hit.id });
       return res.json({ ...one(hit.id), updated: true });
     }
-    const id = db.prepare(`INSERT INTO authorities (entity, entity_key, treatment, name, title, email, city, updated_by)
-      VALUES (:entity, :entity_key, :treatment, :name, :title, :email, :city, :by)`).run({ ...v, by: req.user.id }).lastInsertRowid;
+    const id = db.prepare(`INSERT INTO authorities (entity, entity_key, treatment, name, title, address, email, city, updated_by)
+      VALUES (:entity, :entity_key, :treatment, :name, :title, :address, :email, :city, :by)`).run({ ...v, by: req.user.id }).lastInsertRowid;
     res.status(201).json({ ...one(id) });
   });
 
@@ -52,7 +52,7 @@ export function authoritiesRouter(db) {
     const other = db.prepare("SELECT entity FROM authorities WHERE entity_key = ? AND id != ?").get(v.entity_key, id);
     if (other) return res.status(409).json({ error: `Ya hay un funcionario guardado para «${other.entity}».` });
     db.prepare(`UPDATE authorities SET entity = :entity, entity_key = :entity_key, treatment = :treatment, name = :name, title = :title,
-      email = :email, city = :city, updated_by = :by, updated_at = datetime('now') WHERE id = :id`).run({ ...v, by: req.user.id, id });
+      address = :address, email = :email, city = :city, updated_by = :by, updated_at = datetime('now') WHERE id = :id`).run({ ...v, by: req.user.id, id });
     res.json({ ...one(id) });
   });
 
@@ -65,4 +65,4 @@ export function authoritiesRouter(db) {
 }
 
 /** Every saved official, for the addressee of a case. */
-export const allAuthorities = (db) => db.prepare("SELECT entity, treatment, name, title, email, city FROM authorities").all();
+export const allAuthorities = (db) => db.prepare("SELECT entity, treatment, name, title, address, email, city FROM authorities").all();
