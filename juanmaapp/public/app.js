@@ -90,6 +90,9 @@ const folderButton = (k, cls = "mini") => can("cases.write")
 const canEditCaseNumber = (k) => can("cases.write") || (!!me && k.assigned_user_id === me.id);
 const caseNumberButton = (k, cls = "mini") => canEditCaseNumber(k)
   ? `<button type="button" class="${cls}" data-action="edit-case-number" data-id="${k.id}" data-number="${escapeHtml(k.case_number || "")}">${k.case_number ? "Editar número de expediente" : "Poner número de expediente"}</button>` : "";
+/** «Poner / Editar radicado» on the case screen (version 2.36), same people as the case number. */
+const radicadoButton = (k, cls = "mini") => canEditCaseNumber(k)
+  ? `<button type="button" class="${cls}" data-action="edit-radicado" data-id="${k.id}" data-radicado="${escapeHtml(k.radicado || "")}">${k.radicado ? "Editar radicado" : "Poner radicado"}</button>` : "";
 const typeById = (typeId) => {
   for (const c of state.catalog) {
     const t = c.types.find((t) => t.id === Number(typeId));
@@ -969,6 +972,7 @@ async function renderExpedienteFicha(id) {
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${folderButton(k, "")}
         ${caseNumberButton(k, "")}
+        ${radicadoButton(k, "")}
         <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
         ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
@@ -2362,6 +2366,21 @@ document.addEventListener("click", (e) => {
       if (!v || v === cur) return;
       await api("PUT", `/cases/${id}/number`, { case_number: v });
       toast(cur ? `Número de expediente cambiado de ${cur} a ${v}.` : `Número de expediente ${v} guardado.`);
+      await refreshView();
+    },
+    "edit-radicado": async () => {
+      const cur = btn.dataset.radicado || "";
+      let v = cur ? formatRadicado(cur) : "", problem = "";
+      // Wrong length or a radicado used by another case: say why and ask again with what was typed.
+      for (;;) {
+        v = await ask({ title: cur ? "Editar radicado" : "Poner radicado",
+          message: problem || `${cur ? `Radicado actual: ${formatRadicado(cur)}. Escriba el nuevo.` : "Escriba o pegue el radicado de este expediente."} Son 23 dígitos, con o sin guiones; la App revisa que no esté en otro expediente.`,
+          input: v, okLabel: "Guardar" });
+        if (!v || radDigits(v) === cur) return;
+        try { await api("PUT", `/cases/${id}/radicado`, { radicado: radDigits(v), replace: !!cur }); break; }
+        catch (err) { problem = err.message; }
+      }
+      toast(cur ? `Radicado cambiado a ${formatRadicado(radDigits(v))}.` : `Radicado ${formatRadicado(radDigits(v))} guardado; consulta automática activada.`);
       await refreshView();
     },
     "edit-folder": async () => {

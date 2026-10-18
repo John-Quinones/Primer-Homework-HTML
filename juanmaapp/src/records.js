@@ -519,8 +519,9 @@ export function recordsRouter(db) {
   // «Cargar radicados» (version 2.24): one radicado per case, 23 digits, used by one case only.
   // Changing or removing one already saved needs replace: true (the screen asks first).
   r.put("/cases/:id/radicado", h((req) => {
-    checkPerm(req, "cases.write");
     const cur = getCase(req, toInt(req.params.id, "id"));
+    // Version 2.36: the case's responsible funcionario may also type or change it (user's rule).
+    if (!can(req, "cases.write") && cur.assigned_user_id !== req.user.id) throw new HttpError(403, "Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia el radicado.");
     const radicado = normalizeRadicado(req.body?.radicado);
     if (radicado && radicado.length !== 23) fail400(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
     if (radicado === cur.radicado) return cur;

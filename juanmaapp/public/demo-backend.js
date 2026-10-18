@@ -1243,8 +1243,8 @@
     }],
     // «Cargar radicados» (version 2.24), same rules as the server.
     ["PUT", /^\/cases\/(\d+)\/radicado$/, (m, b) => {
-      need("cases.write");
       const k = visibleCase(+m[1]);
+      if (!me().permissions.includes("cases.write") && k.assigned_user_id !== me().id) fail("Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia el radicado.");
       const fmt = window.JuanmaPortals.formatRadicado;
       const radicado = str(b.radicado).replace(/\D/g, "");
       if (radicado && radicado.length !== 23) fail(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
