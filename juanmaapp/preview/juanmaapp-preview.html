@@ -1235,6 +1235,14 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
   .rad-table td:nth-child(3), .rad-table td.rad-cell { grid-column: 1 / -1; min-width: 0; }
 }
 
+/* Version 2.26: «Notificar al asignado» */
+.notify-box { border-color: var(--select-tint, #c4c8cb); }
+.notify-box .radio-row { align-items: center; }
+.notice-results { list-style: none; padding: 0; margin: .5rem 0; display: grid; gap: .5rem; }
+.notice-results li { padding: .5rem .75rem; border-radius: 10px; background: rgba(2, 124, 198, .06); }
+.notice-results li .follow { margin-right: .4rem; }
+.notice-text pre { white-space: pre-wrap; font: inherit; font-size: .9rem; max-height: 14rem; overflow: auto; background: rgba(0, 43, 106, .05); padding: .6rem; border-radius: 8px; }
+
 </style>
 </head>
 <body>
@@ -2570,6 +2578,17 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
         <label>Lugar o enlace <input name="location" placeholder="Sala 3 o enlace Teams/Lifesize" /></label>
         <label>Funcionario responsable <select name="assigned_user_id"><option value="">— El del expediente —</option></select></label>
       </div>
+      <fieldset class="notify-box" data-notify-box>
+        <legend>Notificar al funcionario</legend>
+        <label class="inline"><input type="checkbox" name="notify_on" /> <strong>Notificar al asignado</strong>&nbsp;<span class="muted" data-notify-who></span></label>
+        <div class="radio-row" data-notify-ways>
+          <span class="muted">Aviso en la App (campana) siempre, y además:</span>
+          <label class="inline"><input type="checkbox" name="notify_email" checked /> Correo</label>
+          <label class="inline"><input type="checkbox" name="notify_whatsapp" /> WhatsApp</label>
+        </div>
+        <label data-notify-ways>Mensaje para el funcionario (opcional) <input name="notify_message" maxlength="500" placeholder="Ej. Llevar el poder original y la cédula del cliente" /></label>
+        <p class="hint" data-notify-hint></p>
+      </fieldset>
       <fieldset><legend>Avisar antes</legend>
         <div class="radio-row">
           <label class="inline"><input type="checkbox" name="remind" value="7" /> 7 días</label>
@@ -2585,6 +2604,21 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Version 2.26: result of «Notificar al asignado» -->
+  <dialog id="notice-dialog">
+    <form method="dialog">
+      <h3 data-title>Aviso al funcionario</h3>
+      <p data-to></p>
+      <ul class="notice-results" data-results></ul>
+      <details class="notice-text"><summary>Ver el texto del aviso</summary><pre data-text></pre></details>
+      <div class="dialog-actions" data-links></div>
+      <div class="dialog-actions">
+        <button type="button" data-copy>Copiar texto</button>
+        <button class="primary" value="ok">Listo</button>
       </div>
     </form>
   </dialog>
@@ -4630,6 +4664,7 @@ function nextFolder(values) {
 const TASK_LOG_LABEL = {
   creada: "Creó", editada: "Editó", reasignada: "Reasignó", reprogramada: "Cambió el plazo", hecha: "Marcó como hecha",
   cancelada: "Canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
+  notificada: "Notificó al asignado",
 };
 const TASK_EDIT_FIELDS = { kind: "tipo", title: "título", notes: "notas", location: "lugar", remind_days: "avisos", done_notes: "cumplimiento",
   term_from: "término", term_days: "término", term_unit: "término", term_label: "término", response_notes: "detalle de la respuesta" };
@@ -4654,6 +4689,27 @@ function taskLogEvents(before, after, nameOf = () => "") {
   if (after.response_at && !same("response_at")) out.push({ action: "respondida", detail: [`Respuesta del ${after.response_at}`, after.response_notes].filter(Boolean).join(" · ") });
   if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" ? after.done_notes || "" : "" });
   return out;
+}
+
+// ----- Notice to the assignee (version 2.26): same words by e-mail, WhatsApp and in the bell -----
+/**
+ * The message telling a funcionario about a task or hearing. `t` is a task as the API returns it,
+ * `to` the person's name, `by` who sends it, `message` an optional note, `link` the case address.
+ */
+function taskNotice(t, { to = "", by = "", message = "", link = "" } = {}) {
+  const kind = TASK_KIND_LABEL[t.kind] || "Tarea";
+  const when = t.kind === "audiencia" ? "Fecha y hora" : "Plazo";
+  const caseLine = [t.client_name, t.type_name, t.radicado && `radicado ${t.radicado}`].filter(Boolean).join(" · ");
+  const subject = `${kind}: ${t.title} · ${t.due_at}`;
+  const text = [
+    `${to ? `Hola, ${to}.` : "Hola."}`, "",
+    `${by || "La oficina"} le notifica ${t.kind === "audiencia" ? "esta audiencia" : "esta tarea"} en TecjuridicosApp:`, "",
+    `Tipo: ${kind}`, `Asunto: ${t.title}`, `${when}: ${t.due_at} (hora de Colombia)`,
+    t.location && `Lugar o enlace: ${t.location}`, caseLine && `Expediente: ${caseLine}`, t.notes && `Notas: ${t.notes}`,
+    message && "", message && `Mensaje: ${message}`, link && "", link && `Ver el expediente: ${link}`,
+  ].filter((x) => x !== "" ? !!x : true).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const short = [`${kind}: ${t.title}`, `${when} ${t.due_at}`, t.location, t.client_name, message].filter(Boolean).join(" · ");
+  return { subject, text, short };
 }
 
 // ----- Case tasks: kinds and follow-up (change 47) -----
@@ -4833,7 +4889,7 @@ function auditDiff(before, after) {
   return out;
 }
 
-return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, filterCourts, isFolderLabel, folderKey, nextFolder, TASK_LOG_LABEL, taskLogEvents, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS, sideOfRole, sideLabels, sideRoles, cleanParties, deviceOf, auditTarget, auditVerb, AUDIT_FIELDS, auditDiff };
+return { STATUSES, LIVE_STATUSES, normStatus, PARTY_ROLES, ALL_PARTY_ROLES, partyRolesFor, normPartyRole, courtCircuit, areaIncludes, courtMatches, filterCourts, isFolderLabel, folderKey, nextFolder, TASK_LOG_LABEL, taskLogEvents, taskNotice, TASK_KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, utcToBogota, taskFollowUp, LEGAL_TERMS, sideOfRole, sideLabels, sideRoles, cleanParties, deviceOf, auditTarget, auditVerb, AUDIT_FIELDS, auditDiff };
 })();
 
 window.JuanmaLedger = (function () {
@@ -6448,7 +6504,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Autorización para el tratamiento de datos personales","category":"Autorización","description":"Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies, centrales de riesgo y comunicaciones), para firmar en papel.","body":"# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:\n\n| Autorización | SÍ | NO |\n|---|---|---|\n| 1. **Tratamiento de datos personales** para prestar los servicios jurídicos, llevar mi expediente, consultar mis procesos, ejecutar el contrato, registrar pagos y cumplir obligaciones legales. | ☐ | ☐ |\n| 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |\n| 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |\n| 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |\n| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |\n\n## DERECHOS DEL TITULAR\n\nConozco que, conforme al artículo 8 de la Ley 1581 de 2012, puedo conocer, actualizar, rectificar y suprimir mis datos; pedir prueba de esta autorización; ser informado(a) del uso de mis datos; revocar cualquiera de estas autorizaciones cuando no exista un deber legal o contractual de conservarlos; y presentar quejas ante la Superintendencia de Industria y Comercio después de agotar el trámite ante EL RESPONSABLE, escribiendo a {{oficina.correo}} o en {{oficina.direccion}}, {{oficina.ciudad}}.\n\nLa información que entrego está amparada por el secreto profesional del abogado (artículo 74 de la Constitución y numeral 9 del artículo 28 de la Ley 1123 de 2007). EL RESPONSABLE conservará la prueba de esta autorización mientras trate mis datos.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Acuerdo de confidencialidad y tratamiento de datos (funcionarios y contratistas)","category":"Contrato","description":"Secreto profesional (Ley 1123 de 2007) y deberes del encargado (Ley 1581 de 2012) para quien accede a la información de los clientes.","body":"# ACUERDO DE CONFIDENCIALIDAD Y TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nEntre **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:\n\n## PRIMERA. Información confidencial\n\nEs confidencial toda la información de clientes, contrapartes y procesos a la que EL RECEPTOR acceda por cualquier medio, incluida TecjuridicosApp: datos personales, hechos, estrategias, documentos, honorarios, pagos y credenciales de acceso.\n\n## SEGUNDA. Obligaciones\n\nEL RECEPTOR se obliga a:\n\n1. Guardar el secreto profesional y la reserva de la información, aun después de terminada su relación con LA FIRMA (artículo 74 de la Constitución y Ley 1123 de 2007).\n2. Usar la información solo para las labores que LA FIRMA le asigne y conforme a la Política de tratamiento de datos personales.\n3. No copiar, extraer, reenviar ni divulgar información fuera de lo que exige cada encargo, ni usar correos o dispositivos personales no autorizados para ello.\n4. Mantener en secreto su usuario y contraseña, no compartir su cuenta y cerrar sesión en equipos compartidos.\n5. Informar de inmediato a LA FIRMA cualquier pérdida, acceso indebido o incidente de seguridad.\n6. Devolver o destruir la información en su poder al terminar la relación.\n\n## TERCERA. Registro de actividad\n\nEL RECEPTOR conoce que TecjuridicosApp registra en una bitácora cada cambio que hace, con fecha, hora, dirección IP y dispositivo, y lo autoriza para fines de seguridad y control.\n\n## CUARTA. Incumplimiento\n\nEl incumplimiento de este acuerdo es falta grave y da lugar a las acciones laborales, contractuales, disciplinarias, civiles y penales que correspondan, sin perjuicio de la indemnización de los perjuicios causados.\n\n## QUINTA. Vigencia\n\nEste acuerdo rige desde su firma y sus obligaciones de confidencialidad no terminan con la relación.\n\nFirmas:\n\n____________________________________\n**LA FIRMA**\n{{abogado.nombre}}\n\n____________________________________\n**EL RECEPTOR**\n[FILL: Nombre completo]\nC.C. [FILL: Número de documento]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"],"firmFixes":[["**{{oficina.nombre}}** (TEC Jurídicos),","**Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4,"],["| 5. **Comunicaciones**","| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones**"],["quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante","quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante"]]};</script>
-<script>window.JUANMA_VERSION = {"change":89,"sha":"8974f26","date":"2026-10-18","name":"2.25","news":[{"n":"2.25","date":"18/10/2026","title":"La firma va donde usted la marque en el PDF","text":"Al enviar un documento a firma, en «Estampa de firma en el PDF» → «Posición» está la opción nueva «En el lugar que yo marque en la vista previa». Se hace clic sobre la vista previa del…"},{"n":"2.24","date":"18/10/2026","title":"Cargar radicados","text":"En Consulta de procesos y en Expedientes está el botón «Cargar radicados», que abre una pantalla con todos los expedientes, primero los que no tienen radicado, cada uno con su casilla.…"},{"n":"2.23","date":"18/10/2026","title":"Direcciones con mayúscula inicial también junto a signos","text":"En el campo Dirección (clientes, oficinas y dirección de notificación), palabras como Carrera, Calle, Avenida, Barrio (y sus abreviaturas: Cra, Kr, Cl, Cll, Av, Br, B/, B.) quedan con la…"}]};</script>
+<script>window.JUANMA_VERSION = {"change":90,"sha":"","date":"2026-10-17","name":"2.26","news":[{"n":"2.26","date":"18/10/2026","title":"Notificar la tarea o audiencia al funcionario asignado","text":"En la ventana de tarea, audiencia, término, oficio o petición hay un recuadro nuevo «Notificar al funcionario» con la casilla «Notificar al asignado» (marcada al crear), que dice a quién…"},{"n":"2.25","date":"18/10/2026","title":"La firma va donde usted la marque en el PDF","text":"Al enviar un documento a firma, en «Estampa de firma en el PDF» → «Posición» está la opción nueva «En el lugar que yo marque en la vista previa». Se hace clic sobre la vista previa del…"},{"n":"2.24","date":"18/10/2026","title":"Cargar radicados","text":"En Consulta de procesos y en Expedientes está el botón «Cargar radicados», que abre una pantalla con todos los expedientes, primero los que no tienen radicado, cada uno con su casilla.…"}]};</script>
 <script>window.JUANMA_LINK_URL = "";</script>
 <script>window.JUANMA_SERVER_URL = "https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net";</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
@@ -6973,7 +7029,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     const o = caseOut(k);
     const name = (id) => shownName(s.users.find((u) => u.id === id));
     return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
-      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name,
+      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name, case_user_id: k.assigned_user_id ?? null,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
   };
   // Task history (version 2.18), same rows as the server's task_log; never changed or removed.
@@ -6992,6 +7048,31 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     s.notes.push({ id: nextId(), user_id: t.assigned_user_id, kind: "asignada", title: `${me().name} le asignó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
       body: `Plazo ${t.due_at} · ${o.client_name}`, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
   };
+  // Version 2.26, same as the server's sendNotice: the bell always; e-mail and WhatsApp need the server,
+  // so the link says so and hands the office the text to send from its own e-mail or WhatsApp.
+  const sendNotice = (t, opts = {}) => {
+    const o = taskOut(t), uid = t.assigned_user_id || o.case_user_id;
+    const u = uid && s.users.find((x) => x.id === uid && x.active);
+    if (!u) return { error: "La tarea no tiene funcionario asignado y el expediente no tiene responsable." };
+    const link = window.JUANMA_LINK_URL ? `${window.JUANMA_LINK_URL}#expediente-${t.case_id}` : "";
+    const message = str(opts.message).slice(0, 500);
+    const n = CM.taskNotice(o, { to: u.name, by: me().name, message, link });
+    s.notes.push({ id: nextId(), user_id: u.id, kind: "asignada", title: `${me().name} le notificó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
+      body: `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${o.client_name}${message ? " · " + message : ""}`, link: `#expediente-${t.case_id}`, key: null, created_at: stamp(), read_at: null });
+    const off = "El enlace de pruebas no envía correos ni WhatsApp: eso lo hace el servidor (Azure). Puede enviarlo desde su propio correo o WhatsApp.";
+    const results = [{ channel: "app", ok: true, detail: "Aviso en la campana de la App" }];
+    if (opts.email) results.push({ channel: "email", ok: false, detail: off });
+    if (opts.whatsapp) results.push({ channel: "whatsapp", ok: false, detail: off });
+    const shownTo = shownName(u);
+    const LABEL = { app: "App", email: "correo", whatsapp: "WhatsApp" };
+    s.tasklog.push({ id: nextId(), at: stamp(), task_id: t.id, case_id: t.case_id, user_id: me().id, action: "notificada", kind: t.kind, title: t.title,
+      detail: `A ${shownTo} por ${results.map((x) => `${LABEL[x.channel]} ${x.ok ? "(enviado)" : "(no enviado)"}`).join(", ")}${message ? ` · ${message}` : ""}`.slice(0, 500),
+      assigned_user_id: t.assigned_user_id ?? null });
+    const open = !u.hidden;
+    return { to: { id: u.id, name: shownTo, email: open ? u.email : "", phone: open ? u.phone || "" : "" }, results,
+      mail: { subject: n.subject, text: n.text }, short: `${n.short}${link ? " · " + link : ""}` };
+  };
+  const noticeOpts = (b) => (b && typeof b === "object" ? { email: b.email !== false, whatsapp: !!b.whatsapp, message: b.message } : null);
   const taskValues = (b, cur = {}) => {
     const v = {
       kind: CM.TASK_KINDS.includes(b.kind) ? b.kind : cur.kind || "tarea",
@@ -7351,8 +7432,9 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       if (t.status === "hecha") Object.assign(t, { done_at: stamp(), done_by: me().id });
       s.tasks.push(t);
       logTask(null, t);
-      tellAssignee(t, null);
-      return taskOut(t);
+      const opts = noticeOpts(b.notify), notice = opts && t.status === "pendiente" ? sendNotice(t, opts) : null;
+      if (!notice || notice.error) tellAssignee(t, null);
+      return { ...taskOut(t), ...(notice ? { notice } : {}) };
     }],
     ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
       need("cases.write");
@@ -7363,10 +7445,21 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
       t.done_by = t.status === "hecha" ? (wasDone ? t.done_by ?? null : me().id) : null;
       logTask(prev, t);
-      tellAssignee(t, assignee);
       if (before !== t.due_at) s.notes = s.notes.filter((n) => !String(n.key || "").startsWith(`task:${t.id}:`));
-      return taskOut(t);
+      const opts = noticeOpts(b.notify), notice = opts && t.status === "pendiente" ? sendNotice(t, opts) : null;
+      if (!notice || notice.error) tellAssignee(t, assignee);
+      return { ...taskOut(t), ...(notice ? { notice } : {}) };
     }],
+    ["POST", /^\/tasks\/(\d+)\/notify$/, (m, b) => {
+      need("cases.write");
+      const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
+      visibleCase(t.case_id);
+      t.status === "pendiente" || fail("Esta tarea ya está cerrada.");
+      const notice = sendNotice(t, noticeOpts(b || {}));
+      if (notice.error) fail(notice.error);
+      return notice;
+    }],
+    ["GET", /^\/tasks\/notify-channels$/, () => ({ email: false, whatsapp: false, link: true })],
     ["DELETE", /^\/tasks\/(\d+)$/, (m) => {
       need("cases.write");
       const t = s.tasks.find((x) => x.id === +m[1]);
@@ -9530,6 +9623,7 @@ function taskTable(list, answers) {
   const rows = list.map((t) => {
     const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
+      ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
       <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
     const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
@@ -10663,6 +10757,7 @@ document.addEventListener("click", (e) => {
     "open-case": () => { location.hash = `#expediente-${id}`; },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
+    "notify-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, "notify"),
     "set-responsible": async () => {
       const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
       if (!uid) { toast("Elija un funcionario.", true); return; }
@@ -12991,6 +13086,7 @@ async function renderAgenda() {
           <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
           ${can("cases.write") ? `
             ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
+            ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>
         </li>`).join("")}</ul>
@@ -13041,6 +13137,51 @@ function syncTaskForm(autoDue = false) {
     computeTerm();
   }
   $("[data-done-notes]", taskForm).hidden = !f.done.checked;
+  syncNotify();
+}
+
+// ----- Version 2.26: «Notificar al asignado» (bell always; e-mail and WhatsApp when chosen) -----
+let noticeChannels = null;
+/** Who gets the notice: the chosen funcionario, else the case's responsible. */
+function noticeTarget() {
+  const f = taskForm.elements, k = taskCases.find((x) => x.id === Number(f.case_id.value));
+  const uid = Number(f.assigned_user_id.value) || k?.assigned_user_id || null;
+  return uid ? { id: uid, name: directory.find((u) => u.id === uid)?.name || k?.assigned_name || "" } : null;
+}
+function syncNotify() {
+  const f = taskForm.elements, who = noticeTarget(), closed = f.done.checked;
+  $("[data-notify-box]", taskForm).hidden = closed;
+  // Without anyone to tell the box is off; it comes back as it was once a funcionario is chosen.
+  f.notify_on.checked = !!who && f.notify_on.dataset.want === "1";
+  f.notify_on.disabled = !who;
+  $("[data-notify-who]", taskForm).textContent = who ? `(${who.name}${who.id === me.id ? ", usted" : ""})` : "(nadie: elija el funcionario o asigne un responsable al expediente)";
+  $$("[data-notify-ways]", taskForm).forEach((x) => (x.hidden = !f.notify_on.checked));
+  const ch = noticeChannels;
+  $("[data-notify-hint]", taskForm).textContent = !f.notify_on.checked ? "" : ch?.link
+    ? "En el enlace de pruebas el correo y WhatsApp no salen solos: al guardar le mostramos el texto para enviarlo desde su propio correo o WhatsApp."
+    : ch && (!ch.email || !ch.whatsapp) ? `${!ch.email ? "El correo no está configurado en el servidor. " : ""}${!ch.whatsapp ? "WhatsApp no está configurado en el servidor. " : ""}Lo que no salga se lo mostramos para enviarlo usted.`
+    : "El aviso queda en el historial de tareas del expediente.";
+}
+taskForm.elements.notify_on.addEventListener("change", (e) => { e.target.dataset.want = e.target.checked ? "1" : ""; syncNotify(); });
+taskForm.elements.assigned_user_id.addEventListener("change", syncNotify);
+
+const NOTICE_LABEL = { app: "Aviso en la App", email: "Correo", whatsapp: "WhatsApp" };
+function showNoticeResult(n) {
+  const dlg = $("#notice-dialog");
+  $("[data-to]", dlg).textContent = `Para: ${n.to.name}${n.to.email ? ` · ${n.to.email}` : ""}`;
+  $("[data-results]", dlg).innerHTML = n.results.map((r) => `<li class="${r.ok ? "ok" : "bad"}"><span class="follow ${r.ok ? "ok" : "bad"}">${r.ok ? "Enviado" : "No enviado"}</span>
+    <strong>${escapeHtml(NOTICE_LABEL[r.channel] || r.channel)}</strong><br><span class="muted">${escapeHtml(r.detail || "")}</span></li>`).join("");
+  $("[data-text]", dlg).textContent = n.mail.text;
+  const failed = (c) => n.results.some((r) => r.channel === c && !r.ok);
+  const digits = String(n.to.phone || "").replace(/\D/g, "");
+  $("[data-links]", dlg).innerHTML = [
+    failed("email") && n.to.email && `<a class="button primary" target="_blank" rel="noopener" href="mailto:${encodeURIComponent(n.to.email)}?subject=${encodeURIComponent(n.mail.subject)}&body=${encodeURIComponent(n.mail.text)}">Enviar desde mi correo</a>`,
+    failed("whatsapp") && digits && `<a class="button primary" target="_blank" rel="noopener" href="https://wa.me/${digits.length === 10 ? "57" + digits : digits}?text=${encodeURIComponent(n.short)}">Enviar por WhatsApp</a>`,
+  ].filter(Boolean).join("");
+  $("[data-copy]", dlg).onclick = async () => {
+    try { await navigator.clipboard.writeText(n.mail.text); toast("Texto copiado."); } catch { toast("No se pudo copiar: selecciónelo en «Ver el texto del aviso».", true); }
+  };
+  dlg.showModal();
 }
 
 // ----- Término de cumplimiento (change 48): days set by the user, presets as suggestions -----
@@ -13093,7 +13234,7 @@ function fillTaskAssignees(cases, selected) {
   sel.value = selected && [...sel.options].some((o) => o.value === String(selected)) ? String(selected) : "";
 }
 let taskCases = [];
-taskForm.elements.case_id.addEventListener("change", () => fillTaskAssignees(taskCases, taskForm.elements.assigned_user_id.value));
+taskForm.elements.case_id.addEventListener("change", () => { fillTaskAssignees(taskCases, taskForm.elements.assigned_user_id.value); syncNotify(); });
 
 async function openTaskDialog(t = null, caseId = null, kind = null, preset = {}, focus = "") {
   const cases = await api("GET", "/cases");
@@ -13118,7 +13259,11 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   const days = t ? t.remind_days : k0 === "audiencia" ? [3, 1] : [1];
   $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
   taskForm.elements.done.checked = t?.status === "hecha";
+  // New tasks and hearings offer the notice already ticked; an edit only when asked («Notificar»).
+  taskForm.elements.notify_on.dataset.want = !t || focus === "notify" ? "1" : "";
+  if (!noticeChannels) noticeChannels = await api("GET", "/tasks/notify-channels").catch(() => ({ email: false, whatsapp: false }));
   syncTaskForm(!t);
+  if (focus === "notify") taskForm.elements.notify_message.focus();
   if (focus && taskForm.elements[focus]) {
     if (focus === "response_at" && !taskForm.elements.response_at.value) taskForm.elements.response_at.value = bogotaNow().slice(0, 10);
     taskForm.elements[focus].focus();
@@ -13140,9 +13285,13 @@ wireDialog($("#task-dialog"), async (form) => {
     term_label: [d.term_label.replace(/ · (notificación por correo|término administrativo)/g, ""), form.elements.term_email.checked && "notificación por correo",
       !form.elements.term_judicial.checked && "término administrativo"].filter(Boolean).join(" · "),
   } : { term_from: "", term_days: null, term_unit: "", term_label: "" });
-  if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
+  const notifying = form.elements.notify_on.checked && !form.elements.notify_on.disabled && body.status === "pendiente";
+  if (notifying) body.notify = { email: form.elements.notify_email.checked, whatsapp: form.elements.notify_whatsapp.checked, message: d.notify_message || "" };
+  const saved = d.id ? await api("PUT", `/tasks/${d.id}`, body) : await api("POST", "/tasks", body);
   const who = directory.find((u) => u.id === body.assigned_user_id);
-  toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who ? `. Se avisó a ${who.name}` : ""}.`);
+  if (saved.notice?.error) toast(`Guardado, pero no se notificó: ${saved.notice.error}`, true);
+  else if (!saved.notice) toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who && who.id !== me.id ? `. Se avisó a ${who.name} en la App` : ""}.`);
+  if (saved.notice && !saved.notice.error) setTimeout(() => showNoticeResult(saved.notice), 0);
   refreshBell();
   await refreshView();
 });

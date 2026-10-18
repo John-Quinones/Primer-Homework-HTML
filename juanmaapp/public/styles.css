@@ -1123,3 +1123,11 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
   .rad-table td { border: 0; padding: .15rem .3rem; }
   .rad-table td:nth-child(3), .rad-table td.rad-cell { grid-column: 1 / -1; min-width: 0; }
 }
+
+/* Version 2.26: «Notificar al asignado» */
+.notify-box { border-color: var(--select-tint, #c4c8cb); }
+.notify-box .radio-row { align-items: center; }
+.notice-results { list-style: none; padding: 0; margin: .5rem 0; display: grid; gap: .5rem; }
+.notice-results li { padding: .5rem .75rem; border-radius: 10px; background: rgba(2, 124, 198, .06); }
+.notice-results li .follow { margin-right: .4rem; }
+.notice-text pre { white-space: pre-wrap; font: inherit; font-size: .9rem; max-height: 14rem; overflow: auto; background: rgba(0, 43, 106, .05); padding: .6rem; border-radius: 8px; }

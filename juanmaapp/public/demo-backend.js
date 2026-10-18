@@ -384,7 +384,7 @@
     const o = caseOut(k);
     const name = (id) => shownName(s.users.find((u) => u.id === id));
     return clone({ done_by: null, done_notes: "", delivered_at: "", response_at: "", response_notes: "", term_from: "", term_days: null, term_unit: "", term_label: "", ...t,
-      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name,
+      radicado: k.radicado, case_title: k.title, office_id: k.office_id, client_id: k.client_id, client_name: o.client_name, type_name: o.type_name, case_user_id: k.assigned_user_id ?? null,
       assigned_name: name(t.assigned_user_id), case_assigned_name: name(k.assigned_user_id), created_by_name: name(t.created_by), done_by_name: name(t.done_by) });
   };
   // Task history (version 2.18), same rows as the server's task_log; never changed or removed.
@@ -403,6 +403,31 @@
     s.notes.push({ id: nextId(), user_id: t.assigned_user_id, kind: "asignada", title: `${me().name} le asignó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
       body: `Plazo ${t.due_at} · ${o.client_name}`, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
   };
+  // Version 2.26, same as the server's sendNotice: the bell always; e-mail and WhatsApp need the server,
+  // so the link says so and hands the office the text to send from its own e-mail or WhatsApp.
+  const sendNotice = (t, opts = {}) => {
+    const o = taskOut(t), uid = t.assigned_user_id || o.case_user_id;
+    const u = uid && s.users.find((x) => x.id === uid && x.active);
+    if (!u) return { error: "La tarea no tiene funcionario asignado y el expediente no tiene responsable." };
+    const link = window.JUANMA_LINK_URL ? `${window.JUANMA_LINK_URL}#expediente-${t.case_id}` : "";
+    const message = str(opts.message).slice(0, 500);
+    const n = CM.taskNotice(o, { to: u.name, by: me().name, message, link });
+    s.notes.push({ id: nextId(), user_id: u.id, kind: "asignada", title: `${me().name} le notificó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
+      body: `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${o.client_name}${message ? " · " + message : ""}`, link: `#expediente-${t.case_id}`, key: null, created_at: stamp(), read_at: null });
+    const off = "El enlace de pruebas no envía correos ni WhatsApp: eso lo hace el servidor (Azure). Puede enviarlo desde su propio correo o WhatsApp.";
+    const results = [{ channel: "app", ok: true, detail: "Aviso en la campana de la App" }];
+    if (opts.email) results.push({ channel: "email", ok: false, detail: off });
+    if (opts.whatsapp) results.push({ channel: "whatsapp", ok: false, detail: off });
+    const shownTo = shownName(u);
+    const LABEL = { app: "App", email: "correo", whatsapp: "WhatsApp" };
+    s.tasklog.push({ id: nextId(), at: stamp(), task_id: t.id, case_id: t.case_id, user_id: me().id, action: "notificada", kind: t.kind, title: t.title,
+      detail: `A ${shownTo} por ${results.map((x) => `${LABEL[x.channel]} ${x.ok ? "(enviado)" : "(no enviado)"}`).join(", ")}${message ? ` · ${message}` : ""}`.slice(0, 500),
+      assigned_user_id: t.assigned_user_id ?? null });
+    const open = !u.hidden;
+    return { to: { id: u.id, name: shownTo, email: open ? u.email : "", phone: open ? u.phone || "" : "" }, results,
+      mail: { subject: n.subject, text: n.text }, short: `${n.short}${link ? " · " + link : ""}` };
+  };
+  const noticeOpts = (b) => (b && typeof b === "object" ? { email: b.email !== false, whatsapp: !!b.whatsapp, message: b.message } : null);
   const taskValues = (b, cur = {}) => {
     const v = {
       kind: CM.TASK_KINDS.includes(b.kind) ? b.kind : cur.kind || "tarea",
@@ -762,8 +787,9 @@
       if (t.status === "hecha") Object.assign(t, { done_at: stamp(), done_by: me().id });
       s.tasks.push(t);
       logTask(null, t);
-      tellAssignee(t, null);
-      return taskOut(t);
+      const opts = noticeOpts(b.notify), notice = opts && t.status === "pendiente" ? sendNotice(t, opts) : null;
+      if (!notice || notice.error) tellAssignee(t, null);
+      return { ...taskOut(t), ...(notice ? { notice } : {}) };
     }],
     ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
       need("cases.write");
@@ -774,10 +800,21 @@
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
       t.done_by = t.status === "hecha" ? (wasDone ? t.done_by ?? null : me().id) : null;
       logTask(prev, t);
-      tellAssignee(t, assignee);
       if (before !== t.due_at) s.notes = s.notes.filter((n) => !String(n.key || "").startsWith(`task:${t.id}:`));
-      return taskOut(t);
+      const opts = noticeOpts(b.notify), notice = opts && t.status === "pendiente" ? sendNotice(t, opts) : null;
+      if (!notice || notice.error) tellAssignee(t, assignee);
+      return { ...taskOut(t), ...(notice ? { notice } : {}) };
     }],
+    ["POST", /^\/tasks\/(\d+)\/notify$/, (m, b) => {
+      need("cases.write");
+      const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
+      visibleCase(t.case_id);
+      t.status === "pendiente" || fail("Esta tarea ya está cerrada.");
+      const notice = sendNotice(t, noticeOpts(b || {}));
+      if (notice.error) fail(notice.error);
+      return notice;
+    }],
+    ["GET", /^\/tasks\/notify-channels$/, () => ({ email: false, whatsapp: false, link: true })],
     ["DELETE", /^\/tasks\/(\d+)$/, (m) => {
       need("cases.write");
       const t = s.tasks.find((x) => x.id === +m[1]);

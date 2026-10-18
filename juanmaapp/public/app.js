@@ -1053,6 +1053,7 @@ function taskTable(list, answers) {
   const rows = list.map((t) => {
     const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
+      ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
       <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
     const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
@@ -2186,6 +2187,7 @@ document.addEventListener("click", (e) => {
     "open-case": () => { location.hash = `#expediente-${id}`; },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
     "edit-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, btn.dataset.focus),
+    "notify-task": () => openTaskDialog(agendaCache.find((t) => t.id === id), null, null, {}, "notify"),
     "set-responsible": async () => {
       const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
       if (!uid) { toast("Elija un funcionario.", true); return; }
@@ -4514,6 +4516,7 @@ async function renderAgenda() {
           <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
           ${can("cases.write") ? `
             ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
+            ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>
         </li>`).join("")}</ul>
@@ -4564,6 +4567,51 @@ function syncTaskForm(autoDue = false) {
     computeTerm();
   }
   $("[data-done-notes]", taskForm).hidden = !f.done.checked;
+  syncNotify();
+}
+
+// ----- Version 2.26: «Notificar al asignado» (bell always; e-mail and WhatsApp when chosen) -----
+let noticeChannels = null;
+/** Who gets the notice: the chosen funcionario, else the case's responsible. */
+function noticeTarget() {
+  const f = taskForm.elements, k = taskCases.find((x) => x.id === Number(f.case_id.value));
+  const uid = Number(f.assigned_user_id.value) || k?.assigned_user_id || null;
+  return uid ? { id: uid, name: directory.find((u) => u.id === uid)?.name || k?.assigned_name || "" } : null;
+}
+function syncNotify() {
+  const f = taskForm.elements, who = noticeTarget(), closed = f.done.checked;
+  $("[data-notify-box]", taskForm).hidden = closed;
+  // Without anyone to tell the box is off; it comes back as it was once a funcionario is chosen.
+  f.notify_on.checked = !!who && f.notify_on.dataset.want === "1";
+  f.notify_on.disabled = !who;
+  $("[data-notify-who]", taskForm).textContent = who ? `(${who.name}${who.id === me.id ? ", usted" : ""})` : "(nadie: elija el funcionario o asigne un responsable al expediente)";
+  $$("[data-notify-ways]", taskForm).forEach((x) => (x.hidden = !f.notify_on.checked));
+  const ch = noticeChannels;
+  $("[data-notify-hint]", taskForm).textContent = !f.notify_on.checked ? "" : ch?.link
+    ? "En el enlace de pruebas el correo y WhatsApp no salen solos: al guardar le mostramos el texto para enviarlo desde su propio correo o WhatsApp."
+    : ch && (!ch.email || !ch.whatsapp) ? `${!ch.email ? "El correo no está configurado en el servidor. " : ""}${!ch.whatsapp ? "WhatsApp no está configurado en el servidor. " : ""}Lo que no salga se lo mostramos para enviarlo usted.`
+    : "El aviso queda en el historial de tareas del expediente.";
+}
+taskForm.elements.notify_on.addEventListener("change", (e) => { e.target.dataset.want = e.target.checked ? "1" : ""; syncNotify(); });
+taskForm.elements.assigned_user_id.addEventListener("change", syncNotify);
+
+const NOTICE_LABEL = { app: "Aviso en la App", email: "Correo", whatsapp: "WhatsApp" };
+function showNoticeResult(n) {
+  const dlg = $("#notice-dialog");
+  $("[data-to]", dlg).textContent = `Para: ${n.to.name}${n.to.email ? ` · ${n.to.email}` : ""}`;
+  $("[data-results]", dlg).innerHTML = n.results.map((r) => `<li class="${r.ok ? "ok" : "bad"}"><span class="follow ${r.ok ? "ok" : "bad"}">${r.ok ? "Enviado" : "No enviado"}</span>
+    <strong>${escapeHtml(NOTICE_LABEL[r.channel] || r.channel)}</strong><br><span class="muted">${escapeHtml(r.detail || "")}</span></li>`).join("");
+  $("[data-text]", dlg).textContent = n.mail.text;
+  const failed = (c) => n.results.some((r) => r.channel === c && !r.ok);
+  const digits = String(n.to.phone || "").replace(/\D/g, "");
+  $("[data-links]", dlg).innerHTML = [
+    failed("email") && n.to.email && `<a class="button primary" target="_blank" rel="noopener" href="mailto:${encodeURIComponent(n.to.email)}?subject=${encodeURIComponent(n.mail.subject)}&body=${encodeURIComponent(n.mail.text)}">Enviar desde mi correo</a>`,
+    failed("whatsapp") && digits && `<a class="button primary" target="_blank" rel="noopener" href="https://wa.me/${digits.length === 10 ? "57" + digits : digits}?text=${encodeURIComponent(n.short)}">Enviar por WhatsApp</a>`,
+  ].filter(Boolean).join("");
+  $("[data-copy]", dlg).onclick = async () => {
+    try { await navigator.clipboard.writeText(n.mail.text); toast("Texto copiado."); } catch { toast("No se pudo copiar: selecciónelo en «Ver el texto del aviso».", true); }
+  };
+  dlg.showModal();
 }
 
 // ----- Término de cumplimiento (change 48): days set by the user, presets as suggestions -----
@@ -4616,7 +4664,7 @@ function fillTaskAssignees(cases, selected) {
   sel.value = selected && [...sel.options].some((o) => o.value === String(selected)) ? String(selected) : "";
 }
 let taskCases = [];
-taskForm.elements.case_id.addEventListener("change", () => fillTaskAssignees(taskCases, taskForm.elements.assigned_user_id.value));
+taskForm.elements.case_id.addEventListener("change", () => { fillTaskAssignees(taskCases, taskForm.elements.assigned_user_id.value); syncNotify(); });
 
 async function openTaskDialog(t = null, caseId = null, kind = null, preset = {}, focus = "") {
   const cases = await api("GET", "/cases");
@@ -4641,7 +4689,11 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   const days = t ? t.remind_days : k0 === "audiencia" ? [3, 1] : [1];
   $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
   taskForm.elements.done.checked = t?.status === "hecha";
+  // New tasks and hearings offer the notice already ticked; an edit only when asked («Notificar»).
+  taskForm.elements.notify_on.dataset.want = !t || focus === "notify" ? "1" : "";
+  if (!noticeChannels) noticeChannels = await api("GET", "/tasks/notify-channels").catch(() => ({ email: false, whatsapp: false }));
   syncTaskForm(!t);
+  if (focus === "notify") taskForm.elements.notify_message.focus();
   if (focus && taskForm.elements[focus]) {
     if (focus === "response_at" && !taskForm.elements.response_at.value) taskForm.elements.response_at.value = bogotaNow().slice(0, 10);
     taskForm.elements[focus].focus();
@@ -4663,9 +4715,13 @@ wireDialog($("#task-dialog"), async (form) => {
     term_label: [d.term_label.replace(/ · (notificación por correo|término administrativo)/g, ""), form.elements.term_email.checked && "notificación por correo",
       !form.elements.term_judicial.checked && "término administrativo"].filter(Boolean).join(" · "),
   } : { term_from: "", term_days: null, term_unit: "", term_label: "" });
-  if (d.id) await api("PUT", `/tasks/${d.id}`, body); else await api("POST", "/tasks", body);
+  const notifying = form.elements.notify_on.checked && !form.elements.notify_on.disabled && body.status === "pendiente";
+  if (notifying) body.notify = { email: form.elements.notify_email.checked, whatsapp: form.elements.notify_whatsapp.checked, message: d.notify_message || "" };
+  const saved = d.id ? await api("PUT", `/tasks/${d.id}`, body) : await api("POST", "/tasks", body);
   const who = directory.find((u) => u.id === body.assigned_user_id);
-  toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who ? `. Se avisó a ${who.name}` : ""}.`);
+  if (saved.notice?.error) toast(`Guardado, pero no se notificó: ${saved.notice.error}`, true);
+  else if (!saved.notice) toast(d.id ? "Guardado." : `Registrado: ${KIND_LABEL[d.kind].toLowerCase()}${who && who.id !== me.id ? `. Se avisó a ${who.name} en la App` : ""}.`);
+  if (saved.notice && !saved.notice.error) setTimeout(() => showNoticeResult(saved.notice), 0);
   refreshBell();
   await refreshView();
 });

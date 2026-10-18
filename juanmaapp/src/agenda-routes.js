@@ -2,8 +2,10 @@
 import express from "express";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
-import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, taskLogEvents } from "./case-meta.js";
+import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, taskLogEvents, taskNotice } from "./case-meta.js";
 import { notify } from "./monitor.js";
+import { sendEmail, sendWhatsapp, channelReady } from "./notify.js";
+import { publicBase } from "./public-url.js";
 const STATUSES = ["pendiente", "hecha", "cancelada"];
 const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const LOCAL = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
@@ -17,7 +19,7 @@ export function agendaRouter(db) {
     return sc === null ? "1 = 1" : sc.length ? `k.office_id IN (${sc.map(Number).join(",")})` : "0 = 1";
   };
   const SELECT = `SELECT t.*, k.radicado, k.title AS case_title, k.office_id, k.client_id, c.full_name AS client_name,
-      ${typePath("pt")} AS type_name, u.name AS assigned_name, ku.name AS case_assigned_name, cb.name AS created_by_name, ud.name AS done_by_name
+      ${typePath("pt")} AS type_name, k.assigned_user_id AS case_user_id, u.name AS assigned_name, ku.name AS case_assigned_name, cb.name AS created_by_name, ud.name AS done_by_name
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id
     JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users_shown u ON u.id = t.assigned_user_id
     LEFT JOIN users_shown ku ON ku.id = k.assigned_user_id LEFT JOIN users_shown cb ON cb.id = t.created_by LEFT JOIN users_shown ud ON ud.id = t.done_by`;
@@ -80,6 +82,35 @@ export function agendaRouter(db) {
       `Plazo ${t.due_at} · ${t.client_name}`, `#expediente-${t.case_id}`, `assign:${t.id}:${t.assigned_user_id}`);
   }
 
+  // Version 2.26: «Notificar al asignado». The person in charge (the task's, else the case's) gets the
+  // notice in the bell and, if chosen, by e-mail and WhatsApp; each send is kept in the task history.
+  async function sendNotice(req, t, opts = {}) {
+    const uid = t.assigned_user_id || t.case_user_id;
+    const u = uid && db.prepare("SELECT id, name, email, phone, hidden FROM users WHERE id = ? AND active = 1").get(uid);
+    if (!u) return { error: "La tarea no tiene funcionario asignado y el expediente no tiene responsable." };
+    let link = "";
+    try { link = `${publicBase(req)}/#expediente-${t.case_id}`; } catch { /* no public address configured: the notice goes without link */ }
+    const message = str(opts.message).slice(0, 500);
+    const n = taskNotice(t, { to: u.name, by: req.user.name, message, link });
+    notify(db, u.id, "asignada", `${req.user.name} le notificó: ${TASK_KIND_LABEL[t.kind]} · ${t.title}`,
+      `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${t.client_name}${message ? " · " + message : ""}`, `#expediente-${t.case_id}`, null);
+    const results = [{ channel: "app", ok: true, detail: "Aviso en la campana de la App" }];
+    if (opts.email) results.push(await sendEmail(u.email, n.subject, n.text));
+    if (opts.whatsapp) {
+      const phone = u.phone || db.prepare("SELECT whatsapp FROM report_prefs WHERE user_id = ?").get(u.id)?.whatsapp || "";
+      results.push(await sendWhatsapp(phone, `${n.short}${link ? " · " + link : ""}`));
+    }
+    const shownTo = db.prepare("SELECT name FROM users_shown WHERE id = ?").get(u.id).name;
+    const LABEL = { app: "App", email: "correo", whatsapp: "WhatsApp" };
+    db.prepare("INSERT INTO task_log (task_id, case_id, user_id, action, kind, title, detail, assigned_user_id) VALUES (?, ?, ?, 'notificada', ?, ?, ?, ?)")
+      .run(t.id, t.case_id, req.user.id, t.kind, t.title, `A ${shownTo} por ${results.map((x) => `${LABEL[x.channel]} ${x.ok ? "(enviado)" : "(no enviado)"}`).join(", ")}${message ? ` · ${message}` : ""}`.slice(0, 500), t.assigned_user_id ?? null);
+    // A hidden user's address stays out of the answer; the office can still open its own e-mail with the text.
+    const open = !u.hidden;
+    return { to: { id: u.id, name: shownTo, email: open ? u.email : "", phone: open ? u.phone : "" }, results,
+      mail: { subject: n.subject, text: n.text }, short: `${n.short}${link ? " · " + link : ""}` };
+  }
+  const noticeOpts = (b) => (b && typeof b === "object" ? { email: b.email !== false, whatsapp: !!b.whatsapp, message: b.message } : null);
+
   r.get("/tasks", (req, res) => {
     const where = [officeCond(req)], params = [];
     if (req.query.caseId) { where.push("t.case_id = ?"); params.push(Number(req.query.caseId)); }
@@ -100,7 +131,7 @@ export function agendaRouter(db) {
     res.json(db.prepare(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY t.due_at LIMIT 1000`).all(...params).map(out));
   });
 
-  r.post("/tasks", (req, res) => {
+  r.post("/tasks", async (req, res) => {
     if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");
     const caseId = Number(req.body?.case_id);
     if (!caseVisible(req, caseId)) return err(res, 404, "El expediente no existe.");
@@ -114,11 +145,13 @@ export function agendaRouter(db) {
       v.term_from, v.term_days, v.term_unit, v.term_label).lastInsertRowid;
     const t = visible(req, id);
     logTask(req, null, out(t));
-    tellAssignee(req, t, null);
-    res.status(201).json(out(t));
+    const opts = noticeOpts(req.body?.notify);
+    const notice = opts && t.status === "pendiente" ? await sendNotice(req, t, opts) : null;
+    if (!notice || notice.error) tellAssignee(req, t, null);
+    res.status(201).json({ ...out(t), ...(notice ? { notice } : {}) });
   });
 
-  r.put("/tasks/:id", (req, res) => {
+  r.put("/tasks/:id", async (req, res) => {
     if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");
     const cur = visible(req, Number(req.params.id));
     if (!cur) return err(res, 404, "La tarea no existe.");
@@ -131,11 +164,26 @@ export function agendaRouter(db) {
       .run(v.kind, v.title, v.notes, v.due_at, v.location, v.assigned_user_id, v.remind_days, v.status, v.status, v.status,
         v.status, req.user.id, v.status, v.done_notes, v.delivered_at, v.response_at, v.response_notes, v.term_from, v.term_days, v.term_unit, v.term_label, cur.id);
     logTask(req, out(cur), out(visible(req, cur.id)));
-    tellAssignee(req, visible(req, cur.id), cur.assigned_user_id);
     // A rescheduled task gets fresh reminders.
     if (v.due_at !== cur.due_at) db.prepare("DELETE FROM notifications WHERE key LIKE ?").run(`task:${cur.id}:%`);
-    res.json(out(visible(req, cur.id)));
+    const t = visible(req, cur.id), opts = noticeOpts(req.body?.notify);
+    const notice = opts && t.status === "pendiente" ? await sendNotice(req, t, opts) : null;
+    if (!notice || notice.error) tellAssignee(req, t, cur.assigned_user_id);
+    res.json({ ...out(t), ...(notice ? { notice } : {}) });
   });
+
+  // Notify again without editing (button «Notificar» on each pending task).
+  r.post("/tasks/:id/notify", async (req, res) => {
+    if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");
+    const t = visible(req, Number(req.params.id));
+    if (!t) return err(res, 404, "La tarea no existe.");
+    if (t.status !== "pendiente") return err(res, 400, "Esta tarea ya está cerrada.");
+    const notice = await sendNotice(req, t, noticeOpts(req.body ?? {}));
+    if (notice.error) return err(res, 400, notice.error);
+    res.json(notice);
+  });
+
+  r.get("/tasks/notify-channels", (req, res) => res.json({ email: channelReady("email"), whatsapp: channelReady("whatsapp") }));
 
   r.delete("/tasks/:id", (req, res) => {
     if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");

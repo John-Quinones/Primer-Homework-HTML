@@ -103,6 +103,7 @@ export function nextFolder(values) {
 export const TASK_LOG_LABEL = {
   creada: "Creó", editada: "Editó", reasignada: "Reasignó", reprogramada: "Cambió el plazo", hecha: "Marcó como hecha",
   cancelada: "Canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
+  notificada: "Notificó al asignado",
 };
 const TASK_EDIT_FIELDS = { kind: "tipo", title: "título", notes: "notas", location: "lugar", remind_days: "avisos", done_notes: "cumplimiento",
   term_from: "término", term_days: "término", term_unit: "término", term_label: "término", response_notes: "detalle de la respuesta" };
@@ -127,6 +128,27 @@ export function taskLogEvents(before, after, nameOf = () => "") {
   if (after.response_at && !same("response_at")) out.push({ action: "respondida", detail: [`Respuesta del ${after.response_at}`, after.response_notes].filter(Boolean).join(" · ") });
   if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" ? after.done_notes || "" : "" });
   return out;
+}
+
+// ----- Notice to the assignee (version 2.26): same words by e-mail, WhatsApp and in the bell -----
+/**
+ * The message telling a funcionario about a task or hearing. `t` is a task as the API returns it,
+ * `to` the person's name, `by` who sends it, `message` an optional note, `link` the case address.
+ */
+export function taskNotice(t, { to = "", by = "", message = "", link = "" } = {}) {
+  const kind = TASK_KIND_LABEL[t.kind] || "Tarea";
+  const when = t.kind === "audiencia" ? "Fecha y hora" : "Plazo";
+  const caseLine = [t.client_name, t.type_name, t.radicado && `radicado ${t.radicado}`].filter(Boolean).join(" · ");
+  const subject = `${kind}: ${t.title} · ${t.due_at}`;
+  const text = [
+    `${to ? `Hola, ${to}.` : "Hola."}`, "",
+    `${by || "La oficina"} le notifica ${t.kind === "audiencia" ? "esta audiencia" : "esta tarea"} en TecjuridicosApp:`, "",
+    `Tipo: ${kind}`, `Asunto: ${t.title}`, `${when}: ${t.due_at} (hora de Colombia)`,
+    t.location && `Lugar o enlace: ${t.location}`, caseLine && `Expediente: ${caseLine}`, t.notes && `Notas: ${t.notes}`,
+    message && "", message && `Mensaje: ${message}`, link && "", link && `Ver el expediente: ${link}`,
+  ].filter((x) => x !== "" ? !!x : true).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const short = [`${kind}: ${t.title}`, `${when} ${t.due_at}`, t.location, t.client_name, message].filter(Boolean).join(" · ");
+  return { subject, text, short };
 }
 
 // ----- Case tasks: kinds and follow-up (change 47) -----
