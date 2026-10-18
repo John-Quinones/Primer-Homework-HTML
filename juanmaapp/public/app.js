@@ -122,6 +122,7 @@ const VIEW_PERMS = {
   correo: "mail.send",
   pagos: "payments.manage",
   consulta: "processes.consult",
+  radicados: "cases.write",
   borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
   importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage", bitacora: "audit.view",
 };
@@ -539,7 +540,7 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "radicados", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
@@ -553,7 +554,7 @@ function showView() {
   let { name, id } = route();
   if (VIEW_PERMS[name] && !can(VIEW_PERMS[name])) name = "inicio";
   for (const v of [...VIEWS, ...Object.keys(FICHAS)]) $(`#view-${v}`).hidden = v !== name;
-  const nav = FICHAS[name] || name;
+  const nav = FICHAS[name] || (name === "radicados" ? "consulta" : name);
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === nav));
   if (FICHAS[name]) {
     window.scrollTo(0, 0);
@@ -1584,6 +1585,119 @@ async function renderExpedientes() {
   await refreshCaseCourts();
 }
 $("#case-filter").addEventListener("change", renderCaseRows);
+
+// ----- «Cargar radicados» (version 2.24): every case with a box to type its radicado -----
+// Cases without one come first; Enter saves (PUT /cases/:id/radicado) and moves to the next box.
+// The order stays put while typing, so a saved row does not jump; it re-sorts on the next visit or filter.
+const radDigits = (v) => String(v ?? "").replace(/\D/g, "");
+// What an Excel import brought that was not 23 digits (field "Radicado (como venía)", importer.js).
+const radAsImported = (k) => {
+  const f = (categoryOf(k.category_id)?.fields ?? []).find((x) => /^radicado\s*\(como ven[ií]a\)$/i.test(x.label.trim()));
+  return f ? String(k.field_values?.[f.id] ?? "").trim() : "";
+};
+function radCount() {
+  const total = state.cases.length, missing = state.cases.filter((k) => !k.radicado).length;
+  $("#rad-progress").innerHTML = `<strong>${total - missing} de ${total}</strong> expediente(s) con radicado · <strong>${missing}</strong> sin radicado`;
+}
+function renderRadRows() {
+  const flat = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const q = flat($("#rad-search").value.trim()), qDigits = q.replace(/\D/g, "");
+  const show = $("#rad-filter").value, officeId = Number($("#rad-office").value) || null;
+  const folderNum = (k) => { const n = parseInt(caseFolder(k).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : Infinity; };
+  const rows = state.cases.filter((k) => (!officeId || k.office_id === officeId)
+    && (show !== "missing" || !k.radicado) && (show !== "done" || k.radicado)
+    && (!q || [caseFolder(k), k.client_name, k.title, k.type_name, k.court_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
+      || (qDigits.length >= 4 && radDigits(k.radicado).includes(qDigits))))
+    .sort((a, b) => (!!a.radicado - !!b.radicado) || folderNum(a) - folderNum(b) || a.id - b.id);
+  $("#rad-empty").hidden = rows.length > 0;
+  $("#rad-rows").innerHTML = rows.map((k) => {
+    const old = radAsImported(k);
+    return `<tr data-rad-case="${k.id}" class="${k.radicado ? "has-rad" : ""}">
+      <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
+      <td><strong>${escapeHtml(k.client_name)}</strong>${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}</td>
+      <td>${escapeHtml(k.type_name)}${k.title ? `<br><span class="muted">${escapeHtml(k.title)}</span>` : ""}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}</td>
+      <td class="rad-cell">
+        <div class="rad-edit">
+          <input class="rad-input mono" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="40" placeholder="23 dígitos, con o sin guiones"
+            aria-label="Radicado del expediente de ${escapeHtml(k.client_name)}" value="${escapeHtml(k.radicado ? formatRadicado(k.radicado) : "")}" data-saved="${escapeHtml(k.radicado || "")}" />
+          <button type="button" class="mini primary" data-rad-save>Guardar</button>
+        </div>
+        <span class="rad-note muted" aria-live="polite">${k.radicado ? `Guardado · consulta automática ${k.monitor ? "activada" : "pausada"}` : "Sin radicado"}</span>
+        ${old ? `<span class="rad-old muted">Venía en el Excel: <span class="mono">${escapeHtml(old)}</span></span>` : ""}
+      </td>
+    </tr>`;
+  }).join("");
+}
+async function renderRadicados() {
+  await Promise.all([loadCatalog(), loadCases()]);
+  const of = $("#rad-office"), cur = of.value;
+  of.innerHTML = '<option value="">Todas mis oficinas</option>' + myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
+  of.value = cur;
+  of.hidden = myOffices().length < 2;
+  radCount();
+  renderRadRows();
+}
+for (const id of ["#rad-filter", "#rad-office"]) $(id).addEventListener("change", renderRadRows);
+$("#rad-search").addEventListener("input", renderRadRows);
+// Live digit count while typing; the dashes come back when leaving the box.
+$("#rad-rows").addEventListener("input", (e) => {
+  const inp = e.target.closest(".rad-input");
+  if (!inp) return;
+  const n = radDigits(inp.value).length, note = $(".rad-note", inp.closest("td"));
+  note.className = `rad-note ${n === 23 ? "ok" : "muted"}`;
+  note.textContent = n === 0 ? (inp.dataset.saved ? "Vacío: Guardar quita el radicado (pide confirmación)" : "Sin radicado")
+    : n === 23 ? "23 dígitos: pulse Enter o Guardar" : `${n} de 23 dígitos`;
+});
+$("#rad-rows").addEventListener("focusout", (e) => {
+  const inp = e.target.closest(".rad-input");
+  if (inp) inp.value = formatRadicado(inp.value.trim());
+});
+async function saveRadicado(tr) {
+  const inp = $(".rad-input", tr), note = $(".rad-note", tr), btn = $("[data-rad-save]", tr);
+  const id = Number(tr.dataset.radCase), saved = inp.dataset.saved, digits = radDigits(inp.value);
+  inp.value = formatRadicado(inp.value.trim());
+  const fail = (msg) => { note.className = "rad-note bad"; note.textContent = msg; inp.focus(); inp.select(); return false; };
+  if (digits === saved) return true;
+  if (digits && digits.length !== 23) return fail(`El radicado debe tener 23 dígitos (tiene ${digits.length}).`);
+  const k = state.cases.find((x) => x.id === id);
+  if (saved && !(await confirmAsk(digits ? "Cambiar radicado" : "Quitar radicado",
+    digits ? `Este expediente ya tiene el radicado ${formatRadicado(saved)}. ¿Lo cambia por ${formatRadicado(digits)}?`
+      : `¿Quita el radicado ${formatRadicado(saved)} de este expediente? Se pausa su consulta automática.`, digits ? "Cambiar" : "Quitar"))) {
+    inp.value = formatRadicado(saved);
+    note.className = "rad-note muted"; note.textContent = "Sin cambios: se dejó el radicado que tenía.";
+    return false;
+  }
+  btn.disabled = true;
+  try {
+    const out = await api("PUT", `/cases/${id}/radicado`, { radicado: digits, replace: !!saved });
+    if (k) Object.assign(k, out);
+    inp.dataset.saved = out.radicado || "";
+    tr.classList.toggle("has-rad", !!out.radicado);
+    note.className = "rad-note ok";
+    note.textContent = out.radicado ? `✓ Guardado · consulta automática ${out.monitor ? "activada" : "pausada"}` : "✓ Radicado quitado";
+    radCount();
+    return true;
+  } catch (err) {
+    return fail(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+const nextRadInput = (tr) => {
+  for (let r = tr.nextElementSibling; r; r = r.nextElementSibling) if (!radDigits($(".rad-input", r).value)) return $(".rad-input", r);
+  return $(".rad-input", tr.nextElementSibling || tr);
+};
+$("#rad-rows").addEventListener("keydown", (e) => {
+  const inp = e.target.closest(".rad-input");
+  if (!inp || e.key !== "Enter") return;
+  e.preventDefault();
+  const tr = inp.closest("tr");
+  guarded(async () => { if (await saveRadicado(tr)) { const n = nextRadInput(tr); n.focus(); n.select(); } });
+});
+$("#rad-rows").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-rad-save]");
+  if (b) guarded(() => saveRadicado(b.closest("tr")));
+});
 $("#case-office-filter").addEventListener("change", renderCaseRows);
 $("#case-mine").addEventListener("change", renderCaseRows);
 for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
@@ -2132,7 +2246,7 @@ document.addEventListener("click", (e) => {
     "read-all": async () => { await api("POST", "/notifications/read", {}); await refreshBell(); },
     "view-acts": () => showActuaciones(id),
     "portals": async () => showPortals(state.cases.find((k) => k.id === id) || await api("GET", `/cases/${id}`)),
-    "add-radicado": () => openCaseDialog(null, null),
+    "add-radicado": () => { location.hash = "#radicados"; },
     "new-role": () => openRoleDialog(),
     "rename-role": async () => {
       const name = await ask({ title: "Renombrar rol", input: btn.dataset.role, okLabel: "Guardar" });
@@ -5072,6 +5186,7 @@ const RENDER = {
   correo: renderCorreo,
   agenda: renderAgenda,
   consulta: renderConsulta,
+  radicados: renderRadicados,
   despachos: renderDespachos,
   reportes: renderReportes,
   usuarios: renderUsuarios,

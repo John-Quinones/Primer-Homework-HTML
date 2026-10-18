@@ -212,7 +212,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -1130,6 +1130,25 @@
         values[f.id] = folder;
       }
       Object.assign(k, { field_values: values, updated_at: stamp() });
+      return caseOut(k);
+    }],
+    // «Cargar radicados» (version 2.24), same rules as the server.
+    ["PUT", /^\/cases\/(\d+)\/radicado$/, (m, b) => {
+      need("cases.write");
+      const k = visibleCase(+m[1]);
+      const fmt = window.JuanmaPortals.formatRadicado;
+      const radicado = str(b.radicado).replace(/\D/g, "");
+      if (radicado && radicado.length !== 23) fail(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
+      if (radicado === (k.radicado || "")) return caseOut(k);
+      if (k.radicado && !b.replace) fail(`Este expediente ya tiene el radicado ${fmt(k.radicado)}. Confirme si quiere cambiarlo.`);
+      const other = radicado && s.cases.find((x) => x.id !== k.id && x.radicado === radicado);
+      if (other) {
+        const oc = s.clients.find((c) => c.id === other.client_id);
+        fail(`El radicado ${fmt(radicado)} ya está en ${oc && clientVisible(oc) ? `el expediente «${other.title || caseOut(other).type_name}» de ${oc.full_name}` : "otro expediente"}.`);
+      }
+      const place = radicado && !k.department ? placeFromRad(radicado) : null;
+      const monitor = !radicado ? 0 : k.radicado ? (k.monitor ? 1 : 0) : 1;
+      Object.assign(k, { radicado, monitor, department: place?.department || k.department || "", city: place ? k.city || place.city : k.city || "", updated_at: stamp() });
       return caseOut(k);
     }],
     ["DELETE", /^\/cases\/(\d+)$/, (m) => {

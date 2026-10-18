@@ -44,6 +44,7 @@ export function audit(db, req, { user = req.user, action, module = "Acceso", ent
 const SNAP = [
   [/^\/cases\/(\d+)$/, "SELECT * FROM cases WHERE id = ?"],
   [/^\/cases\/(\d+)\/folder$/, "SELECT * FROM cases WHERE id = ?"],
+  [/^\/cases\/(\d+)\/radicado$/, "SELECT * FROM cases WHERE id = ?"],
   [/^\/clients\/(\d+)$/, "SELECT * FROM clients WHERE id = ?"],
   [/^\/clients\/(\d+)\/photo$/, "SELECT id, full_name, CASE WHEN EXISTS (SELECT 1 FROM client_photos WHERE client_id = clients.id) THEN 'Sí' ELSE 'No' END AS foto FROM clients WHERE id = ?"],
   [/^\/tasks\/(\d+)$/, "SELECT * FROM tasks WHERE id = ?"],
@@ -88,10 +89,10 @@ export function auditMiddleware(db) {
       const caseId = t.isCase ? t.id ?? created?.id ?? null : after?.case_id ?? before?.case_id ?? created?.case_id ?? (Number(req.body?.case_id) || null);
       const name = nameOf(after) || nameOf(before) || nameOf(created) || "";
       const verb = ok ? auditVerb(req.method, path) : "Intentó (sin permiso)";
-      const extra = path.match(/\/(void|cancel|resend|invite|monitor|documents|folder|photo)\b/)?.[1];
+      const extra = path.match(/\/(void|cancel|resend|invite|monitor|documents|folder|photo|radicado)\b/)?.[1];
       audit(db, req, {
         action: verb, module: t.module, entity: t.entity, record_id: record, case_id: caseId, ok,
-        summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto" }[extra]})` : ""}`,
+        summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto", radicado: "radicado" }[extra]})` : ""}`,
         changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : [],
       });
     });

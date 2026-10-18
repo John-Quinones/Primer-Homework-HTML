@@ -7,6 +7,7 @@ import { can, scopeOf, loadUser } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
+import { formatRadicado } from "./portals.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
 const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
@@ -500,6 +501,28 @@ export function recordsRouter(db) {
       values[id] = folder;
     }
     db.prepare("UPDATE cases SET field_values = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(values), cur.id);
+    return getCase(req, cur.id);
+  }));
+
+  // «Cargar radicados» (version 2.24): one radicado per case, 23 digits, used by one case only.
+  // Changing or removing one already saved needs replace: true (the screen asks first).
+  r.put("/cases/:id/radicado", h((req) => {
+    checkPerm(req, "cases.write");
+    const cur = getCase(req, toInt(req.params.id, "id"));
+    const radicado = normalizeRadicado(req.body?.radicado);
+    if (radicado && radicado.length !== 23) fail400(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
+    if (radicado === cur.radicado) return cur;
+    if (cur.radicado && !req.body?.replace) fail400(`Este expediente ya tiene el radicado ${formatRadicado(cur.radicado)}. Confirme si quiere cambiarlo.`);
+    if (radicado) {
+      const other = db.prepare(`SELECT k.id, k.client_id, k.title, c.full_name, ${typePath("pt")} AS type_name FROM cases k JOIN clients c ON c.id = k.client_id
+        JOIN process_types pt ON pt.id = k.process_type_id WHERE k.radicado = ? AND k.id <> ?`).get(radicado, cur.id);
+      if (other) fail400(`El radicado ${formatRadicado(radicado)} ya está en ${clientVisible(req, other.client_id) ? `el expediente «${other.title || other.type_name}» de ${other.full_name}` : "otro expediente"}.`);
+    }
+    const place = radicado && !cur.department ? placeFromRadicado(radicado) : null;
+    // A new radicado turns the automatic consultation on; a changed one keeps what the case had.
+    const monitor = !radicado ? 0 : cur.radicado ? (cur.monitor ? 1 : 0) : 1;
+    db.prepare("UPDATE cases SET radicado = ?, monitor = ?, department = ?, city = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(radicado, monitor, place?.department || cur.department || "", place ? cur.city || place.city : cur.city || "", cur.id);
     return getCase(req, cur.id);
   }));
 

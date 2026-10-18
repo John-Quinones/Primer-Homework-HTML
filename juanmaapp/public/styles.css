@@ -1098,3 +1098,19 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
 .camera-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .camera-box video.mirror { transform: scaleX(-1); }
 @media (max-width: 560px) { .client-photo.big { width: 88px; height: 88px; } }
+/* «Cargar radicados» (version 2.24) */
+.rad-progress { margin: 0 0 .6rem; }
+.rad-table td { vertical-align: top; }
+.rad-cell { min-width: 370px; }
+.rad-edit { display: flex; gap: .4rem; align-items: center; }
+.rad-edit .rad-input { flex: 1; min-width: 0; font-size: .85rem; letter-spacing: 0; }
+.rad-note, .rad-old { display: block; font-size: .8rem; margin-top: .25rem; }
+.rad-note.ok { color: var(--ok); font-weight: 600; }
+.rad-note.bad { color: var(--error); font-weight: 600; }
+.rad-table tr.has-rad .rad-input { border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+@media (max-width: 720px) {
+  .rad-table thead { display: none; }
+  .rad-table tr { display: grid; grid-template-columns: auto 1fr; gap: .2rem .6rem; padding: .5rem 0; }
+  .rad-table td { border: 0; padding: .15rem .3rem; }
+  .rad-table td:nth-child(3), .rad-table td.rad-cell { grid-column: 1 / -1; min-width: 0; }
+}
