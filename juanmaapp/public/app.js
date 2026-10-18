@@ -86,6 +86,10 @@ const caseFolder = (k) => {
 /** «Asignar carpeta» / «Editar carpeta» (version 2.18), for whoever can edit cases. */
 const folderButton = (k, cls = "mini") => can("cases.write")
   ? `<button type="button" class="${cls}" data-action="edit-folder" data-id="${k.id}" data-folder="${escapeHtml(caseFolder(k))}">${caseFolder(k) ? "Editar carpeta" : "Asignar carpeta"}</button>` : "";
+/** «Número de expediente» (version 2.33): editable by whoever edits cases and by the case's responsible funcionario. */
+const canEditCaseNumber = (k) => can("cases.write") || (!!me && k.assigned_user_id === me.id);
+const caseNumberButton = (k, cls = "mini") => canEditCaseNumber(k)
+  ? `<button type="button" class="${cls}" data-action="edit-case-number" data-id="${k.id}" data-number="${escapeHtml(k.case_number || "")}">${k.case_number ? "Editar número de expediente" : "Poner número de expediente"}</button>` : "";
 const typeById = (typeId) => {
   for (const c of state.catalog) {
     const t = c.types.find((t) => t.id === Number(typeId));
@@ -954,6 +958,7 @@ async function renderExpedienteFicha(id) {
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${folderButton(k, "")}
+        ${caseNumberButton(k, "")}
         <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
         ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
@@ -966,17 +971,18 @@ async function renderExpedienteFicha(id) {
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
       <span class="chip-stat">Cliente <strong>${clientName(k.client_id, k.client_name)}</strong></span>
+      ${k.case_number ? `<span class="chip-stat">Expediente <strong class="mono">${escapeHtml(k.case_number)}</strong></span>` : ""}
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <button type="button" class="chip-stat" data-action="goto-sec" data-sec="responsable" title="Ver o cambiar el funcionario responsable">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></button>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
       ${secId("datos", wide(panel("Datos del expediente", null, `<dl class="facts">
-        ${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Juez", k.judge_name)}${factRow("Correo del despacho", k.court_email)}
+        ${factRow("Número de expediente", k.case_number)}${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Juez", k.judge_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
         ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
-        ${fields.filter((f) => !isFolderField(f)).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
+        ${fields.filter((f) => !isFolderField(f) && !(k.case_number && CMETA.isImportedRadicadoLabel(f.label))).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
       </dl>`)))}
       ${secId("responsable", wide(panel("Funcionario responsable", null, responsiblePanel(k, tasks || []))))}
@@ -1617,7 +1623,7 @@ function renderCaseRows() {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const q = flat($("#case-search").value.trim());
   const qDigits = q.replace(/\D/g, "");
-  const matches = (k) => !q || [caseFolder(k), k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
+  const matches = (k) => !q || [caseFolder(k), k.case_number, k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const court = $("#case-court").value, status = $("#case-status").value;
   const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
@@ -1631,7 +1637,7 @@ function renderCaseRows() {
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
       <td>${clientName(k.client_id, k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}${(k.parties || []).some((p) => p.ours) ? `<br><span class="muted">+ ${(k.parties || []).filter((p) => p.ours).map((p) => escapeHtml(p.name)).join(", ")}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
-      <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
+      <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.case_number ? `<br><span class="muted">Exp. </span><span class="mono">${escapeHtml(k.case_number)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
       <td><span class="status-tag">${escapeHtml(k.status)}</span></td>
       <td>${k.radicado
@@ -2053,7 +2059,7 @@ async function openCaseDialog(k = null, clientId = null) {
   openDialog($("#case-dialog"), k ? `Editar expediente${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}` : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
     radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
-    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0",
+    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0", case_number: k.case_number || "",
   } : { affiliated: "0" });
   caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = k ? !!k.monitor || !k.radicado : true;
@@ -2087,7 +2093,7 @@ wireDialog($("#case-dialog"), async (form) => {
     title: d.title, status: d.status, counterparty: d.counterparty, facts: d.facts, field_values,
     client_role: d.client_role, affiliated: d.affiliated === "1",
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
-    radicado: d.radicado, department: d.department, city: d.city, area: d.area,
+    case_number: d.case_number || "", radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
   };
@@ -2338,6 +2344,15 @@ document.addEventListener("click", (e) => {
     "task-for": () => {
       const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
       return openTaskDialog(null, id, "tarea", { assigned_user_id: uid });
+    },
+    "edit-case-number": async () => {
+      const cur = btn.dataset.number || "";
+      const v = await ask({ title: cur ? "Editar número de expediente" : "Poner número de expediente",
+        message: cur ? `Número actual: ${cur}. Escriba el nuevo número.` : "Escriba el número de este expediente.", input: cur, okLabel: "Guardar" });
+      if (!v || v === cur) return;
+      await api("PUT", `/cases/${id}/number`, { case_number: v });
+      toast(cur ? `Número de expediente cambiado de ${cur} a ${v}.` : `Número de expediente ${v} guardado.`);
+      await refreshView();
     },
     "edit-folder": async () => {
       const cur = btn.dataset.folder || "";

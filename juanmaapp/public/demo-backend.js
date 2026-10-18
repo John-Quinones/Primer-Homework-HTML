@@ -53,6 +53,14 @@
     }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
+    // Version 2.33: «Número de expediente». What the Excel import kept as "Radicado (como venía)" is
+    // that number (user's rule): copied once per case, the imported field stays as it was.
+    const asImported = st.fields.filter((f) => CM.isImportedRadicadoLabel(f.label));
+    for (const k of st.cases) {
+      if (k.case_number !== undefined) continue;
+      const catId = st.types.find((t) => t.id === k.process_type_id)?.category_id;
+      k.case_number = CM.cleanCaseNumber(asImported.filter((f) => f.category_id === catId).map((f) => String(k.field_values?.[f.id] ?? "").trim()).find(Boolean));
+    }
     for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog"]) st[k] ||= [];
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
@@ -212,7 +220,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -368,7 +376,7 @@
         "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
         "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
-        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.correo_despacho": k.court_email,
+        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": k.case_number || "", "expediente.correo_despacho": k.court_email,
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
       });
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
@@ -1171,7 +1179,7 @@
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
         assigned_user_id: checkAssignee(b.assigned_user_id, officeId), updated_at: stamp(),
         created_at: /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : stamp(),
-        last_checked_at: null, last_action_date: null, ...caseLocation(b), parties: caseParties(b.parties, c.id),
+        last_checked_at: null, last_action_date: null, ...caseLocation(b), parties: caseParties(b.parties, c.id), case_number: CM.cleanCaseNumber(b.case_number),
       };
       s.cases.push(k);
       return caseOut(k);
@@ -1188,6 +1196,7 @@
         field_values: cleanValues(typeId, b.field_values ?? k.field_values), office_id: officeId,
         assigned_user_id: "assigned_user_id" in b ? checkAssignee(b.assigned_user_id, officeId) : k.assigned_user_id,
         updated_at: stamp(), ...caseLocation(b, k), parties: "parties" in b ? caseParties(b.parties, k.client_id) : k.parties || [],
+        case_number: "case_number" in b ? CM.cleanCaseNumber(b.case_number) : k.case_number ?? "",
       });
       return caseOut(k);
     }],
@@ -1215,6 +1224,13 @@
         values[f.id] = folder;
       }
       Object.assign(k, { field_values: values, updated_at: stamp() });
+      return caseOut(k);
+    }],
+    // «Número de expediente» (version 2.33), same rules as the server: case editors or the case's responsible.
+    ["PUT", /^\/cases\/(\d+)\/number$/, (m, b) => {
+      const k = visibleCase(+m[1]);
+      if (!me().permissions.includes("cases.write") && k.assigned_user_id !== me().id) fail("Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia este número.");
+      Object.assign(k, { case_number: CM.cleanCaseNumber(b.case_number), updated_at: stamp() });
       return caseOut(k);
     }],
     // «Cargar radicados» (version 2.24), same rules as the server.

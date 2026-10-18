@@ -310,6 +310,7 @@
               client_id: client.id, process_type_id: type.id, title: rc.title || "",
               status: rc.status || "Activo", counterparty: rc.counterparty || "",
               facts: rc.facts || "", field_values, radicado: radOk ? rad : "",
+              case_number: rc.radicado && !radOk ? rc.radicado : "", // version 2.33: that value is the case number
               client_role: window.JuanmaCaseMeta?.normPartyRole(rc.client_role) || "",
               affiliated: /^(s|si|sí|x|1|true|afiliado)$/i.test(String(rc.affiliated || "").trim()),
               created_at: parseDate(rc.created_at) || undefined,

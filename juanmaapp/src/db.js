@@ -8,7 +8,7 @@ import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS, ASSISTANT } from "./auth.js";
 import { seedTemplates } from "./templates.js";
 import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW, FIRM_FIXES } from "./templates-seed.js";
-import { normStatus, courtCircuit } from "./case-meta.js";
+import { normStatus, courtCircuit, isImportedRadicadoLabel } from "./case-meta.js";
 import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 
@@ -590,6 +590,19 @@ function migrate(db) {
     ["last_checked_at", "TEXT"], ["last_action_date", "TEXT"],
     ["client_role", "TEXT NOT NULL DEFAULT ''"], ["affiliated", "INTEGER NOT NULL DEFAULT 0"],
     ["parties", "TEXT NOT NULL DEFAULT '[]'"], ["judge_name", "TEXT NOT NULL DEFAULT ''"]]) add("cases", col, def); // parties: JSON list (change 49)
+  // Version 2.33: the case number («Número de expediente»). What the Excel import kept as
+  // "Radicado (como venía)" is that number (user's rule); it is copied once, when the column
+  // appears, and the imported field stays as it was.
+  if (!cols("cases").has("case_number")) {
+    add("cases", "case_number", "TEXT NOT NULL DEFAULT ''");
+    const asImported = db.prepare("SELECT id, category_id, label FROM custom_fields").all().filter((f) => isImportedRadicadoLabel(f.label));
+    const setNumber = db.prepare("UPDATE cases SET case_number = ? WHERE id = ?");
+    for (const k of db.prepare("SELECT k.id, k.field_values, pt.category_id FROM cases k JOIN process_types pt ON pt.id = k.process_type_id").all()) {
+      const values = JSON.parse(k.field_values || "{}");
+      const v = asImported.filter((f) => f.category_id === k.category_id).map((f) => String(values[f.id] ?? "").trim()).find(Boolean);
+      if (v) setNumber.run(v.slice(0, 60), k.id);
+    }
+  }
   // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
   for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],
     ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def);

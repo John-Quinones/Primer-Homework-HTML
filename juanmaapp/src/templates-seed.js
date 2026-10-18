@@ -16,6 +16,7 @@ export const VARIABLES = [
   ["cliente.departamento", "Departamento del cliente", "Cliente"],
   ["expediente.carpeta", "Número de carpeta (y del contrato)", "Expediente"],
   ["expediente.radicado", "Radicado", "Expediente"],
+  ["expediente.numero", "Número de expediente", "Expediente"],
   ["expediente.tipo_proceso", "Tipo de proceso", "Expediente"],
   ["expediente.subproceso", "Subproceso", "Expediente"],
   ["expediente.asunto", "Asunto", "Expediente"],

@@ -91,6 +91,11 @@ export function filterCourts(list, want = {}) {
 
 // The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
 export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));
+// Version 2.33: an Excel radicado that was not 23 digits was kept in "Radicado (como venía)";
+// the user says it is the case number («Número de expediente», cases.case_number).
+export const isImportedRadicadoLabel = (label) => /^radicado\s*\(como ven[ií]a\)$/i.test(String(label ?? "").trim());
+/** Case number as typed: spaces collapsed, at most 60 characters. */
+export const cleanCaseNumber = (v) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
 /** Folder numbers compare without spaces, dots or case: "Carpeta 045-A" = "045a". */
 export const folderKey = (v) => nrm(v).replace(/^(n|no|nro|num|numero)?\.?\s*(de)?\s*carpeta\s*/, "").replace(/[^a-z0-9]/g, "");
 /** Next free folder number: one more than the highest purely numeric one in use. */
@@ -306,7 +311,7 @@ export const auditVerb = (method, path) => (/^\/monitor\/check/.test(path) ? "Co
   : method === "POST" ? "Creó" : method === "DELETE" ? "Eliminó" : "Modificó");
 /** Spanish names of the fields shown in the change details. */
 export const AUDIT_FIELDS = {
-  title: "Asunto o título", status: "Estado", client_role: "Calidad del cliente", affiliated: "Afiliado", parties: "Partes", radicado: "Radicado",
+  title: "Asunto o título", status: "Estado", client_role: "Calidad del cliente", affiliated: "Afiliado", parties: "Partes", radicado: "Radicado", case_number: "Número de expediente",
   court_name: "Despacho", judge_name: "Juez", court_email: "Correo del despacho", department: "Departamento", city: "Ciudad", area: "Área", counterparty: "Contraparte",
   facts: "Hechos", field_values: "Campos del proceso", office_id: "Oficina", assigned_user_id: "Responsable", process_type_id: "Tipo de proceso",
   monitor: "Consulta automática", full_name: "Nombre", first_names: "Nombres", last_names: "Apellidos", id_type: "Tipo de documento", id_number: "Documento",

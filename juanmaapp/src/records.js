@@ -4,7 +4,7 @@ import express from "express";
 import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
-import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder } from "./case-meta.js";
+import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
@@ -439,11 +439,11 @@ export function recordsRouter(db) {
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);
     const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
-        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, judge_name, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
+        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, judge_name, case_number, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
       .run(clientId, typeId, str(b.title), normStatus(b.status), str(b.counterparty), str(b.facts),
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
-        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId), loc.judge_name,
+        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId), loc.judge_name, cleanCaseNumber(b.case_number),
         // Imported cases keep the date they were opened in the previous system.
         /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : null).lastInsertRowid;
     res.status(201);
@@ -464,12 +464,13 @@ export function recordsRouter(db) {
     const loc = caseLocation(b, cur);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
       field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
-      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, judge_name = ?, updated_at = datetime('now') WHERE id = ?`)
+      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, judge_name = ?, case_number = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) ? normStatus(b.status) : cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
         loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
-        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), loc.judge_name, id);
+        "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), loc.judge_name,
+        "case_number" in b ? cleanCaseNumber(b.case_number) : cur.case_number ?? "", id);
     return getCase(req, id);
   }));
 
@@ -503,6 +504,15 @@ export function recordsRouter(db) {
       values[id] = folder;
     }
     db.prepare("UPDATE cases SET field_values = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(values), cur.id);
+    return getCase(req, cur.id);
+  }));
+
+  // «Número de expediente» (version 2.33): whoever edits cases, and also the case's responsible
+  // funcionario (assigned_user_id) even without cases.write (user's rule).
+  r.put("/cases/:id/number", h((req) => {
+    const cur = getCase(req, toInt(req.params.id, "id"));
+    if (!can(req, "cases.write") && cur.assigned_user_id !== req.user.id) throw new HttpError(403, "Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia este número.");
+    db.prepare("UPDATE cases SET case_number = ?, updated_at = datetime('now') WHERE id = ?").run(cleanCaseNumber(req.body?.case_number), cur.id);
     return getCase(req, cur.id);
   }));
 
