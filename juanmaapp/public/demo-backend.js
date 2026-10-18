@@ -61,6 +61,14 @@
       const catId = st.types.find((t) => t.id === k.process_type_id)?.category_id;
       k.case_number = CM.cleanCaseNumber(asImported.filter((f) => f.category_id === catId).map((f) => String(k.field_values?.[f.id] ?? "").trim()).find(Boolean));
     }
+    // Version 2.35 (user's rule): the 21-digit case number + "00" becomes the radicado, once (as on the server).
+    if (!st.info.radFromNumber) {
+      for (const { id, radicado } of CM.radicadosFromNumbers(st.cases).out) {
+        const k = st.cases.find((x) => x.id === id), place = !k.department ? placeFromRad(radicado) : null;
+        Object.assign(k, { radicado, monitor: 1, department: place?.department || k.department || "", city: place ? k.city || place.city : k.city || "" });
+      }
+      st.info.radFromNumber = true;
+    }
     for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog"]) st[k] ||= [];
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.

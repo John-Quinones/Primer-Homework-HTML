@@ -8,7 +8,8 @@ import path from "node:path";
 import { DEFAULT_MATRIX, PERMISSIONS, ASSISTANT } from "./auth.js";
 import { seedTemplates } from "./templates.js";
 import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW, FIRM_FIXES } from "./templates-seed.js";
-import { normStatus, courtCircuit, isImportedRadicadoLabel } from "./case-meta.js";
+import { normStatus, courtCircuit, isImportedRadicadoLabel, radicadosFromNumbers } from "./case-meta.js";
+import { placeFromRadicado } from "./places.js";
 import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 
@@ -602,6 +603,19 @@ function migrate(db) {
       const v = asImported.filter((f) => f.category_id === k.category_id).map((f) => String(values[f.id] ?? "").trim()).find(Boolean);
       if (v) setNumber.run(v.slice(0, 60), k.id);
     }
+  }
+  // Version 2.35 (user's rule): the 21-digit case number + "00" becomes the radicado, once.
+  // Like «Cargar radicados», a new radicado turns the consultation on and fills an empty place.
+  db.exec("CREATE TABLE IF NOT EXISTS app_flags (key TEXT PRIMARY KEY)"); // same table as seedTemplates
+  if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'radicado-from-number'").get()) {
+    const all = db.prepare("SELECT id, radicado, case_number, department, city FROM cases").all();
+    const byId = new Map(all.map((k) => [k.id, k]));
+    const setRad = db.prepare("UPDATE cases SET radicado = ?, monitor = 1, department = ?, city = ? WHERE id = ?");
+    for (const { id, radicado } of radicadosFromNumbers(all).out) {
+      const k = byId.get(id), place = !k.department ? placeFromRadicado(radicado) : null;
+      setRad.run(radicado, place?.department || k.department || "", place ? k.city || place.city : k.city || "", id);
+    }
+    db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('radicado-from-number')").run();
   }
   // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
   for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],

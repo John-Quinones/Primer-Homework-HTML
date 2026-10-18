@@ -94,6 +94,21 @@ export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.t
 // Version 2.33: an Excel radicado that was not 23 digits was kept in "Radicado (como venía)";
 // the user says it is the case number («Número de expediente», cases.case_number).
 export const isImportedRadicadoLabel = (label) => /^radicado\s*\(como ven[ií]a\)$/i.test(String(label ?? "").trim());
+/** Version 2.35 (user's rule): a 21-digit case number + "00" is the case's 23-digit radicado.
+ *  For cases without radicado; a radicado already used by another case is skipped. */
+export function radicadosFromNumbers(cases) {
+  const used = new Set(cases.map((k) => k.radicado).filter(Boolean));
+  const out = [], skipped = [];
+  for (const k of cases) {
+    const n = String(k.case_number ?? "").trim();
+    if (k.radicado || !/^\d{21}$/.test(n)) continue;
+    const radicado = `${n}00`;
+    if (used.has(radicado)) { skipped.push({ id: k.id, radicado }); continue; }
+    used.add(radicado);
+    out.push({ id: k.id, radicado });
+  }
+  return { out, skipped };
+}
 /** Case number as typed: spaces collapsed, at most 60 characters. */
 export const cleanCaseNumber = (v) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
 /** Folder numbers compare without spaces, dots or case: "Carpeta 045-A" = "045a". */
