@@ -55,7 +55,7 @@ export function templateData(db, user, caseId) {
       "cliente.ciudad": c.city, "cliente.departamento": c.department,
       "expediente.radicado": formatRadicado(k.radicado), "expediente.tipo_proceso": k.category_name, "expediente.subproceso": k.type_name,
       "expediente.asunto": k.title, "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts,
-      "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": k.case_number || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
+      "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
       "expediente.ciudad": k.city, "expediente.departamento": k.department,
     });
     const fields = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);

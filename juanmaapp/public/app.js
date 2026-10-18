@@ -86,13 +86,11 @@ const caseFolder = (k) => {
 /** «Asignar carpeta» / «Editar carpeta» (version 2.18), for whoever can edit cases. */
 const folderButton = (k, cls = "mini") => can("cases.write")
   ? `<button type="button" class="${cls}" data-action="edit-folder" data-id="${k.id}" data-folder="${escapeHtml(caseFolder(k))}">${caseFolder(k) ? "Editar carpeta" : "Asignar carpeta"}</button>` : "";
-/** «Número de expediente» (version 2.33): editable by whoever edits cases and by the case's responsible funcionario. */
+/** The case number IS the radicado (version 2.37, user's rule); editable by case editors and the case's responsible. */
 const canEditCaseNumber = (k) => can("cases.write") || (!!me && k.assigned_user_id === me.id);
-const caseNumberButton = (k, cls = "mini") => canEditCaseNumber(k)
-  ? `<button type="button" class="${cls}" data-action="edit-case-number" data-id="${k.id}" data-number="${escapeHtml(k.case_number || "")}">${k.case_number ? "Editar número de expediente" : "Poner número de expediente"}</button>` : "";
 /** «Poner / Editar radicado» on the case screen (version 2.36), same people as the case number. */
 const radicadoButton = (k, cls = "mini") => canEditCaseNumber(k)
-  ? `<button type="button" class="${cls}" data-action="edit-radicado" data-id="${k.id}" data-radicado="${escapeHtml(k.radicado || "")}">${k.radicado ? "Editar radicado" : "Poner radicado"}</button>` : "";
+  ? `<button type="button" class="${cls}" data-action="edit-radicado" data-id="${k.id}" data-radicado="${escapeHtml(k.radicado || "")}">${k.radicado ? "Editar número de expediente" : "Poner número de expediente"}</button>` : "";
 const typeById = (typeId) => {
   for (const c of state.catalog) {
     const t = c.types.find((t) => t.id === Number(typeId));
@@ -971,7 +969,6 @@ async function renderExpedienteFicha(id) {
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
         ${folderButton(k, "")}
-        ${caseNumberButton(k, "")}
         ${radicadoButton(k, "")}
         <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
@@ -985,14 +982,14 @@ async function renderExpedienteFicha(id) {
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
       <span class="chip-stat">Cliente <strong>${clientName(k.client_id, k.client_name)}</strong></span>
-      ${k.case_number ? `<span class="chip-stat">Expediente <strong class="mono">${escapeHtml(k.case_number)}</strong></span>` : ""}
+      ${k.radicado ? `<span class="chip-stat">Expediente <strong class="mono">${escapeHtml(formatRadicado(k.radicado))}</strong></span>` : ""}
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <button type="button" class="chip-stat" data-action="goto-sec" data-sec="responsable" title="Ver o cambiar el funcionario responsable">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></button>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
     </div>
     <div class="ficha-grid">
       ${secId("datos", wide(panel("Datos del expediente", null, `<dl class="facts">
-        ${factRow("Número de expediente", k.case_number)}${factRow("Radicado", k.radicado && formatRadicado(k.radicado))}${factRow("Despacho", k.court_name)}${factRow("Juez", k.judge_name)}${factRow("Correo del despacho", k.court_email)}
+        ${factRow("Número de expediente", k.radicado && formatRadicado(k.radicado))}${k.radicado ? "" : factRow("Número como venía (sin radicado de 23 dígitos)", k.case_number)}${factRow("Despacho", k.court_name)}${factRow("Juez", k.judge_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
         ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
         ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
@@ -1651,7 +1648,7 @@ function renderCaseRows() {
       <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">—</span>'}</td>
       <td>${clientName(k.client_id, k.client_name)}${partyLine(k) ? `<br><span class="muted">${escapeHtml(partyLine(k))}</span>` : ""}${(k.parties || []).some((p) => p.ours) ? `<br><span class="muted">+ ${(k.parties || []).filter((p) => p.ours).map((p) => escapeHtml(p.name)).join(", ")}</span>` : ""}</td>
       <td><span class="pill">${escapeHtml(k.category_name)}</span><br>${escapeHtml(k.type_name)}</td>
-      <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.case_number ? `<br><span class="muted">Exp. </span><span class="mono">${escapeHtml(k.case_number)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
+      <td>${escapeHtml(k.title)}${k.court_name ? `<br><span class="muted">${escapeHtml(k.court_name)}</span>` : ""}${k.radicado ? `<br><span class="mono">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
       <td>${escapeHtml(k.office_name || "")}<br><span class="muted">${escapeHtml(k.assigned_name || "Sin responsable")}</span></td>
       <td><span class="status-tag">${escapeHtml(k.status)}</span></td>
       <td>${k.radicado
@@ -1692,7 +1689,7 @@ const radAsImported = (k) => {
 };
 function radCount() {
   const total = state.cases.length, missing = state.cases.filter((k) => !k.radicado).length;
-  $("#rad-progress").innerHTML = `<strong>${total - missing} de ${total}</strong> expediente(s) con radicado · <strong>${missing}</strong> sin radicado`;
+  $("#rad-progress").innerHTML = `<strong>${total - missing} de ${total}</strong> expediente(s) con número · <strong>${missing}</strong> sin número`;
 }
 function renderRadRows() {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -2073,7 +2070,7 @@ async function openCaseDialog(k = null, clientId = null) {
   openDialog($("#case-dialog"), k ? `Editar expediente${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}` : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
     radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
-    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0", case_number: k.case_number || "",
+    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0",
   } : { affiliated: "0" });
   caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = k ? !!k.monitor || !k.radicado : true;
@@ -2107,7 +2104,7 @@ wireDialog($("#case-dialog"), async (form) => {
     title: d.title, status: d.status, counterparty: d.counterparty, facts: d.facts, field_values,
     client_role: d.client_role, affiliated: d.affiliated === "1",
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
-    case_number: d.case_number || "", radicado: d.radicado, department: d.department, city: d.city, area: d.area,
+    radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
   };
@@ -2359,28 +2356,19 @@ document.addEventListener("click", (e) => {
       const uid = Number($("[name=resp_user]", btn.closest("[data-resp-case]")).value) || null;
       return openTaskDialog(null, id, "tarea", { assigned_user_id: uid });
     },
-    "edit-case-number": async () => {
-      const cur = btn.dataset.number || "";
-      const v = await ask({ title: cur ? "Editar número de expediente" : "Poner número de expediente",
-        message: cur ? `Número actual: ${cur}. Escriba el nuevo número.` : "Escriba el número de este expediente.", input: cur, okLabel: "Guardar" });
-      if (!v || v === cur) return;
-      await api("PUT", `/cases/${id}/number`, { case_number: v });
-      toast(cur ? `Número de expediente cambiado de ${cur} a ${v}.` : `Número de expediente ${v} guardado.`);
-      await refreshView();
-    },
     "edit-radicado": async () => {
       const cur = btn.dataset.radicado || "";
       let v = cur ? formatRadicado(cur) : "", problem = "";
       // Wrong length or a radicado used by another case: say why and ask again with what was typed.
       for (;;) {
-        v = await ask({ title: cur ? "Editar radicado" : "Poner radicado",
-          message: problem || `${cur ? `Radicado actual: ${formatRadicado(cur)}. Escriba el nuevo.` : "Escriba o pegue el radicado de este expediente."} Son 23 dígitos, con o sin guiones; la App revisa que no esté en otro expediente.`,
+        v = await ask({ title: cur ? "Editar número de expediente" : "Poner número de expediente",
+          message: problem || `${cur ? `Número actual: ${formatRadicado(cur)}. Escriba el nuevo.` : "Escriba o pegue el número de expediente (radicado)."} Son 23 dígitos, con o sin guiones; la App revisa que no esté en otro expediente.`,
           input: v, okLabel: "Guardar" });
         if (!v || radDigits(v) === cur) return;
         try { await api("PUT", `/cases/${id}/radicado`, { radicado: radDigits(v), replace: !!cur }); break; }
         catch (err) { problem = err.message; }
       }
-      toast(cur ? `Radicado cambiado a ${formatRadicado(radDigits(v))}.` : `Radicado ${formatRadicado(radDigits(v))} guardado; consulta automática activada.`);
+      toast(cur ? `Número de expediente cambiado a ${formatRadicado(radDigits(v))}.` : `Número de expediente ${formatRadicado(radDigits(v))} guardado; consulta automática activada.`);
       await refreshView();
     },
     "edit-folder": async () => {
@@ -5169,7 +5157,7 @@ async function showRama(id) {
   const body = $("[data-rama-body]", dlg);
   if (!rad) {
     body.innerHTML = `<p class="empty">Este expediente no tiene radicado de 23 dígitos. Cárguelo para consultar el proceso; en la consulta oficial también se puede buscar por el nombre de las partes.</p>
-      ${can("cases.write") ? '<p><button value="cancel" data-action="add-radicado">Cargar radicado</button></p>' : ""}`;
+      ${can("cases.write") ? '<p><button value="cancel" data-action="add-radicado">Cargar número de expediente</button></p>' : ""}`;
   } else if (!live) {
     body.innerHTML = `<p class="hint">${opened ? "Se abrió la Consulta Nacional Unificada de la Rama Judicial en otra pestaña" : "Pulse «Abrir la consulta oficial» para abrir la Consulta Nacional Unificada de la Rama Judicial"} y el radicado quedó copiado: péguelo en «Número de radicación» y pulse «Consultar».</p>
       <p class="hint">${WEB ? "En este enlace de prueba la App no puede traer las actuaciones (no se conecta a sitios externos). En la versión del servidor (Azure) este botón consulta el proceso al momento y muestra aquí el despacho, las partes y las actuaciones." : "Su usuario no tiene el permiso de consulta de procesos; puede revisar el proceso en la consulta oficial."}</p>`;

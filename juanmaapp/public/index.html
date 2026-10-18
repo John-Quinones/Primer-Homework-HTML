@@ -253,7 +253,7 @@
             <select id="case-office-filter"><option value="">Todas mis oficinas</option></select>
             <select id="case-filter"><option value="">Todos los tipos de proceso</option></select>
             <label class="inline toggle"><input type="checkbox" id="case-mine" /> Solo míos</label>
-            <button data-action="add-radicado">Cargar radicados</button>
+            <button data-action="add-radicado">Cargar números de expediente</button>
             <button class="primary" data-action="new-case">+ Nuevo expediente</button>
           </div>
         </div>
@@ -298,23 +298,23 @@
       <!-- ============ CARGAR RADICADOS (version 2.24) ============ -->
       <section id="view-radicados" class="view" hidden>
         <div class="view-head">
-          <h2>Cargar radicados</h2>
+          <h2>Cargar números de expediente</h2>
           <div class="toolbar">
             <input id="rad-search" type="search" placeholder="Buscar carpeta, cliente o asunto" aria-label="Buscar expediente" />
             <select id="rad-filter" aria-label="Qué expedientes mostrar">
-              <option value="">Todos, primero sin radicado</option>
-              <option value="missing">Solo sin radicado</option>
-              <option value="done">Solo con radicado</option>
+              <option value="">Todos, primero sin número</option>
+              <option value="missing">Solo sin número</option>
+              <option value="done">Solo con número</option>
             </select>
             <select id="rad-office" aria-label="Oficina"><option value="">Todas mis oficinas</option></select>
           </div>
         </div>
-        <p class="hint">Escriba o pegue el radicado de 23 dígitos en la casilla de cada expediente (con o sin guiones) y pulse <strong>Enter</strong> o <strong>Guardar</strong>: queda guardado con el formato 73-001-40-03-002-2008-00664-00, se activa la consulta automática en la Rama Judicial y el cursor pasa al siguiente. La App no deja repetir un radicado que ya está en otro expediente y pide confirmación antes de cambiar uno ya guardado.</p>
+        <p class="hint">Escriba o pegue el número de expediente (radicado de 23 dígitos) en la casilla de cada expediente (con o sin guiones) y pulse <strong>Enter</strong> o <strong>Guardar</strong>: queda guardado con el formato 73-001-40-03-002-2008-00664-00, se activa la consulta automática en la Rama Judicial y el cursor pasa al siguiente. La App no deja repetir un radicado que ya está en otro expediente y pide confirmación antes de cambiar uno ya guardado.</p>
         <p class="rad-progress" id="rad-progress" aria-live="polite"></p>
         <div class="panel min0">
           <div class="table-scroll">
             <table class="data-table rad-table">
-              <thead><tr><th>Carpeta</th><th>Cliente</th><th>Proceso</th><th>Radicado</th></tr></thead>
+              <thead><tr><th>Carpeta</th><th>Cliente</th><th>Proceso</th><th>Número de expediente (radicado)</th></tr></thead>
               <tbody id="rad-rows"></tbody>
             </table>
           </div>
@@ -327,7 +327,7 @@
         <div class="view-head">
           <h2>Consulta de procesos</h2>
           <div class="toolbar">
-            <button data-action="add-radicado">Cargar radicados</button>
+            <button data-action="add-radicado">Cargar números de expediente</button>
             <button id="consulta-selected" disabled>Consultar seleccionados</button>
             <button class="primary" id="consulta-all">Consultar todos ahora</button>
           </div>
@@ -348,7 +348,7 @@
                 <tbody></tbody>
               </table>
             </div>
-            <p id="consulta-empty" class="empty" hidden>Aún no hay expedientes con radicado. Cárguelos con «Cargar radicados» o escriba el radicado en el expediente.</p>
+            <p id="consulta-empty" class="empty" hidden>Aún no hay expedientes con radicado. Cárguelos con «Cargar números de expediente» o escriba el radicado en el expediente.</p>
           </div>
           <form id="prefs-form" class="panel">
             <h3 class="panel-title">Reporte automático</h3>
@@ -988,7 +988,6 @@
         </label>
       </div>
       <div class="grid2">
-        <label>Número de expediente <input name="case_number" maxlength="60" autocomplete="off" placeholder="Ej. 730014189002201601179" /></label>
         <label>Cliente afiliado
           <select name="affiliated"><option value="0">No</option><option value="1">Sí</option></select>
         </label>
@@ -1009,7 +1008,7 @@
           <label>Departamento <input name="department" class="combo" data-combo="dep" autocomplete="off" /></label>
           <label>Ciudad o circuito <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
           <label>Área <select name="area"><option value="">—</option></select></label>
-          <label>Radicado (23 dígitos) <input name="radicado" inputmode="numeric" placeholder="73-001-40-03-002-2008-00664-00" /></label>
+          <label>Número de expediente (radicado, 23 dígitos) <input name="radicado" inputmode="numeric" placeholder="73-001-40-03-002-2008-00664-00" /></label>
           <label class="span2">Despacho <input name="court_search" class="combo" data-combo="court" autocomplete="off" placeholder="Toque para ver los despachos del filtro, o escriba para buscar" /></label>
         </div>
         <input type="hidden" name="court_id" />

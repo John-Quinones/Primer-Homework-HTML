@@ -384,7 +384,7 @@
         "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
         "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
-        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": k.case_number || "", "expediente.correo_despacho": k.court_email,
+        "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email,
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
       });
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
