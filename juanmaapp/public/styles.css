@@ -1085,3 +1085,16 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
 .select-search > .select-search-native { position: absolute; inset: auto 0 0 0; width: 100%; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }
 .select-search .combo-list { max-height: 320px; overflow-y: auto; }
 .toolbar .select-search { display: inline-block; min-width: 260px; }
+
+/* Version 2.22: optional client photo */
+.photo-field { display: flex; gap: 14px; align-items: center; margin: 10px 0; }
+.photo-field .toolbar { margin-top: 6px; flex-wrap: wrap; }
+.photo-field .hint { margin: 2px 0 0; }
+.client-photo { flex: none; width: 72px; height: 72px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: var(--select-tint, #e8eef6); color: #002b6a; font-weight: 700; font-size: 1.4rem; border: 2px solid #c4c8cb; }
+.client-photo.big { width: 112px; height: 112px; font-size: 2rem; }
+.client-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-box { background: #0b1a33; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; max-width: 560px; margin: 8px auto; }
+.camera-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-box video.mirror { transform: scaleX(-1); }
+@media (max-width: 560px) { .client-photo.big { width: 88px; height: 88px; } }

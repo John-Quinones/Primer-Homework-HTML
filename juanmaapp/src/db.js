@@ -520,6 +520,9 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS task_log_case ON task_log(case_id, id);
     CREATE TRIGGER IF NOT EXISTS task_log_no_update BEFORE UPDATE ON task_log BEGIN SELECT RAISE(ABORT, 'El historial de tareas no se modifica.'); END;
     CREATE TRIGGER IF NOT EXISTS task_log_no_delete BEFORE DELETE ON task_log BEGIN SELECT RAISE(ABORT, 'El historial de tareas no se borra.'); END;`);
+  // Version 2.22: optional client photo, in its own table so client lists stay light. Existing clients simply have none.
+  db.exec(`CREATE TABLE IF NOT EXISTS client_photos (
+    client_id INTEGER PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE, photo TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");

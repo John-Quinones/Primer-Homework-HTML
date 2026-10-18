@@ -9,6 +9,8 @@ import { personFields, clientMatches, properAddress, properPhone } from "./perso
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
+const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_MAX = 1_500_000; // characters of the data URL (about 1.1 MB of image)
 const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id",
   "person_type", "first_names", "last_names", "legal_rep"];
 const NAME_FIELDS = ["full_name", "id_type", "person_type", "first_names", "last_names", "legal_rep"];
@@ -113,9 +115,10 @@ export function recordsRouter(db) {
     return v;
   };
   const getClient = (req, id) => {
-    const c = getOr404(`SELECT c.*, o.name AS office_name FROM clients c LEFT JOIN offices o ON o.id = c.office_id WHERE c.id = ?`, id, "El cliente");
+    const c = getOr404(`SELECT c.*, o.name AS office_name, p.photo FROM clients c LEFT JOIN offices o ON o.id = c.office_id
+      LEFT JOIN client_photos p ON p.client_id = c.id WHERE c.id = ?`, id, "El cliente");
     if (!clientVisible(req, id)) throw new HttpError(404, "El cliente no existe.");
-    return c;
+    return { ...c, photo: c.photo || "", has_photo: !!c.photo };
   };
 
   r.get("/clients", h((req) => {
@@ -124,7 +127,7 @@ export function recordsRouter(db) {
     const [cw, cp] = scopeSql(req, "c.office_id");
     const [sw, sp] = scopeSql(req, "office_id");
     return db.prepare(`
-      SELECT c.*, o.name AS office_name,
+      SELECT c.*, o.name AS office_name, EXISTS (SELECT 1 FROM client_photos p WHERE p.client_id = c.id) AS has_photo,
         (SELECT COUNT(*) FROM cases k WHERE (k.client_id = c.id OR EXISTS (SELECT 1 FROM json_each(k.parties) j
           WHERE json_extract(j.value, '$.client_id') = c.id AND json_extract(j.value, '$.ours') = 1)) AND ${kw}) AS case_count
       FROM clients c LEFT JOIN offices o ON o.id = c.office_id
@@ -148,6 +151,22 @@ export function recordsRouter(db) {
     const id = toInt(req.params.id, "id");
     const v = clientValues(req, req.body ?? {}, getClient(req, id));
     db.prepare(`UPDATE clients SET ${CLIENT_FIELDS.map((f) => `${f} = :${f}`).join(", ")} WHERE id = :id`).run({ ...v, id });
+    return getClient(req, id);
+  }));
+
+  // Optional photo (version 2.22): taken with the camera or uploaded, sent as a small JPEG/PNG/WebP data URL; "" removes it.
+  r.put("/clients/:id/photo", h((req) => {
+    checkPerm(req, "clients.write");
+    const id = toInt(req.params.id, "id");
+    getClient(req, id);
+    const photo = str(req.body?.photo);
+    if (!photo) db.prepare("DELETE FROM client_photos WHERE client_id = ?").run(id);
+    else {
+      if (!PHOTO_RE.test(photo)) fail400("La foto debe ser una imagen JPG, PNG o WebP.");
+      if (photo.length > PHOTO_MAX) fail400("La foto es demasiado grande. Use una imagen más pequeña.");
+      db.prepare(`INSERT INTO client_photos (client_id, photo) VALUES (?, ?)
+        ON CONFLICT(client_id) DO UPDATE SET photo = excluded.photo, updated_at = datetime('now')`).run(id, photo);
+    }
     return getClient(req, id);
   }));
 

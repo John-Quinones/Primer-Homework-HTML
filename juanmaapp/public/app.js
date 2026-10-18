@@ -684,6 +684,7 @@ async function renderClienteFicha(id) {
     <div class="ficha-grid">
       <section class="panel">
         <h3 class="panel-title">Datos del cliente</h3>
+        ${clientPhotoBlock(c)}
         <dl class="facts">
           ${factRow("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
@@ -1360,7 +1361,122 @@ document.addEventListener("focusout", (e) => {
   if (v !== el.value) { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); }
 });
 
+// ---------- Version 2.22: optional client photo (camera of the phone or computer, or an uploaded image) ----------
+const PHOTO_SIDE = 640; // longest side of the stored photo, in pixels
+const clientInitials = (c) => escapeHtml((c.person_type === "juridica" ? [c.full_name] : [c.first_names || c.full_name, c.last_names])
+  .filter(Boolean).map((w) => String(w).trim()[0] || "").join("").slice(0, 2).toUpperCase() || "?");
+const photoImg = (photo, c) => (photo ? `<img src="${escapeHtml(photo)}" alt="Foto de ${escapeHtml(c.full_name || "el cliente")}" />` : `<span>${clientInitials(c)}</span>`);
+function clientPhotoBlock(c) {
+  const edit = can("clients.write");
+  return `<div class="photo-field ficha-photo">
+    <span class="client-photo big">${photoImg(c.photo, c)}</span>
+    <div>
+      <strong>Foto</strong> <span class="muted">${c.photo ? "" : "(opcional, sin foto)"}</span>
+      ${edit ? `<div class="toolbar">
+        <button class="mini" data-action="client-photo" data-mode="camera" data-id="${c.id}">${c.photo ? "Tomar otra foto" : "Tomar foto"}</button>
+        <button class="mini" data-action="client-photo" data-mode="file" data-id="${c.id}">Subir imagen</button>
+        ${c.photo ? `<button class="mini" data-action="client-photo" data-mode="clear" data-id="${c.id}">Quitar foto</button>` : ""}
+      </div>` : ""}
+    </div>
+  </div>`;
+}
+// Any image (camera frame or file) becomes a JPEG data URL no larger than PHOTO_SIDE on its longest side.
+function shrinkPhoto(source, w, h) {
+  const k = Math.min(1, PHOTO_SIDE / Math.max(w, h));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+  const g = cv.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+  g.drawImage(source, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.85);
+}
+function fileToPhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type)) return reject(new Error("Elija un archivo de imagen (JPG, PNG…)."));
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => { try { resolve(shrinkPhoto(img, img.naturalWidth, img.naturalHeight)); } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); } };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen. Pruebe con una foto JPG o PNG.")); };
+    img.src = url;
+  });
+}
+// Opens a file input and resolves with the chosen image as a photo, or null if nothing was chosen.
+function pickPhotoFile(input) {
+  return new Promise((resolve, reject) => {
+    input.value = "";
+    const done = () => { window.removeEventListener("focus", onFocus); };
+    const onFocus = () => setTimeout(() => { if (!input.files.length) { done(); resolve(null); } }, 1200);
+    input.onchange = () => { done(); input.files[0] ? fileToPhoto(input.files[0]).then(resolve, reject) : resolve(null); };
+    window.addEventListener("focus", onFocus);
+    input.click();
+  });
+}
+const coarsePointer = () => window.matchMedia?.("(pointer: coarse)").matches;
+// Camera: on phones the phone's own camera opens; on computers the webcam shows in a window.
+// If the browser does not allow the camera, the user is told and can upload an image instead.
+let photoStream = null, photoFacing = "user";
+function stopPhotoStream() { photoStream?.getTracks().forEach((t) => t.stop()); photoStream = null; }
+async function startPhotoStream() {
+  stopPhotoStream();
+  photoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: photoFacing, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+  $("#photo-video").srcObject = photoStream;
+  $("#photo-video").classList.toggle("mirror", photoFacing === "user"); // a front camera shows like a mirror
+}
+async function takePhoto() {
+  if (coarsePointer()) return pickPhotoFile($("#photo-capture"));
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast("Este navegador no permite usar la cámara aquí. Elija una imagen guardada.", true);
+    return pickPhotoFile($("#photo-file"));
+  }
+  try { await startPhotoStream(); } catch (err) {
+    stopPhotoStream();
+    toast(err?.name === "NotAllowedError" ? "No se dio permiso para usar la cámara. Puede subir una imagen en su lugar." : "No se encontró una cámara disponible. Puede subir una imagen en su lugar.", true);
+    return pickPhotoFile($("#photo-file"));
+  }
+  const dlg = $("#photo-dialog");
+  const cams = (await navigator.mediaDevices.enumerateDevices().catch(() => [])).filter((d) => d.kind === "videoinput");
+  $("#photo-switch").hidden = cams.length < 2;
+  return new Promise((resolve) => {
+    let shot = null;
+    $("#photo-shoot").onclick = () => {
+      const v = $("#photo-video");
+      if (!v.videoWidth) return toast("La cámara aún no está lista. Espere un momento.", true);
+      shot = shrinkPhoto(v, v.videoWidth, v.videoHeight);
+      dlg.close("shot");
+    };
+    $("#photo-switch").onclick = () => guarded(async () => { photoFacing = photoFacing === "user" ? "environment" : "user"; await startPhotoStream(); });
+    dlg.addEventListener("close", () => { stopPhotoStream(); resolve(shot); }, { once: true });
+    dlg.showModal();
+  });
+}
+const getPhoto = (mode) => (mode === "camera" ? takePhoto() : pickPhotoFile($("#photo-file")));
+async function saveClientPhoto(id, photo) {
+  const saved = await api("PUT", `/clients/${id}/photo`, { photo });
+  const i = state.clients.findIndex((x) => x.id === id);
+  if (i >= 0) state.clients[i] = { ...state.clients[i], has_photo: saved.has_photo };
+  return saved;
+}
+// In the client form the photo waits until «Guardar»: undefined = unchanged, "" = remove, data URL = new.
+let pendingPhoto;
+function showFormPhoto(photo, c) {
+  $("#client-photo-field [data-photo-preview]").innerHTML = photoImg(photo, c || {});
+  $('#client-photo-field [data-photo-pick="clear"]').hidden = !photo;
+  $('#client-photo-field [data-photo-pick="camera"]').textContent = photo ? "Tomar otra foto" : "Tomar foto";
+}
+$("#client-photo-field").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-photo-pick]");
+  if (!b) return;
+  e.preventDefault();
+  const f = clientForm.elements, who = { full_name: f.business_name.value || f.first_names.value, first_names: f.first_names.value, last_names: f.last_names.value, person_type: f.person_type.value };
+  guarded(async () => {
+    const photo = b.dataset.photoPick === "clear" ? "" : await getPhoto(b.dataset.photoPick);
+    if (photo == null) return;
+    pendingPhoto = photo;
+    showFormPhoto(photo, who);
+  });
+});
+
 function openClientDialog(c) {
+  pendingPhoto = undefined;
   const sel = $("#client-dialog [name=office_id]");
   sel.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   const type = c?.person_type || "natural";
@@ -1370,12 +1486,15 @@ function openClientDialog(c) {
   } : {});
   setPersonType(type);
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
+  showFormPhoto(c?.photo || "", c || {});
 }
 
 wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
+  if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
+  pendingPhoto = undefined;
   state.selectedClientId = saved.id;
   toast(id ? "Cliente actualizado." : "Cliente creado.");
   // The client's own screen opens (or refreshes) with the saved data.
@@ -2065,7 +2184,16 @@ document.addEventListener("click", (e) => {
       await renderUsuarios();
     },
     "new-client": () => openClientDialog(null),
-    "edit-client": async () => openClientDialog(state.clients.find((c) => c.id === id) || await api("GET", `/clients/${id}`)),
+    "client-photo": async () => {
+      const mode = btn.dataset.mode;
+      if (mode === "clear" && !(await ask({ title: "Quitar foto", okLabel: "Quitar", message: "La foto del cliente se quitará. Sus demás datos no cambian." }))) return;
+      const photo = mode === "clear" ? "" : await getPhoto(mode);
+      if (photo == null) return;
+      await saveClientPhoto(id, photo);
+      toast(photo ? "Foto del cliente guardada." : "Foto quitada.");
+      await refreshView();
+    },
+    "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;

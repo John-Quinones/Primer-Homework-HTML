@@ -1194,6 +1194,19 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
 .select-search .combo-list { max-height: 320px; overflow-y: auto; }
 .toolbar .select-search { display: inline-block; min-width: 260px; }
 
+/* Version 2.22: optional client photo */
+.photo-field { display: flex; gap: 14px; align-items: center; margin: 10px 0; }
+.photo-field .toolbar { margin-top: 6px; flex-wrap: wrap; }
+.photo-field .hint { margin: 2px 0 0; }
+.client-photo { flex: none; width: 72px; height: 72px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: var(--select-tint, #e8eef6); color: #002b6a; font-weight: 700; font-size: 1.4rem; border: 2px solid #c4c8cb; }
+.client-photo.big { width: 112px; height: 112px; font-size: 2rem; }
+.client-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-box { background: #0b1a33; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; max-width: 560px; margin: 8px auto; }
+.camera-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-box video.mirror { transform: scaleX(-1); }
+@media (max-width: 560px) { .client-photo.big { width: 88px; height: 88px; } }
+
 </style>
 
 <style>
@@ -2085,6 +2098,18 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
         <label>Oficina <select name="office_id"></select></label>
       </div>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
+      <div class="photo-field" id="client-photo-field">
+        <span class="client-photo" data-photo-preview></span>
+        <div>
+          <strong>Foto del cliente <span class="muted">(opcional)</span></strong>
+          <p class="hint">Tómela con la cámara del celular o del computador, o suba una imagen. Puede dejarla en blanco.</p>
+          <div class="toolbar">
+            <button type="button" class="mini" data-photo-pick="camera">Tomar foto</button>
+            <button type="button" class="mini" data-photo-pick="file">Subir imagen</button>
+            <button type="button" class="mini" data-photo-pick="clear" hidden>Quitar foto</button>
+          </div>
+        </div>
+      </div>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -2092,6 +2117,22 @@ tr.is-hidden-user td { background: color-mix(in srgb, var(--warn) 6%, transparen
       </div>
     </form>
   </dialog>
+
+  <!-- Cámara para la foto del cliente (versión 2.22) -->
+  <dialog id="photo-dialog">
+    <form method="dialog">
+      <h3>Tomar foto del cliente</h3>
+      <div class="camera-box"><video id="photo-video" autoplay playsinline muted></video></div>
+      <p class="hint" id="photo-cam-hint">Ubique el rostro del cliente en el recuadro y pulse «Capturar».</p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button type="button" id="photo-switch" hidden>Cambiar cámara</button>
+        <button type="button" class="primary" id="photo-shoot">Capturar</button>
+      </div>
+    </form>
+  </dialog>
+  <input type="file" id="photo-file" accept="image/*" hidden />
+  <input type="file" id="photo-capture" accept="image/*" capture="environment" hidden />
 
   <!-- Formulario de expediente -->
   <dialog id="case-dialog">
@@ -4653,7 +4694,7 @@ const AUDIT_FIELDS = {
   court_name: "Despacho", court_email: "Correo del despacho", department: "Departamento", city: "Ciudad", area: "Área", counterparty: "Contraparte",
   facts: "Hechos", field_values: "Campos del proceso", office_id: "Oficina", assigned_user_id: "Responsable", process_type_id: "Tipo de proceso",
   monitor: "Consulta automática", full_name: "Nombre", first_names: "Nombres", last_names: "Apellidos", id_type: "Tipo de documento", id_number: "Documento",
-  email: "Correo", phone: "Teléfono", address: "Dirección", notes: "Notas", legal_rep: "Representante legal", person_type: "Tipo de persona",
+  email: "Correo", phone: "Teléfono", address: "Dirección", notes: "Notas", legal_rep: "Representante legal", person_type: "Tipo de persona", foto: "Foto",
   kind: "Tipo", due_at: "Plazo", location: "Lugar", remind_days: "Avisos", done_notes: "Cumplimiento", delivered_at: "Entregado", response_at: "Respuesta",
   response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
   concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",
@@ -6269,7 +6310,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Autorización para el tratamiento de datos personales","category":"Autorización","description":"Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies, centrales de riesgo y comunicaciones), para firmar en papel.","body":"# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:\n\n| Autorización | SÍ | NO |\n|---|---|---|\n| 1. **Tratamiento de datos personales** para prestar los servicios jurídicos, llevar mi expediente, consultar mis procesos, ejecutar el contrato, registrar pagos y cumplir obligaciones legales. | ☐ | ☐ |\n| 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |\n| 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |\n| 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |\n| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |\n\n## DERECHOS DEL TITULAR\n\nConozco que, conforme al artículo 8 de la Ley 1581 de 2012, puedo conocer, actualizar, rectificar y suprimir mis datos; pedir prueba de esta autorización; ser informado(a) del uso de mis datos; revocar cualquiera de estas autorizaciones cuando no exista un deber legal o contractual de conservarlos; y presentar quejas ante la Superintendencia de Industria y Comercio después de agotar el trámite ante EL RESPONSABLE, escribiendo a {{oficina.correo}} o en {{oficina.direccion}}, {{oficina.ciudad}}.\n\nLa información que entrego está amparada por el secreto profesional del abogado (artículo 74 de la Constitución y numeral 9 del artículo 28 de la Ley 1123 de 2007). EL RESPONSABLE conservará la prueba de esta autorización mientras trate mis datos.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Acuerdo de confidencialidad y tratamiento de datos (funcionarios y contratistas)","category":"Contrato","description":"Secreto profesional (Ley 1123 de 2007) y deberes del encargado (Ley 1581 de 2012) para quien accede a la información de los clientes.","body":"# ACUERDO DE CONFIDENCIALIDAD Y TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nEntre **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:\n\n## PRIMERA. Información confidencial\n\nEs confidencial toda la información de clientes, contrapartes y procesos a la que EL RECEPTOR acceda por cualquier medio, incluida TecjuridicosApp: datos personales, hechos, estrategias, documentos, honorarios, pagos y credenciales de acceso.\n\n## SEGUNDA. Obligaciones\n\nEL RECEPTOR se obliga a:\n\n1. Guardar el secreto profesional y la reserva de la información, aun después de terminada su relación con LA FIRMA (artículo 74 de la Constitución y Ley 1123 de 2007).\n2. Usar la información solo para las labores que LA FIRMA le asigne y conforme a la Política de tratamiento de datos personales.\n3. No copiar, extraer, reenviar ni divulgar información fuera de lo que exige cada encargo, ni usar correos o dispositivos personales no autorizados para ello.\n4. Mantener en secreto su usuario y contraseña, no compartir su cuenta y cerrar sesión en equipos compartidos.\n5. Informar de inmediato a LA FIRMA cualquier pérdida, acceso indebido o incidente de seguridad.\n6. Devolver o destruir la información en su poder al terminar la relación.\n\n## TERCERA. Registro de actividad\n\nEL RECEPTOR conoce que TecjuridicosApp registra en una bitácora cada cambio que hace, con fecha, hora, dirección IP y dispositivo, y lo autoriza para fines de seguridad y control.\n\n## CUARTA. Incumplimiento\n\nEl incumplimiento de este acuerdo es falta grave y da lugar a las acciones laborales, contractuales, disciplinarias, civiles y penales que correspondan, sin perjuicio de la indemnización de los perjuicios causados.\n\n## QUINTA. Vigencia\n\nEste acuerdo rige desde su firma y sus obligaciones de confidencialidad no terminan con la relación.\n\nFirmas:\n\n____________________________________\n**LA FIRMA**\n{{abogado.nombre}}\n\n____________________________________\n**EL RECEPTOR**\n[FILL: Nombre completo]\nC.C. [FILL: Número de documento]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\nSeñores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"],"firmFixes":[["**{{oficina.nombre}}** (TEC Jurídicos),","**Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4,"],["| 5. **Comunicaciones**","| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones**"],["quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante","quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante"]]};</script>
-<script>window.JUANMA_VERSION = {"change":85,"sha":"687cef2","date":"2026-10-17","name":"2.21","news":[{"n":"2.21","date":"17/10/2026","title":"Errores de Jurisprudencia con el motivo real","text":"Cuando la búsqueda, el análisis o la verificación de citas fallan, el aviso ya no dice solo «Error del servicio de IA (400)» o «(undefined)»: ahora muestra el código y el mensaje exacto…"},{"n":"2.20","date":"17/10/2026","title":"Buscador de clientes","text":"En «Nuevo expediente» el campo «Cliente» ya no es una lista fija: se escribe cualquier letra, palabra o parte del documento y la lista se va filtrando mientras se escribe (no importan…"},{"n":"2.19","date":"17/10/2026","title":"Consulta de sentencias más rápida","text":"En Jurisprudencia, la IA ahora razona con esfuerzo medio en lugar de alto, que era lo que más demoraba cada consulta (sigue leyendo solo los sitios oficiales de las cortes). Para las…"}]};</script>
+<script>window.JUANMA_VERSION = {"change":86,"sha":"6ce0f2a","date":"2026-10-18","name":"2.22","news":[{"n":"2.22","date":"18/10/2026","title":"Foto del cliente (opcional)","text":"En la pantalla de cada cliente, dentro de «Datos del cliente», y en la ventana Nuevo cliente / Editar cliente están los botones «Tomar foto», «Subir imagen» y «Quitar foto». En el…"},{"n":"2.21","date":"17/10/2026","title":"Errores de Jurisprudencia con el motivo real","text":"Cuando la búsqueda, el análisis o la verificación de citas fallan, el aviso ya no dice solo «Error del servicio de IA (400)» o «(undefined)»: ahora muestra el código y el mensaje exacto…"},{"n":"2.20","date":"17/10/2026","title":"Buscador de clientes","text":"En «Nuevo expediente» el campo «Cliente» ya no es una lista fija: se escribe cualquier letra, palabra o parte del documento y la lista se va filtrando mientras se escribe (no importan…"}]};</script>
 <script>window.JUANMA_LINK_URL = "https://claude.ai/artifact/ReozPvwxi8VWkwbdPRssSz";</script>
 <script>window.JUANMA_SERVER_URL = "https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net";</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
@@ -6560,6 +6601,10 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
 
   // ----- session, permissions, scope -----
   const officeName = (id) => s.offices.find((o) => o.id === id)?.name || "";
+  const clientOut = (c, withPhoto) => {
+    const { foto, ...out } = clone(c), photo = s.blobs[`photo-${c.id}`] || "";
+    return { ...out, office_name: officeName(c.office_id), has_photo: !!photo, ...(withPhoto ? { photo } : {}) };
+  };
   const permsOf = (role) => {
     const p = [...(s.matrix[role] || [])];
     if (role === "Gerencia" && !p.includes("users.manage")) p.push("users.manage");
@@ -6618,7 +6663,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -7263,25 +7308,25 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     // ----- clients -----
     ["GET", /^\/clients\/(\d+)$/, (m) => {
       const c = s.clients.find((x) => x.id === +m[1] && clientVisible(x)) || fail("El cliente no existe.");
-      return { ...clone(c), office_name: officeName(c.office_id) };
+      return clientOut(c, true);
     }],
     ["GET", /^\/clients(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       return s.clients
         .filter((c) => clientVisible(c) && window.JuanmaPerson.clientMatches(c, q.q || "", q.by || ""))
         .sort((a, b) => a.full_name.localeCompare(b.full_name, "es"))
-        .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => (k.client_id === c.id || isPartyClient(k, c.id)) && inScope(k.office_id)).length }));
+        .map((c) => ({ ...clientOut(c), case_count: s.cases.filter((k) => (k.client_id === c.id || isPartyClient(k, c.id)) && inScope(k.office_id)).length }));
     }],
     ["POST", /^\/clients$/, (m, b) => {
       need("clients.write");
-      const c = { id: nextId(), created_at: stamp() };
+      const c = { id: nextId(), created_at: stamp(), foto: "No" };
       for (const f of CLIENT_FIELDS) c[f] = str(b[f]);
       Object.assign(c, nameFields(b));
       c.id_number = c.id_number.replace(/\s+/g, "");
       placeClient(c);
       c.office_id = officeFor(b.office_id);
       s.clients.push(c);
-      return { ...clone(c), office_name: officeName(c.office_id) };
+      return clientOut(c, true);
     }],
     ["PUT", /^\/clients\/(\d+)$/, (m, b) => {
       need("clients.write");
@@ -7292,13 +7337,28 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
       c.id_number = c.id_number.replace(/\s+/g, "");
       placeClient(c);
       c.office_id = officeFor(b.office_id, c.office_id);
-      return { ...clone(c), office_name: officeName(c.office_id) };
+      return clientOut(c, true);
+    }],
+    // Optional photo (version 2.22), kept as a blob so the client buckets stay small; "" removes it.
+    ["PUT", /^\/clients\/(\d+)\/photo$/, (m, b) => {
+      need("clients.write");
+      const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
+      const photo = str(b.photo);
+      if (!photo) { delete s.blobs[`photo-${c.id}`]; c.foto = "No"; }
+      else {
+        /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo) || fail("La foto debe ser una imagen JPG, PNG o WebP.");
+        photo.length <= 1500000 || fail("La foto es demasiado grande. Use una imagen más pequeña.");
+        s.blobs[`photo-${c.id}`] = photo;
+        c.foto = "Sí";
+      }
+      return clientOut(c, true);
     }],
     ["DELETE", /^\/clients\/(\d+)$/, (m) => {
       need("clients.delete");
       s.clients.some((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
       s.cases.some((k) => k.client_id === +m[1]) && fail("No se puede eliminar: tiene expedientes asociados.");
       s.clients = s.clients.filter((c) => c.id !== +m[1]);
+      delete s.blobs[`photo-${m[1]}`];
       for (const r of s.consents) if (r.client_id === +m[1]) r.client_id = null; // the evidence stays, with the name and document
       return null;
     }],
@@ -8943,6 +9003,7 @@ async function renderClienteFicha(id) {
     <div class="ficha-grid">
       <section class="panel">
         <h3 class="panel-title">Datos del cliente</h3>
+        ${clientPhotoBlock(c)}
         <dl class="facts">
           ${factRow("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
@@ -9619,7 +9680,122 @@ document.addEventListener("focusout", (e) => {
   if (v !== el.value) { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); }
 });
 
+// ---------- Version 2.22: optional client photo (camera of the phone or computer, or an uploaded image) ----------
+const PHOTO_SIDE = 640; // longest side of the stored photo, in pixels
+const clientInitials = (c) => escapeHtml((c.person_type === "juridica" ? [c.full_name] : [c.first_names || c.full_name, c.last_names])
+  .filter(Boolean).map((w) => String(w).trim()[0] || "").join("").slice(0, 2).toUpperCase() || "?");
+const photoImg = (photo, c) => (photo ? `<img src="${escapeHtml(photo)}" alt="Foto de ${escapeHtml(c.full_name || "el cliente")}" />` : `<span>${clientInitials(c)}</span>`);
+function clientPhotoBlock(c) {
+  const edit = can("clients.write");
+  return `<div class="photo-field ficha-photo">
+    <span class="client-photo big">${photoImg(c.photo, c)}</span>
+    <div>
+      <strong>Foto</strong> <span class="muted">${c.photo ? "" : "(opcional, sin foto)"}</span>
+      ${edit ? `<div class="toolbar">
+        <button class="mini" data-action="client-photo" data-mode="camera" data-id="${c.id}">${c.photo ? "Tomar otra foto" : "Tomar foto"}</button>
+        <button class="mini" data-action="client-photo" data-mode="file" data-id="${c.id}">Subir imagen</button>
+        ${c.photo ? `<button class="mini" data-action="client-photo" data-mode="clear" data-id="${c.id}">Quitar foto</button>` : ""}
+      </div>` : ""}
+    </div>
+  </div>`;
+}
+// Any image (camera frame or file) becomes a JPEG data URL no larger than PHOTO_SIDE on its longest side.
+function shrinkPhoto(source, w, h) {
+  const k = Math.min(1, PHOTO_SIDE / Math.max(w, h));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+  const g = cv.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+  g.drawImage(source, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.85);
+}
+function fileToPhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type)) return reject(new Error("Elija un archivo de imagen (JPG, PNG…)."));
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => { try { resolve(shrinkPhoto(img, img.naturalWidth, img.naturalHeight)); } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); } };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen. Pruebe con una foto JPG o PNG.")); };
+    img.src = url;
+  });
+}
+// Opens a file input and resolves with the chosen image as a photo, or null if nothing was chosen.
+function pickPhotoFile(input) {
+  return new Promise((resolve, reject) => {
+    input.value = "";
+    const done = () => { window.removeEventListener("focus", onFocus); };
+    const onFocus = () => setTimeout(() => { if (!input.files.length) { done(); resolve(null); } }, 1200);
+    input.onchange = () => { done(); input.files[0] ? fileToPhoto(input.files[0]).then(resolve, reject) : resolve(null); };
+    window.addEventListener("focus", onFocus);
+    input.click();
+  });
+}
+const coarsePointer = () => window.matchMedia?.("(pointer: coarse)").matches;
+// Camera: on phones the phone's own camera opens; on computers the webcam shows in a window.
+// If the browser does not allow the camera, the user is told and can upload an image instead.
+let photoStream = null, photoFacing = "user";
+function stopPhotoStream() { photoStream?.getTracks().forEach((t) => t.stop()); photoStream = null; }
+async function startPhotoStream() {
+  stopPhotoStream();
+  photoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: photoFacing, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+  $("#photo-video").srcObject = photoStream;
+  $("#photo-video").classList.toggle("mirror", photoFacing === "user"); // a front camera shows like a mirror
+}
+async function takePhoto() {
+  if (coarsePointer()) return pickPhotoFile($("#photo-capture"));
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast("Este navegador no permite usar la cámara aquí. Elija una imagen guardada.", true);
+    return pickPhotoFile($("#photo-file"));
+  }
+  try { await startPhotoStream(); } catch (err) {
+    stopPhotoStream();
+    toast(err?.name === "NotAllowedError" ? "No se dio permiso para usar la cámara. Puede subir una imagen en su lugar." : "No se encontró una cámara disponible. Puede subir una imagen en su lugar.", true);
+    return pickPhotoFile($("#photo-file"));
+  }
+  const dlg = $("#photo-dialog");
+  const cams = (await navigator.mediaDevices.enumerateDevices().catch(() => [])).filter((d) => d.kind === "videoinput");
+  $("#photo-switch").hidden = cams.length < 2;
+  return new Promise((resolve) => {
+    let shot = null;
+    $("#photo-shoot").onclick = () => {
+      const v = $("#photo-video");
+      if (!v.videoWidth) return toast("La cámara aún no está lista. Espere un momento.", true);
+      shot = shrinkPhoto(v, v.videoWidth, v.videoHeight);
+      dlg.close("shot");
+    };
+    $("#photo-switch").onclick = () => guarded(async () => { photoFacing = photoFacing === "user" ? "environment" : "user"; await startPhotoStream(); });
+    dlg.addEventListener("close", () => { stopPhotoStream(); resolve(shot); }, { once: true });
+    dlg.showModal();
+  });
+}
+const getPhoto = (mode) => (mode === "camera" ? takePhoto() : pickPhotoFile($("#photo-file")));
+async function saveClientPhoto(id, photo) {
+  const saved = await api("PUT", `/clients/${id}/photo`, { photo });
+  const i = state.clients.findIndex((x) => x.id === id);
+  if (i >= 0) state.clients[i] = { ...state.clients[i], has_photo: saved.has_photo };
+  return saved;
+}
+// In the client form the photo waits until «Guardar»: undefined = unchanged, "" = remove, data URL = new.
+let pendingPhoto;
+function showFormPhoto(photo, c) {
+  $("#client-photo-field [data-photo-preview]").innerHTML = photoImg(photo, c || {});
+  $('#client-photo-field [data-photo-pick="clear"]').hidden = !photo;
+  $('#client-photo-field [data-photo-pick="camera"]').textContent = photo ? "Tomar otra foto" : "Tomar foto";
+}
+$("#client-photo-field").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-photo-pick]");
+  if (!b) return;
+  e.preventDefault();
+  const f = clientForm.elements, who = { full_name: f.business_name.value || f.first_names.value, first_names: f.first_names.value, last_names: f.last_names.value, person_type: f.person_type.value };
+  guarded(async () => {
+    const photo = b.dataset.photoPick === "clear" ? "" : await getPhoto(b.dataset.photoPick);
+    if (photo == null) return;
+    pendingPhoto = photo;
+    showFormPhoto(photo, who);
+  });
+});
+
 function openClientDialog(c) {
+  pendingPhoto = undefined;
   const sel = $("#client-dialog [name=office_id]");
   sel.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   const type = c?.person_type || "natural";
@@ -9629,12 +9805,15 @@ function openClientDialog(c) {
   } : {});
   setPersonType(type);
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
+  showFormPhoto(c?.photo || "", c || {});
 }
 
 wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
+  if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
+  pendingPhoto = undefined;
   state.selectedClientId = saved.id;
   toast(id ? "Cliente actualizado." : "Cliente creado.");
   // The client's own screen opens (or refreshes) with the saved data.
@@ -10324,7 +10503,16 @@ document.addEventListener("click", (e) => {
       await renderUsuarios();
     },
     "new-client": () => openClientDialog(null),
-    "edit-client": async () => openClientDialog(state.clients.find((c) => c.id === id) || await api("GET", `/clients/${id}`)),
+    "client-photo": async () => {
+      const mode = btn.dataset.mode;
+      if (mode === "clear" && !(await ask({ title: "Quitar foto", okLabel: "Quitar", message: "La foto del cliente se quitará. Sus demás datos no cambian." }))) return;
+      const photo = mode === "clear" ? "" : await getPhoto(mode);
+      if (photo == null) return;
+      await saveClientPhoto(id, photo);
+      toast(photo ? "Foto del cliente guardada." : "Foto quitada.");
+      await refreshView();
+    },
+    "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;

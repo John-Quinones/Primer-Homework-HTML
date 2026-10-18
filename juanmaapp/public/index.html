@@ -891,6 +891,18 @@
         <label>Oficina <select name="office_id"></select></label>
       </div>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
+      <div class="photo-field" id="client-photo-field">
+        <span class="client-photo" data-photo-preview></span>
+        <div>
+          <strong>Foto del cliente <span class="muted">(opcional)</span></strong>
+          <p class="hint">Tómela con la cámara del celular o del computador, o suba una imagen. Puede dejarla en blanco.</p>
+          <div class="toolbar">
+            <button type="button" class="mini" data-photo-pick="camera">Tomar foto</button>
+            <button type="button" class="mini" data-photo-pick="file">Subir imagen</button>
+            <button type="button" class="mini" data-photo-pick="clear" hidden>Quitar foto</button>
+          </div>
+        </div>
+      </div>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -898,6 +910,22 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Cámara para la foto del cliente (versión 2.22) -->
+  <dialog id="photo-dialog">
+    <form method="dialog">
+      <h3>Tomar foto del cliente</h3>
+      <div class="camera-box"><video id="photo-video" autoplay playsinline muted></video></div>
+      <p class="hint" id="photo-cam-hint">Ubique el rostro del cliente en el recuadro y pulse «Capturar».</p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button type="button" id="photo-switch" hidden>Cambiar cámara</button>
+        <button type="button" class="primary" id="photo-shoot">Capturar</button>
+      </div>
+    </form>
+  </dialog>
+  <input type="file" id="photo-file" accept="image/*" hidden />
+  <input type="file" id="photo-capture" accept="image/*" capture="environment" hidden />
 
   <!-- Formulario de expediente -->
   <dialog id="case-dialog">

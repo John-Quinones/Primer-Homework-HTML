@@ -150,6 +150,10 @@
 
   // ----- session, permissions, scope -----
   const officeName = (id) => s.offices.find((o) => o.id === id)?.name || "";
+  const clientOut = (c, withPhoto) => {
+    const { foto, ...out } = clone(c), photo = s.blobs[`photo-${c.id}`] || "";
+    return { ...out, office_name: officeName(c.office_id), has_photo: !!photo, ...(withPhoto ? { photo } : {}) };
+  };
   const permsOf = (role) => {
     const p = [...(s.matrix[role] || [])];
     if (role === "Gerencia" && !p.includes("users.manage")) p.push("users.manage");
@@ -208,7 +212,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -853,25 +857,25 @@
     // ----- clients -----
     ["GET", /^\/clients\/(\d+)$/, (m) => {
       const c = s.clients.find((x) => x.id === +m[1] && clientVisible(x)) || fail("El cliente no existe.");
-      return { ...clone(c), office_name: officeName(c.office_id) };
+      return clientOut(c, true);
     }],
     ["GET", /^\/clients(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       return s.clients
         .filter((c) => clientVisible(c) && window.JuanmaPerson.clientMatches(c, q.q || "", q.by || ""))
         .sort((a, b) => a.full_name.localeCompare(b.full_name, "es"))
-        .map((c) => ({ ...clone(c), office_name: officeName(c.office_id), case_count: s.cases.filter((k) => (k.client_id === c.id || isPartyClient(k, c.id)) && inScope(k.office_id)).length }));
+        .map((c) => ({ ...clientOut(c), case_count: s.cases.filter((k) => (k.client_id === c.id || isPartyClient(k, c.id)) && inScope(k.office_id)).length }));
     }],
     ["POST", /^\/clients$/, (m, b) => {
       need("clients.write");
-      const c = { id: nextId(), created_at: stamp() };
+      const c = { id: nextId(), created_at: stamp(), foto: "No" };
       for (const f of CLIENT_FIELDS) c[f] = str(b[f]);
       Object.assign(c, nameFields(b));
       c.id_number = c.id_number.replace(/\s+/g, "");
       placeClient(c);
       c.office_id = officeFor(b.office_id);
       s.clients.push(c);
-      return { ...clone(c), office_name: officeName(c.office_id) };
+      return clientOut(c, true);
     }],
     ["PUT", /^\/clients\/(\d+)$/, (m, b) => {
       need("clients.write");
@@ -882,13 +886,28 @@
       c.id_number = c.id_number.replace(/\s+/g, "");
       placeClient(c);
       c.office_id = officeFor(b.office_id, c.office_id);
-      return { ...clone(c), office_name: officeName(c.office_id) };
+      return clientOut(c, true);
+    }],
+    // Optional photo (version 2.22), kept as a blob so the client buckets stay small; "" removes it.
+    ["PUT", /^\/clients\/(\d+)\/photo$/, (m, b) => {
+      need("clients.write");
+      const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
+      const photo = str(b.photo);
+      if (!photo) { delete s.blobs[`photo-${c.id}`]; c.foto = "No"; }
+      else {
+        /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo) || fail("La foto debe ser una imagen JPG, PNG o WebP.");
+        photo.length <= 1500000 || fail("La foto es demasiado grande. Use una imagen más pequeña.");
+        s.blobs[`photo-${c.id}`] = photo;
+        c.foto = "Sí";
+      }
+      return clientOut(c, true);
     }],
     ["DELETE", /^\/clients\/(\d+)$/, (m) => {
       need("clients.delete");
       s.clients.some((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
       s.cases.some((k) => k.client_id === +m[1]) && fail("No se puede eliminar: tiene expedientes asociados.");
       s.clients = s.clients.filter((c) => c.id !== +m[1]);
+      delete s.blobs[`photo-${m[1]}`];
       for (const r of s.consents) if (r.client_id === +m[1]) r.client_id = null; // the evidence stays, with the name and document
       return null;
     }],
