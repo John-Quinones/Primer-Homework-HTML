@@ -55,26 +55,44 @@ const NUMBER_SIGNS = new Set(["no", "nro", "num", "n°", "nº", "número", "nume
 const ADDRESS_JOINERS = new Set(["de", "del", "y", "e", "o", "a", "al", "en", "por"]);
 
 const addressWord = (w) => ADDRESS_WORDS.get(w) || ADDRESS_WORDS.get(w.replace(/\.$/, ""));
+// After these a lone letter is a block or unit name ("Manzana A", "Torre E"), not "a"/"e" as a joining word.
+const UNIT_WORDS = new Set(["Manzana", "Torre", "Bloque", "Interior", "Etapa", "Casa", "Apartamento", "Oficina", "Local", "Lote", "Piso", "Edificio", "Conjunto", "Sector"]);
+// "1ra", "5ta", "2do": ordinals keep their ending in lower case.
+const ORDINAL = /^(\d+)(ra|da|ta|ro|do|to|va|vo|na|no|mo|er)$/;
 
 /** "CLLE 5 no 12b-30 BR la POLA" → "Calle 5 No. 12B-30 Barrio La Pola". */
 export function properAddress(s) {
+  const roadOrSign = (w) => w === "#" || addressWord(w) || NUMBER_SIGNS.has(w.replace(/\.$/, ""));
   const words = String(s ?? "").trim().toLocaleLowerCase("es")
+    // "calle,10" → "calle 10"; "centro,local" → "centro, local"; "barrio(centro)" → "barrio (centro)"; "av.guabinal" → "av. guabinal"; "carrera-5" → "carrera 5"
+    .replace(/,(?=\S)/g, ", ").replace(/([^\s(])\((?=\S)/g, "$1 (")
+    .replace(/(^|[\s(])([a-zñ]+\.?),\s*(?=\d)/g, (m, sp, w) => (roadOrSign(w) ? `${sp}${w} ` : m))
+    .replace(/(^|[\s(])([a-zñ]+)\.(?=[a-zñáéíóúü])/g, (m, sp, w) => (roadOrSign(w) ? `${sp}${w}. ` : m))
     // "cra5", "cll.10", "no.12", "#12" → "cra 5", "cll. 10", "no. 12", "# 12"; "b/la" → "b/ la"
-    .replace(/(^|\s)([a-zñ°º]+\.?|#)(?=\d)/g, (m, sp, w) => (w === "#" || addressWord(w) || NUMBER_SIGNS.has(w.replace(/\.$/, "")) ? `${sp}${w} ` : m))
+    .replace(/(^|[\s(])([a-zñ°º]+\.?|#)-?(?=\d)/g, (m, sp, w) => (roadOrSign(w) ? `${sp}${w} ` : m))
     .replace(/(^|\s)(b\/)(?=\S)/g, "$1$2 ")
     .replace(/([\da-zñ])#\s*(?=\d)/g, "$1 # ")
     .replace(/\s+/g, " ").split(" ").filter(Boolean);
-  return words.map((w, i) => {
-    const prev = words[i - 1] || "", next = words[i + 1] || "";
-    if (/\d/.test(w)) return w.toLocaleUpperCase("es");
-    if (/^[a-zñ]$/.test(w) && /\d/.test(prev)) return w.toLocaleUpperCase("es");
-    if (w === "bis") return "Bis";
-    if (w === "ph") return "PH";
-    if (NUMBER_SIGNS.has(w.replace(/\.$/, "")) && /^\d/.test(next)) return "No.";
-    const full = addressWord(w);
-    if (full) return full;
-    if (i > 0 && (ADDRESS_JOINERS.has(w) || (/^(la|las|los)$/.test(w) && prev === "de"))) return w;
-    return capWord(w);
+  // Brackets, commas and colons stay where they were; the word inside them is what gets formatted.
+  const parts = words.map((w) => w.match(/^([("'“¿¡]*)(.*?)([),;:!?"'”]*)$/));
+  const core = parts.map((m) => m[2]);
+  return parts.map(([, lead, w, trail], i) => {
+    const prev = core[i - 1] || "", next = core[i + 1] || "";
+    const prevFull = addressWord(prev) || "";
+    let out;
+    if (!w) out = w;
+    else if (ORDINAL.test(w)) out = w;
+    else if (/\d/.test(w)) out = w.toLocaleUpperCase("es");
+    else if (/^[a-zñ]$/.test(w) && (/\d/.test(prev) || UNIT_WORDS.has(prevFull))) out = w.toLocaleUpperCase("es");
+    else if (w === "bis") out = "Bis";
+    else if (w === "ph") out = "PH";
+    else if (NUMBER_SIGNS.has(w.replace(/\.$/, "")) && /^\d/.test(next)) out = "No.";
+    // "B. Centro" is Barrio Centro; "Manzana B. Casa 3" keeps the letter.
+    else if (w === "b." && next && !/\d/.test(next) && !addressWord(next) && !UNIT_WORDS.has(prevFull)) out = "Barrio";
+    else if (addressWord(w)) out = addressWord(w);
+    else if (i > 0 && (ADDRESS_JOINERS.has(w) || (/^(la|las|los)$/.test(w) && prev === "de"))) out = w;
+    else out = capWord(w);
+    return lead + out + trail;
   }).join(" ");
 }
 

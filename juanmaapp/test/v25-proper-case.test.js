@@ -23,6 +23,14 @@ test("names, cities and addresses in proper case whatever the user types", () =>
   assert.equal(properAddress("mz b casa 12 URB el vergel"), "Manzana B Casa 12 Urbanización El Vergel");
   assert.equal(properAddress("TV 5 nro 3-20 b/la pola"), "Transversal 5 No. 3-20 Barrio La Pola");
   assert.equal(properAddress("cra5#12-30"), "Carrera 5 # 12-30");
+  // Version 2.23: road and place words keep their initial capital next to punctuation too.
+  for (const x of ["carrera 5", "CARRERA 5", "cARRERA 5", "carrera-5", "Cra.5", "carrera,5"]) assert.equal(properAddress(x), "Carrera 5");
+  assert.equal(properAddress("AV.GUABINAL calle,10 barrio(centro)"), "Avenida Guabinal Calle 10 Barrio (Centro)");
+  assert.equal(properAddress("calle 10 # 3-45, barrio belén"), "Calle 10 # 3-45, Barrio Belén");
+  assert.equal(properAddress("Cl. 60 #5-12 B. Centro"), "Calle 60 # 5-12 Barrio Centro");
+  assert.equal(properAddress("mz. a casa 3 torre e"), "Manzana A Casa 3 Torre E");
+  assert.equal(properAddress("Mz. B. Casa 3"), "Manzana B. Casa 3");
+  assert.equal(properAddress("CALLE 1RA carrera 5TA"), "Calle 1ra Carrera 5ta");
 });
 
 test("clients and offices are saved with the city's accent and the address in proper case", async () => {
