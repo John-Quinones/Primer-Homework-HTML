@@ -225,6 +225,7 @@
     id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at, hidden: !!u.hidden,
     offices: s.offices.filter((o) => u.office_ids.includes(o.id)).map((o) => ({ id: o.id, name: o.name })),
     permissions: userPerms(u), phone: u.phone || "", professional_card: u.professional_card || "", custom_permissions: !!u.custom_permissions,
+    has_photo: !!s.blobs[`user-photo-${u.id}`],
   });
   const me = () => {
     const u = s.users.find((x) => x.id === currentId && x.active);
@@ -693,6 +694,26 @@
       auditAdd({ action: hide ? "Ocultó un usuario" : "Volvió a mostrar un usuario", module: "Usuarios", entity: "usuario", record_id: u.id,
         summary: hide ? "Ocultó un usuario: sus acciones se ven como «Asistente»" : "Volvió a mostrar un usuario oculto" });
       return userOut(u);
+    }],
+    // Optional photo of the user (funcionario), same rules as the server: own photo, or users.manage for anyone.
+    ["GET", /^\/admin\/users\/(\d+)\/photo$/, (m) => {
+      me(); const u = s.users.find((x) => x.id === +m[1]) || fail("El usuario no existe.");
+      return { photo: u.hidden && u.id !== currentId && !hiddenOpen() ? "" : s.blobs[`user-photo-${u.id}`] || "" };
+    }],
+    ["PUT", /^\/admin\/users\/(\d+)\/photo$/, (m, b) => {
+      const self = me(), own = +m[1] === currentId;
+      const u = s.users.find((x) => x.id === +m[1] && (own || !x.hidden || hiddenOpen())) || fail("El usuario no existe.");
+      own || self.permissions.includes("users.manage") || fail("Solo puede cambiar su propia foto.");
+      own || u.role !== "Gerencia" || self.role === "Gerencia" || fail("Solo Gerencia puede modificar usuarios de Gerencia.");
+      const photo = str(b.photo);
+      if (!photo) { delete s.blobs[`user-photo-${u.id}`]; u.foto = "No"; }
+      else {
+        /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo) || fail("La foto debe ser una imagen JPG, PNG o WebP.");
+        photo.length <= 1500000 || fail("La foto es demasiado grande. Use una imagen más pequeña.");
+        s.blobs[`user-photo-${u.id}`] = photo;
+        u.foto = "Sí"; // only for the audit diff, like the client's
+      }
+      return { ...userOut(u), photo };
     }],
     ["POST", /^\/admin\/users$/, (m, b) => {
       need("users.manage");

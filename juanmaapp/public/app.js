@@ -172,7 +172,7 @@ function applyPermissions() {
   $$("[data-action]").forEach((b) => { if (needs[b.dataset.action]) b.hidden = !can(needs[b.dataset.action]); });
   $("#user-name").textContent = me.name;
   $("#user-role").textContent = me.role;
-  $("#user-initials").textContent = me.name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  showMyAvatar();
   $("#courts-import-btn").hidden = !can("catalog.manage");
   // Creating process types and sub-processes from the case form or an import is for Gerencia only.
   $$("[data-new-cat], [data-new-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
@@ -1514,7 +1514,9 @@ async function startPhotoStream() {
   $("#photo-video").srcObject = photoStream;
   $("#photo-video").classList.toggle("mirror", photoFacing === "user"); // a front camera shows like a mirror
 }
-async function takePhoto() {
+async function takePhoto(who = "cliente") {
+  $("#photo-dialog h3").textContent = `Tomar foto del ${who}`;
+  $("#photo-cam-hint").textContent = `Ubique el rostro del ${who} en el recuadro y pulse «Capturar».`;
   if (coarsePointer()) return pickPhotoFile($("#photo-capture"));
   if (!navigator.mediaDevices?.getUserMedia) {
     toast("Este navegador no permite usar la cámara aquí. Elija una imagen guardada.", true);
@@ -1541,7 +1543,7 @@ async function takePhoto() {
     dlg.showModal();
   });
 }
-const getPhoto = (mode) => (mode === "camera" ? takePhoto() : pickPhotoFile($("#photo-file")));
+const getPhoto = (mode, who) => (mode === "camera" ? takePhoto(who) : pickPhotoFile($("#photo-file")));
 async function saveClientPhoto(id, photo) {
   const saved = await api("PUT", `/clients/${id}/photo`, { photo });
   const i = state.clients.findIndex((x) => x.id === id);
@@ -1565,6 +1567,77 @@ $("#client-photo-field").addEventListener("click", (e) => {
     if (photo == null) return;
     pendingPhoto = photo;
     showFormPhoto(photo, who);
+  });
+});
+
+// ---------- Version 2.41: optional photo of the funcionario (user), same camera/upload as the client's ----------
+// Gerencia sets it in Usuarios (form or list); every user sets their own from the user menu («Mi foto»).
+const userInitials = (u) => escapeHtml(String(u?.name || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?");
+const userPhotoImg = (photo, u) => (photo ? `<img src="${escapeHtml(photo)}" alt="Foto de ${escapeHtml(u?.name || "el funcionario")}" />` : `<span>${userInitials(u)}</span>`);
+const userPhotos = new Map(); // user id → photo data URL ("" = none), loaded only for users that have one
+async function userPhoto(u) {
+  if (!u?.has_photo) return "";
+  if (!userPhotos.has(u.id)) userPhotos.set(u.id, (await api("GET", `/admin/users/${u.id}/photo`).catch(() => ({ photo: "" }))).photo || "");
+  return userPhotos.get(u.id);
+}
+// Fills every [data-user-photo=ID] avatar on screen once its photo arrives.
+async function fillUserPhotos(users) {
+  for (const u of users.filter((x) => x.has_photo)) {
+    const photo = await userPhoto(u);
+    if (photo) $$(`[data-user-photo="${u.id}"]`).forEach((el) => (el.innerHTML = userPhotoImg(photo, u)));
+  }
+}
+async function saveUserPhoto(id, photo) {
+  const saved = await api("PUT", `/admin/users/${id}/photo`, { photo });
+  userPhotos.set(id, saved.photo || "");
+  if (me && id === me.id) { me.has_photo = !!saved.has_photo; showMyAvatar(); }
+  return saved;
+}
+function showMyAvatar() {
+  const el = $("#user-initials"), photo = me?.has_photo ? userPhotos.get(me.id) : "";
+  el.innerHTML = photo ? userPhotoImg(photo, me) : userInitials(me);
+  if (me?.has_photo && !userPhotos.has(me.id)) userPhoto(me).then((p) => p && showMyAvatar());
+}
+// In the user form the photo waits until «Guardar», like the client's.
+let pendingUserPhoto;
+function showUserFormPhoto(photo, u) {
+  $("#user-photo-field [data-photo-preview]").innerHTML = userPhotoImg(photo, u);
+  $('#user-photo-field [data-photo-pick="clear"]').hidden = !photo;
+  $('#user-photo-field [data-photo-pick="camera"]').textContent = photo ? "Tomar otra foto" : "Tomar foto";
+}
+$("#user-photo-field").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-photo-pick]");
+  if (!b) return;
+  e.preventDefault();
+  guarded(async () => {
+    const photo = b.dataset.photoPick === "clear" ? "" : await getPhoto(b.dataset.photoPick, "funcionario");
+    if (photo == null) return;
+    pendingUserPhoto = photo;
+    showUserFormPhoto(photo, { name: $("#user-dialog [name=name]").value });
+  });
+});
+// «Mi foto»: the signed-in user's own photo.
+async function openMyPhoto() {
+  $(".user-menu").open = false;
+  const photo = await userPhoto(me);
+  $("#my-photo-preview").innerHTML = userPhotoImg(photo, me);
+  $('#my-photo-dialog [data-my-photo="clear"]').hidden = !photo;
+  $('#my-photo-dialog [data-my-photo="camera"]').textContent = photo ? "Tomar otra foto" : "Tomar foto";
+  $("#my-photo-dialog").showModal();
+}
+$("#my-photo-dialog").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-my-photo]");
+  if (!b) return;
+  e.preventDefault();
+  guarded(async () => {
+    const mode = b.dataset.myPhoto;
+    if (mode === "clear" && !(await ask({ title: "Quitar foto", okLabel: "Quitar", message: "Su foto se quitará. Sus demás datos no cambian." }))) return;
+    const photo = mode === "clear" ? "" : await getPhoto(mode, "funcionario");
+    if (photo == null) return;
+    $("#my-photo-dialog").close();
+    await saveUserPhoto(me.id, photo);
+    toast(photo ? "Su foto quedó guardada." : "Foto quitada.");
+    if (location.hash.startsWith("#usuarios")) await renderUsuarios();
   });
 });
 
@@ -2309,6 +2382,7 @@ document.addEventListener("click", (e) => {
       $("#channel-test-result").textContent = r.ok ? `WhatsApp de prueba enviado a ${r.detail}.` : `No se envió: ${r.detail}`;
     },
     "display-prefs": () => openPrefs(),
+    "my-photo": () => openMyPhoto(),
     "change-email": () => openDialog($("#email-dialog"), "Cambiar correo", { email: me?.email || "" }),
     "change-password": () => {
       $(".user-menu").open = false;
@@ -3433,7 +3507,8 @@ async function renderUsuarios() {
   renderHiddenBar();
   $("#user-rows").innerHTML = adminUsers.map((u) => `
     <tr class="${u.active ? "" : "inactive"} ${u.hidden ? "is-hidden-user" : ""}">
-      <td><strong>${escapeHtml(u.name)}</strong>${u.hidden ? ' <span class="badge warn">Oculto · se ve como «Asistente»</span>' : ""}<br><span class="muted">${escapeHtml(u.email)}</span></td>
+      <td><div class="user-cell"><span class="client-photo small" data-user-photo="${u.id}">${userPhotoImg("", u)}</span>
+        <div><strong>${escapeHtml(u.name)}</strong>${u.hidden ? ' <span class="badge warn">Oculto · se ve como «Asistente»</span>' : ""}<br><span class="muted">${escapeHtml(u.email)}</span></div></div></td>
       <td>${escapeHtml(u.role)}${u.custom_permissions ? '<br><span class="badge warn">Permisos propios</span>' : ""}</td>
       <td>${u.permissions.includes("scope.all") ? "Todas" : escapeHtml(u.offices.map((o) => o.name).join(", "))}</td>
       <td>${u.active ? '<span class="badge ok">Activo</span>' : '<span class="badge">Inactivo</span>'}</td>
@@ -3444,6 +3519,7 @@ async function renderUsuarios() {
         ${!WEB && u.active ? `<button data-action="invite-user" data-id="${u.id}">${u.invited_at ? "Reenviar invitación" : "Invitar por correo"}</button>` : ""}
         ${hiddenInfo.can_manage && u.id !== me.id ? (u.hidden ? `<button data-action="unhide-user" data-id="${u.id}">Dejar de ocultar</button>` : `<button data-action="hide-user" data-id="${u.id}">Ocultar</button>`) : ""}</td>
     </tr>`).join("");
+  fillUserPhotos(adminUsers);
   $("#office-cards").innerHTML = offices.map((o) => `
     <article class="result-card">
       <div class="result-head"><h4>${escapeHtml(o.name)}</h4>${o.is_main ? '<span class="badge ok">Principal</span>' : ""}</div>
@@ -3489,6 +3565,9 @@ function openUserDialog(u) {
   if (form.elements.invite) form.elements.invite.checked = !u;
   if ($("[data-pw-label]", dlg)) $("[data-pw-label]", dlg).textContent = u ? "Asignar contraseña nueva (opcional, temporal)"
     : "Contraseña asignada (opcional si envía la invitación)";
+  pendingUserPhoto = undefined;
+  showUserFormPhoto(u?.has_photo ? userPhotos.get(u.id) || "" : "", u || {});
+  if (u?.has_photo && !userPhotos.has(u.id)) userPhoto(u).then((p) => { if (pendingUserPhoto === undefined && form.elements.id.value === String(u.id)) showUserFormPhoto(p, u); });
 }
 
 // Per-user checklist: shows the role's permissions until "específicos" is on.
@@ -3520,14 +3599,19 @@ wireDialog($("#user-dialog"), async (form) => {
   const invite = !!form.elements.invite?.checked;
   if (!d.id && !d.password && !invite && !authInfo.microsoft && !WEB) throw new Error("Asigne una contraseña o marque «Enviar invitación por correo».");
   let msg;
+  const photoLater = (id) => (pendingUserPhoto === undefined ? null
+    : saveUserPhoto(Number(id), pendingUserPhoto).then(() => "", (e) => ` El usuario quedó guardado, pero la foto no: ${e.message}`));
   if (d.id) {
     await api("PUT", `/admin/users/${d.id}`, body);
+    msg = await photoLater(d.id);
     const sent = invite ? await api("POST", `/admin/users/${d.id}/invite`).then(() => true, (e) => e.message) : null;
-    msg = `Usuario actualizado.${sent === true ? " Invitación enviada por correo." : sent ? ` ${sent}` : ""}`;
+    msg = `Usuario actualizado.${sent === true ? " Invitación enviada por correo." : sent ? ` ${sent}` : ""}${msg || ""}`;
   } else {
     const u = await api("POST", "/admin/users", { ...body, invite });
-    msg = `Usuario creado.${u.invitation ? (u.invitation.ok ? ` Invitación enviada a ${u.email}.` : ` La invitación no se envió: ${u.invitation.detail}`) : ""}${d.password ? " Entréguele la contraseña temporal por un medio distinto al correo." : ""}`;
+    const photoMsg = (await photoLater(u.id)) || "";
+    msg = `Usuario creado.${u.invitation ? (u.invitation.ok ? ` Invitación enviada a ${u.email}.` : ` La invitación no se envió: ${u.invitation.detail}`) : ""}${d.password ? " Entréguele la contraseña temporal por un medio distinto al correo." : ""}${photoMsg}`;
   }
+  pendingUserPhoto = undefined;
   toast(msg);
   await renderUsuarios();
 });

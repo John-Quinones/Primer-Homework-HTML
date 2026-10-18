@@ -145,6 +145,7 @@
         <summary><span class="avatar" id="user-initials"></span><span class="user-meta"><strong id="user-name"></strong><span id="user-role"></span></span></summary>
         <div class="user-pop">
           <p class="muted" id="user-offices"></p>
+          <button type="button" data-action="my-photo">Mi foto</button>
           <button type="button" data-action="display-prefs">Pantalla: letra, vista, día o noche</button>
           <button type="button" data-action="change-email">Cambiar correo</button>
           <button type="button" data-action="change-password">Cambiar contraseña</button>
@@ -966,6 +967,26 @@
       </div>
     </form>
   </dialog>
+  <!-- Foto propia del funcionario (versión 2.41) -->
+  <dialog id="my-photo-dialog">
+    <form method="dialog">
+      <h3>Mi foto</h3>
+      <div class="photo-field">
+        <span class="client-photo big" id="my-photo-preview"></span>
+        <div>
+          <p class="hint">Es opcional. Se ve en su menú y en la lista de usuarios. Tómela con la cámara o suba una imagen.</p>
+          <div class="toolbar">
+            <button type="button" class="mini" data-my-photo="camera">Tomar foto</button>
+            <button type="button" class="mini" data-my-photo="file">Subir imagen</button>
+            <button type="button" class="mini" data-my-photo="clear" hidden>Quitar foto</button>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cerrar</button>
+      </div>
+    </form>
+  </dialog>
   <input type="file" id="photo-file" accept="image/*" hidden />
   <input type="file" id="photo-capture" accept="image/*" capture="environment" hidden />
 
@@ -1047,6 +1068,18 @@
           <span class="pw-row"><input name="password" type="text" minlength="10" autocomplete="new-password" spellcheck="false" /><button type="button" class="mini" data-gen-password>Generar</button></span></label>
         <label>Celular / WhatsApp <input name="phone" inputmode="tel" /></label>
         <label>Tarjeta profesional (abogados) <input name="professional_card" /></label>
+      </div>
+      <div class="photo-field" id="user-photo-field">
+        <span class="client-photo" data-photo-preview></span>
+        <div>
+          <strong>Foto del funcionario <span class="muted">(opcional)</span></strong>
+          <p class="hint">Tómela con la cámara del celular o del computador, o suba una imagen. Puede dejarla en blanco.</p>
+          <div class="toolbar">
+            <button type="button" class="mini" data-photo-pick="camera">Tomar foto</button>
+            <button type="button" class="mini" data-photo-pick="file">Subir imagen</button>
+            <button type="button" class="mini" data-photo-pick="clear" hidden>Quitar foto</button>
+          </div>
+        </div>
       </div>
       <div data-pw-only>
         <label class="inline"><input type="checkbox" name="invite" /> Enviar invitación por correo: el usuario recibe un enlace para crear su propia contraseña (vence en 72 horas)</label>

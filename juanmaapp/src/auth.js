@@ -170,9 +170,9 @@ export function rolePermissions(db, role) {
 
 export function loadUser(db, id) {
   const row = db.prepare(`SELECT id, name, email, phone, professional_card, role, active, custom_permissions, created_at, must_change_password, invited_at,
-    password_hash != '!' AS has_password, hidden FROM users WHERE id = ?`).get(id);
+    password_hash != '!' AS has_password, hidden, EXISTS (SELECT 1 FROM user_photos p WHERE p.user_id = users.id) AS has_photo FROM users WHERE id = ?`).get(id);
   if (!row) return null;
-  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password, hidden: !!row.hidden };
+  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password, hidden: !!row.hidden, has_photo: !!row.has_photo };
   const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
     WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
   // A user's own checklist replaces the role's when it is turned on.
@@ -530,6 +530,33 @@ export function adminRouter(db) {
     audit(db, req, { action: hide ? "Ocultó un usuario" : "Volvió a mostrar un usuario", module: "Usuarios", entity: "usuario", record_id: id,
       summary: hide ? "Ocultó un usuario: sus acciones se ven como «Asistente»" : "Volvió a mostrar un usuario oculto" });
     res.json(loadUser(db, id));
+  });
+
+  // ----- Optional photo of the user (funcionario) -----
+  // Anyone signed in sees it (pickers, header); a hidden user's photo only to that user or with the hidden view open.
+  // A user changes their own; Gerencia / users.manage changes anyone's (a Gerencia account only by Gerencia).
+  const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/, PHOTO_MAX = 1_500_000;
+  const photoOf = (id) => db.prepare("SELECT photo FROM user_photos WHERE user_id = ?").get(id)?.photo || "";
+  r.get("/users/:id/photo", (req, res) => {
+    const id = Number(req.params.id), u = db.prepare("SELECT id, hidden FROM users WHERE id = ?").get(id);
+    if (!u) return res.status(404).json({ error: "El usuario no existe." });
+    res.json({ photo: u.hidden && id !== req.user.id && !hiddenUnlocked(req) ? "" : photoOf(id) });
+  });
+  r.put("/users/:id/photo", (req, res) => {
+    const id = Number(req.params.id), own = id === req.user.id;
+    const u = db.prepare("SELECT id, role, hidden FROM users WHERE id = ?").get(id);
+    if (!u || (!own && u.hidden && !hiddenUnlocked(req))) return res.status(404).json({ error: "El usuario no existe." });
+    if (!own && !req.user.permissions.includes("users.manage")) return res.status(403).json({ error: "Solo puede cambiar su propia foto." });
+    if (!own && u.role === "Gerencia" && req.user.role !== "Gerencia") return res.status(403).json({ error: "Solo Gerencia puede modificar usuarios de Gerencia." });
+    const photo = str(req.body?.photo);
+    if (!photo) db.prepare("DELETE FROM user_photos WHERE user_id = ?").run(id);
+    else {
+      if (!PHOTO_RE.test(photo)) return res.status(400).json({ error: "La foto debe ser una imagen JPG, PNG o WebP." });
+      if (photo.length > PHOTO_MAX) return res.status(400).json({ error: "La foto es demasiado grande. Use una imagen más pequeña." });
+      db.prepare(`INSERT INTO user_photos (user_id, photo) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET photo = excluded.photo, updated_at = datetime('now')`).run(id, photo);
+    }
+    res.json({ ...loadUser(db, id), photo: photoOf(id) });
   });
 
   const setUserPermissions = (userId, custom, perms) => {

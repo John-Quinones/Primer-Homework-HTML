@@ -531,6 +531,9 @@ function migrate(db) {
     name TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '',
     updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
   if (!cols("authorities").has("address")) db.exec("ALTER TABLE authorities ADD COLUMN address TEXT NOT NULL DEFAULT ''"); // version 2.30
+  // Optional photo of each user (funcionario), same rules as the client photo. Existing users simply have none.
+  db.exec(`CREATE TABLE IF NOT EXISTS user_photos (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, photo TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");

@@ -1190,3 +1190,9 @@ dialog:not([open]) { pointer-events: none; }
   :root[data-fx="on"] .sidenav a:is(:has(+ a:hover), a:hover + a) .ico { transform: scale(1.2); }
   :root[data-fx="on"] :is(button:active:not(:disabled), a.button:active, .file-btn:active) { transform: scale(1.03) translateY(1px); }
 }
+
+/* Version 2.41: optional photo of the funcionario (user) */
+.avatar { overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.client-photo.small { width: 40px; height: 40px; font-size: .85rem; border-width: 1px; }
+.user-cell { display: flex; align-items: center; gap: 10px; }
