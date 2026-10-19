@@ -444,3 +444,31 @@ export function recipientPrompt(r) {
   return [`Addressee official (address the document to this person exactly as written; never invent another name): ${line}`,
     ...(t(r.address) ? [`Addressee postal address: ${t(r.address)}`] : []), ...(t(r.email) ? [`Addressee e-mail: ${t(r.email)}`] : [])];
 }
+
+// ----- Version 2.44: the minuta's own data saved in the case -----
+// A minuta can ask for data the App has no field for (the deceased affiliate's name, document,
+// place of issue, date of death). Typed once in Documentos, each one is kept in the case as a
+// field of its process type ({{campo.<label>}}): the next document of that case finds it filled.
+const FIELD_MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+export const fieldLabelKey = (label) => nrm(label).replace(/\s+/g, " ");
+/** A date field writes "21 de abril de 2026" in documents; anything else as saved. */
+export function fieldDocValue(field, value) {
+  const v = String(value ?? "").trim();
+  const m = field?.field_type === "date" && v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${Number(m[3])} de ${FIELD_MONTHS[Number(m[2]) - 1]} de ${m[1]}` : v;
+}
+/** A label read as a date ("Fecha del fallecimiento") gets a date field. */
+export const fieldTypeFor = (label) => (/^fecha\b/.test(fieldLabelKey(label)) ? "date" : "text");
+/** [{label, value}] from a request: labels without {{ }} or |, at most 40 rows. Returns a message on bad input. */
+export function cleanCaseFields(list) {
+  if (!Array.isArray(list) || !list.length) return "No hay datos para guardar.";
+  const out = [];
+  for (const x of list.slice(0, 40)) {
+    const label = String(x?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!label || /[{}|]/.test(label)) return `Nombre de dato no válido: «${label}».`;
+    let value = String(x?.value ?? "").trim().slice(0, 2000);
+    if (fieldTypeFor(label) === "date" && value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return `Escriba «${label}» como fecha (año-mes-día).`;
+    out.push({ label, value });
+  }
+  return out;
+}

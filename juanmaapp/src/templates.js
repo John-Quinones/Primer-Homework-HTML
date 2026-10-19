@@ -6,7 +6,7 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { isFolderLabel, caseRecipient, recipientVariables } from "./case-meta.js";
+import { isFolderLabel, caseRecipient, recipientVariables, fieldDocValue } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
 
@@ -58,9 +58,9 @@ export function templateData(db, user, caseId) {
       "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
       "expediente.ciudad": k.city, "expediente.departamento": k.department,
     });
-    const fields = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);
+    const fields = db.prepare("SELECT id, label, field_type FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);
     const values = JSON.parse(k.field_values);
-    for (const f of fields) v[`campo.${f.label}`] = values[f.id] ?? "";
+    for (const f of fields) v[`campo.${f.label}`] = fieldDocValue(f, values[f.id]);
     const folder = fields.find((f) => isFolderLabel(f.label) && String(values[f.id] ?? "").trim());
     if (folder) v["expediente.carpeta"] = String(values[folder.id]).trim();
     // Addressee (version 2.27): the judge of the case or the official saved for the entity.

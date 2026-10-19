@@ -3743,7 +3743,7 @@ function renderTplList() {
       ${can("templates.manage") ? `<span class="tpl-tools">
         <button class="mini" data-action="download-template" data-id="${t.id}" title="Descarga la plantilla en Word, con sus {{marcadores}}, para actualizarla">Descargar</button>
         <button class="mini" data-action="replace-template" data-id="${t.id}" title="Sube el Word actualizado en lugar de esta plantilla">Reemplazar</button>
-        ${t.format === "markdown" ? `<button class="mini" data-action="edit-template" data-id="${t.id}">Editar</button>` : ""}
+        <button class="mini" data-action="edit-template" data-id="${t.id}" title="${t.format === "docx" ? "Cambia el nombre, la categoría o la descripción; el contenido se ajusta en Word con Descargar y Reemplazar" : "Edita el texto de la plantilla"}">Editar</button>
         <button class="mini danger" data-action="delete-template" data-id="${t.id}" aria-label="Eliminar plantilla">✕</button></span>` : ""}</li>`).join("")}</ul>`).join("")
     || '<p class="empty">No hay plantillas con ese filtro.</p>';
 }
@@ -3868,17 +3868,40 @@ function renderTplVars() {
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
   const ordered = tplActive.vars.filter((k) => tplRecipient.hidden || !k.startsWith("destinatario.")).sort((a, b) => Number(!!vals[a]) - Number(!!vals[b]));
-  $("#tpl-vars").innerHTML = ordered.map((k) => `<label>${escapeHtml(varLabel(k))}
+  // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
+  $("#tpl-vars").innerHTML = ordered.map((k) => isDateVar(k)
+    ? `<label>${escapeHtml(varLabel(k))}
+    <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
+    : `<label>${escapeHtml(varLabel(k))}
     <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="Falta" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
     || '<p class="muted">Esta plantilla no tiene variables.</p>';
+  $("#tpl-fields-row").hidden = !($("#tpl-case").value && can("cases.write") && tplActive.vars.some((k) => k.startsWith("campo.")));
+}
+const isDateVar = (k) => k.startsWith("campo.") && CMETA.fieldTypeFor(k.slice(6)) === "date";
+const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function isoFromLong(v) {
+  const m = String(v || "").match(/^(\d{1,2}) de (\p{L}+) de (\d{4})$/u);
+  const mo = m ? MONTHS_ES.indexOf(m[2].toLowerCase()) : -1;
+  return mo >= 0 ? `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}` : /^\d{4}-\d{2}-\d{2}$/.test(v || "") ? v : "";
 }
 $("#tpl-vars").addEventListener("input", (e) => {
   const i = e.target.closest("[data-var]");
   if (!i) return;
-  tplOverrides[i.dataset.var] = i.value.trim();
+  tplOverrides[i.dataset.var] = i.type === "date" ? CMETA.fieldDocValue({ field_type: "date" }, i.value) : i.value.trim();
   i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var]);
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
 });
+// Version 2.44: the minuta's own data ({{campo.…}}) typed here is kept in the case.
+$("#tpl-fields-save").addEventListener("click", () => guarded(async () => {
+  const caseId = Number($("#tpl-case").value) || null;
+  if (!caseId) throw new Error("Elija primero el expediente.");
+  const fields = $$("#tpl-vars [data-var^='campo.']").map((i) => ({ label: i.dataset.var.slice(6), value: i.value.trim() })).filter((x) => x.value || tplData[`campo.${x.label}`]);
+  if (!fields.length) throw new Error("Escriba al menos un dato para guardar.");
+  await api("PUT", `/cases/${caseId}/fields`, { fields });
+  toast(`${fields.length} dato(s) guardado(s) en el expediente. También los ve y edita en Expedientes.`);
+  for (const x of fields) delete tplOverrides[`campo.${x.label}`];
+  await loadTplData();
+}));
 
 function filledText() {
   const labels = Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)]));
@@ -3917,8 +3940,13 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
       const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name));
       await exportDocument(action, {
         name: tplActive.name, base: tplFileBase(), caseId: Number($("#tpl-case").value) || null, word,
-        // A Word form keeps its layout in the .docx; its PDF carries the same text in the firm's PDF layout.
-        pdf: async () => markdownToPdf(tplActive.format === "docx" ? D.docxText(new Uint8Array(await word().arrayBuffer())) : currentText()),
+        // A Word form's PDF looks like the Word (version 2.44); if the page cannot draw it, the same text in the firm's PDF layout.
+        pdf: async () => {
+          if (tplActive.format !== "docx") return markdownToPdf(currentText());
+          const bytes = new Uint8Array(await word().arrayBuffer());
+          try { return await window.JuanmaDocxPdf.docxToPdf(bytes); }
+          catch (err) { console.warn("PDF del Word", err); toast("El PDF salió con el formato de la App: no se pudo dibujar el Word en esta pantalla.", true); return markdownToPdf(D.docxText(bytes)); }
+        },
       });
     } else if (action === "copy") {
       try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
@@ -4044,6 +4072,10 @@ function openTemplateDialog(t = null) {
   tplForm.elements.category.innerHTML = tplMeta.categories.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
   openDialog($("#tpl-dialog"), t ? "Editar plantilla" : "Nueva plantilla", t ? { id: t.id, name: t.name, category: t.category, description: t.description, body: t.body }
     : { category: tplCat || "Contrato", body: "# TÍTULO DEL DOCUMENTO\n\n{{fecha.ciudad_y_fecha}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}…\n" });
+  // A Word template (version 2.44) edits its name, category and description here; its content in Word.
+  const word = t?.format === "docx";
+  $(".tpl-editor", tplForm).hidden = word;
+  $("[data-word-note]", tplForm).hidden = !word;
   const groups = {};
   for (const v of tplMeta.variables) (groups[v.group] ||= []).push(v);
   $("#var-picker").innerHTML = Object.entries(groups).map(([g, vs]) => `<h5>${escapeHtml(g)}</h5>${vs.map((v) =>
@@ -4060,6 +4092,7 @@ $("#var-picker").addEventListener("click", (e) => {
 });
 wireDialog($("#tpl-dialog"), async (form) => {
   const { id, ...d } = formData(form);
+  if ($(".tpl-editor", form).hidden) delete d.body;
   if (id) await api("PUT", `/templates/${id}`, d); else await api("POST", "/templates", d);
   toast(id ? "Plantilla actualizada." : "Plantilla creada.");
   await renderBorradores();
@@ -4188,35 +4221,92 @@ const bytesToB64 = (bytes) => {
   return btoa(bin);
 };
 let blanksFor = null;
+// Version 2.44: the data the minuta needs that the App has no field for yet, suggested as names.
+const OWN_FIELD_HINTS = ["Nombres y apellidos del afiliado fallecido", "Identificación del afiliado fallecido", "Lugar de expedición del documento del afiliado",
+  "Fecha del fallecimiento", "Lugar de expedición del documento del cliente"];
 async function openBlanksDialog(t) {
   if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
+  const markers = await markerList();
   const blanks = D.docxBlanks(t.bytes);
-  blanksFor = { t, blanks };
   const dlg = $("#blanks-dialog");
-  const opts = (sel) => '<option value="">— Dejar como está —</option>' + Object.entries(tplMeta.variables.reduce((g, v) => ((g[v.group] ||= []).push(v), g), {}))
+  const opts = (sel, list = tplMeta.variables) => '<option value="">— Dejar como está —</option>' + Object.entries(list.reduce((g, v) => ((g[v.group] ||= []).push(v), g), {}))
     .map(([g, vs]) => `<optgroup label="${escapeHtml(g)}">${vs.map((v) => `<option value="${escapeHtml(v.key)}" ${v.key === sel ? "selected" : ""}>${escapeHtml(v.label)}</option>`).join("")}</optgroup>`).join("");
   const shown = (x) => (x.kind === "subrayado" ? "línea subrayada" : x.text.length > 40 ? x.text.slice(0, 40) + "…" : x.text);
-  $("tbody", dlg).innerHTML = blanks.map((b) => `<tr>
+  $(".blanks-table tbody", dlg).innerHTML = blanks.map((b) => `<tr>
     <td class="blank-ctx">…${escapeHtml(b.before.slice(-60))}<mark>${escapeHtml(shown(b))}</mark>${escapeHtml(b.after.slice(0, 40))}…</td>
     <td><select data-blank="${b.id}" aria-label="Dato para el espacio ${b.id + 1}">${opts(D.guessVariable(b))}</select></td></tr>`).join("");
   $("[data-sub]", dlg).textContent = blanks.length
     ? `“${t.name}”: ${blanks.length} espacio(s) encontrado(s). La app ya sugirió el dato más probable según el texto de alrededor; revise cada uno y cambie lo que no corresponda. El formato del documento no cambia.`
-    : `“${t.name}”`;
-  $("[data-none]", dlg).hidden = blanks.length > 0;
-  $(".blanks-table", dlg).hidden = !blanks.length;
+    : `“${t.name}”: el formato del documento no cambia; solo los textos que usted elija pasan a ser datos que la App llena.`;
+  $("[data-none]", dlg).hidden = blanks.length > 0 || !!$("#tpl-case").value;
+  $(".blanks-table:not(.found-table):not(.own-table)", dlg).hidden = !blanks.length;
+  // The case's data written in the Word: every appearance becomes its marker (capitals and 65.760.174 kept).
+  const caseId = $("#tpl-case").value;
+  const wanted = caseId ? D.caseTexts(tplData) : [];
+  const keyOf = new Map(wanted.map((w) => [w.text, w.key]));
+  const dates = D.docxDates(t.bytes);
+  const found = D.docxFind(t.bytes, [...wanted.map((w) => w.text), ...dates]);
+  const guess = (f) => {
+    const key = keyOf.get(f.text);
+    if (key) return /^(oficina|abogado)\./.test(key) ? "" : key.split("|")[0];
+    return f.text.includes(",") ? "fecha.ciudad_y_fecha" : "";
+  };
+  blanksFor = { t, blanks, found };
+  // The minuta's own data can be chosen here too (a found date → «Fecha del fallecimiento»).
+  const ownMarkers = [...markers, ...OWN_FIELD_HINTS.filter((n) => !markers.some((m) => m.key === `campo.${n}`))
+    .map((n) => ({ key: `campo.${n}`, label: n, group: "Datos propios de la minuta" }))];
+  $(".found-table tbody", dlg).innerHTML = found.map((f, i) => `<tr>
+    <td class="blank-ctx">${escapeHtml(f.context).replace(/\[\[(.*?)\]\]/, "<mark>$1</mark>")}</td><td>${f.count}</td>
+    <td><select data-found="${i}" aria-label="Dato para «${escapeHtml(f.text)}»">${opts(guess(f), ownMarkers)}</select></td></tr>`).join("");
+  $("[data-found-sub]", dlg).textContent = !caseId ? "Elija el expediente en Documentos para que la App busque sus datos dentro del Word."
+    : found.length ? `La App encontró ${found.length} dato(s) del expediente escritos en el Word. Cada uno se cambia en todas sus apariciones, también en el encabezado; los datos de la firma y del abogado quedan como están salvo que elija otro.`
+      : "No se encontraron datos de este expediente escritos en el Word.";
+  $(".found-table", dlg).hidden = !found.length;
+  $("#own-field-names").innerHTML = [...new Set([...OWN_FIELD_HINTS, ...markers.filter((m) => m.key.startsWith("campo.")).map((m) => m.label)])]
+    .map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
+  $(".own-table tbody", dlg).innerHTML = "";
+  addOwnRow();
   $(".form-error", dlg).hidden = true;
   dlg.showModal();
 }
+function addOwnRow() {
+  $("#blanks-dialog .own-table tbody").insertAdjacentHTML("beforeend", `<tr>
+    <td><input data-own-text placeholder="Ej. EDWIN ALBERTO RUBIANO VERA" aria-label="Texto del Word" /></td>
+    <td><input data-own-name list="own-field-names" placeholder="Ej. Nombres y apellidos del afiliado fallecido" aria-label="Nombre del dato" /></td>
+    <td><button type="button" class="mini danger" data-own-del aria-label="Quitar fila">✕</button></td></tr>`);
+}
+$("#blanks-dialog").addEventListener("click", (e) => {
+  if (e.target.closest("[data-own-add]")) addOwnRow();
+  const del = e.target.closest("[data-own-del]");
+  if (del) del.closest("tr").remove();
+});
 wireDialog($("#blanks-dialog"), async (form) => {
-  const { t, blanks } = blanksFor;
+  const { t, blanks, found } = blanksFor;
   const assign = new Map();
   for (const sel of $$("select[data-blank]", form)) if (sel.value) assign.set(Number(sel.dataset.blank), sel.value);
-  if (!blanks.length) return;
-  if (!assign.size) throw new Error("Elija el dato de al menos un espacio, o cancele.");
-  const bytes = D.applyBlanks(t.bytes, assign);
+  // A dotted number (65.760.174) keeps its dots; a datum written in capitals stays in capitals.
+  const marker = (key, as) => (/^\d{1,3}(\.\d{3})+$/.test(as) && !key.includes("|") ? `${key}|puntos` : D.markerFor(key, as));
+  const items = [];
+  for (const sel of $$("select[data-found]", form)) if (sel.value) {
+    const f = found[Number(sel.dataset.found)];
+    for (const as of f.as) items.push({ text: as, marker: marker(sel.value, as) });
+  }
+  for (const row of $$(".own-table tbody tr", form)) {
+    const text = $("[data-own-text]", row).value.trim(), name = $("[data-own-name]", row).value.replace(/\s+/g, " ").trim();
+    if (!text && !name) continue;
+    if (!text || !name) throw new Error("En «Otros datos» escriba el texto del Word y el nombre del dato, o quite la fila.");
+    if (/[{}|]/.test(name)) throw new Error(`El nombre «${name}» no puede llevar llaves ni la barra |.`);
+    const hit = D.docxFind(t.bytes, [text])[0];
+    if (!hit) throw new Error(`«${text}» no aparece en el Word. Cópielo tal como está escrito.`);
+    for (const as of hit.as) items.push({ text: as, marker: CMETA.fieldTypeFor(name) === "date" ? `campo.${name}` : marker(`campo.${name}`, as) });
+  }
+  if (!assign.size && !items.length) throw new Error("Elija el dato de al menos un espacio o texto, o cancele.");
+  let bytes = assign.size ? D.applyBlanks(t.bytes, assign) : t.bytes;
+  let changed = 0;
+  if (items.length) ({ bytes, count: changed } = D.docxReplace(bytes, items));
   const vars = D.docxVariables(bytes);
   await api("PUT", `/templates/${t.id}`, { file_base64: bytesToB64(bytes), description: `Minuta de Word · ${vars.length} dato(s) del cliente o del expediente` });
-  toast(`Minuta lista: ${assign.size} espacio(s) se llenarán con los datos del expediente.`);
+  toast(`Minuta lista: ${assign.size + changed} lugar(es) se llenarán con los datos del expediente.`);
   await renderBorradores();
   await openTemplate(t.id);
 });

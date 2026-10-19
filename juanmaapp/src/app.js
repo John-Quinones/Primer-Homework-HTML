@@ -92,6 +92,10 @@ export function createApp(db) {
   app.get("/vendor/pdfjs-worker.js", sendPdfjs("worker"));
   app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
   app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
+  // Version 2.44: PDF of a Word minuta with the Word's look.
+  app.get("/vendor/jszip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/jszip/dist/jszip.min.js")));
+  app.get("/vendor/docx-preview.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docx-preview/dist/docx-preview.min.js")));
+  app.get("/vendor/html2canvas.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/html2canvas/dist/html2canvas.min.js")));
   // Shared logic for the page (statuses, procedural roles, receivables math).
   // Public pages (legal.html, autorizar.html) learn the App's version here: it is the version of the legal documents.
   const shared = `window.JUANMA_VERSION = window.JUANMA_VERSION || ${JSON.stringify({ change: VERSION.change, name: VERSION.name, date: VERSION.date })};\n`

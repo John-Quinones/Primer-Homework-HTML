@@ -4,8 +4,8 @@ import express from "express";
 import { str, HttpError, toInt } from "./http.js";
 import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
-import { can, scopeOf, loadUser } from "./auth.js";
-import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber } from "./case-meta.js";
+import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
+import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
@@ -494,6 +494,35 @@ export function recordsRouter(db) {
       values[id] = folder;
     }
     db.prepare("UPDATE cases SET field_values = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(values), cur.id);
+    return getCase(req, cur.id);
+  }));
+
+  // Data a minuta asks for (version 2.44): saved in the case as fields of its process type.
+  // Filling the case is cases.write; a field the type lacks is created only by Gerencia (catalog.manage, user's rule).
+  r.put("/cases/:id/fields", h((req) => {
+    checkPerm(req, "cases.write");
+    const cur = getCase(req, toInt(req.params.id, "id"));
+    const list = cleanCaseFields(req.body?.fields);
+    if (typeof list === "string") fail400(list);
+    const catId = db.prepare("SELECT category_id FROM process_types WHERE id = ?").get(cur.process_type_id).category_id;
+    const mine = db.prepare("SELECT id, label, field_type FROM custom_fields WHERE category_id = ? ORDER BY sort, id").all(catId);
+    const missing = list.filter((x) => !mine.some((f) => fieldLabelKey(f.label) === fieldLabelKey(x.label)));
+    if (missing.length && !can(req, "catalog.manage"))
+      throw new HttpError(403, `Este tipo de proceso no tiene ${missing.length > 1 ? "los campos" : "el campo"} «${missing.map((x) => x.label).join("», «")}». Solo Gerencia los crea.`);
+    const values = { ...cur.field_values };
+    inTransaction(db, () => {
+      for (const x of list) {
+        let f = mine.find((y) => fieldLabelKey(y.label) === fieldLabelKey(x.label));
+        if (!f) {
+          const id = db.prepare("INSERT INTO custom_fields (category_id, label, field_type, options, required, sort) VALUES (?, ?, ?, '[]', 0, ?)")
+            .run(catId, x.label, fieldTypeFor(x.label), nextSort("custom_fields", "WHERE category_id = ?", catId)).lastInsertRowid;
+          f = { id: Number(id), label: x.label };
+          mine.push(f);
+        }
+        if (x.value) values[f.id] = x.value; else delete values[f.id];
+      }
+      db.prepare("UPDATE cases SET field_values = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(values), cur.id);
+    });
     return getCase(req, cur.id);
   }));
 

@@ -234,7 +234,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/fields$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -393,7 +393,7 @@
         "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email,
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
       });
-      for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = k.field_values[f.id] ?? "";
+      for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = CM.fieldDocValue(f, k.field_values[f.id]);
       const folder = s.fields.find((f) => f.category_id === o.category_id && CM.isFolderLabel(f.label) && String(k.field_values[f.id] ?? "").trim());
       if (folder) v["expediente.carpeta"] = String(k.field_values[folder.id]).trim();
       Object.assign(v, CM.recipientVariables(CM.caseRecipient(o, s.authorities)));
@@ -1257,6 +1257,30 @@
         let f = mine[0];
         if (!f) { f = { id: nextId(), category_id: catId, label: "No. Carpeta", field_type: "text", options: [], required: false, sort: s.fields.filter((x) => x.category_id === catId).length }; s.fields.push(f); }
         values[f.id] = folder;
+      }
+      Object.assign(k, { field_values: values, updated_at: stamp() });
+      return caseOut(k);
+    }],
+    // Data a minuta asks for (version 2.44), same rules as the server: new fields only by Gerencia.
+    ["PUT", /^\/cases\/(\d+)\/fields$/, (m, b) => {
+      need("cases.write");
+      const k = visibleCase(+m[1]);
+      const list = CM.cleanCaseFields(b.fields);
+      if (typeof list === "string") fail(list);
+      const catId = (s.types.find((t) => t.id === k.process_type_id) || fail("El subproceso no existe.")).category_id;
+      const mine = s.fields.filter((f) => f.category_id === catId);
+      const missing = list.filter((x) => !mine.some((f) => CM.fieldLabelKey(f.label) === CM.fieldLabelKey(x.label)));
+      if (missing.length && !me().permissions.includes("catalog.manage"))
+        fail(`Este tipo de proceso no tiene ${missing.length > 1 ? "los campos" : "el campo"} «${missing.map((x) => x.label).join("», «")}». Solo Gerencia los crea.`);
+      const values = { ...k.field_values };
+      for (const x of list) {
+        let f = mine.find((y) => CM.fieldLabelKey(y.label) === CM.fieldLabelKey(x.label));
+        if (!f) {
+          f = { id: nextId(), category_id: catId, label: x.label, field_type: CM.fieldTypeFor(x.label), options: [], required: false, sort: s.fields.filter((y) => y.category_id === catId).length };
+          s.fields.push(f);
+          mine.push(f);
+        }
+        if (x.value) values[f.id] = x.value; else delete values[f.id];
       }
       Object.assign(k, { field_values: values, updated_at: stamp() });
       return caseOut(k);

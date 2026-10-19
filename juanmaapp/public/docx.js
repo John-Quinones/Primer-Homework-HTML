@@ -12,12 +12,28 @@
     return out;
   }
 
+  // Version 2.44: a marker may end in a format, {{cliente.nombre|mayúsculas}} or {{cliente.documento|puntos}},
+  // so a minuta written in capitals or with 65.760.174 keeps its look. The datum asked for is the key before "|".
+  const FORMATS = {
+    "mayúsculas": (v) => String(v).toLocaleUpperCase("es-CO"),
+    "mayusculas": (v) => String(v).toLocaleUpperCase("es-CO"),
+    puntos: (v) => (/^\d[\d.\s]*$/.test(String(v).trim()) ? String(v).replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".") : String(v)),
+  };
+  const markerKey = (tag) => String(tag).split("|")[0].trim();
+  function markerValue(data, tag) {
+    const [key, ...fmts] = String(tag).split("|").map((x) => x.trim());
+    let v = data[key];
+    if (v === undefined || v === null || String(v).trim() === "") return undefined;
+    for (const f of fmts) if (FORMATS[f.toLowerCase()]) v = FORMATS[f.toLowerCase()](v);
+    return v;
+  }
+
   /** {{variables}} used in a .docx (text of every part, tags removed). */
   function docxVariables(bytes) {
     const zip = new window.PizZip(bytes);
     const text = Object.keys(zip.files).filter((n) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(n))
       .map((n) => zip.file(n).asText().replace(/<[^>]+>/g, "")).join("\n");
-    return [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => m[1].trim()))];
+    return [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
   }
 
   /** Fill a .docx template; missing values become [FILL: variable]. */
@@ -27,8 +43,8 @@
       delimiters: { start: "{{", end: "}}" },
       paragraphLoop: true,
       linebreaks: true,
-      parser: (tag) => ({ get: (scope) => scope[tag.trim()] }),
-      nullGetter: (part) => `[FILL: ${part.value.trim()}]`,
+      parser: (tag) => ({ get: (scope) => markerValue(scope, tag) }),
+      nullGetter: (part) => `[FILL: ${markerKey(part.value)}]`,
     });
     doc.render(data);
     return doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
@@ -94,13 +110,13 @@
 
   /** Replace {{variables}} in text; missing ones become [FILL: label] (highlighted on screen and in Word). */
   function fillText(text, data, labels = {}) {
-    return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key) => {
-      const v = data[key];
+    return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, tag) => {
+      const key = markerKey(tag), v = markerValue(data, tag);
       // A multi-line value (the addressee block) keeps its lines: Markdown hard breaks.
       return v !== undefined && v !== null && String(v).trim() !== "" ? (String(v).includes("\n") ? String(v).replace(/\n/g, "  \n") + "  " : String(v)) : `[FILL: ${labels[key] || key}]`;
     });
   }
-  const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => m[1].trim()))];
+  const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
 
   // ----- Firm's own Word forms (minutas): find the blanks and turn them into {{variables}} -----
   const dec = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
@@ -223,6 +239,124 @@
     return "";
   }
 
+  // ----- Version 2.44: a minuta written with a real client's data: those words become {{markers}} -----
+  // Matching ignores capitals, accents and non-breaking spaces, one character for one, so offsets stay put.
+  const fold = (s) => [...String(s)].map((c) => (c === "\u00a0" ? " " : c.normalize("NFD")[0].toLowerCase())).join("");
+  const WORD = /[\p{L}\p{N}]/u;
+  /** Where `needle` sits in `hay` as a whole word or number: [start, end] pairs, left to right, no overlaps. */
+  function spots(hay, needle) {
+    const h = fold(hay), n = fold(needle).trim(), out = [];
+    if (n.length < 3) return out;
+    for (let i = h.indexOf(n); i >= 0; i = h.indexOf(n, i + 1)) {
+      if (WORD.test(h[i - 1] || "") || WORD.test(h[i + n.length] || "")) continue;
+      if (out.length && i < out[out.length - 1][1]) continue;
+      out.push([i, i + n.length]);
+    }
+    return out;
+  }
+  const PART_ORDER = (a, b) => (a === "word/document.xml" ? -1 : b === "word/document.xml" ? 1 : a.localeCompare(b));
+  const paragraphText = (para) => [...para.matchAll(T_RE)].map((m) => dec(m[2])).join("");
+
+  /**
+   * How often each text appears in the Word (document, headers and footers):
+   * [{text, count, as: [exact spellings found], context}] for the texts that appear at least once.
+   */
+  function docxFind(bytes, texts) {
+    const zip = new window.PizZip(bytes);
+    const paras = Object.keys(zip.files).filter((n) => PARTS.test(n)).sort(PART_ORDER)
+      .flatMap((n) => [...zip.file(n).asText().matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((m) => paragraphText(m[0])));
+    const out = [];
+    for (const text of [...new Set(texts.map((t) => String(t || "").trim()).filter(Boolean))]) {
+      let count = 0, context = "";
+      const as = new Set();
+      for (const p of paras) for (const [a, z] of spots(p, text)) {
+        count++;
+        as.add(p.slice(a, z));
+        if (!context) context = `${a > 50 ? "…" : ""}${p.slice(Math.max(0, a - 50), a)}[[${p.slice(a, z)}]]${p.slice(z, z + 40)}${z + 40 < p.length ? "…" : ""}`;
+      }
+      if (count) out.push({ text, count, as: [...as], context });
+    }
+    return out;
+  }
+
+  /**
+   * Replace every appearance of each `text` by its {{marker}}, keeping the formatting of the run
+   * where the text starts (a name Word split into several runs comes out as one marker).
+   * An e-mail link that held a replaced text loses the link, since its address changes per case.
+   * `items`: [{text, marker}] with marker like "cliente.nombre|mayúsculas" (or `out`, the exact text to write). Longer texts go first.
+   */
+  function docxReplace(bytes, items) {
+    const list = items.filter((x) => x.text && (x.marker || x.out)).sort((a, b) => b.text.length - a.text.length);
+    const zip = new window.PizZip(bytes);
+    let total = 0;
+    for (const name of Object.keys(zip.files).filter((n) => PARTS.test(n))) {
+      const xmlIn = zip.file(name).asText();
+      const xmlOut = xmlIn.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
+        const nodes = [...para.matchAll(T_RE)].map((m) => dec(m[2]));
+        const full = nodes.join("");
+        // Each character keeps or drops; a marker is written where its text started.
+        const drop = new Uint8Array(full.length), put = new Map();
+        for (const { text, marker, out } of list) for (const [a, z] of spots(full, text)) {
+          if (drop.subarray(a, z).some((d) => d)) continue;
+          drop.fill(1, a, z);
+          put.set(a, out ?? `{{${marker}}}`);
+          total++;
+        }
+        if (!put.size) return para;
+        let off = 0, i = 0;
+        const fresh = nodes.map((t) => {
+          let o = "";
+          for (let k = 0; k < t.length; k++, off++) {
+            if (put.has(off)) o += put.get(off);
+            if (!drop[off]) o += t[k];
+          }
+          return o;
+        });
+        let res = para.replace(T_RE, () => `<w:t xml:space="preserve">${xml(fresh[i++])}</w:t>`);
+        res = res.replace(/<w:hyperlink\b[^>]*>([\s\S]*?)<\/w:hyperlink>/g, (h, inner) => (/\{\{/.test(paragraphText(inner)) ? inner : h));
+        return res;
+      });
+      if (xmlOut !== xmlIn) zip.file(name, xmlOut);
+    }
+    return { bytes: zip.generate({ type: "uint8array" }), count: total };
+  }
+
+  /**
+   * Texts of the case that a filled minuta probably carries, each with the marker that writes it again:
+   * the value as saved, in capitals, and a document number with dots (65.760.174).
+   * `data` = the case's template values; `skip` = keys too general to look for (a city appears everywhere).
+   */
+  const FIND_SKIP = /^(cliente\.(ciudad|departamento|tipo_documento)|expediente\.(ciudad|departamento|tipo_proceso|subproceso|area|hechos)|oficina\.(ciudad|nombre)|destinatario\.(tratamiento|bloque)|honorarios\.cuotas|fecha\.)/;
+  function caseTexts(data) {
+    const out = [];
+    for (const [key, raw] of Object.entries(data || {})) {
+      const v = String(raw ?? "").trim();
+      if (FIND_SKIP.test(key) || v.length < 4 || v.includes("\n") || v.length > 120) continue;
+      out.push({ text: v, key });
+      if (/^\d{5,}$/.test(v.replace(/[.\s]/g, ""))) out.push({ text: FORMATS.puntos(v), key: `${key}|puntos` });
+    }
+    return out;
+  }
+  /** The marker for a text as the Word writes it: capitals when the Word has it in capitals. */
+  function markerFor(key, found) {
+    if (key.includes("|")) return key;
+    const letters = found.replace(/[^\p{L}]/gu, "");
+    return letters.length > 2 && letters === letters.toLocaleUpperCase("es-CO") ? `${key}|mayúsculas` : key;
+  }
+  // "Ibagué, 16 de octubre de 2026" and other written dates: the place-and-date line and loose dates.
+  const DATE_RE = /\b\d{1,2} de (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) de \d{4}\b/gi;
+  function docxDates(bytes) {
+    const text = docxText(bytes);
+    const out = [];
+    for (const m of text.matchAll(DATE_RE)) {
+      const line = text.slice(text.lastIndexOf("\n", m.index) + 1, m.index);
+      const place = line.match(/([\p{L} .]{3,40}),\s*$/u);
+      const whole = place && line.trim() === place[0].trim() ? `${place[1].trim()}, ${m[0]}` : m[0];
+      if (!out.includes(whole)) out.push(whole);
+    }
+    return out;
+  }
+
   /** Plain text of a .docx (one paragraph per line, blank line between), to build a PDF from a Word form. */
   function docxText(bytes) {
     const zip = new window.PizZip(bytes);
@@ -234,5 +368,6 @@
     }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable };
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable,
+    markerKey, docxFind, docxReplace, caseTexts, markerFor, docxDates };
 })();
