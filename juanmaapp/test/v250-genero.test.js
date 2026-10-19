@@ -85,8 +85,8 @@ before(async () => {
 after(() => srv.close());
 
 test("the client's gender is saved, changed alone, and feeds the documents", async () => {
-  assert.equal((await admin.call("GET", `/clients/${clientId}`)).body.gender, "", "existing clients start without gender");
-  assert.equal(Object.keys((await admin.call("GET", `/templates/data?caseId=${caseId}`)).body).some((k) => k === "cliente.suscrito"), false);
+  // Version 2.53 (user's rule): without a gender, the first name gives it («Gladys» → mujer).
+  assert.equal((await admin.call("GET", `/clients/${clientId}`)).body.gender, "mujer", "the gender comes from the first name");
   const put = await admin.call("PUT", `/clients/${clientId}`, { gender: "Mujer" });
   assert.equal(put.status, 200);
   assert.equal(put.body.gender, "mujer");
@@ -94,7 +94,11 @@ test("the client's gender is saved, changed alone, and feeds the documents", asy
   const data = (await admin.call("GET", `/templates/data?caseId=${caseId}`)).body;
   assert.deepEqual([data["cliente.genero"], data["cliente.suscrito"], data["cliente.identificado"], data["cliente.domiciliado"]], ["Mujer", "la suscrita", "identificada", "domiciliada"]);
   assert.equal((await admin.call("PUT", `/clients/${clientId}`, { notes: "otra nota" })).body.gender, "mujer", "a save without gender keeps it");
-  assert.equal((await admin.call("PUT", `/clients/${clientId}`, { gender: "no sé" })).body.gender, "", "an unknown value is cleared");
+  assert.equal((await admin.call("PUT", `/clients/${clientId}`, { gender: "Hombre" })).body.gender, "hombre", "the office can always change it");
+  assert.equal((await admin.call("PUT", `/clients/${clientId}`, { gender: "no sé" })).body.gender, "mujer", "an unknown value goes back to the name's");
+  const dany = (await admin.call("POST", "/clients", { full_name: "Dany Gutierrez", id_type: "CC", id_number: "1110222333" })).body;
+  assert.equal(dany.gender, "", "an uncommon name is left for the office");
+  assert.equal(Object.keys((await admin.call("GET", `/templates/data?caseId=${(await admin.call("POST", "/cases", { client_id: dany.id, process_type_id: (await admin.call("GET", `/cases/${caseId}`)).body.process_type_id })).body.id}`)).body).some((k) => k === "cliente.suscrito"), false);
 });
 
 test("the starter templates use the client's gender but not the funcionario's", async () => {

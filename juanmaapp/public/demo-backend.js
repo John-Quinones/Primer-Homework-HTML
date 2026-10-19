@@ -86,6 +86,16 @@
         Object.assign(c, { person_type: "natural", ...sp, full_name: `${sp.first_names} ${sp.last_names}`.trim() || c.full_name, legal_rep: "" });
       }
     }
+    // Version 2.53 (user's rule), once, as on the server: gender from the first names, Ibagué (Tolima) where the
+    // place is empty and John Quiñones as responsible of cases without one. Only empty data is filled.
+    if (!st.info.defaults253) {
+      const john = st.users.find((u) => u.id === RR.defaultResponsible(st.users));
+      const holds = (k) => john && (john.role === "Gerencia" || (john.custom_permissions ? john.permissions : st.matrix[john.role] || []).includes("scope.all") || (john.office_ids || []).includes(k.office_id));
+      const plan = RR.defaultsPlan(st.clients, st.cases, (k) => (holds(k) ? john.id : null));
+      for (const { id, set } of plan.clients) Object.assign(st.clients.find((c) => c.id === id), set);
+      for (const { id, assigned_user_id } of plan.cases) st.cases.find((k) => k.id === id).assigned_user_id = assigned_user_id;
+      st.info.defaults253 = { at: new Date().toISOString(), clients: plan.clients.length, cases: plan.cases.length, undecided: plan.undecided };
+    }
     st.payset ||= null;
     for (const c of st.courts) if (c.circuit === undefined) c.circuit = CM.courtCircuit(c.name);
     // Signature events carry their time in "at", as on the server.
@@ -265,6 +275,9 @@
     if (!userPerms(u).includes("scope.all") && !u.office_ids.includes(officeId)) fail("El responsable no pertenece a la oficina del expediente.");
     return u.id;
   };
+
+  // Version 2.53 (user's rule): a new case without responsible gets John Quiñones, when he can hold it.
+  const defaultAssignee = (officeId) => { const id = RR.defaultResponsible(s.users); try { return id ? checkAssignee(id, officeId) : null; } catch { return null; } };
 
   const caseOut = (k) => {
     const t = s.types.find((t) => t.id === k.process_type_id);
@@ -1146,7 +1159,7 @@
         status: CM.normStatus(b.status), counterparty: str(b.counterparty), facts: str(b.facts),
         client_role: partyRole(b.client_role), affiliated: !!b.affiliated,
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
-        assigned_user_id: checkAssignee(b.assigned_user_id, officeId), updated_at: stamp(),
+        assigned_user_id: b.assigned_user_id ? checkAssignee(b.assigned_user_id, officeId) : defaultAssignee(officeId), updated_at: stamp(),
         created_at: RR.openedAt(b.created_at) || stamp(),
         last_checked_at: null, last_action_date: null, ...caseLocation(b), parties: caseParties(b.parties, c.id), case_number: CM.cleanCaseNumber(b.case_number),
       };

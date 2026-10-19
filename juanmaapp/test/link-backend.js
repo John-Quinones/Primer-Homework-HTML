@@ -13,8 +13,8 @@ import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** A fresh link backend; returns { call(method, url, body) → { status, body } } like the server helper. */
-export async function startLink() {
-  let saved = null;
+export async function startLink({ state } = {}) {
+  let saved = state ? JSON.stringify(state) : null;
   const local = new Map();
   const window = {
     JUANMA_SEED_CATALOG: SEED_CATALOG,

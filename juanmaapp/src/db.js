@@ -5,14 +5,15 @@ import { CONSENT_SCHEMA } from "./consents.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { DEFAULT_MATRIX, PERMISSIONS, ASSISTANT } from "./auth.js";
+import { DEFAULT_MATRIX, PERMISSIONS, ASSISTANT, loadUser, scopeOf } from "./auth.js";
 import { seedTemplates } from "./templates.js";
 import { FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW, FIRM_FIXES } from "./templates-seed.js";
 import { normStatus, courtCircuit, isImportedRadicadoLabel, radicadosFromNumbers } from "./case-meta.js";
 import { placeFromRadicado } from "./places.js";
 import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
-import { dbFiles } from "./backup.js";
+import { dbFiles, makeBackup } from "./backup.js";
+import { defaultsPlan, defaultResponsible } from "./record-rules.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -697,6 +698,39 @@ function migrate(db) {
     for (const [role, perms] of Object.entries(DEFAULT_MATRIX)) if (perms.includes(p)) insP.run(role, p);
     db.prepare("INSERT INTO known_permissions (permission) VALUES (?)").run(p);
   }
+  fillDefaults(db);
+}
+
+// Version 2.53 (user's rule), once: the client's gender from the first names, Ibagué (Tolima) where
+// the place is empty and John Quiñones as responsible of cases without one. Only empty data is filled;
+// a copy of the database is made first and every filled value is kept in defaults_log.
+function fillDefaults(db) {
+  if (db.prepare("SELECT 1 FROM app_flags WHERE key = 'defaults-v2-53'").get()) return;
+  const johnId = defaultResponsible(db.prepare("SELECT id, name, active FROM users").all().map((u) => ({ ...u, active: !!u.active })));
+  const john = johnId && loadUser(db, johnId), scope = john ? scopeOf(john) : [];
+  const plan = defaultsPlan(db.prepare("SELECT id, full_name, first_names, person_type, gender, department, city FROM clients").all(),
+    db.prepare("SELECT id, office_id, assigned_user_id FROM cases").all(), (k) => (john && (scope === null || scope.includes(k.office_id)) ? john.id : null));
+  if (plan.clients.length || plan.cases.length) {
+    const copy = makeBackup(db, { trigger: "antes-v2.53" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de completar los datos: ${copy.error}`);
+  }
+  db.exec("CREATE TABLE IF NOT EXISTS defaults_log (entity TEXT NOT NULL, entity_id INTEGER NOT NULL, field TEXT NOT NULL, value TEXT NOT NULL, at TEXT NOT NULL DEFAULT (datetime('now')))");
+  const log = db.prepare("INSERT INTO defaults_log (entity, entity_id, field, value) VALUES (?, ?, ?, ?)");
+  db.exec("BEGIN");
+  try {
+    for (const { id, set } of plan.clients) {
+      for (const [field, value] of Object.entries(set)) {
+        db.prepare(`UPDATE clients SET ${field} = ? WHERE id = ? AND ${field} = ''`).run(value, id);
+        log.run("client", id, field, value);
+      }
+    }
+    for (const { id, assigned_user_id } of plan.cases) {
+      db.prepare("UPDATE cases SET assigned_user_id = ? WHERE id = ? AND assigned_user_id IS NULL").run(assigned_user_id, id);
+      log.run("case", id, "assigned_user_id", String(assigned_user_id));
+    }
+    db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('defaults-v2-53')").run();
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); throw err; }
 }
 
 function seed(db) {

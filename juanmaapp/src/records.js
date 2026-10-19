@@ -7,7 +7,7 @@ import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
-import { clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange } from "./record-rules.js";
+import { clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
 import { AREAS, canonicalDepartment, canonicalCity, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
 
@@ -348,6 +348,12 @@ export function recordsRouter(db) {
     return u.id;
   };
 
+  // Version 2.53 (user's rule): a new case without responsible gets John Quiñones, when he can hold it.
+  const defaultAssignee = (officeId) => {
+    const id = defaultResponsible(db.prepare("SELECT id, name, active FROM users").all().map((u) => ({ ...u, active: !!u.active })));
+    try { return id ? checkAssignee(id, officeId) : null; } catch { return null; }
+  };
+
   // Keep only values for fields defined on the case's category; enforce required ones.
   const cleanFieldValues = (typeId, values) => {
     const type = getOr404("SELECT * FROM process_types WHERE id = ?", typeId, "El subproceso");
@@ -373,7 +379,7 @@ export function recordsRouter(db) {
     getOr404("SELECT id FROM clients WHERE id = ?", clientId, "El cliente");
     if (!clientVisible(req, clientId)) throw new HttpError(404, "El cliente no existe.");
     const officeId = officeFor(req, b.office_id, null);
-    const assignee = checkAssignee(b.assigned_user_id ? toInt(b.assigned_user_id, "El responsable") : null, officeId);
+    const assignee = b.assigned_user_id ? checkAssignee(toInt(b.assigned_user_id, "El responsable"), officeId) : defaultAssignee(officeId);
     const typeId = toInt(b.process_type_id, "El subproceso");
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);

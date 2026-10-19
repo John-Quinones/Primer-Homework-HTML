@@ -17,14 +17,69 @@ export function clientValues(body, existing, lib) {
   // Names in proper case, split into first and last names; legal entities use their business name and NIT.
   try { Object.assign(v, lib.personFields(body, existing)); } catch (err) { lib.fail(err.message); }
   v.id_number = v.id_number.replace(/\s+/g, "");
-  v.gender = v.person_type === "juridica" ? "" : lib.normGender(v.gender);
+  v.gender = v.person_type === "juridica" ? "" : lib.normGender(v.gender) || genderFromName(v.first_names);
   const department = lib.canonicalDepartment(v.department);
   if (v.department && !department) lib.fail("Departamento no reconocido.");
   v.department = department;
   v.city = lib.canonicalCity(v.city, department);
+  Object.assign(v, homePlace(v));
   v.address = lib.properAddress(v.address);
   v.phone = lib.properPhone(v.phone);
   return v;
+}
+
+// ----- Defaults (version 2.53, user's rule) -----
+// The client's gender from the first names, Ibagué (Tolima) as the place of residence and
+// John Quiñones as the case's responsible, only where the data is empty: what is set stays.
+
+export const HOME_DEPARTMENT = "Tolima";
+export const HOME_CITY = "Ibagué";
+
+/** Ibagué (Tolima) for a client without department and city; Ibagué for Tolima without city. Returns only what to fill. */
+export function homePlace(c) {
+  if (!str(c.department) && !str(c.city)) return { department: HOME_DEPARTMENT, city: HOME_CITY };
+  if (str(c.department) === HOME_DEPARTMENT && !str(c.city)) return { city: HOME_CITY };
+  return {};
+}
+
+const MALE = new Set(("abelardo abel abraham adolfo adrian agustin alberto alcides aldemar alejandro alexander alexis alfonso alfredo alirio alonso alvaro amado anderson andres angel anibal antonio argemiro ariel armando arnulfo arturo augusto aurelio benjamin bernardo braian brayan brian bryan camilo carlos cesar cristhiam cristhian cristian cristobal daniel dario david diego dilan duvan edgar edilberto edinson edinsson edison eduardo edwin efrain elias eliecer elkin emilio enrique ernesto esteban eugenio ever fabian fabio faber federico felipe felix fernando francisco gabriel german gerardo gilberto giovanni giovanny gonzalo guillermo gustavo haiver harold hector heriberto hernan hernando hugo humberto ignacio isaac ismael ivan jaime jairo javier jeider jesus jhoan jhojan jhon jhonatan jhonny jhony joan joaquin johan john johnny jonathan jorge jose josue juan julian julio kevin leonardo leonel lisandro lorenzo luis manuel marco marcos mario martin mateo mauricio maicol maycol michael miguel moises nelson nestor nicolas norberto octavio omar orlando oscar osvaldo pablo pedro rafael ramiro ramon raul reinaldo ricardo roberto rodrigo rodolfo rogelio ruben salvador samuel santiago sebastian sebstian segundo sergio silvio simon steven stiven teodoro tomas ulises uriel veimar victor vicente walter wilmer wilson william yeison yeyson yohan yovani yovany").split(" "));
+const FEMALE = new Set(("adela adriana alba alejandra alexandra alicia amanda amparo ana andrea angela angelica antonia araceli astrid aura aurora azucena beatriz bella blanca camila carmen carolina catalina cecilia celmira cenelia claudia constanza cristina daniela deisy diana dilia dirley doris dora edilma edith edna elena elibeth elizabeth elsa elvira emilce esperanza estefania estella fabiola fanny fernanda flor gelsa gladis gladys gloria graciela heidy herlinda hilda ines isabel ivonne jazmin jenny johana judith julia juliana julieth karen katherine laura leidy lida ligia liliana lina lorena lorenza lucia lucy luisa luz magdalena maira margarita maria marcela marina marisol marly martha mayerly melba mercedes mery milena mireya monica myriam natalia nelly neyla nidia nubia olga paola patricia paula piedad pilar raquel rocio rosa rosalba rosario ruth sandra sandy sara sofia sonia stella sther susana tatiana teresa valentina valeria vanessa veronica victoria viviana yaneth yanet yasmid yasmin yenni yesenia yohana yolanda yurleidy yuliana zoraida").split(" "));
+const nameKey = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z\s]/g, " ").trim();
+
+/** "hombre" | "mujer" | "" from the first names: the first name the list knows decides
+ * («María José» is a woman, «José María» a man). An unknown or uncommon name gives "" (left for the office). */
+export function genderFromName(firstNames) {
+  for (const w of nameKey(firstNames).split(/\s+/).filter(Boolean)) {
+    if (MALE.has(w)) return "hombre";
+    if (FEMALE.has(w)) return "mujer";
+  }
+  return "";
+}
+
+/** Plan of the one-time fill: which empty client fields and which cases without responsible get a value.
+ * responsibleFor(case) returns the default responsible's id for that case, or null. */
+export function defaultsPlan(clients, cases, responsibleFor) {
+  const out = { clients: [], cases: [], undecided: [] };
+  for (const c of clients) {
+    const set = { ...homePlace(c) };
+    if (c.person_type !== "juridica" && !str(c.gender)) {
+      const g = genderFromName(c.first_names || c.full_name);
+      if (g) set.gender = g; else out.undecided.push({ id: c.id, name: c.full_name });
+    }
+    if (Object.keys(set).length) out.clients.push({ id: c.id, set });
+  }
+  for (const k of cases) {
+    if (k.assigned_user_id) continue;
+    const id = responsibleFor(k);
+    if (id) out.cases.push({ id: k.id, assigned_user_id: id });
+  }
+  return out;
+}
+
+/** The default responsible (user's rule): the active user named John Quiñones, else null. */
+export function defaultResponsible(users) {
+  const isJohn = (u) => { const n = nameKey(u.name).replace(/\s+/g, " "); return n === "john quinones" || n.startsWith("john quinones "); };
+  return users.find((u) => u.active && isJohn(u))?.id ?? null;
 }
 
 export const PHOTO_MAX = 1_500_000; // characters of the data URL (about 1.1 MB of image)
