@@ -39,6 +39,9 @@ html = html
   .replace('<script src="combo.js"></script>', () => `<script>window.JUANMA_DIVIPOLA = ${read("public/data/divipola.json")};</script>\n<script>${safe(read("public/combo.js"))}</script>`)
   .replace('<script src="importer.js"></script>', () => `<script>${safe(read("public/importer.js"))}</script>`)
   .replace('<script src="vendor/write-excel-file.min.js"></script>', () => `<script>${safe(read("node_modules/write-excel-file/bundle/write-excel-file.min.js"))}</script>`)
+  .replace('<script src="vendor/qrcode.js"></script>', () => `<script>${safe(read("node_modules/qrcode-generator/qrcode.js"))}</script>`)
+  .replace('<script src="logo-wm.js"></script>', () => `<script>${safe(read("public/logo-wm.js"))}</script>`)
+  .replace('<script src="qr.js"></script>', () => `<script>${safe(read("public/qr.js"))}</script>`)
   .replace('<script src="vendor/pizzip.min.js"></script>', () => `<script>${safe(read("node_modules/pizzip/dist/pizzip.min.js"))}</script>`)
   .replace('<script src="vendor/docxtemplater.min.js"></script>', () => `<script>${safe(read("node_modules/docxtemplater/build/docxtemplater.min.js"))}</script>`)
   // Version 2.58: the receipt's Word base (letterhead, QR, footer) travels inside the single page.

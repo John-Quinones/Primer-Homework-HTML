@@ -91,6 +91,7 @@ export function createApp(db) {
   const sendPdfjs = (key) => (_req, res) => { pdfjs ||= pdfjsClassic(root); res.type("text/javascript").send(pdfjs[key]); };
   app.get("/vendor/pdfjs.js", sendPdfjs("lib"));
   app.get("/vendor/pdfjs-worker.js", sendPdfjs("worker"));
+  app.get("/vendor/qrcode.js", (_req, res) => res.sendFile(path.join(root, "node_modules/qrcode-generator/qrcode.js")));
   app.get("/vendor/pizzip.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/pizzip/dist/pizzip.min.js")));
   app.get("/vendor/docxtemplater.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/docxtemplater/build/docxtemplater.min.js")));
   // Version 2.44: PDF of a Word minuta with the Word's look.

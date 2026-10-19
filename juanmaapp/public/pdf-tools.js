@@ -98,7 +98,9 @@
   // pdf-lib's standard fonts write WinAnsi: drop what it cannot encode instead of failing.
   const ansi = (t) => String(t ?? "").replace(/[^\x20-\x7E -ÿ–—‘’“”•…€]/g, "");
 
-  const STAMP = { w: 170, h: 78, gap: 8, margin: 26, footer: 28 };
+  const STAMP = { w: 250, h: 104, gap: 8, margin: 26, footer: 28 };
+  // «2026-10-19 14:58:20 -05:00»: the stored UTC time as Colombia time with its offset (version 2.60).
+  const isoCo = (utc) => (utc ? new Date(Date.parse(String(utc).replace(" ", "T") + "Z") - 5 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ") + " -05:00" : "");
   // "at:X,Y": top-left corner of the first stamp as a fraction (0–1) of the page width and height,
   // measured from the top-left corner, as the sender placed it on the preview (version 2.25).
   function stampSpot(pos) {
@@ -153,7 +155,8 @@
     const font = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
     const navy = rgb(0, 43 / 255, 106 / 255), blue = rgb(2 / 255, 124 / 255, 198 / 255), gray = rgb(0.35, 0.35, 0.35);
     const signed = r.signers.filter((s) => s.status === "firmado");
-    const images = await Promise.all(signed.map((s) => pdf.embedPng(s.signature_png).catch(() => null)));
+    const wm = window.JuanmaLogoWm ? await pdf.embedPng(window.JuanmaLogoWm.png).catch(() => null) : null;
+    const verifyText = r.verify_code ? (r.verify_url ? `${r.verify_url}#${r.verify_code}` : `TecjuridicosApp · verificación de firma electrónica · código ${r.verify_code}`) : "";
     const pages = pdf.getPages();
     const verifyLine = r.verify_code ? ` · Verifique en ${r.verify_url || "TecjuridicosApp → Firmas → Verificar"} con el código ${r.verify_code}` : "";
     for (const page of pages) {
@@ -178,18 +181,24 @@
       const boxW = STAMP.w, boxH = STAMP.h;
       stampBoxes(width, height, signed.length, pos, top).forEach(({ x, y }, i) => {
         const s = signed[i];
-        page.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1, 1, 1), opacity: 0.94, borderColor: blue, borderWidth: 0.8 });
-        const img = images[i];
-        if (img) {
-          const k = Math.min(110 / img.width, 30 / img.height);
-          page.drawImage(img, { x: x + 6, y: y + boxH - 6 - img.height * k, width: img.width * k, height: img.height * k });
-        }
-        const t = (text, dy, f = font, size = 6.6, color = rgb(0.1, 0.1, 0.1)) => page.drawText(ansi(text).slice(0, 52), { x: x + 6, y: y + dy, size, font: f, color });
-        t(s.typed_name || s.name, 31, bold, 7.4, navy);
-        t(`${s.id_type || ""} ${s.id_number || ""}`.trim(), 22.5);
-        t(`Firmó: ${co(s.signed_at).replace(" (hora de Colombia)", " (hora Colombia)")}`, 14);
-        t(s.method === "presencial" ? "Verificación: en persona con testigo"
-          : `Verificación: código OTP por ${s.otp_channel === "sms" ? "SMS" : s.otp_channel === "whatsapp" ? "WhatsApp" : "correo"}`, 5.5, font, 6.2, gray);
+        page.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1, 1, 1), opacity: 0.94 });
+        // Tecjuridicos logo faded behind the whole stamp (version 2.60).
+        if (wm) { const zone = boxW - 74, k = Math.min(zone / wm.width, (boxH - 8) / wm.height); page.drawImage(wm, { x: x + 70 + (zone - wm.width * k) / 2, y: y + (boxH - wm.height * k) / 2, width: wm.width * k, height: wm.height * k, opacity: 0.55 }); }
+        // QR with the verification link (navy, transparent background) and, under the name, the signature data.
+        const qr = verifyText ? window.JuanmaQr?.modules?.(`${verifyText}`) : null;
+        const qs = 58, cell = qr ? qs / qr.length : 0, qx = x + 6, qy = y + boxH - 6 - qs;
+        if (qr) qr.forEach((row, ri) => row.forEach((dark, ci) => dark && page.drawRectangle({ x: qx + ci * cell, y: qy + qs - (ri + 1) * cell, width: cell + 0.05, height: cell + 0.05, color: navy })));
+        const left = x + (qr ? qs + 14 : 8);
+        const put = (text, dx, dy, f, size, color, max = 40) => page.drawText(ansi(text).slice(0, max), { x: dx, y: y + dy, size, font: f, color });
+        put(s.typed_name || s.name, left, boxH - 16, font, 9, gray, 34);
+        put(`${s.id_type || "CC"}. ${s.id_number || ""}`.trim(), left, boxH - 28, font, 9, gray);
+        put("Firma Electrónica", left, boxH - 42, bold, 6.5, blue);
+        put(isoCo(s.signed_at), left, boxH - 50, font, 6.5, blue);
+        const bx = x + 6;
+        put(s.typed_name || s.name, bx, 24, bold, 7.4, rgb(0.06, 0.06, 0.06), 52);
+        put([`${s.id_type || ""} ${s.id_number || ""}`.trim(), s.email, s.phone].filter(Boolean).join(" · "), bx, 15, font, 6.4, rgb(0.1, 0.1, 0.1), 66);
+        put(s.method === "presencial" ? "Verificación: en persona con testigo"
+          : `Verificación: código OTP por ${s.otp_channel === "sms" ? "SMS" : s.otp_channel === "whatsapp" ? "WhatsApp" : "correo"}`, bx, 6, font, 6, gray, 66);
       });
     }
     const cert = await PDFDocument.load(await signatureCertificate(r).arrayBuffer());

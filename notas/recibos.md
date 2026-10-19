@@ -21,3 +21,5 @@ Pedido de John (19/10/2026, hilo «Recibos de pago con firma»). Instrucciones c
 - Pruebas: `test/v258-recibos.test.js` (servidor y enlace dan lo mismo).
 
 - v2.59 (19/10/2026, John): el recibo debe quedar con el formato (proforma), membrete y pie exactamente iguales a los demás Word; y lleva la firma electrónica del usuario (menú del usuario → «Mi firma electrónica», dibujada; se estampa sobre su nombre).
+
+- v2.60 (19/10/2026, John): la firma electrónica (módulo Firmas y recibos) se plasma como su imagen de ejemplo: QR, nombre, CC, «Firma Electrónica» con fecha y hora -05:00 y bloque de datos; con el logo de Tecjuridicos SAS como marca de agua al fondo del sello. John la llamó «certificada»: la App hace firma electrónica con evidencia, no certificada por entidad acreditada (ONAC); explicárselo.

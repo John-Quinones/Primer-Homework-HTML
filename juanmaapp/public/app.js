@@ -6114,28 +6114,53 @@ async function buildReceiptFiles(r) {
   let word = D.fillDocx(await receiptBaseBytes(), data, RECEIPT_LABELS);
   const sign = r.created_by ? await userSignature(r.created_by) : "";
   if (sign) word = await stampSignature(word, sign);
+  word = await insertWordImage(word, await receiptStampPng(r), { name: "sello-firma-electronica", widthEmu: 3300000 });
   const base = `Recibo ${receiptNo(r.number)} ${safeName(r.client_name)}`;
   let pdf;
   try { pdf = await window.JuanmaDocxPdf.docxToPdf(new Uint8Array(await word.arrayBuffer())); }
   catch { pdf = await simpleReceiptPdf(r); }
   return { word, pdf, base, missingSigner: !r.signer_name || !r.signer_id };
 }
-/** Puts the user's drawn signature (PNG data URL) above the signature line of the receipt's Word. */
-async function stampSignature(word, dataUrl) {
+/** Inserts a PNG (data URL) as its own paragraph just above the signature line of the receipt's Word. */
+async function insertWordImage(word, dataUrl, { name, widthEmu }) {
   const zip = new window.PizZip(await word.arrayBuffer());
-  zip.file("word/media/firma-usuario.png", dataUrl.split(",")[1], { base64: true });
-  let rels = zip.file("word/_rels/document.xml.rels").asText();
-  rels = rels.replace("</Relationships>", '<Relationship Id="rIdFirmaUsuario" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/firma-usuario.png"/></Relationships>');
-  zip.file("word/_rels/document.xml.rels", rels);
+  const rid = "rId" + name.replace(/\W/g, "");
+  zip.file(`word/media/${name}.png`, dataUrl.split(",")[1], { base64: true });
+  zip.file("word/_rels/document.xml.rels", zip.file("word/_rels/document.xml.rels").asText()
+    .replace("</Relationships>", `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${name}.png"/></Relationships>`));
   const dims = await new Promise((ok) => { const i = new Image(); i.onload = () => ok([i.naturalWidth, i.naturalHeight]); i.onerror = () => ok([400, 160]); i.src = dataUrl; });
-  const cx = 1800000, cy = Math.round(cx * dims[1] / dims[0]); // 5 cm wide
-  const drawing = `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9001" name="Firma electrónica"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="9001" name="firma-usuario.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdFirmaUsuario" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+  const cx = widthEmu, cy = Math.round(cx * dims[1] / dims[0]), n = 9000 + Math.floor(Math.random() * 900);
+  const drawing = `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="${name}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${n}" name="${name}.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
   let doc = zip.file("word/document.xml").asText();
-  const at = doc.indexOf("______");
-  const start = doc.lastIndexOf("<w:p>", at);
+  const start = doc.lastIndexOf("<w:p>", doc.indexOf("______"));
   doc = doc.slice(0, start) + `<w:p><w:pPr><w:pStyle w:val="Sinespaciado"/><w:keepNext/><w:jc w:val="left"/></w:pPr>${drawing}</w:p>` + doc.slice(start);
   zip.file("word/document.xml", doc);
   return zip.generate({ type: "blob", mimeType: word.type });
+}
+/** The user's drawn signature above the signature line (version 2.59). */
+const stampSignature = (word, dataUrl) => insertWordImage(word, dataUrl, { name: "firma-usuario", widthEmu: 1800000 });
+
+/** The electronic-signature stamp of a receipt (version 2.60): QR (navy, transparent), name, document, «Firma Electrónica» and
+ * the time with its Colombia offset, over the faded Tecjuridicos logo. The QR holds the receipt's data and a short hash of them. */
+async function receiptStampPng(r) {
+  const when = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ") + " -05:00";
+  const facts = `Tecjuridicos S.A.S. NIT ${paySettings?.firm_nit || ""} | Recibo de caja N.º ${r.number} | ${cop(r.amount)} | ${r.paid_on} | ${r.client_name} | Firmado electrónicamente por ${r.signer_name || ""} C.C. ${r.signer_id || ""} | ${when}`;
+  const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(facts)))].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const W = 760, H = 190, canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const wm = window.JuanmaLogoWm;
+  if (wm) await new Promise((ok) => { const img = new Image(); img.onload = () => { const k = Math.min((W - 200) / wm.w, (H - 20) / wm.h); ctx.globalAlpha = 0.55; ctx.drawImage(img, 190 + (W - 200 - wm.w * k) / 2, (H - wm.h * k) / 2, wm.w * k, wm.h * k); ctx.globalAlpha = 1; ok(); }; img.onerror = ok; img.src = wm.png; });
+  const qr = new Image();
+  await new Promise((ok) => { qr.onload = ok; qr.onerror = ok; qr.src = window.JuanmaQr.png(`${facts} | ${hash}`, 480); });
+  ctx.drawImage(qr, 10, 10, 170, 170);
+  ctx.textBaseline = "alphabetic";
+  const text = (t, x, y, font, color) => { ctx.font = font; ctx.fillStyle = color; ctx.fillText(t, x, y); };
+  text(r.signer_name || "[FILL: nombre completo de quien firma]", 200, 64, "27px Arial, sans-serif", "#555");
+  text(`CC. ${r.signer_id || "[FILL: cédula]"}`, 200, 104, "27px Arial, sans-serif", "#555");
+  text("Firma Electrónica", 200, 140, "bold 20px Arial, sans-serif", "#027cc6");
+  text(when, 200, 166, "18px Arial, sans-serif", "#027cc6");
+  return canvas.toDataURL("image/png");
 }
 /** Saves Word and PDF in the case, once per receipt. Returns true when they are (now) in the case. */
 async function saveReceiptToCase(r, files) {

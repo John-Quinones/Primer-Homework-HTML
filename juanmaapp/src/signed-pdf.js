@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { jsPDF } from "jspdf";
 import * as PDFLib from "pdf-lib";
 
@@ -12,7 +13,10 @@ let tools = null;
 function load() {
   if (tools) return tools;
   // Run in this realm (not a vm context) so pdf-lib recognizes the arrays and pages it is given.
-  const window = { jspdf: { jsPDF }, PDFLib };
+  const qrcode = createRequire(import.meta.url)("qrcode-generator");
+  const modules = (text) => { const q = qrcode(0, "M"); q.addData(String(text)); q.make(); const n = q.getModuleCount(); return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c))); };
+  const window = { jspdf: { jsPDF }, PDFLib, JuanmaQr: { modules } };
+  new Function("window", readFileSync(path.join(root, "public/logo-wm.js"), "utf8"))(window);
   new Function("window", readFileSync(path.join(root, "public/pdf-tools.js"), "utf8"))(window);
   tools = window.JuanmaPdf;
   return tools;
