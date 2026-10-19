@@ -7,17 +7,16 @@ import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
-import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
+import { clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange } from "./record-rules.js";
+import { AREAS, canonicalDepartment, canonicalCity, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
-const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
-const PHOTO_MAX = 1_500_000; // characters of the data URL (about 1.1 MB of image)
 const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id",
   "person_type", "first_names", "last_names", "legal_rep", "gender"];
-const NAME_FIELDS = ["full_name", "id_type", "person_type", "first_names", "last_names", "legal_rep"];
 
 const fail400 = (msg) => { throw new HttpError(400, msg); };
+const PLACE = { canonicalDepartment, canonicalCity, placeFromRadicado, areas: AREAS, fail: fail400 };
 
 
 function requireText(value, label) {
@@ -90,16 +89,7 @@ export function recordsRouter(db) {
 
   // ---------- Clients ----------
   const clientValues = (req, body, existing = {}) => {
-    const v = {};
-    for (const f of CLIENT_FIELDS) if (f !== "office_id" && !NAME_FIELDS.includes(f)) v[f] = f in body ? str(body[f]) : existing[f] ?? "";
-    // Names in proper case, split into first and last names; legal entities use their business name and NIT.
-    try { Object.assign(v, personFields(body, existing)); } catch (err) { throw new HttpError(400, err.message); }
-    v.id_number = v.id_number.replace(/\s+/g, "");
-    v.gender = v.person_type === "juridica" ? "" : normGender(v.gender);
-    v.department = canonicalDepartment(v.department) || (v.department ? fail400("Departamento no reconocido.") : "");
-    v.city = canonicalCity(v.city, v.department);
-    v.address = properAddress(v.address);
-    v.phone = properPhone(v.phone);
+    const v = cleanClient(body, existing, { ...PLACE, personFields, properAddress, properPhone, normGender });
     v.office_id = officeFor(req, body.office_id, existing.office_id);
     return v;
   };
@@ -151,8 +141,8 @@ export function recordsRouter(db) {
     const photo = str(req.body?.photo);
     if (!photo) db.prepare("DELETE FROM client_photos WHERE client_id = ?").run(id);
     else {
-      if (!PHOTO_RE.test(photo)) fail400("La foto debe ser una imagen JPG, PNG o WebP.");
-      if (photo.length > PHOTO_MAX) fail400("La foto es demasiado grande. Use una imagen más pequeña.");
+      const problem = photoProblem(photo);
+      if (problem) fail400(problem);
       db.prepare(`INSERT INTO client_photos (client_id, photo) VALUES (?, ?)
         ON CONFLICT(client_id) DO UPDATE SET photo = excluded.photo, updated_at = datetime('now')`).run(id, photo);
     }
@@ -328,20 +318,12 @@ export function recordsRouter(db) {
   // Our clients among the parties are linked to their client record (given, or found by document number).
   const PARTY_CLIENT = "EXISTS (SELECT 1 FROM json_each(k.parties) j WHERE json_extract(j.value, '$.client_id') = ? AND json_extract(j.value, '$.ours') = 1)";
   function caseParties(req, list, mainClientId) {
-    const { parties, error } = cleanParties(list);
-    if (error) throw new HttpError(400, error);
-    const digits = (x) => String(x || "").replace(/\D/g, "");
     let allClients = null; // read once per request, only when a party needs a lookup by document
-    for (const p of parties) {
-      if (p.client_id && !clientVisible(req, p.client_id)) p.client_id = null;
-      if (p.ours && !p.client_id && digits(p.id_number).length >= 5) {
+    return JSON.stringify(linkParties(list, mainClientId, { cleanParties, fail: fail400, visible: (id) => clientVisible(req, id),
+      byDocument: (digits) => {
         allClients ??= db.prepare("SELECT id, id_number FROM clients").all();
-        const found = allClients.find((c) => digits(c.id_number) === digits(p.id_number));
-        if (found && clientVisible(req, found.id)) p.client_id = found.id;
-      }
-      if (!p.ours) p.client_id = null;
-    }
-    return JSON.stringify(parties.filter((p) => p.client_id !== mainClientId));
+        return allClients.find((c) => String(c.id_number || "").replace(/\D/g, "") === digits && clientVisible(req, c.id))?.id ?? null;
+      } }));
   }
   const partyRole = (x) => {
     const r = normPartyRole(x);
@@ -354,35 +336,8 @@ export function recordsRouter(db) {
     if (!row || !inScope(req, row.office_id)) throw new HttpError(404, "El expediente no existe.");
     return caseOut(row);
   };
-  // Place, area, court and radicado of a case. A 23-digit radicado fills the
-  // department and city (its first five digits are the DANE municipality code).
-  const caseLocation = (b, cur = {}) => {
-    const pick = (k) => (k in b ? str(b[k]) : cur[k] ?? "");
-    const radicado = normalizeRadicado(pick("radicado"));
-    if (radicado && radicado.length !== 23) throw new HttpError(400, "El radicado debe tener 23 dígitos.");
-    let department = canonicalDepartment(pick("department"));
-    if (pick("department") && !department) throw new HttpError(400, "Departamento no reconocido.");
-    let city = canonicalCity(pick("city"), department);
-    const fromRad = radicado ? placeFromRadicado(radicado) : null;
-    if (fromRad && !department) { department = fromRad.department; city = city || fromRad.city; }
-    const area = pick("area");
-    if (area && !AREAS.includes(area)) throw new HttpError(400, "Área no válida.");
-    let courtId = "court_id" in b ? (b.court_id ? toInt(b.court_id, "El despacho") : null) : cur.court_id ?? null;
-    let courtName = pick("court_name"), courtEmail = pick("court_email");
-    if (courtId) {
-      const c = db.prepare("SELECT * FROM courts WHERE id = ?").get(courtId);
-      if (!c) throw new HttpError(400, "El despacho no existe en el directorio.");
-      courtName = c.name;
-      courtEmail = c.email;
-      department ||= c.department;
-      city ||= c.city;
-    }
-    // Version 2.38 (user's rule): only the «Consulta automática» box turns it on.
-    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? 0;
-    return { department, city, area: area || (courtId ? db.prepare("SELECT area FROM courts WHERE id = ?").get(courtId).area : ""),
-      court_id: courtId, court_name: courtName, court_email: courtEmail, radicado, monitor: radicado ? monitor : 0,
-      judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
-  };
+  // Place, area, court and radicado of a case (rules in record-rules.js).
+  const caseLocation = (b, cur = {}) => locate(b, cur, { ...PLACE, court: (id) => db.prepare("SELECT * FROM courts WHERE id = ?").get(id) ?? null });
 
   // The responsible person must be an active user of the case's office (or see all offices).
   const checkAssignee = (userId, officeId) => {
@@ -396,14 +351,7 @@ export function recordsRouter(db) {
   // Keep only values for fields defined on the case's category; enforce required ones.
   const cleanFieldValues = (typeId, values) => {
     const type = getOr404("SELECT * FROM process_types WHERE id = ?", typeId, "El subproceso");
-    const fields = db.prepare("SELECT * FROM custom_fields WHERE category_id = ?").all(type.category_id);
-    const out = {};
-    for (const f of fields) {
-      const v = str(values?.[f.id] ?? values?.[String(f.id)]);
-      if (f.required && !v) throw new HttpError(400, `El campo "${f.label}" es obligatorio.`);
-      if (v) out[f.id] = v;
-    }
-    return out;
+    return fieldValues(db.prepare("SELECT * FROM custom_fields WHERE category_id = ?").all(type.category_id), values, fail400);
   };
 
   r.get("/cases", h((req) => {
@@ -435,8 +383,7 @@ export function recordsRouter(db) {
       .run(clientId, typeId, str(b.title), normStatus(b.status), str(b.counterparty), str(b.facts),
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
         loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId), loc.judge_name, cleanCaseNumber(b.case_number),
-        // Imported cases keep the date they were opened in the previous system.
-        /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : null).lastInsertRowid;
+        openedAt(b.created_at)).lastInsertRowid;
     res.status(201);
     return getCase(req, id);
   }));
@@ -531,7 +478,7 @@ export function recordsRouter(db) {
   // funcionario (assigned_user_id) even without cases.write (user's rule).
   r.put("/cases/:id/number", h((req) => {
     const cur = getCase(req, toInt(req.params.id, "id"));
-    if (!can(req, "cases.write") && cur.assigned_user_id !== req.user.id) throw new HttpError(403, "Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia este número.");
+    if (!mayEditCaseIds(can(req, "cases.write"), req.user.id, cur)) throw new HttpError(403, "Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia este número.");
     db.prepare("UPDATE cases SET case_number = ?, updated_at = datetime('now') WHERE id = ?").run(cleanCaseNumber(req.body?.case_number), cur.id);
     return getCase(req, cur.id);
   }));
@@ -541,22 +488,15 @@ export function recordsRouter(db) {
   r.put("/cases/:id/radicado", h((req) => {
     const cur = getCase(req, toInt(req.params.id, "id"));
     // Version 2.36: the case's responsible funcionario may also type or change it (user's rule).
-    if (!can(req, "cases.write") && cur.assigned_user_id !== req.user.id) throw new HttpError(403, "Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia el radicado.");
-    const radicado = normalizeRadicado(req.body?.radicado);
-    if (radicado && radicado.length !== 23) fail400(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
-    if (radicado === cur.radicado) return cur;
-    if (cur.radicado && !req.body?.replace) fail400(`Este expediente ya tiene el radicado ${formatRadicado(cur.radicado)}. Confirme si quiere cambiarlo.`);
-    if (radicado) {
+    if (!mayEditCaseIds(can(req, "cases.write"), req.user.id, cur)) throw new HttpError(403, "Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia el radicado.");
+    const next = radicadoChange(cur, req.body, { placeFromRadicado, formatRadicado, fail: fail400, usedBy: (radicado) => {
       const other = db.prepare(`SELECT k.id, k.client_id, k.title, c.full_name, ${typePath("pt")} AS type_name FROM cases k JOIN clients c ON c.id = k.client_id
         JOIN process_types pt ON pt.id = k.process_type_id WHERE k.radicado = ? AND k.id <> ?`).get(radicado, cur.id);
-      if (other) fail400(`El radicado ${formatRadicado(radicado)} ya está en ${clientVisible(req, other.client_id) ? `el expediente «${other.title || other.type_name}» de ${other.full_name}` : "otro expediente"}.`);
-    }
-    const place = radicado && !cur.department ? placeFromRadicado(radicado) : null;
-    // Version 2.38 (user's rule): saving a radicado never turns the automatic consultation on by itself;
-    // only the box does (sent as monitor), otherwise the case keeps what it had.
-    const monitor = !radicado ? 0 : req.body && "monitor" in req.body ? (req.body.monitor ? 1 : 0) : cur.monitor ? 1 : 0;
+      return !other ? "" : clientVisible(req, other.client_id) ? `el expediente «${other.title || other.type_name}» de ${other.full_name}` : "otro expediente";
+    } });
+    if (!next) return cur;
     db.prepare("UPDATE cases SET radicado = ?, monitor = ?, department = ?, city = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(radicado, monitor, place?.department || cur.department || "", place ? cur.city || place.city : cur.city || "", cur.id);
+      .run(next.radicado, next.monitor, next.department, next.city, cur.id);
     return getCase(req, cur.id);
   }));
 

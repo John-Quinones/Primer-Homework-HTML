@@ -10,9 +10,10 @@
   const AUTH = window.JUANMA_AUTH || { roles: [], permissions: {}, matrix: {} };
   const REPORTS = window.JUANMA_REPORTS || {};
   const TPL = window.JUANMA_TEMPLATES || { seed: [], categories: [], variables: [] };
-  const AREAS = window.JUANMA_AREAS || [];
+  const AREAS = window.JuanmaPlaces.AREAS;
   const DIV = window.JUANMA_DIVIPOLA || { departamentos: [], municipios: [] };
   const CM = window.JuanmaCaseMeta;
+  const RR = window.JuanmaRecords; // client and case rules, same code as the server (src/record-rules.js)
   const LG = window.JuanmaLedger;
   const OPEN = ["Activo"];
   const ARCHIVED = ["Archivo provisional", "Archivo definitivo"];
@@ -188,31 +189,10 @@
     return p.filter((x) => !only.includes(x));
   };
   const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
-  const canonDep = (x) => {
-    const n = nrm(x);
-    if (!n) return "";
-    return DIV.departamentos.find((d) => nrm(d.name) === n)?.name || (n.startsWith("bogota") ? "Bogotá, D.C." : n.startsWith("valle") ? "Valle del Cauca" : "");
-  };
-  const canonCity = (x, dep) => {
-    const n = nrm(x);
-    if (!n) return "";
-    const code = DIV.departamentos.find((d) => d.name === dep)?.code;
-    return DIV.municipios.find((m) => (!code || m.dep === code) && nrm(m.name) === n)?.name || (n.startsWith("bogota") ? "Bogotá, D.C." : window.JuanmaPerson.properName(x));
-  };
-  const AREA_RULES = [[/ejecucion de penas/, "Ejecución de Penas"], [/pequenas causas|competencia multiple/, "Pequeñas Causas y Competencia Múltiple"],
-    [/restitucion de tierras/, "Restitución de Tierras"], [/adolescente/, "Penal para Adolescentes"], [/administrativ|contencioso/, "Administrativo"],
-    [/laboral/, "Laboral"], [/familia/, "Familia"], [/promiscuo/, "Promiscuo"], [/penal|control de garantias|conocimiento/, "Penal"], [/civil/, "Civil"],
-    [/constitucional/, "Constitucional"]];
-  const inferArea = (name, explicit) => {
-    const e = nrm(explicit);
-    if (e) { const d = AREAS.find((a) => nrm(a) === e); if (d) return d; for (const [re, a] of AREA_RULES) if (re.test(e)) return a; }
-    for (const [re, a] of AREA_RULES) if (re.test(nrm(name))) return a;
-    return "Otro";
-  };
-  const placeFromRad = (r) => {
-    const m = DIV.municipios.find((x) => x.code === String(r).slice(0, 5));
-    return m ? { department: DIV.departamentos.find((d) => d.code === m.dep).name, city: m.name } : null;
-  };
+  // Department, city, area and radicado place: the same code as the server (src/place-rules.js).
+  const PL = window.JuanmaPlaces;
+  const { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad } = PL.makePlaces(DIV, window.JuanmaPerson.properName);
+  const inferArea = PL.inferArea;
   const bogotaNow = (d = new Date()) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
   // Version 2.11, same as the server: a hidden user reads "Asistente"; only the hidden-users
@@ -296,17 +276,9 @@
   };
   // Same as the server: our clients among the parties are linked to their client record.
   const isPartyClient = (k, clientId) => (k.parties || []).some((p) => p.ours && p.client_id === clientId);
-  const caseParties = (list, mainClientId) => {
-    const { parties, error } = CM.cleanParties(list);
-    if (error) fail(error);
-    const digits = (x) => String(x || "").replace(/\D/g, "");
-    for (const p of parties) {
-      if (p.client_id && !s.clients.some((c) => c.id === p.client_id && clientVisible(c))) p.client_id = null;
-      if (p.ours && !p.client_id && digits(p.id_number).length >= 5) p.client_id = s.clients.find((c) => clientVisible(c) && digits(c.id_number) === digits(p.id_number))?.id ?? null;
-      if (!p.ours) p.client_id = null;
-    }
-    return parties.filter((p) => p.client_id !== mainClientId);
-  };
+  const caseParties = (list, mainClientId) => RR.linkParties(list, mainClientId, { cleanParties: CM.cleanParties, fail,
+    visible: (id) => s.clients.some((c) => c.id === id && clientVisible(c)),
+    byDocument: (digits) => s.clients.find((c) => String(c.id_number || "").replace(/\D/g, "") === digits && clientVisible(c))?.id ?? null });
   const typePath = (t) => { const p = t.parent_id && s.types.find((x) => x.id === t.parent_id); return p ? `${p.name} › ${t.name}` : t.name; };
   const typeUses = (t) => s.cases.filter((k) => k.process_type_id === t.id || s.types.some((x) => x.parent_id === t.id && x.id === k.process_type_id)).length;
   const visibleCase = (id) => {
@@ -316,46 +288,13 @@
   };
   const cleanValues = (typeId, values) => {
     const t = s.types.find((t) => t.id === typeId) || fail("El subproceso no existe.");
-    const out = {};
-    for (const f of s.fields.filter((f) => f.category_id === t.category_id)) {
-      const v = str(values?.[f.id]);
-      if (f.required && !v) fail(`El campo "${f.label}" es obligatorio.`);
-      if (v) out[f.id] = v;
-    }
-    return out;
+    return RR.fieldValues(s.fields.filter((f) => f.category_id === t.category_id), values, fail);
   };
   const uniq = (list, name, ignoreId) => list.some((x) => x.name.toLowerCase() === name.toLowerCase() && x.id !== ignoreId) && fail("Ya existe un registro con ese nombre.");
-  const CLIENT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes", "gender"];
   const PERSON = window.JuanmaPerson;
-  const nameFields = (b, existing = {}) => { try { return PERSON.personFields(b, existing); } catch (err) { fail(err.message); } };
-  const placeClient = (c) => {
-    const dep = canonDep(c.department);
-    if (c.department && !dep) fail("Departamento no reconocido.");
-    c.department = dep;
-    c.city = canonCity(c.city, dep);
-    c.address = PERSON.properAddress(c.address);
-    c.phone = PERSON.properPhone(c.phone);
-  };
-  // Same rules as the server's caseLocation().
-  const caseLocation = (b, cur = {}) => {
-    const pick = (k) => (k in b ? str(b[k]) : cur[k] ?? "");
-    const radicado = pick("radicado").replace(/\D/g, "");
-    if (radicado && radicado.length !== 23) fail("El radicado debe tener 23 dígitos.");
-    let department = canonDep(pick("department"));
-    if (pick("department") && !department) fail("Departamento no reconocido.");
-    let city = canonCity(pick("city"), department);
-    const fr = radicado ? placeFromRad(radicado) : null;
-    if (fr && !department) { department = fr.department; city = city || fr.city; }
-    const area = pick("area");
-    if (area && !AREAS.includes(area)) fail("Área no válida.");
-    const courtId = "court_id" in b ? (+b.court_id || null) : cur.court_id ?? null;
-    let court_name = pick("court_name"), court_email = pick("court_email");
-    const c = courtId ? s.courts.find((x) => x.id === courtId) || fail("El despacho no existe en el directorio.") : null;
-    if (c) { court_name = c.name; court_email = c.email; department ||= c.department; city ||= c.city; }
-    const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ?? 0; // v2.38: only the box turns it on
-    return { department, city, area: area || c?.area || "", court_id: courtId, court_name, court_email, radicado, monitor: radicado ? monitor : 0,
-      judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
-  };
+  const PLACE = { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad, areas: AREAS, fail };
+  const clientValues = (b, existing = {}) => RR.clientValues(b, existing, { ...PLACE, personFields: PERSON.personFields, properAddress: PERSON.properAddress, properPhone: PERSON.properPhone, normGender: CM.normGender });
+  const caseLocation = (b, cur = {}) => RR.caseLocation(b, cur, { ...PLACE, court: (id) => s.courts.find((x) => x.id === id) || null });
   const savedVisible = (r) => scope() === null || r.created_by === me().id || (r.case_id && s.cases.some((k) => k.id === r.case_id && inScope(k.office_id)));
   const usedFolders = () => {
     const ids = s.fields.filter((f) => CM.isFolderLabel(f.label)).map((f) => f.id);
@@ -711,8 +650,8 @@
       const photo = str(b.photo);
       if (!photo) { delete s.blobs[`user-photo-${u.id}`]; u.foto = "No"; }
       else {
-        /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo) || fail("La foto debe ser una imagen JPG, PNG o WebP.");
-        photo.length <= 1500000 || fail("La foto es demasiado grande. Use una imagen más pequeña.");
+        const problem = RR.photoProblem(photo);
+        if (problem) fail(problem);
         s.blobs[`user-photo-${u.id}`] = photo;
         u.foto = "Sí"; // only for the audit diff, like the client's
       }
@@ -998,12 +937,7 @@
     }],
     ["POST", /^\/clients$/, (m, b) => {
       need("clients.write");
-      const c = { id: nextId(), created_at: stamp(), foto: "No" };
-      for (const f of CLIENT_FIELDS) c[f] = str(b[f]);
-      Object.assign(c, nameFields(b));
-      c.id_number = c.id_number.replace(/\s+/g, "");
-      c.gender = c.person_type === "juridica" ? "" : CM.normGender(c.gender);
-      placeClient(c);
+      const c = { id: nextId(), created_at: stamp(), foto: "No", ...clientValues(b) };
       c.office_id = officeFor(b.office_id);
       s.clients.push(c);
       return clientOut(c, true);
@@ -1011,12 +945,7 @@
     ["PUT", /^\/clients\/(\d+)$/, (m, b) => {
       need("clients.write");
       const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
-      const names = nameFields(b, c);
-      for (const f of CLIENT_FIELDS) if (f in b) c[f] = str(b[f]);
-      Object.assign(c, names);
-      c.id_number = c.id_number.replace(/\s+/g, "");
-      c.gender = c.person_type === "juridica" ? "" : CM.normGender(c.gender);
-      placeClient(c);
+      Object.assign(c, clientValues(b, c));
       c.office_id = officeFor(b.office_id, c.office_id);
       return clientOut(c, true);
     }],
@@ -1027,8 +956,8 @@
       const photo = str(b.photo);
       if (!photo) { delete s.blobs[`photo-${c.id}`]; c.foto = "No"; }
       else {
-        /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo) || fail("La foto debe ser una imagen JPG, PNG o WebP.");
-        photo.length <= 1500000 || fail("La foto es demasiado grande. Use una imagen más pequeña.");
+        const problem = RR.photoProblem(photo);
+        if (problem) fail(problem);
         s.blobs[`photo-${c.id}`] = photo;
         c.foto = "Sí";
       }
@@ -1217,7 +1146,7 @@
         client_role: partyRole(b.client_role), affiliated: !!b.affiliated,
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
         assigned_user_id: checkAssignee(b.assigned_user_id, officeId), updated_at: stamp(),
-        created_at: /^\d{4}-\d{2}-\d{2}$/.test(str(b.created_at)) && !Number.isNaN(Date.parse(b.created_at)) ? `${b.created_at} 00:00:00` : stamp(),
+        created_at: RR.openedAt(b.created_at) || stamp(),
         last_checked_at: null, last_action_date: null, ...caseLocation(b), parties: caseParties(b.parties, c.id), case_number: CM.cleanCaseNumber(b.case_number),
       };
       s.cases.push(k);
@@ -1292,27 +1221,19 @@
     // «Número de expediente» (version 2.33), same rules as the server: case editors or the case's responsible.
     ["PUT", /^\/cases\/(\d+)\/number$/, (m, b) => {
       const k = visibleCase(+m[1]);
-      if (!me().permissions.includes("cases.write") && k.assigned_user_id !== me().id) fail("Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia este número.");
+      if (!RR.mayEditCaseIds(me().permissions.includes("cases.write"), me().id, k)) fail("Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia este número.");
       Object.assign(k, { case_number: CM.cleanCaseNumber(b.case_number), updated_at: stamp() });
       return caseOut(k);
     }],
     // «Cargar radicados» (version 2.24), same rules as the server.
     ["PUT", /^\/cases\/(\d+)\/radicado$/, (m, b) => {
       const k = visibleCase(+m[1]);
-      if (!me().permissions.includes("cases.write") && k.assigned_user_id !== me().id) fail("Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia el radicado.");
-      const fmt = window.JuanmaPortals.formatRadicado;
-      const radicado = str(b.radicado).replace(/\D/g, "");
-      if (radicado && radicado.length !== 23) fail(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
-      if (radicado === (k.radicado || "")) return caseOut(k);
-      if (k.radicado && !b.replace) fail(`Este expediente ya tiene el radicado ${fmt(k.radicado)}. Confirme si quiere cambiarlo.`);
-      const other = radicado && s.cases.find((x) => x.id !== k.id && x.radicado === radicado);
-      if (other) {
-        const oc = s.clients.find((c) => c.id === other.client_id);
-        fail(`El radicado ${fmt(radicado)} ya está en ${oc && clientVisible(oc) ? `el expediente «${other.title || caseOut(other).type_name}» de ${oc.full_name}` : "otro expediente"}.`);
-      }
-      const place = radicado && !k.department ? placeFromRad(radicado) : null;
-      const monitor = !radicado ? 0 : "monitor" in b ? (b.monitor ? 1 : 0) : k.monitor ? 1 : 0; // v2.38: only the box
-      Object.assign(k, { radicado, monitor, department: place?.department || k.department || "", city: place ? k.city || place.city : k.city || "", updated_at: stamp() });
+      if (!RR.mayEditCaseIds(me().permissions.includes("cases.write"), me().id, k)) fail("Solo el funcionario asignado al expediente, o quien puede editar expedientes, cambia el radicado.");
+      const next = RR.radicadoChange(k, b, { placeFromRadicado: placeFromRad, formatRadicado: window.JuanmaPortals.formatRadicado, fail, usedBy: (radicado) => {
+        const other = s.cases.find((x) => x.id !== k.id && x.radicado === radicado), oc = other && s.clients.find((c) => c.id === other.client_id);
+        return !other ? "" : oc && clientVisible(oc) ? `el expediente «${other.title || caseOut(other).type_name}» de ${oc.full_name}` : "otro expediente";
+      } });
+      if (next) Object.assign(k, next, { updated_at: stamp() });
       return caseOut(k);
     }],
     ["DELETE", /^\/cases\/(\d+)$/, (m) => {

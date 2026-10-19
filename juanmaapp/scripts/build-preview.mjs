@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import { SEED_CATALOG } from "../src/db.js";
 import { ROLES, PERMISSIONS, DEFAULT_MATRIX, GERENCIA_ONLY } from "../src/auth.js";
 import { REPORTS } from "../src/reports.js";
-import { AREAS } from "../src/places.js";
 import { SEED_TEMPLATES, DOC_CATEGORIES, VARIABLES, FEE_CLAUSE_OLD, FEE_CLAUSE_NEW, CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW, FIRM_FIXES } from "../src/templates-seed.js";
 import { asGlobal, SHARED_MODULES } from "../src/browser-module.js";
 import { readVersion, readNews } from "../src/version.js";
@@ -67,7 +66,6 @@ html = html
     `<script>window.JUANMA_SEED_CATALOG = ${JSON.stringify(SEED_CATALOG)};
 window.JUANMA_AUTH = ${JSON.stringify({ roles: ROLES, permissions: PERMISSIONS, matrix: DEFAULT_MATRIX, gerenciaOnly: GERENCIA_ONLY })};
 window.JUANMA_REPORTS = ${JSON.stringify(REPORTS)};
-window.JUANMA_AREAS = ${JSON.stringify(AREAS)};
 window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: DOC_CATEGORIES, variables: VARIABLES, feeClause: [FEE_CLAUSE_OLD, FEE_CLAUSE_NEW], contractHead: [CONTRACT_HEAD_OLD, CONTRACT_HEAD_NEW], firmFixes: FIRM_FIXES })};</script>`,
     `<script>window.JUANMA_VERSION = ${JSON.stringify({ ...readVersion(), news: readNews() })};</script>`,
     // Address of the published link, for signers' links (#firmar-CODE); filled only in the web-link version below.

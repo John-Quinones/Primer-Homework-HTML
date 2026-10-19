@@ -9,6 +9,7 @@ import { VERSION } from "./version.js";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { publicBase } from "./public-url.js";
 import { canonicalDepartment, canonicalCity } from "./places.js";
+import { photoProblem } from "./record-rules.js";
 import { properAddress, properPhone } from "./person.js";
 import { sendEmail, sendWhatsapp, channelsStatus, channelReady } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
@@ -554,7 +555,6 @@ export function adminRouter(db) {
   // ----- Optional photo of the user (funcionario) -----
   // Anyone signed in sees it (pickers, header); a hidden user's photo only to that user or with the hidden view open.
   // A user changes their own; Gerencia / users.manage changes anyone's (a Gerencia account only by Gerencia).
-  const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/, PHOTO_MAX = 1_500_000;
   const photoOf = (id) => db.prepare("SELECT photo FROM user_photos WHERE user_id = ?").get(id)?.photo || "";
   r.get("/users/:id/photo", (req, res) => {
     const id = Number(req.params.id), u = db.prepare("SELECT id, hidden FROM users WHERE id = ?").get(id);
@@ -570,8 +570,8 @@ export function adminRouter(db) {
     const photo = str(req.body?.photo);
     if (!photo) db.prepare("DELETE FROM user_photos WHERE user_id = ?").run(id);
     else {
-      if (!PHOTO_RE.test(photo)) return res.status(400).json({ error: "La foto debe ser una imagen JPG, PNG o WebP." });
-      if (photo.length > PHOTO_MAX) return res.status(400).json({ error: "La foto es demasiado grande. Use una imagen más pequeña." });
+      const problem = photoProblem(photo);
+      if (problem) return res.status(400).json({ error: problem });
       db.prepare(`INSERT INTO user_photos (user_id, photo) VALUES (?, ?)
         ON CONFLICT(user_id) DO UPDATE SET photo = excluded.photo, updated_at = datetime('now')`).run(id, photo);
     }

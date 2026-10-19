@@ -1,0 +1,126 @@
+// Client and case rules, one copy for the server (src/records.js) and the
+// published link (public/demo-backend.js). Dependency-free: each side passes
+// `lib` with its helpers, a `fail(message)` that throws its own "400" error,
+// and small lookups into its own storage (SQLite or the link's database).
+
+const str = (v) => (v == null ? "" : String(v).trim());
+
+// ---------- Clients ----------
+
+/** Plain client fields a request may set (names and document type go through personFields). */
+export const CLIENT_TEXT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes", "gender"];
+
+/** Cleaned client values from a request; fields left out keep `existing`. office_id is each side's. */
+export function clientValues(body, existing, lib) {
+  const v = {};
+  for (const f of CLIENT_TEXT_FIELDS) v[f] = f in body ? str(body[f]) : str(existing[f]);
+  // Names in proper case, split into first and last names; legal entities use their business name and NIT.
+  try { Object.assign(v, lib.personFields(body, existing)); } catch (err) { lib.fail(err.message); }
+  v.id_number = v.id_number.replace(/\s+/g, "");
+  v.gender = v.person_type === "juridica" ? "" : lib.normGender(v.gender);
+  const department = lib.canonicalDepartment(v.department);
+  if (v.department && !department) lib.fail("Departamento no reconocido.");
+  v.department = department;
+  v.city = lib.canonicalCity(v.city, department);
+  v.address = lib.properAddress(v.address);
+  v.phone = lib.properPhone(v.phone);
+  return v;
+}
+
+export const PHOTO_MAX = 1_500_000; // characters of the data URL (about 1.1 MB of image)
+
+/** Problem with a client or user photo (a JPEG/PNG/WebP data URL), or "" when it is fine. */
+export function photoProblem(photo) {
+  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo)) return "La foto debe ser una imagen JPG, PNG o WebP.";
+  if (photo.length > PHOTO_MAX) return "La foto es demasiado grande. Use una imagen más pequeña.";
+  return "";
+}
+
+// ---------- Cases ----------
+
+/** Place, area, court and radicado of a case. A 23-digit radicado fills the department and city
+ * (its first five digits are the DANE municipality code). lib.court(id) returns the directory row or null. */
+export function caseLocation(b, cur, lib) {
+  const pick = (k) => (k in b ? str(b[k]) : str(cur[k]));
+  const radicado = pick("radicado").replace(/\D/g, "");
+  if (radicado && radicado.length !== 23) lib.fail("El radicado debe tener 23 dígitos.");
+  let department = lib.canonicalDepartment(pick("department"));
+  if (pick("department") && !department) lib.fail("Departamento no reconocido.");
+  let city = lib.canonicalCity(pick("city"), department);
+  const fromRad = radicado ? lib.placeFromRadicado(radicado) : null;
+  if (fromRad && !department) { department = fromRad.department; city = city || fromRad.city; }
+  const area = pick("area");
+  if (area && !lib.areas.includes(area)) lib.fail("Área no válida.");
+  let courtId = cur.court_id ?? null;
+  if ("court_id" in b) {
+    courtId = b.court_id ? Number(b.court_id) : null;
+    if (courtId !== null && !(Number.isInteger(courtId) && courtId > 0)) lib.fail("El despacho no es válido.");
+  }
+  let courtName = pick("court_name"), courtEmail = pick("court_email");
+  const court = courtId ? lib.court(courtId) || lib.fail("El despacho no existe en el directorio.") : null;
+  if (court) {
+    courtName = court.name;
+    courtEmail = court.email;
+    department ||= court.department;
+    city ||= court.city;
+  }
+  // Version 2.38 (user's rule): only the «Consulta automática» box turns it on.
+  const monitor = "monitor" in b ? (b.monitor ? 1 : 0) : cur.monitor ? 1 : 0;
+  return { department, city, area: area || court?.area || "", court_id: courtId, court_name: courtName, court_email: courtEmail,
+    radicado, monitor: radicado ? monitor : 0, judge_name: pick("judge_name").replace(/\s+/g, " ").slice(0, 200) };
+}
+
+/** Keep only values for the fields of the case's category; required ones must be filled. */
+export function fieldValues(fields, values, fail) {
+  const out = {};
+  for (const f of fields) {
+    const v = str(values?.[f.id] ?? values?.[String(f.id)]);
+    if (f.required && !v) fail(`El campo "${f.label}" es obligatorio.`);
+    if (v) out[f.id] = v;
+  }
+  return out;
+}
+
+/** Imported cases keep the date they were opened in the previous system: "YYYY-MM-DD 00:00:00", else null. */
+export function openedAt(value) {
+  const d = str(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) ? `${d} 00:00:00` : null;
+}
+
+/** Parties of a case: our clients are linked to their client record (given, or found by document number).
+ * lib.visible(clientId) tells whether the user sees that client; lib.byDocument(digits) returns the id of a
+ * visible client with that document, or null. Returns the list without the case's main client. */
+export function linkParties(list, mainClientId, lib) {
+  const { parties, error } = lib.cleanParties(list);
+  if (error) lib.fail(error);
+  const digits = (x) => String(x || "").replace(/\D/g, "");
+  for (const p of parties) {
+    if (p.client_id && !lib.visible(p.client_id)) p.client_id = null;
+    if (p.ours && !p.client_id && digits(p.id_number).length >= 5) p.client_id = lib.byDocument(digits(p.id_number)) ?? null;
+    if (!p.ours) p.client_id = null;
+  }
+  return parties.filter((p) => p.client_id !== mainClientId);
+}
+
+/** Case number (2.33) and radicado (2.36): whoever edits cases, or the case's responsible funcionario (user's rule). */
+export function mayEditCaseIds(canWriteCases, userId, k) {
+  return !!canWriteCases || (k.assigned_user_id != null && k.assigned_user_id === userId);
+}
+
+/** «Cargar radicados» (version 2.24): one radicado per case, 23 digits, used by one case only.
+ * Changing or removing a saved one needs replace: true. lib.usedBy(radicado) describes the other case
+ * holding it («el expediente «X» de Y», or «otro expediente»), or "" when it is free.
+ * Returns null when nothing changes, else the new { radicado, monitor, department, city }. */
+export function radicadoChange(cur, body, lib) {
+  const radicado = str(body?.radicado).replace(/\D/g, "");
+  if (radicado && radicado.length !== 23) lib.fail(`El radicado debe tener 23 dígitos (tiene ${radicado.length}).`);
+  if (radicado === str(cur.radicado)) return null;
+  if (cur.radicado && !body?.replace) lib.fail(`Este expediente ya tiene el radicado ${lib.formatRadicado(cur.radicado)}. Confirme si quiere cambiarlo.`);
+  const other = radicado ? lib.usedBy(radicado) : "";
+  if (other) lib.fail(`El radicado ${lib.formatRadicado(radicado)} ya está en ${other}.`);
+  const place = radicado && !cur.department ? lib.placeFromRadicado(radicado) : null;
+  // Version 2.38 (user's rule): saving a radicado never turns the automatic consultation on by itself;
+  // only the box does (sent as monitor), otherwise the case keeps what it had.
+  const monitor = !radicado ? 0 : body && "monitor" in body ? (body.monitor ? 1 : 0) : cur.monitor ? 1 : 0;
+  return { radicado, monitor, department: place?.department || cur.department || "", city: place ? cur.city || place.city : cur.city || "" };
+}
