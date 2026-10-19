@@ -3766,8 +3766,12 @@ async function openTemplate(id) {
     const f = await api("GET", `/templates/${id}/file`);
     t.bytes = D.b64ToBytes(f.base64);
     t.vars = D.docxVariables(t.bytes);
+    t.optional = D.docxOptional(t.bytes);
+    t.lines = D.docxLineVars(t.bytes);
   } else {
     t.vars = D.textVariables(t.body);
+    t.optional = [];
+    t.lines = [];
   }
   tplActive = t;
   tplOverrides = {};
@@ -3857,23 +3861,27 @@ tplRecipient.addEventListener("recipientchange", () => {
 });
 
 const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
+// Version 2.46: a datum that opens an optional passage ({{#…}}) may stay empty; the passage is then left out.
+const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 const tplValues = () => ({ ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, v]) => v !== "")) });
 
 function renderTplVars() {
   const vals = tplValues();
-  const missing = tplActive.vars.filter((k) => !vals[k] && (tplRecipient.hidden || !k.startsWith("destinatario.")));
+  const missing = tplActive.vars.filter((k) => !vals[k] && !isOptionalVar(k) && (tplRecipient.hidden || !k.startsWith("destinatario.")));
   $("#tpl-missing").textContent = missing.length ? `${missing.length} por completar` : "Completo";
   $("#tpl-missing").className = `badge ${missing.length ? "warn" : "ok"}`;
   $("#tpl-vars-box").open = missing.length > 0;
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
-  const ordered = tplActive.vars.filter((k) => tplRecipient.hidden || !k.startsWith("destinatario.")).sort((a, b) => Number(!!vals[a]) - Number(!!vals[b]));
+  const ordered = tplActive.vars.filter((k) => tplRecipient.hidden || !k.startsWith("destinatario.")).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
   $("#tpl-vars").innerHTML = ordered.map((k) => isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
     <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
+    : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>
+    <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea). " : ""}Si lo deja vacío, esa frase no aparece" /></label>`
     : `<label>${escapeHtml(varLabel(k))}
-    <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="Falta" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
+    <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea)" : "Falta"}" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
     || '<p class="muted">Esta plantilla no tiene variables.</p>';
   $("#tpl-fields-row").hidden = !($("#tpl-case").value && can("cases.write") && tplActive.vars.some((k) => k.startsWith("campo.")));
 }
@@ -3888,7 +3896,7 @@ $("#tpl-vars").addEventListener("input", (e) => {
   const i = e.target.closest("[data-var]");
   if (!i) return;
   tplOverrides[i.dataset.var] = i.type === "date" ? CMETA.fieldDocValue({ field_type: "date" }, i.value) : i.value.trim();
-  i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var]);
+  i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var] && !isOptionalVar(i.dataset.var));
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
 });
 // Version 2.44: the minuta's own data ({{campo.…}}) typed here is kept in the case.
@@ -3911,7 +3919,7 @@ function renderTplDoc() {
   if (tplActive.format === "docx") {
     const vals = tplValues();
     $("#tpl-preview").innerHTML = `<table class="data-table"><thead><tr><th>Variable</th><th>Valor en el documento</th></tr></thead><tbody>${
-      tplActive.vars.map((k) => `<tr><td><code>{{${escapeHtml(k)}}}</code></td><td>${vals[k] ? escapeHtml(vals[k]) : `<mark class="fill">[FILL: ${escapeHtml(k)}]</mark>`}</td></tr>`).join("")
+      tplActive.vars.map((k) => `<tr><td><code>{{${escapeHtml(k)}}}</code></td><td>${vals[k] ? escapeHtml(vals[k]) : isOptionalVar(k) ? '<span class="muted">Vacío: esa frase no aparece</span>' : `<mark class="fill">[FILL: ${escapeHtml(k)}]</mark>`}</td></tr>`).join("")
     }</tbody></table>`;
     return;
   }

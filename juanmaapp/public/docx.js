@@ -17,9 +17,13 @@
   const FORMATS = {
     "mayúsculas": (v) => String(v).toLocaleUpperCase("es-CO"),
     "mayusculas": (v) => String(v).toLocaleUpperCase("es-CO"),
+    // «Fiscalía 60 Local Espinal; Fiscalía 11 Seccional» → one per line (version 2.46).
+    "líneas": (v) => String(v).split(/\s*;\s*/).filter(Boolean).join("\n"),
+    lineas: (v) => String(v).split(/\s*;\s*/).filter(Boolean).join("\n"),
     puntos: (v) => (/^\d[\d.\s]*$/.test(String(v).trim()) ? String(v).replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".") : String(v)),
   };
-  const markerKey = (tag) => String(tag).split("|")[0].trim();
+  // {{#key}}…{{/key}} (version 2.46) is an optional passage: printed only when key has a value.
+  const markerKey = (tag) => String(tag).split("|")[0].trim().replace(/^[#^/]\s*/, "");
   function markerValue(data, tag) {
     const [key, ...fmts] = String(tag).split("|").map((x) => x.trim());
     let v = data[key];
@@ -29,12 +33,19 @@
   }
 
   /** {{variables}} used in a .docx (text of every part, tags removed). */
-  function docxVariables(bytes) {
+  function docxPlain(bytes) {
     const zip = new window.PizZip(bytes);
-    const text = Object.keys(zip.files).filter((n) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(n))
+    return Object.keys(zip.files).filter((n) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(n))
       .map((n) => zip.file(n).asText().replace(/<[^>]+>/g, "")).join("\n");
-    return [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
   }
+  function docxVariables(bytes) {
+    return [...new Set([...docxPlain(bytes).matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])).filter(Boolean))];
+  }
+  /** Variables written one per line ({{key|líneas}}): several values separated by «;». */
+  const docxLineVars = (bytes) => [...new Set([...docxPlain(bytes).matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)]
+    .filter((m) => /\|\s*l[ií]neas\b/i.test(m[1])).map((m) => markerKey(m[1])))];
+  /** Variables that open an optional passage {{#key}}: left empty, the passage is left out. */
+  const docxOptional = (bytes) => [...new Set([...docxPlain(bytes).matchAll(/\{\{\s*#\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
 
   /** Fill a .docx template; missing values become [FILL: variable]. */
   function fillDocx(bytes, data) {
@@ -44,7 +55,8 @@
       paragraphLoop: true,
       linebreaks: true,
       parser: (tag) => ({ get: (scope) => markerValue(scope, tag) }),
-      nullGetter: (part) => `[FILL: ${markerKey(part.value)}]`,
+      // An optional passage without its value is dropped; a plain marker shows [FILL: …].
+      nullGetter: (part) => (part.module ? "" : `[FILL: ${markerKey(part.value)}]`),
     });
     doc.render(data);
     return doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
@@ -116,7 +128,7 @@
       return v !== undefined && v !== null && String(v).trim() !== "" ? (String(v).includes("\n") ? String(v).replace(/\n/g, "  \n") + "  " : String(v)) : `[FILL: ${labels[key] || key}]`;
     });
   }
-  const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
+  const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])).filter(Boolean))];
 
   // ----- Firm's own Word forms (minutas): find the blanks and turn them into {{variables}} -----
   const dec = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
@@ -368,6 +380,6 @@
     }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable,
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable,
     markerKey, docxFind, docxReplace, caseTexts, markerFor, docxDates };
 })();
