@@ -12,5 +12,6 @@ Estas notas viven fuera de `juanmaapp/`, así que cambiarlas no sube la versión
 | [forma-de-trabajo.md](forma-de-trabajo.md) | Cómo quiere John que se le informe el trabajo |
 | [costos-ia.md](costos-ia.md) | Qué gasta créditos de la API y con qué modelo |
 | [pruebas-locales.md](pruebas-locales.md) | Trucos para probar la App en el contenedor |
+| [contacto-gerencia.md](contacto-gerencia.md) | Correo y WhatsApp de Gerencia y dónde se guardan |
 
 Regla para estas notas: una nota por tema, corta (menos de 3 KB), sin datos de clientes ni contraseñas.

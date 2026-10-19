@@ -8,3 +8,4 @@
 - La importación del Excel ya está hecha: no volver a mencionarla. No duplicar clientes o expedientes cargados a mano.
 - Pendientes que pidió y no se han empezado: módulo de funcionarios, creación de volantes, creación de videos.
 - OmniRoute está en el PC de John para su Claude Code local; no integrarlo en la App.
+- Desde 19/10/2026 (regla de John): leer solo el módulo que pide la petición, no todo el repositorio, y guardar lo aprendido en la nota .md de su tema en notas/ (crearla si no existe).
