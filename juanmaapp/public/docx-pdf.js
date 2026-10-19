@@ -18,6 +18,23 @@
     return Math.floor(to);
   }
 
+  // html2canvas paints an inline background over its whole box, so a highlighted [FILL: …] that wraps to
+  // the next line would cover the words before it (version 2.47): each word gets its own highlighted span.
+  function splitHighlights(box) {
+    for (const el of [...box.querySelectorAll("span[style*='background']")]) {
+      if (!el.style.backgroundColor || el.children.length || !/\s\S/.test(el.textContent.trim())) continue;
+      const bg = el.style.backgroundColor, words = el.textContent.match(/\s*\S+\s*/g) || [];
+      el.style.backgroundColor = "";
+      el.textContent = "";
+      for (const w of words) {
+        const piece = document.createElement("span");
+        piece.style.backgroundColor = bg;
+        piece.textContent = w;
+        el.appendChild(piece);
+      }
+    }
+  }
+
   /** PDF Blob of a .docx, as it looks in Word (pictures of the pages). */
   async function docxToPdf(bytes) {
     if (!window.docx?.renderAsync || !window.html2canvas || !window.jspdf) throw new Error("Sin visor de Word en esta página.");
@@ -26,6 +43,7 @@
     document.body.appendChild(box);
     try {
       await window.docx.renderAsync(bytes, box, null, { inWrapper: false, ignoreLastRenderedPageBreak: false, experimental: true, useBase64URL: true });
+      splitHighlights(box);
       const sections = [...box.querySelectorAll("section.docx")];
       if (!sections.length) throw new Error("El Word no tiene páginas.");
       const { jsPDF } = window.jspdf;

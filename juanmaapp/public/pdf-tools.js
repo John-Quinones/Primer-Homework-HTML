@@ -19,8 +19,21 @@
     const write = (text, { size = 11, bold = false, gap = 6, indent = 0 } = {}) => {
       doc.setFont("times", bold ? "bold" : "normal");
       doc.setFontSize(size);
+      let open = false; // a [FILL: …] that wraps to the next line stays highlighted (version 2.47)
       for (const line of doc.splitTextToSize(text, width - indent)) {
         if (y > bottom) { doc.addPage(); y = margin; }
+        const spans = [];
+        let from = open ? 0 : -1;
+        for (let i = 0; i < line.length; i++) {
+          if (from < 0 && line.startsWith("[FILL:", i)) from = i;
+          else if (from >= 0 && line[i] === "]") { spans.push([from, i + 1]); from = -1; }
+        }
+        open = from >= 0;
+        if (open) spans.push([from, line.length]);
+        if (spans.length) {
+          doc.setFillColor(255, 236, 102);
+          for (const [a, z] of spans) doc.rect(margin + indent + doc.getTextWidth(line.slice(0, a)), y - size * 0.82, doc.getTextWidth(line.slice(a, z)), size * 1.1, "F");
+        }
         doc.text(line, margin + indent, y);
         y += size * 1.35;
       }

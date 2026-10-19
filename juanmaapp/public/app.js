@@ -530,8 +530,9 @@ $("#bell-list").addEventListener("click", (e) => {
 });
 
 // In-page confirm / prompt (the browser's own dialogs are blocked in some viewers).
-function ask({ title, message = "", input = null, okLabel = "Aceptar", danger = false, secret = false }) {
+function ask({ title, message = "", input = null, okLabel = "Aceptar", cancelLabel = "Cancelar", danger = false, secret = false }) {
   const dlg = $("#ask-dialog");
+  $("button[value=cancel]", dlg).textContent = cancelLabel;
   const field = dlg.querySelector("[name=text]");
   field.type = secret ? "password" : "text"; // secret: a password, never trimmed or remembered
   field.autocomplete = secret ? "new-password" : "on";
@@ -3865,9 +3866,11 @@ const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label ||
 const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 const tplValues = () => ({ ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, v]) => v !== "")) });
 
+// Data the document still lacks (an optional passage never counts).
+const tplMissing = () => { const vals = tplValues(); return tplActive.vars.filter((k) => !vals[k] && !isOptionalVar(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))); };
 function renderTplVars() {
   const vals = tplValues();
-  const missing = tplActive.vars.filter((k) => !vals[k] && !isOptionalVar(k) && (tplRecipient.hidden || !k.startsWith("destinatario.")));
+  const missing = tplMissing();
   $("#tpl-missing").textContent = missing.length ? `${missing.length} por completar` : "Completo";
   $("#tpl-missing").className = `badge ${missing.length ? "warn" : "ok"}`;
   $("#tpl-vars-box").open = missing.length > 0;
@@ -3939,13 +3942,30 @@ const tplFileBase = () => (tplActive.name + (tplActive.category === "Contrato" &
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w .-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 90) || "documento";
 const currentText = () => ($("#tpl-edit-mode").checked ? $("#tpl-text").value : filledText());
 
+// Version 2.47 (user's rule): the document keeps the minuta's layout; before it goes out, the user is told
+// which data are missing, and whatever stays missing comes out as [FILL: …] highlighted in yellow.
+const tplLabels = () => Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)]));
+async function missingOk() {
+  const missing = tplMissing();
+  if (!missing.length) return true;
+  const names = missing.map(varLabel);
+  const go = await ask({ title: `Faltan ${missing.length} dato(s)`, okLabel: "Continuar con los faltantes resaltados", cancelLabel: "Completar los datos",
+    message: `Faltan: ${names.join(", ")}. Puede completarlos en «Datos del documento» o continuar: cada dato faltante sale como [FILL: …] resaltado en amarillo, con el mismo formato de la minuta, para llenarlo a mano.` });
+  if (go) return true;
+  $("#tpl-vars-box").open = true;
+  const first = $("#tpl-vars input.missing");
+  first?.scrollIntoView({ block: "center" });
+  first?.focus();
+  return false;
+}
 $("#tpl-active .actions").addEventListener("click", (e) => {
   const action = e.target.closest("[data-tpl-out]")?.dataset.tplOut;
   if (!action) return;
   guarded(async () => {
+    if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action) && !(await missingOk())) return;
     if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
       if (!tplRecipient.hidden) await saveRecipientIfAsked(tplRecipient);
-      const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues()) : D.markdownToDocx(currentText(), tplActive.name));
+      const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues(), tplLabels()) : D.markdownToDocx(currentText(), tplActive.name));
       await exportDocument(action, {
         name: tplActive.name, base: tplFileBase(), caseId: Number($("#tpl-case").value) || null, word,
         // A Word form's PDF looks like the Word (version 2.44); if the page cannot draw it, the same text in the firm's PDF layout.
@@ -3960,7 +3980,7 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
       try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
       catch { toast("No se pudo copiar; active “Editar el texto” y cópielo desde allí.", true); }
     } else if (action === "sign") {
-      const text = tplActive.format === "docx" ? D.docxText(new Uint8Array(await D.fillDocx(tplActive.bytes, tplValues()).arrayBuffer())) : currentText();
+      const text = tplActive.format === "docx" ? D.docxText(new Uint8Array(await D.fillDocx(tplActive.bytes, tplValues(), tplLabels()).arrayBuffer())) : currentText();
       await openSignDialog({ title: tplActive.name, text, caseId: Number($("#tpl-case").value) || null });
     } else if (action === "nomos") {
       setBaseTemplate({ name: tplActive.name, text: currentText() });

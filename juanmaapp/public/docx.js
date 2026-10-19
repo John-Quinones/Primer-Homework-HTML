@@ -47,8 +47,33 @@
   /** Variables that open an optional passage {{#key}}: left empty, the passage is left out. */
   const docxOptional = (bytes) => [...new Set([...docxPlain(bytes).matchAll(/\{\{\s*#\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
 
-  /** Fill a .docx template; missing values become [FILL: variable]. */
-  function fillDocx(bytes, data) {
+  // Version 2.47: a missing datum comes out as [FILL: label] highlighted in yellow, in the run's own font.
+  const MISS = "\u2063";
+  // Where <w:highlight> goes among a run's properties (Word wants them in schema order).
+  const AFTER_HIGHLIGHT = /<w:(u|effect|bdr|shd|fitText|vertAlign|rtl|cs|em|lang|eastAsianLayout|specVanish|oMath|rPrChange)\b/;
+  function highlighted(rPr) {
+    const body = rPr.replace(/^<w:rPr>|<\/w:rPr>$/g, "").replace(/<w:highlight\b[^>]*\/>/g, "");
+    const at = body.search(AFTER_HIGHLIGHT);
+    const hl = '<w:highlight w:val="yellow"/>';
+    return `<w:rPr>${at < 0 ? body + hl : body.slice(0, at) + hl + body.slice(at)}</w:rPr>`;
+  }
+  function markMissing(xmlText) {
+    if (!xmlText.includes(MISS)) return xmlText;
+    return xmlText.replace(/<w:r\b([^>]*)>([\s\S]*?)<\/w:r>/g, (run, attrs, inner) => {
+      if (!inner.includes(MISS)) return run;
+      const rPr = (inner.match(/^\s*(<w:rPr>[\s\S]*?<\/w:rPr>)/) || ["", ""])[1];
+      const hl = highlighted(rPr || "<w:rPr></w:rPr>");
+      const body = inner.replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g, (t, text) => {
+        if (!text.includes(MISS)) return t;
+        return text.split(MISS).map((piece, i) => (i % 2
+          ? `</w:r><w:r>${hl}<w:t xml:space="preserve">${piece}</w:t></w:r><w:r${attrs}>${rPr}`
+          : `<w:t xml:space="preserve">${piece}</w:t>`)).join("");
+      });
+      return `<w:r${attrs}>${body}</w:r>`.replace(/<w:r(?:\s[^>]*)?>(<w:rPr>(?:(?!<\/w:rPr>)[\s\S])*<\/w:rPr>)?(<w:t xml:space="preserve"><\/w:t>)?<\/w:r>/g, "");
+    });
+  }
+  /** Fill a .docx template; missing values become [FILL: label] highlighted (`labels`: key → readable name). */
+  function fillDocx(bytes, data, labels = {}) {
     const zip = new window.PizZip(bytes);
     const doc = new window.docxtemplater(zip, {
       delimiters: { start: "{{", end: "}}" },
@@ -56,10 +81,15 @@
       linebreaks: true,
       parser: (tag) => ({ get: (scope) => markerValue(scope, tag) }),
       // An optional passage without its value is dropped; a plain marker shows [FILL: …].
-      nullGetter: (part) => (part.module ? "" : `[FILL: ${markerKey(part.value)}]`),
+      nullGetter: (part) => (part.module ? "" : `${MISS}[FILL: ${labels[markerKey(part.value)] || markerKey(part.value)}]${MISS}`),
     });
     doc.render(data);
-    return doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const out = doc.getZip();
+    for (const name of Object.keys(out.files).filter((n) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(n))) {
+      const x = out.file(name).asText();
+      if (x.includes(MISS)) out.file(name, markMissing(x));
+    }
+    return out.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 
   // **bold**, *italic*, [FILL: …] highlighted.
