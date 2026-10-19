@@ -1027,8 +1027,8 @@ async function renderExpedienteFicha(id) {
           <td>${escapeHtml(c.concept)}${c.plan_label ? `<br><span class="muted">${escapeHtml(c.plan_label)}</span>` : ""}</td><td>${escapeHtml(c.due_date)}</td>
           <td class="num">${cop(c.amount)}</td><td class="num">${cop(c.balance)}</td><td><span class="pay-state ${c.state}">${escapeHtml(L.STATE_LABELS[c.state] || c.state)}</span></td></tr>`).join("")}</tbody></table>` : empty("Sin cobros para este expediente.")}
         ${caseReceipts.length ? `<h4>Recibos</h4><ul class="ficha-list">${caseReceipts.map((r) => `<li><strong>${escapeHtml(receiptNo(r.number))}</strong> · ${escapeHtml(r.paid_on)} · ${cop(r.amount)}${r.voided_at ? " · anulado" : ""}
-          <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></li>`).join("")}</ul>` : ""}`,
-        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}">Registrar pago</button></span>`)) : ""}
+          <button class="mini" data-action="receipt-word" data-id="${r.id}">Word</button> <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></li>`).join("")}</ul>` : ""}`,
+        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}" data-case="${k.id}">Registrar pago</button></span>`)) : ""}
       ${signs ? secId("firmas", panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
           <span class="badge ${r.status === "completada" ? "ok" : r.status === "enviada" ? "warn" : ""}">${escapeHtml(SIGN_STATUS[r.status][1])}</span> <strong>${escapeHtml(r.title)}</strong>
           <button class="mini" data-action="open-sign" data-id="${r.id}">Ver</button></li>`).join("")}</ul>` : empty("Sin documentos enviados a firma."),
@@ -2662,7 +2662,8 @@ document.addEventListener("click", (e) => {
     "tpl-markers": async () => openMarkers(),
     "case-docs": async () => openCaseDocs(id),
     "delete-casedoc": async () => {
-      if (!(await ask({ title: "Eliminar documento", message: "El documento se borrará del expediente.", okLabel: "Eliminar", danger: true }))) return;
+      const isReceipt = (await api("GET", `/cases/${casedocsCase.id}/documents`)).some((d) => d.id === id && d.kind === "recibo");
+      if (!(await ask({ title: isReceipt ? "Eliminar recibo" : "Eliminar documento", message: isReceipt ? "Un recibo no se borra sin necesidad: solo Gerencia puede hacerlo y antes se hace una copia de respaldo." : "El documento se borrará del expediente.", okLabel: "Eliminar", danger: true }))) return;
       await api("DELETE", `/cases/${casedocsCase.id}/documents/${id}`);
       await renderCaseDocs();
     },
@@ -3695,7 +3696,7 @@ function openUserDialog(u) {
   form.elements.role.innerHTML = roleInfo.roles.map((r) => `<option>${escapeHtml(r)}</option>`).join("");
   $("#user-office-checks").innerHTML = offices.map((o) => `<label class="inline"><input type="checkbox" name="office" value="${o.id}"
     ${u ? (u.offices.some((x) => x.id === o.id) ? "checked" : "") : (o.is_main ? "checked" : "")}> ${escapeHtml(o.name)}</label>`).join("");
-  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, professional_card: u.professional_card } : { role: "Abogado" });
+  openDialog(dlg, u ? "Editar usuario" : "Nuevo usuario", u ? { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, professional_card: u.professional_card, legal_name: u.legal_name, id_number: u.id_number } : { role: "Abogado" });
   form.elements.custom_permissions.checked = !!u?.custom_permissions;
   renderUserPerms(u ? u.permissions : roleInfo.matrix[form.elements.role.value]);
   form.elements.active.checked = u ? u.active : true;
@@ -3728,7 +3729,7 @@ $("#user-dialog [name=role]").addEventListener("change", (e) => {
 wireDialog($("#user-dialog"), async (form) => {
   const d = formData(form);
   const body = {
-    name: d.name, email: d.email, phone: d.phone, professional_card: d.professional_card, role: d.role, active: form.elements.active.checked,
+    name: d.name, email: d.email, phone: d.phone, professional_card: d.professional_card, legal_name: d.legal_name, id_number: d.id_number, role: d.role, active: form.elements.active.checked,
     office_ids: $$("#user-office-checks input:checked").map((i) => Number(i.value)),
     custom_permissions: form.elements.custom_permissions.checked,
     permissions: $$("#user-perm-checks input:checked").map((i) => i.value),
@@ -4215,10 +4216,10 @@ async function renderCaseDocs() {
   const list = await api("GET", `/cases/${casedocsCase.id}/documents`);
   $("#casedocs-empty").hidden = list.length > 0;
   $("#casedocs-rows").innerHTML = list.map((d) => `<tr>
-    <td><strong>${escapeHtml(d.name)}</strong><br><span class="muted">${escapeHtml(d.filename)} · ${Math.max(1, Math.round(d.size / 1024))} KB</span></td>
+    <td><strong>${escapeHtml(d.name)}</strong>${d.kind === "recibo" ? ' <span class="badge ok">Recibo</span>' : ""}<br><span class="muted">${escapeHtml(d.filename)} · ${Math.max(1, Math.round(d.size / 1024))} KB</span></td>
     <td>${escapeHtml(d.created_at)}${d.created_by_name ? `<br><span class="muted">${escapeHtml(d.created_by_name)}</span>` : ""}</td>
     <td class="row-actions"><button type="button" class="mini" data-casedoc="${d.id}">Descargar</button>
-      ${can("cases.write") ? `<button type="button" class="mini danger" data-action="delete-casedoc" data-id="${d.id}" aria-label="Eliminar documento">✕</button>` : ""}</td></tr>`).join("");
+      ${can("cases.write") && (d.kind !== "recibo" || isGerencia()) ? `<button type="button" class="mini danger" data-action="delete-casedoc" data-id="${d.id}" aria-label="Eliminar documento">✕</button>` : ""}</td></tr>`).join("");
 }
 $("#casedocs-rows").addEventListener("click", (e) => {
   const b = e.target.closest("[data-casedoc]");
@@ -5838,8 +5839,10 @@ async function renderPayTab() {
       <td>${escapeHtml(r.concept)}${r.voided_at ? `<br><span class="muted">Anulado: ${escapeHtml(r.void_reason)}</span>` : ""}</td>
       <td>${escapeHtml(r.method)}${r.reference ? `<br><span class="muted">${escapeHtml(r.reference)}</span>` : ""}</td>
       <td class="num">${cop(r.amount)}</td>
-      <td class="row-actions"><button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button>
-        ${r.voided_at ? "" : `<button class="mini danger" data-action="void-receipt" data-id="${r.id}">Anular</button>`}</td></tr>`).join("");
+      <td class="row-actions"><button class="mini" data-action="receipt-word" data-id="${r.id}" title="Generar el recibo en Word (queda guardado en el expediente)">Word</button>
+        <button class="mini" data-action="receipt-pdf" data-id="${r.id}" title="Generar el recibo en PDF (queda guardado en el expediente)">PDF</button>
+        ${r.voided_at ? "" : `<button class="mini danger" data-action="void-receipt" data-id="${r.id}">Anular</button>`}
+        ${isGerencia() ? `<button class="mini danger" data-action="delete-receipt" data-id="${r.id}" title="Solo Gerencia; se hace una copia de respaldo antes">Eliminar</button>` : ""}</td></tr>`).join("");
     payReceiptsCache = list;
   } else if (payTab === "recordatorios") {
     const list = await api("GET", `/payments/reminders?${q}`);
@@ -5922,8 +5925,15 @@ wireDialog($("#charge-dialog"), async (form) => {
 const receiptForm = $("#receipt-dialog form");
 window.JuanmaCombo.searchSelect(receiptForm.elements.client_id);
 let receiptCharges = [];
+let receiptCaseWanted = null;
 async function fillReceiptCharges(selected) {
   receiptCharges = await api("GET", `/payments/charges?clientId=${receiptForm.elements.client_id.value}&state=abiertos`);
+  // Version 2.58: the receipt is saved in a case: the charge's, the one chosen, or the client's only case.
+  const cases = await api("GET", `/cases?clientId=${receiptForm.elements.client_id.value}`);
+  receiptForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml(k.type_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  const chosen = receiptCharges.find((x) => x.id === Number(selected))?.case_id || receiptCaseWanted || (cases.length === 1 ? cases[0].id : "");
+  receiptForm.elements.case_id.value = String(chosen || "");
   receiptForm.elements.charge_id.innerHTML = '<option value="">Abono a cuenta (se aplica a las cuotas más antiguas)</option>' + receiptCharges.map((c) =>
     `<option value="${c.id}">${escapeHtml(c.concept)}${c.plan_label ? " · " + escapeHtml(c.plan_label) : ""} — saldo ${cop(c.balance)} — vence ${c.due_date}</option>`).join("");
   receiptForm.elements.charge_id.value = selected || "";
@@ -5933,9 +5943,11 @@ async function fillReceiptCharges(selected) {
 receiptForm.elements.client_id.addEventListener("change", () => guarded(() => fillReceiptCharges()));
 receiptForm.elements.charge_id.addEventListener("change", () => {
   const c = receiptCharges.find((x) => x.id === Number(receiptForm.elements.charge_id.value));
+  if (c?.case_id) receiptForm.elements.case_id.value = String(c.case_id);
   if (c) receiptForm.elements.amount.value = cop(c.balance);
 });
-async function openReceiptDialog(clientId, chargeId) {
+async function openReceiptDialog(clientId, chargeId, caseId) {
+  receiptCaseWanted = caseId || null;
   payMeta ||= await api("GET", "/payments/meta");
   await fillClientSelect(receiptForm.elements.client_id, clientId || $("#pay-client").value);
   receiptForm.elements.method.innerHTML = payMeta.methods.map((m) => `<option>${escapeHtml(m)}</option>`).join("");
@@ -5944,15 +5956,19 @@ async function openReceiptDialog(clientId, chargeId) {
 }
 wireDialog($("#receipt-dialog"), async (form) => {
   const d = formData(form);
-  const r = await api("POST", "/payments/receipts", { client_id: Number(d.client_id), charge_id: Number(d.charge_id) || null, amount: parseMoney(d.amount),
+  const r = await api("POST", "/payments/receipts", { client_id: Number(d.client_id), charge_id: Number(d.charge_id) || null, case_id: Number(d.case_id) || null, amount: parseMoney(d.amount),
     method: d.method, reference: d.reference, paid_on: d.paid_on, concept: d.concept, notes: d.notes });
   toast(`Recibo ${receiptNo(r.number)} registrado.`);
   payTab = "recibos";
   if (FICHAS[route().name]) await refreshView();
   else location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
+  const full = (await api("GET", `/payments/receipts?clientId=${r.client_id}`)).find((x) => x.id === r.id);
+  // Version 2.58: a receipt of a case is generated (Word and PDF) and saved in the case at once.
+  const files = await buildReceiptFiles(full);
+  const saved = full.case_id ? await saveReceiptToCase(full, files) : false;
+  toast(saved ? `Recibo ${receiptNo(r.number)} registrado y guardado en el expediente (Word y PDF).` : `Recibo ${receiptNo(r.number)} registrado.`);
   if (await ask({ title: `Recibo ${receiptNo(r.number)}`, message: "¿Descargar el recibo en PDF para entregarlo al cliente?", okLabel: "Descargar PDF" })) {
-    const full = (await api("GET", `/payments/receipts?clientId=${r.client_id}`)).find((x) => x.id === r.id);
-    await downloadReceipt(full);
+    await saveFile(`${files.base}.pdf`, files.pdf);
   }
 });
 
@@ -6036,32 +6052,64 @@ function pdfBase(title) {
   return { doc, W, M };
 }
 
-async function downloadReceipt(r) {
+// ----- Receipt in Word and PDF (version 2.58) -----
+// The Word comes from the contract's own letterhead (logo, QR, footer: public/recibo-base.docx) filled with the same
+// engine as Documentos. It is signed with the data of whoever registered the payment (Gerencia = the lawyer's own).
+const longDate = (iso) => { const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${Number(m[3])} de ${MONTHS_ES[Number(m[2]) - 1]} de ${m[1]}` : String(iso); };
+async function receiptBaseBytes() {
+  if (window.JUANMA_RECIBO_BASE) return D.b64ToBytes(window.JUANMA_RECIBO_BASE);
+  const res = await fetch("recibo-base.docx");
+  if (!res.ok) throw new Error("No se encontró la plantilla del recibo.");
+  return new Uint8Array(await res.arrayBuffer());
+}
+const RECEIPT_LABELS = { "firma.nombre": "nombre completo de quien firma (Usuarios)", "firma.cedula": "cédula de quien firma (Usuarios)" };
+async function buildReceiptFiles(r) {
   paySettings ||= await api("GET", "/payments/settings");
+  const open = await api("GET", `/payments/charges?clientId=${r.client_id}&state=abiertos`);
+  const k = r.case_id ? await api("GET", `/cases/${r.case_id}`).catch(() => null) : null;
+  const data = {
+    "recibo.numero": String(r.number), "recibo.fecha": longDate(r.paid_on), "recibo.cliente": r.client_name, "recibo.documento": r.client_doc,
+    "recibo.valor": cop(r.amount), "recibo.valor_letras": pesosEnLetras(r.amount), "recibo.concepto": r.concept, "recibo.medio": r.method,
+    "recibo.referencia": r.reference, "recibo.notas": r.notes, "recibo.saldo": cop(open.reduce((a, c) => a + c.balance, 0)),
+    "recibo.expediente": k ? [k.radicado ? formatRadicado(k.radicado) : "", k.title].filter(Boolean).join(" · ") : "",
+    "recibo.estado": r.voided_at ? `ANULADO · ${r.void_reason}` : "",
+    "firma.nombre": r.signer_name, "firma.cedula": r.signer_id, "firma.tarjeta": r.signer_card,
+  };
+  const word = D.fillDocx(await receiptBaseBytes(), data, RECEIPT_LABELS);
+  const base = `Recibo ${receiptNo(r.number)} ${safeName(r.client_name)}`;
+  let pdf;
+  try { pdf = await window.JuanmaDocxPdf.docxToPdf(new Uint8Array(await word.arrayBuffer())); }
+  catch { pdf = await simpleReceiptPdf(r); }
+  return { word, pdf, base, missingSigner: !r.signer_name || !r.signer_id };
+}
+/** Saves Word and PDF in the case, once per receipt. Returns true when they are (now) in the case. */
+async function saveReceiptToCase(r, files) {
+  const have = await api("GET", `/cases/${r.case_id}/documents`);
+  if (have.some((d) => d.kind === "recibo" && d.receipt_id === r.id)) return true;
+  for (const [ext, blob] of [["docx", files.word], ["pdf", files.pdf]]) {
+    await api("POST", `/cases/${r.case_id}/documents`, { name: `Recibo de caja ${receiptNo(r.number)}`, filename: `${files.base}.${ext}`, file_base64: await blobToB64(blob), kind: "recibo", receipt_id: r.id });
+  }
+  return true;
+}
+async function downloadReceipt(r, format) {
+  const files = await buildReceiptFiles(r);
+  const saved = r.case_id ? await saveReceiptToCase(r, files) : false;
+  await saveFile(`${files.base}.${format === "word" ? "docx" : "pdf"}`, format === "word" ? files.word : files.pdf);
+  toast(files.missingSigner ? "Faltan los datos de quien firma: Gerencia los completa en Usuarios (nombre completo y cédula); salen resaltados en el recibo." : saved ? "Recibo guardado también en el expediente." : "Recibo generado.", files.missingSigner);
+}
+// The plain PDF the app made before the Word receipt; only used when the Word viewer is not available.
+async function simpleReceiptPdf(r) {
   const { doc, W, M } = pdfBase(`RECIBO DE CAJA ${receiptNo(r.number)}`);
   doc.setFont("helvetica", "normal"); doc.setFontSize(10);
   doc.text(`Fecha de pago: ${r.paid_on}`, W - M, 62, { align: "right" });
   const rows = [["Recibimos de", `${r.client_name}${r.client_doc ? " · " + r.client_doc : ""}`], ["La suma de", `${cop(r.amount)}`],
     ["En letras", pesosEnLetras(r.amount)], ["Por concepto de", r.concept], ["Medio de pago", r.method + (r.reference ? ` · Ref. ${r.reference}` : "")]];
-  if (r.notes) rows.push(["Notas", r.notes]);
   doc.autoTable({ startY: 90, body: rows, theme: "grid", styles: { fontSize: 10.5, cellPadding: 7 },
     columnStyles: { 0: { fontStyle: "bold", cellWidth: 130, fillColor: [238, 242, 247] } }, margin: { left: M, right: M } });
-  let y = doc.lastAutoTable.finalY + 18;
-  const charges = await api("GET", `/payments/charges?clientId=${r.client_id}&state=abiertos`);
-  const balance = charges.reduce((a, c) => a + c.balance, 0);
-  doc.setFontSize(10);
-  doc.text(`Saldo pendiente del cliente a la fecha de emisión: ${cop(balance)}`, M, y);
-  y += 70;
+  const y = doc.lastAutoTable.finalY + 70;
   doc.line(M, y, M + 220, y);
-  doc.text(`Recibido por: ${r.created_by_name || me.name}`, M, y + 14);
-  doc.setFontSize(8); doc.setTextColor(110, 110, 110);
-  doc.text(`Emitido con TecjuridicosApp el ${new Date().toLocaleString("es-CO")}`, M, y + 40);
-  if (r.voided_at) {
-    doc.setTextColor(179, 38, 30); doc.setFontSize(54); doc.setFont("helvetica", "bold");
-    doc.text("ANULADO", W / 2, 330, { align: "center", angle: 20 });
-    doc.setFontSize(10); doc.text(`Motivo: ${r.void_reason}`, W / 2, 360, { align: "center" });
-  }
-  await saveFile(`${receiptNo(r.number)} ${safeName(r.client_name)}.pdf`, doc.output("blob"));
+  doc.text([r.signer_name || r.created_by_name || me.name, r.signer_id ? `C.C. ${r.signer_id}` : ""].filter(Boolean), M, y + 14);
+  return doc.output("blob");
 }
 
 async function downloadStatement(clientId) {
@@ -6089,13 +6137,20 @@ async function downloadStatement(clientId) {
 
 const PAY_ACTIONS = {
   "new-charge": (b) => openChargeDialog(null, Number(b.dataset.client) || null, Number(b.dataset.case) || null),
-  "new-receipt": (b) => openReceiptDialog(Number(b.dataset.client) || null, Number(b.dataset.charge) || null),
+  "new-receipt": (b) => openReceiptDialog(Number(b.dataset.client) || null, Number(b.dataset.charge) || null, Number(b.dataset.case) || null),
   "pay-settings": () => openPaySettings(),
   "edit-charge": async (b) => openChargeDialog(payChargesCache.find((c) => c.id === Number(b.dataset.id))),
   "pay-remind": (b) => openRemindDialog(Number(b.dataset.id)),
   "pay-client-charges": async (b) => { $("#pay-client").value = b.dataset.id; payTab = "cobros"; await renderPagos(); },
   "pay-statement": (b) => downloadStatement(Number(b.dataset.id)),
-  "receipt-pdf": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id))),
+  "receipt-pdf": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id)), "pdf"),
+  "receipt-word": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id)), "word"),
+  "delete-receipt": async (b) => {
+    if (!(await confirmAsk("Eliminar recibo", "Un recibo no se borra sin necesidad. Solo Gerencia puede hacerlo y antes se hace una copia de respaldo de la base de datos. También se borra su Word y PDF del expediente."))) return;
+    await api("DELETE", `/payments/receipts/${b.dataset.id}`);
+    toast("Recibo eliminado (copia de respaldo hecha).");
+    await renderPagos();
+  },
   "void-charge": async (b) => {
     const reason = await ask({ title: "Anular cobro", message: "El cobro deja de contar en la cartera. Escriba el motivo.", input: "", okLabel: "Anular", danger: true });
     if (!reason) return;

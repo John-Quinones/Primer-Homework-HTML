@@ -3,6 +3,7 @@
 import express from "express";
 import { str, HttpError, toInt } from "./http.js";
 import { createHash } from "node:crypto";
+import { backupBeforeReceiptDelete } from "./backup.js";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
@@ -510,7 +511,7 @@ export function recordsRouter(db) {
   const DOC_TYPES = { docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", pdf: "application/pdf" };
   r.get("/cases/:id/documents", h((req) => {
     const k = getCase(req, toInt(req.params.id, "id"));
-    return db.prepare(`SELECT d.id, d.case_id, d.name, d.filename, d.mime, d.size, d.sha256, d.created_at, u.name AS created_by_name
+    return db.prepare(`SELECT d.id, d.case_id, d.name, d.filename, d.mime, d.size, d.sha256, d.kind, d.receipt_id, d.created_at, u.name AS created_by_name
       FROM case_documents d LEFT JOIN users_shown u ON u.id = d.created_by WHERE d.case_id = ? ORDER BY d.id DESC`).all(k.id).map(plain);
   }));
   r.post("/cases/:id/documents", h((req, res) => {
@@ -524,10 +525,14 @@ export function recordsRouter(db) {
     const magic = file.subarray(0, 5).toString("latin1");
     if (ext === "pdf" ? magic !== "%PDF-" : !magic.startsWith("PK")) throw new HttpError(400, "El archivo no corresponde a su formato.");
     const name = str(b.name) || str(b.filename);
-    const id = db.prepare(`INSERT INTO case_documents (case_id, name, filename, mime, size, sha256, file, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(k.id, name.slice(0, 200), str(b.filename).slice(0, 200), DOC_TYPES[ext], file.length, createHash("sha256").update(file).digest("hex"), file, req.user.id).lastInsertRowid;
+    // A receipt generated from Pagos (version 2.58) is saved with its receipt's id; it can only be deleted by Gerencia, after a backup.
+    const receiptId = b.kind === "recibo" ? Number(b.receipt_id) || 0 : 0;
+    if (b.kind === "recibo" && !db.prepare("SELECT 1 FROM receipts WHERE id = ? AND case_id = ?").get(receiptId, k.id)) throw new HttpError(400, "El recibo no es de este expediente.");
+    const id = db.prepare(`INSERT INTO case_documents (case_id, name, filename, mime, size, sha256, file, kind, receipt_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(k.id, name.slice(0, 200), str(b.filename).slice(0, 200), DOC_TYPES[ext], file.length, createHash("sha256").update(file).digest("hex"), file,
+        receiptId ? "recibo" : "", receiptId || null, req.user.id).lastInsertRowid;
     res.status(201);
-    return plain(db.prepare("SELECT id, case_id, name, filename, mime, size, sha256, created_at FROM case_documents WHERE id = ?").get(id));
+    return plain(db.prepare("SELECT id, case_id, name, filename, mime, size, sha256, kind, receipt_id, created_at FROM case_documents WHERE id = ?").get(id));
   }));
   const getDoc = (req) => {
     const d = db.prepare("SELECT * FROM case_documents WHERE id = ?").get(toInt(req.params.docId, "docId"));
@@ -541,7 +546,11 @@ export function recordsRouter(db) {
   }));
   r.delete("/cases/:id/documents/:docId", h((req, res) => {
     checkPerm(req, "cases.write");
-    db.prepare("DELETE FROM case_documents WHERE id = ?").run(getDoc(req).id);
+    const d = getDoc(req);
+    // Receipts are never lost: only Gerencia deletes one (the DELETE gate), and a copy of the database is made first.
+    if (d.kind === "recibo" && req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia puede eliminar un recibo.");
+    if (d.kind === "recibo") backupBeforeReceiptDelete(db);
+    db.prepare("DELETE FROM case_documents WHERE id = ?").run(d.id);
     res.status(204).end();
   }));
 
@@ -549,6 +558,7 @@ export function recordsRouter(db) {
     checkPerm(req, "cases.delete");
     const id = toInt(req.params.id, "id");
     getCase(req, id);
+    if (db.prepare("SELECT 1 FROM case_documents WHERE case_id = ? AND kind = 'recibo'").get(id)) throw new HttpError(409, "El expediente tiene recibos guardados: un recibo no se pierde con el expediente. Elimine primero cada recibo (con copia de respaldo).");
     db.prepare("DELETE FROM cases WHERE id = ?").run(id);
     res.status(204).end();
   }));

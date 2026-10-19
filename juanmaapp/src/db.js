@@ -575,6 +575,11 @@ function migrate(db) {
   add("users", "custom_permissions", "INTEGER NOT NULL DEFAULT 0");
   add("users", "phone", "TEXT NOT NULL DEFAULT ''");
   add("users", "professional_card", "TEXT NOT NULL DEFAULT ''");
+  // Version 2.58: data a user signs receipts with (full legal name, cédula), and which saved documents are receipts.
+  add("users", "legal_name", "TEXT NOT NULL DEFAULT ''");
+  add("users", "id_number", "TEXT NOT NULL DEFAULT ''");
+  add("case_documents", "kind", "TEXT NOT NULL DEFAULT ''");
+  add("case_documents", "receipt_id", "INTEGER");
   // Invitations and temporary passwords (change 45).
   add("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
   add("users", "invited_at", "TEXT");

@@ -75,7 +75,7 @@
       for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
       st.info.monitorOffFromNumber = true;
     }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash"]) st[k] ||= [];
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -220,9 +220,14 @@
   const userOut = (u) => ({
     id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at, hidden: !!u.hidden,
     offices: s.offices.filter((o) => u.office_ids.includes(o.id)).map((o) => ({ id: o.id, name: o.name })),
-    permissions: userPerms(u), phone: u.phone || "", professional_card: u.professional_card || "", custom_permissions: !!u.custom_permissions,
+    permissions: userPerms(u), phone: u.phone || "", professional_card: u.professional_card || "", legal_name: u.legal_name || "", id_number: u.id_number || "", custom_permissions: !!u.custom_permissions,
     has_photo: !!s.blobs[`user-photo-${u.id}`],
   });
+  // Who signs a receipt: its creator's legal name, cédula and tarjeta profesional (empty for a hidden user).
+  const signerOf = (id) => {
+    const u = s.users.find((x) => x.id === id);
+    return { signer_name: u && !u.hidden ? u.legal_name || "" : "", signer_id: u && !u.hidden ? u.id_number || "" : "", signer_card: u && !u.hidden ? u.professional_card || "" : "" };
+  };
   const me = () => {
     const u = s.users.find((x) => x.id === currentId && x.active);
     if (!u) fail("Inicie sesión para continuar.");
@@ -685,7 +690,7 @@
       s.roles.some((r) => r.name === b.role) || fail("Rol no válido.");
       (b.office_ids || []).length || fail("Asigne al menos una oficina.");
       s.users.some((u) => u.email === email) && fail("Ya existe un usuario con ese correo.");
-      const u = { id: nextId(), name, email, phone: PERSON.properPhone(b.phone), professional_card: str(b.professional_card), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
+      const u = { id: nextId(), name, email, phone: PERSON.properPhone(b.phone), professional_card: str(b.professional_card), legal_name: str(b.legal_name), id_number: str(b.id_number), role: b.role, active: true, office_ids: b.office_ids.map(Number), created_at: stamp(),
         custom_permissions: !!b.custom_permissions, permissions: (b.permissions || []).filter((p) => p in AUTH.permissions) };
       s.users.push(u);
       return userOut(u);
@@ -704,7 +709,8 @@
       const email = b.email ? str(b.email).toLowerCase() : u.email;
       s.users.some((x) => x.email === email && x.id !== u.id) && fail("Ya existe un usuario con ese correo.");
       Object.assign(u, { name: str(b.name) || u.name, email, role, active, phone: "phone" in b ? PERSON.properPhone(b.phone) : u.phone,
-        professional_card: "professional_card" in b ? str(b.professional_card) : u.professional_card });
+        professional_card: "professional_card" in b ? str(b.professional_card) : u.professional_card,
+        legal_name: "legal_name" in b ? str(b.legal_name) : u.legal_name || "", id_number: "id_number" in b ? str(b.id_number) : u.id_number || "" });
       if (b.custom_permissions !== undefined) {
         u.custom_permissions = !!b.custom_permissions;
         u.permissions = u.custom_permissions ? (b.permissions || []).filter((p) => p in AUTH.permissions) : [];
@@ -1258,6 +1264,7 @@
     }],
     ["DELETE", /^\/cases\/(\d+)$/, (m) => {
       need("cases.delete"); visibleCase(+m[1]);
+      s.casedocs.some((d) => d.case_id === +m[1] && d.kind === "recibo") && fail("El expediente tiene recibos guardados: un recibo no se pierde con el expediente. Elimine primero cada recibo (con copia de respaldo).");
       s.cases = s.cases.filter((k) => k.id !== +m[1]);
       for (const d of s.casedocs.filter((x) => x.case_id === +m[1])) delete s.blobs[`doc-${d.id}`];
       s.casedocs = s.casedocs.filter((x) => x.case_id !== +m[1]);
@@ -1279,7 +1286,11 @@
       const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((x) => x.toString(16).padStart(2, "0")).join("");
       const d = { id: nextId(), case_id: +m[1], name: (str(b.name) || str(b.filename)).slice(0, 200), filename: str(b.filename).slice(0, 200),
         mime: ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        size: bytes.length, sha256: hash, created_by: me().id, created_at: stamp() };
+        size: bytes.length, sha256: hash, kind: "", receipt_id: null, created_by: me().id, created_at: stamp() };
+      if (b.kind === "recibo") {
+        s.receipts.some((x) => x.id === +b.receipt_id && x.case_id === +m[1]) || fail("El recibo no es de este expediente.");
+        Object.assign(d, { kind: "recibo", receipt_id: +b.receipt_id });
+      }
       s.blobs[`doc-${d.id}`] = b64;
       s.casedocs.push(d);
       return clone(d);
@@ -1291,6 +1302,12 @@
     }],
     ["DELETE", /^\/cases\/(\d+)\/documents\/(\d+)$/, (m) => {
       need("cases.write"); visibleCase(+m[1]);
+      const doc = s.casedocs.find((x) => x.id === +m[2] && x.case_id === +m[1]);
+      if (doc?.kind === "recibo") {
+        s.receiptTrash.push({ at: stamp(), by: me().id, receipt: null, docs: [clone(doc)] }); // the file stays in blobs
+        s.casedocs = s.casedocs.filter((x) => x !== doc);
+        return null;
+      }
       s.casedocs = s.casedocs.filter((x) => !(x.id === +m[2] && x.case_id === +m[1]));
       delete s.blobs[`doc-${m[2]}`];
       return null;
@@ -1779,6 +1796,15 @@
       if (results.some((r) => r.ok)) raw.last_reminder_at = stamp();
       return { results, message };
     }],
+    // Version 2.58: only Gerencia deletes a receipt. The link keeps what it deletes in receiptTrash (the copy that the server makes of its database).
+    ["DELETE", /^\/payments\/receipts\/(\d+)$/, (m) => {
+      need("payments.manage");
+      const r = s.receipts.find((x) => x.id === +m[1] && inScope(x.office_id)) || fail("El recibo no existe.");
+      s.receiptTrash.push({ at: stamp(), by: me().id, receipt: clone(r), docs: s.casedocs.filter((d) => d.kind === "recibo" && d.receipt_id === r.id).map(clone) });
+      s.casedocs = s.casedocs.filter((d) => !(d.kind === "recibo" && d.receipt_id === r.id)); // their files stay in blobs
+      s.receipts = s.receipts.filter((x) => x.id !== r.id);
+      return null;
+    }],
     ["GET", /^\/payments\/receipts(?:\?.*)?$/, (m, b, url) => {
       need("payments.manage");
       const q = qs(url);
@@ -1788,7 +1814,7 @@
           const c = s.clients.find((x) => x.id === r.client_id) || {};
           const ch = s.charges.find((x) => x.id === r.charge_id);
           return { ...clone(r), client_name: c.full_name || "", client_doc: [c.id_type, c.id_number].filter(Boolean).join(" "), client_email: c.email || "",
-            charge_concept: ch?.concept ?? null, plan_label: ch?.plan_label ?? null, created_by_name: userName(r.created_by) };
+            charge_concept: ch?.concept ?? null, plan_label: ch?.plan_label ?? null, created_by_name: userName(r.created_by), ...signerOf(r.created_by) };
         });
     }],
     ["POST", /^\/payments\/receipts$/, (m, b) => {

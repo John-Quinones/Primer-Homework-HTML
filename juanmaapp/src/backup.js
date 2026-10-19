@@ -4,6 +4,7 @@
 // BACKUP_KEEP files and logs every attempt. A failed copy rings Gerencia's bell.
 import { mkdirSync, readdirSync, statSync, unlinkSync, existsSync } from "node:fs";
 import path from "node:path";
+import { HttpError } from "./http.js";
 
 const DAY_MS = 86400000;
 const NAME_RE = /^juanmaapp-\d{4}-\d{2}-\d{2}-\d{4}\.db$/;
@@ -56,6 +57,15 @@ export function makeBackup(db, { dir = backupDir(db), trigger = "auto", now = Da
   }
   db.prepare("INSERT INTO backup_log (at_ms, ok, file, size, trigger, error) VALUES (?, ?, ?, ?, ?, ?)").run(now, row.ok, row.file, row.size, trigger, row.error);
   return { ...row, ok: !!row.ok, trigger };
+}
+
+/** Copy of the database taken right before a receipt is deleted (version 2.58). No copy, no deletion; in-memory databases (tests) have none to make. */
+export function backupBeforeReceiptDelete(db) {
+  const file = dbFiles.get(db);
+  if (!file || file === ":memory:") return null;
+  const out = makeBackup(db, { trigger: "antes-de-borrar-recibo" });
+  if (!out.ok) throw new HttpError(409, `No se borró: no se pudo hacer la copia de respaldo previa (${out.error}).`);
+  return out;
 }
 
 /** Called every minute by the scheduler: a copy when the last good one is BACKUP_DAYS old (or there is none). */

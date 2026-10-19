@@ -172,7 +172,7 @@ export function rolePermissions(db, role) {
 }
 
 export function loadUser(db, id) {
-  const row = db.prepare(`SELECT id, name, email, phone, professional_card, role, active, custom_permissions, created_at, must_change_password, invited_at,
+  const row = db.prepare(`SELECT id, name, email, phone, professional_card, legal_name, id_number, role, active, custom_permissions, created_at, must_change_password, invited_at,
     password_hash != '!' AS has_password, hidden, EXISTS (SELECT 1 FROM user_photos p WHERE p.user_id = users.id) AS has_photo FROM users WHERE id = ?`).get(id);
   if (!row) return null;
   const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password, hidden: !!row.hidden, has_photo: !!row.has_photo };
@@ -646,8 +646,8 @@ export function adminRouter(db) {
     let id;
     try {
       // A password Gerencia assigns is temporary: the user changes it at the first sign-in.
-      id = db.prepare("INSERT INTO users (name, email, phone, professional_card, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(name, email, properPhone(b.phone), str(b.professional_card), noPassword ? "!" : await hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
+      id = db.prepare("INSERT INTO users (name, email, phone, professional_card, legal_name, id_number, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(name, email, properPhone(b.phone), str(b.professional_card), str(b.legal_name), str(b.id_number), noPassword ? "!" : await hashPassword(b.password), b.role, noPassword ? 0 : 1).lastInsertRowid;
       setOffices(id, b.office_ids);
       setUserPermissions(id, b.custom_permissions, b.permissions);
     } catch {
@@ -676,9 +676,10 @@ export function adminRouter(db) {
     if (Array.isArray(b.office_ids) && !b.office_ids.length) return res.status(400).json({ error: "Asigne al menos una oficina." });
     const email = b.email ? str(b.email).toLowerCase() : cur.email;
     try {
-      db.prepare("UPDATE users SET name = ?, email = ?, phone = ?, professional_card = ?, role = ?, active = ? WHERE id = ?")
+      db.prepare("UPDATE users SET name = ?, email = ?, phone = ?, professional_card = ?, legal_name = ?, id_number = ?, role = ?, active = ? WHERE id = ?")
         .run(str(b.name) || cur.name, email, "phone" in b ? properPhone(b.phone) : cur.phone,
-          "professional_card" in b ? str(b.professional_card) : cur.professional_card, role, active ? 1 : 0, id);
+          "professional_card" in b ? str(b.professional_card) : cur.professional_card,
+          "legal_name" in b ? str(b.legal_name) : cur.legal_name, "id_number" in b ? str(b.id_number) : cur.id_number, role, active ? 1 : 0, id);
     } catch {
       return res.status(409).json({ error: "Ya existe un usuario con ese correo." });
     }

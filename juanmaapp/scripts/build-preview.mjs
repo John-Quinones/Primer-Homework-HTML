@@ -41,7 +41,8 @@ html = html
   .replace('<script src="vendor/write-excel-file.min.js"></script>', () => `<script>${safe(read("node_modules/write-excel-file/bundle/write-excel-file.min.js"))}</script>`)
   .replace('<script src="vendor/pizzip.min.js"></script>', () => `<script>${safe(read("node_modules/pizzip/dist/pizzip.min.js"))}</script>`)
   .replace('<script src="vendor/docxtemplater.min.js"></script>', () => `<script>${safe(read("node_modules/docxtemplater/build/docxtemplater.min.js"))}</script>`)
-  .replace('<script src="docx.js"></script>', () => `<script>${safe(read("public/docx.js"))}</script>`)
+  // Version 2.58: the receipt's Word base (letterhead, QR, footer) travels inside the single page.
+  .replace('<script src="docx.js"></script>', () => `<script>window.JUANMA_RECIBO_BASE = "${readFileSync(path.join(root, "public/recibo-base.docx")).toString("base64")}";</script>\n<script>${safe(read("public/docx.js"))}</script>`)
   .replace('<script src="vendor/jszip.min.js"></script>', () => `<script>${safe(read("node_modules/jszip/dist/jszip.min.js"))}</script>`)
   .replace('<script src="vendor/docx-preview.min.js"></script>', () => `<script>${safe(read("node_modules/docx-preview/dist/docx-preview.min.js"))}</script>`)
   .replace('<script src="vendor/html2canvas.min.js"></script>', () => `<script>${safe(read("node_modules/html2canvas/dist/html2canvas.min.js"))}</script>`)

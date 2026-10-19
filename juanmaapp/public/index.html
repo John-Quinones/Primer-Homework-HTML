@@ -1107,6 +1107,8 @@
           <span class="pw-row"><input name="password" type="text" minlength="10" autocomplete="new-password" spellcheck="false" /><button type="button" class="mini" data-gen-password>Generar</button></span></label>
         <label>Celular / WhatsApp <input name="phone" inputmode="tel" /></label>
         <label>Tarjeta profesional (abogados) <input name="professional_card" /></label>
+        <label>Nombres y apellidos completos (para firmar recibos) <input name="legal_name" autocomplete="off" /></label>
+        <label>Cédula de ciudadanía (para firmar recibos) <input name="id_number" inputmode="numeric" autocomplete="off" /></label>
       </div>
       <div class="photo-field" id="user-photo-field">
         <span class="client-photo" data-photo-preview></span>
@@ -1604,6 +1606,7 @@
       <h3 data-title>Recibo de caja</h3>
       <label>Cliente * <select name="client_id" required></select></label>
       <label>Aplica a <select name="charge_id"></select></label>
+      <label>Expediente (donde se guarda el recibo) <select name="case_id"><option value="">— Ninguno —</option></select></label>
       <div class="grid2">
         <label>Valor recibido * <input name="amount" required inputmode="numeric" class="money" placeholder="$ 0" /></label>
         <label>Fecha de pago * <input name="paid_on" type="date" required /></label>

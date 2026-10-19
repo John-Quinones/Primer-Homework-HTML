@@ -54,7 +54,7 @@ const SNAP = [
   [/^\/admin\/users\/(\d+)\/photo$/, `SELECT id, CASE WHEN hidden = 1 THEN '${ASSISTANT}' ELSE name END AS name,
     CASE WHEN EXISTS (SELECT 1 FROM user_photos WHERE user_id = users.id) THEN 'Sí' ELSE 'No' END AS foto FROM users WHERE id = ?`],
   [/^\/admin\/users\/(\d+)/, `SELECT id, CASE WHEN hidden = 1 THEN '${ASSISTANT}' ELSE name END AS name, CASE WHEN hidden = 1 THEN '' ELSE email END AS email,
-    role, active, phone, professional_card, custom_permissions FROM users WHERE id = ?`],
+    role, active, phone, professional_card, legal_name, id_number, custom_permissions FROM users WHERE id = ?`],
   [/^\/esign\/(\d+)/, "SELECT id, title, status, case_id FROM sign_requests WHERE id = ?"],
   [/^\/authorities\/(\d+)$/, "SELECT id, entity, treatment, name, title, address, email, city FROM authorities WHERE id = ?"],
 ];

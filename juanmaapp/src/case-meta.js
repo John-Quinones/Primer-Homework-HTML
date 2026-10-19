@@ -336,7 +336,7 @@ export const AUDIT_FIELDS = {
   response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
   concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",
   entity: "Entidad", treatment: "Tratamiento", court_address: "Dirección del despacho",
-  name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", custom_permissions: "Permisos propios",
+  name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", legal_name: "Nombre completo para firmas", id_number: "Cédula", custom_permissions: "Permisos propios",
 };
 /** Field-by-field differences between two rows: [{ field, label, before, after }]. */
 export function auditDiff(before, after) {

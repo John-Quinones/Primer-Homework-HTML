@@ -6,6 +6,7 @@ import { str, HttpError } from "./http.js";
 import { scopeOf } from "./auth.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 import { bogota } from "./monitor.js";
+import { backupBeforeReceiptDelete } from "./backup.js";
 import { METHODS, AGING, STATE_LABELS, applyPayments, portfolio, clientRows, reminderMessage, splitAmount, addMonths, addDays, fmtCOP,
   RECEIPT_START, nextReceiptNumber, receiptLabel, collectionWindow } from "./ledger.js";
 
@@ -247,8 +248,11 @@ export function paymentsRouter(db) {
     if (DATE.test(req.query.from || "")) { w.push("r.paid_on >= ?"); p.push(req.query.from); }
     if (DATE.test(req.query.to || "")) { w.push("r.paid_on <= ?"); p.push(req.query.to); }
     return db.prepare(`SELECT r.*, c.full_name AS client_name, trim(c.id_type || ' ' || c.id_number) AS client_doc, c.email AS client_email,
-        ch.concept AS charge_concept, ch.plan_label, u.name AS created_by_name
+        ch.concept AS charge_concept, ch.plan_label, u.name AS created_by_name,
+        CASE WHEN sg.hidden = 1 THEN '' ELSE sg.legal_name END AS signer_name, CASE WHEN sg.hidden = 1 THEN '' ELSE sg.id_number END AS signer_id,
+        CASE WHEN sg.hidden = 1 THEN '' ELSE sg.professional_card END AS signer_card
       FROM receipts r JOIN clients c ON c.id = r.client_id LEFT JOIN charges ch ON ch.id = r.charge_id LEFT JOIN users_shown u ON u.id = r.created_by
+        LEFT JOIN users sg ON sg.id = r.created_by
       WHERE ${w.join(" AND ")} ORDER BY r.number DESC LIMIT 2000`).all(...p).map((x) => ({ ...x }));
   }));
 
@@ -288,6 +292,18 @@ export function paymentsRouter(db) {
     if (!str(req.body?.reason)) throw new HttpError(400, "Escriba el motivo de la anulación.");
     db.prepare("UPDATE receipts SET voided_at = datetime('now'), void_reason = ? WHERE id = ?").run(str(req.body.reason), x.id);
     return { ok: true };
+  }));
+
+  // Version 2.58: a receipt is never lost. Only Gerencia deletes one (the DELETE gate in requireAuth), after a copy of the database,
+  // and its Word/PDF saved in the case go with it.
+  r.delete("/receipts/:id", h((req, res) => {
+    if (req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia puede eliminar un recibo.");
+    const x = db.prepare(`SELECT * FROM receipts WHERE id = ? AND ${officeSql(req.user, "office_id")}`).get(Number(req.params.id));
+    if (!x) throw new HttpError(404, "El recibo no existe.");
+    backupBeforeReceiptDelete(db);
+    db.prepare("DELETE FROM case_documents WHERE kind = 'recibo' AND receipt_id = ?").run(x.id);
+    db.prepare("DELETE FROM receipts WHERE id = ?").run(x.id);
+    res.status(204).end();
   }));
 
   r.get("/reminders", h((req) => db.prepare(`SELECT pr.*, c.full_name AS client_name, ch.concept, ch.plan_label, u.name AS created_by_name
