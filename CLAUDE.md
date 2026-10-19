@@ -8,6 +8,15 @@ The app lives in `juanmaapp/`. The other files at the root are unrelated homewor
 - Brand: navy `#002b6a`, blue `#027cc6`, silver `#989795`, light silver `#c4c8cb`; "T" column logo (`public/logo-t.png`). Layout follows appbogado.app with these colors.
 - Drafting engine: `prompts/nomosai-system-prompt.md` (NomosAI: no AI clichés, `[FILL: …]` markers, audit footer, Bold link, e-signature block, JSON payload). `src/validate.js` enforces it.
 
+## Fixed rules (user's, read first)
+Short summary of the user's standing rules; one note per topic in `notas/` (Spanish, outside `juanmaapp/` so editing them adds no version).
+- Real data since 17/10/2026: never delete, reset, overwrite or seed test data in the test link's database or in Azure; test only on local copies; back up before any migration or bulk fill, which only fills empty values once. → `notas/datos-reales.md`
+- Versions: 2.N per commit touching `juanmaapp/` (see Shape). Azure publishes only when the user writes «sí, publica» inside the thread of that work; always the branch head, never an older version over a newer one; ask first if the head carries other threads' unapproved versions (above all data migrations). → `notas/versiones-y-publicacion.md`
+- Templates and minutas: keep the original format (Century Gothic, sizes, logos, header, footer); fill only client/case data, warn and highlight what is missing; header QR in RGB 31/56/100 with a transparent background; adapt to the client's gender. Only Gerencia creates templates, process types, fields and functions; new templates go to the user as .docx, never seeded. → `notas/plantillas-y-minutas.md`
+- Interface: Neumorfismo on light screens, Glassmorphism on dark areas, Atrás/Adelante at the foot of every screen and dialog, version seal / «Novedades» / menu foot. → `notas/interfaz.md`
+- Working with the user: show every step (status list plus a short thread message per step with file, result and screenshot); republish the test link on each change. → `notas/forma-de-trabajo.md`
+- AI costs: NomosAI on Haiku, case law on Sonnet, ask before spending. → `notas/costos-ia.md`; local testing tricks → `notas/pruebas-locales.md`.
+
 ## Never
 - Never show invented data (fake cases, judgments, actuaciones). If something needs the internet or e-mail and is not available, say so in the UI.
 - Never reset the user's stored data. Data structure changes are migrations (`src/db.js` `migrate()`, `public/demo-backend.js` `migrate()`); the browser storage key in `public/web-store.js` never changes.
