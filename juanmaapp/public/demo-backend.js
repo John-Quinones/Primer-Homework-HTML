@@ -96,6 +96,12 @@
       for (const { id, assigned_user_id } of plan.cases) st.cases.find((k) => k.id === id).assigned_user_id = assigned_user_id;
       st.info.defaults253 = { at: new Date().toISOString(), clients: plan.clients.length, cases: plan.cases.length, undecided: plan.undecided };
     }
+    // Version 2.54, once: the names the office answered give the gender of clients still without one.
+    if (!st.info.gender254) {
+      const plan = RR.genderPlan(st.clients);
+      for (const { id, gender } of plan) st.clients.find((c) => c.id === id).gender = gender;
+      st.info.gender254 = { at: new Date().toISOString(), clients: plan.length };
+    }
     st.payset ||= null;
     for (const c of st.courts) if (c.circuit === undefined) c.circuit = CM.courtCircuit(c.name);
     // Signature events carry their time in "at", as on the server.

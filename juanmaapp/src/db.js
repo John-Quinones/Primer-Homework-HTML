@@ -13,7 +13,7 @@ import { placeFromRadicado } from "./places.js";
 import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 import { dbFiles, makeBackup } from "./backup.js";
-import { defaultsPlan, defaultResponsible } from "./record-rules.js";
+import { defaultsPlan, defaultResponsible, genderPlan } from "./record-rules.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -699,6 +699,28 @@ function migrate(db) {
     db.prepare("INSERT INTO known_permissions (permission) VALUES (?)").run(p);
   }
   fillDefaults(db);
+  fillGenders(db);
+}
+
+// Version 2.54, once: the names the office answered (Miller, Dany, Yimmi, Hossman, Arley, Dunier: hombre;
+// Cemida: mujer) give the gender of clients still without one. Only empty genders; copy first, logged.
+function fillGenders(db) {
+  if (db.prepare("SELECT 1 FROM app_flags WHERE key = 'gender-v2-54'").get()) return;
+  const plan = genderPlan(db.prepare("SELECT id, full_name, first_names, person_type, gender FROM clients").all());
+  if (plan.length) {
+    const copy = makeBackup(db, { trigger: "antes-v2.54" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de completar el género: ${copy.error}`);
+  }
+  const log = db.prepare("INSERT INTO defaults_log (entity, entity_id, field, value) VALUES ('client', ?, 'gender', ?)");
+  db.exec("BEGIN");
+  try {
+    for (const { id, gender } of plan) {
+      db.prepare("UPDATE clients SET gender = ? WHERE id = ? AND gender = ''").run(gender, id);
+      log.run(id, gender);
+    }
+    db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('gender-v2-54')").run();
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); throw err; }
 }
 
 // Version 2.53 (user's rule), once: the client's gender from the first names, Ibagué (Tolima) where

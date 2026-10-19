@@ -18,7 +18,9 @@ test("gender from the first names: the first known name decides, uncommon names 
   assert.equal(genderFromName("José María"), "hombre");
   assert.equal(genderFromName("Yoslin Alejandra"), "mujer");
   assert.equal(genderFromName("Jhojan Andrés"), "hombre");
-  assert.equal(genderFromName("Dany"), "");
+  assert.equal(genderFromName("Dany"), "hombre", "John's answer (2.54)");
+  assert.equal(genderFromName("Cemida"), "mujer");
+  assert.equal(genderFromName("Zuley"), "");
   assert.equal(genderFromName(""), "");
 });
 
@@ -31,11 +33,11 @@ test("only empty data is planned; what is set stays", () => {
     { id: 1, first_names: "Gladys", person_type: "natural", gender: "", department: "", city: "" },
     { id: 2, first_names: "Carlos", person_type: "natural", gender: "mujer", department: "Huila", city: "Neiva" },
     { id: 3, full_name: "Inversiones S.A.S.", person_type: "juridica", gender: "", department: "Tolima", city: "Ibagué" },
-    { id: 4, first_names: "Dany", full_name: "Dany Gutierrez", person_type: "natural", gender: "", department: "Tolima", city: "Ibagué" },
+    { id: 4, first_names: "Zuley", full_name: "Zuley Gutierrez", person_type: "natural", gender: "", department: "Tolima", city: "Ibagué" },
   ], [{ id: 10, assigned_user_id: null }, { id: 11, assigned_user_id: 7 }], () => 5);
   assert.deepEqual(plan.clients, [{ id: 1, set: { department: "Tolima", city: "Ibagué", gender: "mujer" } }]);
   assert.deepEqual(plan.cases, [{ id: 10, assigned_user_id: 5 }]);
-  assert.deepEqual(plan.undecided, [{ id: 4, name: "Dany Gutierrez" }]);
+  assert.deepEqual(plan.undecided, [{ id: 4, name: "Zuley Gutierrez" }]);
   assert.equal(defaultResponsible([{ id: 1, name: "Ana", active: true }, { id: 2, name: "John Quiñones", active: true }]), 2);
   assert.equal(defaultResponsible([{ id: 2, name: "John Quiñones", active: false }]), null);
 });
@@ -114,4 +116,20 @@ test("new clients and cases get the defaults on both sides", async () => {
     assert.deepEqual(out.link, out.server);
     assert.deepEqual(out.server, { gender: "mujer", department: "Tolima", city: "Ibagué", responsible: true, name: "John Quiñones" });
   } finally { srv.close(); }
+});
+
+test("2.54: clients still without gender get it from the names the office answered, once", () => {
+  const file = path.join(dir, "v254.db");
+  let db = openDb(file);
+  const office = db.prepare("SELECT id FROM offices WHERE is_main = 1").get().id;
+  const add = db.prepare("INSERT INTO clients (full_name, first_names, last_names, id_number, person_type, gender, department, city, office_id) VALUES (?, ?, ?, ?, 'natural', ?, 'Tolima', 'Ibagué', ?)");
+  const dany = add.run("Dany Gutierrez", "Dany", "Gutierrez", "11", "", office).lastInsertRowid;
+  const set = add.run("Cemida Delgado", "Cemida", "Delgado", "12", "hombre", office).lastInsertRowid;
+  db.prepare("DELETE FROM app_flags WHERE key = 'gender-v2-54'").run(); // as after 2.53
+  db.close();
+  db = openDb(file);
+  const g = (id) => db.prepare("SELECT gender FROM clients WHERE id = ?").get(id).gender;
+  assert.equal(g(dany), "hombre");
+  assert.equal(g(set), "hombre", "a gender already chosen stays");
+  db.close();
 });

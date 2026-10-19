@@ -96,7 +96,7 @@ test("the client's gender is saved, changed alone, and feeds the documents", asy
   assert.equal((await admin.call("PUT", `/clients/${clientId}`, { notes: "otra nota" })).body.gender, "mujer", "a save without gender keeps it");
   assert.equal((await admin.call("PUT", `/clients/${clientId}`, { gender: "Hombre" })).body.gender, "hombre", "the office can always change it");
   assert.equal((await admin.call("PUT", `/clients/${clientId}`, { gender: "no sé" })).body.gender, "mujer", "an unknown value goes back to the name's");
-  const dany = (await admin.call("POST", "/clients", { full_name: "Dany Gutierrez", id_type: "CC", id_number: "1110222333" })).body;
+  const dany = (await admin.call("POST", "/clients", { full_name: "Zuley Gutierrez", id_type: "CC", id_number: "1110222333" })).body;
   assert.equal(dany.gender, "", "an uncommon name is left for the office");
   assert.equal(Object.keys((await admin.call("GET", `/templates/data?caseId=${(await admin.call("POST", "/cases", { client_id: dany.id, process_type_id: (await admin.call("GET", `/cases/${caseId}`)).body.process_type_id })).body.id}`)).body).some((k) => k === "cliente.suscrito"), false);
 });
