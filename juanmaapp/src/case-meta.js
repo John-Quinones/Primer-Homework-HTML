@@ -515,6 +515,12 @@ export function genderWords(v) {
     "cliente.del_senor": m ? "del señor" : "de la señora",
   };
 }
+/** Where the client's ID card was issued (version 2.56): «Ibagué (Tolima)»; Bogotá alone, since its department has the same name. */
+export function idPlaceVariables(c) {
+  const city = String(c?.id_city ?? "").trim(), dep = String(c?.id_department ?? "").trim();
+  const both = city && dep && city !== dep ? `${city} (${dep})` : city || dep;
+  return { "cliente.expedicion": both, "cliente.expedicion_ciudad": city, "cliente.expedicion_departamento": dep };
+}
 // Common male names ending in «a» and female names that do not end in it, so the suggestion is not wrong on the obvious ones.
 const MALE_A = new Set(["jose", "joshua", "luca", "bautista", "mustafa"]);
 const FEMALE_OTHER = new Set(["carmen", "beatriz", "luz", "mercedes", "dolores", "ines", "isabel", "raquel", "esther", "ruth", "miriam", "yaneth", "janeth", "elizabeth", "jennifer", "yuliet", "yulieth", "nancy", "marlen", "marleny", "maryory", "rocio", "pilar", "consuelo", "soledad", "amparo", "gladys", "liliana"]);

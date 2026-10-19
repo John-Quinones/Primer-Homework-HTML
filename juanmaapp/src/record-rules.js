@@ -8,7 +8,7 @@ const str = (v) => (v == null ? "" : String(v).trim());
 // ---------- Clients ----------
 
 /** Plain client fields a request may set (names and document type go through personFields). */
-export const CLIENT_TEXT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes", "gender"];
+export const CLIENT_TEXT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes", "gender", "id_department", "id_city"];
 
 /** Cleaned client values from a request; fields left out keep `existing`. office_id is each side's. */
 export function clientValues(body, existing, lib) {
@@ -23,6 +23,11 @@ export function clientValues(body, existing, lib) {
   v.department = department;
   v.city = lib.canonicalCity(v.city, department);
   Object.assign(v, homePlace(v));
+  // Where the ID card was issued (version 2.56): optional, official DIVIPOLA names, never filled by default.
+  const idDepartment = lib.canonicalDepartment(v.id_department);
+  if (v.id_department && !idDepartment) lib.fail("Departamento de expedición de la cédula no reconocido.");
+  v.id_department = v.person_type === "juridica" ? "" : idDepartment;
+  v.id_city = v.person_type === "juridica" ? "" : lib.canonicalCity(v.id_city, idDepartment);
   v.address = lib.properAddress(v.address);
   v.phone = lib.properPhone(v.phone);
   return v;

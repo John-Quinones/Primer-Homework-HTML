@@ -687,6 +687,7 @@ async function renderClientDetail() {
       ${row("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
       ${c.person_type === "juridica" ? "" : row("Nombres", c.first_names) + row("Apellidos", c.last_names) + row("Género", CMETA.GENDER_LABEL[c.gender] || "Sin indicar")}
       ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
+      ${c.person_type === "juridica" ? "" : row("Expedida en", idPlace(c))}
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
       ${row("Dirección", c.address)}
@@ -737,6 +738,7 @@ async function renderClienteFicha(id) {
           ${factRow("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
           ${c.person_type === "juridica" ? "" : factRow("Género", CMETA.GENDER_LABEL[c.gender] || "Sin indicar")}
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
+          ${c.person_type === "juridica" ? "" : factRow("Expedida en", idPlace(c))}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
           ${factRow("Correo", c.email)}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
           ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
@@ -1642,6 +1644,9 @@ $("#my-photo-dialog").addEventListener("click", (e) => {
     if (location.hash.startsWith("#usuarios")) await renderUsuarios();
   });
 });
+
+/** Where the client's ID card was issued: «Ibagué (Tolima)» (version 2.56). */
+function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
 
 function openClientDialog(c) {
   pendingPhoto = undefined;

@@ -345,7 +345,7 @@
       const c = s.clients.find((x) => x.id === k.client_id);
       Object.assign(v, {
         "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number, "cliente.correo": c.email,
-        "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
+        "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department, ...CM.idPlaceVariables(c),
         ...CM.genderWords(c.person_type === "juridica" ? "" : c.gender),
         "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,

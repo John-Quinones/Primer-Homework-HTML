@@ -50,6 +50,8 @@
     "client.first_names": ["", "Solo los nombres. Ej. «María José». Se corrige a mayúscula inicial al salir."],
     "client.last_names": ["", "Primer y segundo apellido. Las partículas quedan en minúscula: «Torres de Cifuentes»."],
     "client.id_number": ["", "Solo números, sin puntos ni espacios."],
+    "client.id_department": ["Escriba: C… Cundinamarca, Chocó", "Departamento donde se expidió la cédula. Al escribir una letra se filtran los departamentos que empiezan con ella; las tildes no importan. Opcional."],
+    "client.id_city": ["Escriba: I… Ibagué", "Ciudad o municipio donde se expidió la cédula, dentro del departamento elegido. Si la elige primero, el departamento se llena solo. En los documentos: {{cliente.expedicion}} = «Ibagué (Tolima)»."],
     "client.business_name": ["", "Razón social exacta como aparece en el certificado de Cámara de Comercio."],
     "client.nit": ["", "NIT con guion y dígito de verificación: 900123456-7."],
     "client.legal_rep": ["", "Nombre completo del representante legal según el certificado de existencia."],

@@ -955,6 +955,9 @@
           </select>
         </label>
         <p class="hint span2">Los documentos usan «el suscrito, identificado, domiciliado» si es hombre y «la suscrita, identificada, domiciliada» si es mujer.</p>
+        <label>Cédula expedida en: departamento <input name="id_department" class="combo" data-combo="dep" placeholder="Escriba: C… Cundinamarca, Chocó…" autocomplete="off" /></label>
+        <label>Cédula expedida en: ciudad o municipio <input name="id_city" class="combo" data-combo="city" data-dep="[name=id_department]" placeholder="Escriba para buscar" autocomplete="off" /></label>
+        <p class="hint span2">Lugar de expedición del documento (opcional). Escriba una o más letras y elija de la lista; las tildes no importan.</p>
       </div>
       <div class="grid2" data-pt="juridica" hidden>
         <label class="span2">Razón social * <input name="business_name" autocomplete="off" placeholder="Ej. Inversiones del Tolima S.A.S." /></label>

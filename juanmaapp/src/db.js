@@ -638,10 +638,16 @@ function migrate(db) {
     for (const id of ids) { off.run(id); log.run(id); }
     db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('monitor-off-from-number')").run();
   }
+  // Version 2.56: a copy of the database before the columns of the ID card's place of issue are added.
+  if (!cols("clients").has("id_department") && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.56" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar el lugar de expedición: ${copy.error}`);
+  }
   // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
   for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],
     ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"],
-    ["gender", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def); // version 2.50: only adds a column; no client changes
+    ["gender", "TEXT NOT NULL DEFAULT ''"], // version 2.50: only adds a column; no client changes
+    ["id_department", "TEXT NOT NULL DEFAULT ''"], ["id_city", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def); // version 2.56: where the ID card was issued, empty for every existing client
   for (const c of db.prepare("SELECT id, full_name, id_type FROM clients WHERE first_names = '' AND last_names = '' AND person_type = 'natural'").all()) {
     if (looksLikeCompany(c.full_name, c.id_type)) {
       db.prepare("UPDATE clients SET person_type = 'juridica', id_type = 'NIT' WHERE id = ?").run(c.id);
