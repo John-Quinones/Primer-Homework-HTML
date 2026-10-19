@@ -18,6 +18,7 @@
     "mayúsculas": (v) => String(v).toLocaleUpperCase("es-CO"),
     "mayusculas": (v) => String(v).toLocaleUpperCase("es-CO"),
     // «Fiscalía 60 Local Espinal; Fiscalía 11 Seccional» → one per line (version 2.46).
+    inicial: (v) => String(v).charAt(0).toLocaleUpperCase("es-CO") + String(v).slice(1), // «el suscrito» → «El suscrito»
     "líneas": (v) => String(v).split(/\s*;\s*/).filter(Boolean).join("\n"),
     lineas: (v) => String(v).split(/\s*;\s*/).filter(Boolean).join("\n"),
     puntos: (v) => (/^\d[\d.\s]*$/.test(String(v).trim()) ? String(v).replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".") : String(v)),
@@ -380,6 +381,62 @@
    * `data` = the case's template values; `skip` = keys too general to look for (a city appears everywhere).
    */
   const FIND_SKIP = /^(cliente\.(ciudad|departamento|tipo_documento)|expediente\.(ciudad|departamento|tipo_proceso|subproceso|area|hechos)|oficina\.(ciudad|nombre)|destinatario\.(tratamiento|bloque)|honorarios\.cuotas|fecha\.)/;
+  // ----- Gender words (version 2.50): «identificada», «la suscrita», «domiciliado» → {{cliente.…}} -----
+  const GENDER_RE = /(?:\b(el|la)\s+)?\bsuscrit([oa])\b(?:\s*(?:\([ao]\)|\/[ao]))?|\b(identificad|domiciliad)([oa])\b(?:\s*(?:\([ao]\)|\/[ao]))?|(?:\b(de\s+)?(el|la)\s+)?\b(se[ñn]or)(a)?\b(?:\s*(?:\([ao]\)|\/[ao]))?/gi;
+  const NOT_CLIENT = /\b(dr|dra|doctor|doctora|abogad[oa]|apoderad[oa]|funcionari[oa]|contratista|receptor)\b/i;
+  /**
+   * The gendered words of the Word, one entry per appearance, in reading order. «client» says whether the words look
+   * like the client's (the lawyer's «identificado con la cédula…» does not); the person confirms each one.
+   */
+  function docxGenderWords(bytes, names = []) {
+    const zip = new window.PizZip(bytes), out = [], who = names.map((n) => fold(n)).filter((n) => n.length > 3);
+    for (const part of Object.keys(zip.files).filter((n) => PARTS.test(n)).sort(PART_ORDER)) {
+      [...zip.file(part).asText().matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].forEach((pm, para) => {
+        const text = paragraphText(pm[0]);
+        for (const m of text.matchAll(GENDER_RE)) {
+          const start = m.index, end = start + m[0].length, shown = m[0];
+          // «señor/señora» is the client's only right after «mi poderdante,» or right before the client's name
+          if (m[7] && !(/poderdante,?\s+$/i.test(text.slice(0, start)) || /^\s*\{\{\s*cliente\.nombre/.test(text.slice(end)))) continue;
+          const key = m[7] ? (m[5] ? "cliente.del_senor" : m[6] ? "cliente.el_senor" : "cliente.senor") : m[2] ? (m[1] ? "cliente.suscrito" : "cliente.suscrito_solo") : m[3].toLowerCase() === "identificad" ? "cliente.identificado" : "cliente.domiciliado";
+          const letters = shown.replace(/[^\p{L}]/gu, "");
+          const fmt = letters.length > 2 && letters === letters.toLocaleUpperCase("es-CO") ? "|mayúsculas" : /^\p{Lu}/u.test(shown) ? "|inicial" : "";
+          const before = text.slice(Math.max(0, start - 45), start);
+          out.push({ id: out.length, part, para, start, end, text: shown, marker: key + fmt,
+            client: !NOT_CLIENT.test(before) && !who.some((n) => fold(before).includes(n)),
+            context: `${start > 50 ? "…" : ""}${text.slice(Math.max(0, start - 50), start)}[[${shown}]]${text.slice(end, end + 40)}${end + 40 < text.length ? "…" : ""}` });
+        }
+      });
+    }
+    return out;
+  }
+  /** Writes {{markers}} over exact spots of the Word ({part, para, start, end, marker}), keeping the first run's format. */
+  function docxReplaceAt(bytes, edits) {
+    const zip = new window.PizZip(bytes);
+    let total = 0;
+    for (const part of [...new Set(edits.map((e) => e.part))]) {
+      const mine = edits.filter((e) => e.part === part);
+      let idx = -1;
+      const xmlOut = zip.file(part).asText().replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
+        idx++;
+        const here = mine.filter((e) => e.para === idx);
+        if (!here.length) return para;
+        const nodes = [...para.matchAll(T_RE)].map((m) => dec(m[2]));
+        const full = nodes.join("");
+        const drop = new Uint8Array(full.length), put = new Map();
+        for (const e of here) { drop.fill(1, e.start, e.end); put.set(e.start, `{{${e.marker}}}`); total++; }
+        let off = 0, i = 0;
+        const fresh = nodes.map((t) => {
+          let o = "";
+          for (let k = 0; k < t.length; k++, off++) { if (put.has(off)) o += put.get(off); if (!drop[off]) o += t[k]; }
+          return o;
+        });
+        return para.replace(T_RE, () => `<w:t xml:space="preserve">${xml(fresh[i++])}</w:t>`)
+          .replace(/<w:hyperlink\b[^>]*>([\s\S]*?)<\/w:hyperlink>/g, (h, inner) => (/\{\{/.test(paragraphText(inner)) ? inner : h));
+      });
+      zip.file(part, xmlOut);
+    }
+    return { bytes: zip.generate({ type: "uint8array" }), count: total };
+  }
   function caseTexts(data) {
     const out = [];
     for (const [key, raw] of Object.entries(data || {})) {
@@ -421,6 +478,6 @@
     }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable,
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, docxGenderWords, docxReplaceAt, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable,
     markerKey, docxFind, docxReplace, caseTexts, markerFor, docxDates };
 })();

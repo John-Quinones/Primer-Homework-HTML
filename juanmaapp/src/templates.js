@@ -6,9 +6,9 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { isFolderLabel, caseRecipient, recipientVariables, fieldDocValue } from "./case-meta.js";
+import { isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
-import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
+import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES } from "./templates-seed.js";
 
 const MAX_FILE = 8 * 1024 * 1024;
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -24,7 +24,7 @@ export function seedTemplates(db) {
     const key = `template:${t.name}`;
     if (flag.get(key)) continue;
     const exists = db.prepare("SELECT 1 FROM document_templates WHERE name = ?").get(t.name);
-    if (first || !exists) { if (!exists) ins.run(t.name, t.category, t.description, t.body); }
+    if (first || !exists) { if (!exists) ins.run(t.name, t.category, t.description, FIRM_FIXES.reduce((b, [from, to]) => b.split(from).join(to), t.body)); }
     setFlag.run(key);
   }
   setFlag.run("templates_seeded");
@@ -52,7 +52,7 @@ export function templateData(db, user, caseId) {
     Object.assign(v, {
       "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number,
       "cliente.correo": c.email, "cliente.telefono": c.phone, "cliente.direccion": c.address,
-      "cliente.ciudad": c.city, "cliente.departamento": c.department,
+      "cliente.ciudad": c.city, "cliente.departamento": c.department, ...genderWords(c.person_type === "juridica" ? "" : c.gender),
       "expediente.radicado": formatRadicado(k.radicado), "expediente.tipo_proceso": k.category_name, "expediente.subproceso": k.type_name,
       "expediente.asunto": k.title, "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts,
       "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,

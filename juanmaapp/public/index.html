@@ -947,6 +947,14 @@
           </select>
         </label>
         <label>Número de documento <input name="id_number" inputmode="numeric" autocomplete="off" placeholder="Ej. 1110456789, sin puntos" /></label>
+        <label>Género
+          <select name="gender">
+            <option value="">Sin indicar</option>
+            <option value="hombre">Hombre</option>
+            <option value="mujer">Mujer</option>
+          </select>
+        </label>
+        <p class="hint span2">Los documentos usan «el suscrito, identificado, domiciliado» si es hombre y «la suscrita, identificada, domiciliada» si es mujer.</p>
       </div>
       <div class="grid2" data-pt="juridica" hidden>
         <label class="span2">Razón social * <input name="business_name" autocomplete="off" placeholder="Ej. Inversiones del Tolima S.A.S." /></label>
@@ -1392,6 +1400,12 @@
       <p class="hint" data-found-sub></p>
       <div class="table-scroll">
         <table class="data-table blanks-table found-table"><thead><tr><th>Texto del Word</th><th>Veces</th><th>Dato que va ahí</th></tr></thead><tbody></tbody></table>
+      </div>
+      <!-- Version 2.50: words that change with the client's gender -->
+      <h4>Género del cliente</h4>
+      <p class="hint" data-gender-sub></p>
+      <div class="table-scroll">
+        <table class="data-table blanks-table gender-table"><thead><tr><th>Texto del Word</th><th>Qué hacer</th></tr></thead><tbody></tbody></table>
       </div>
       <h4>Otros datos de este tipo de petición</h4>
       <p class="hint">Copie del Word el texto que cambia en cada caso y póngale nombre (por ejemplo «Nombres y apellidos del afiliado fallecido»). Al crear el documento la App pide ese dato; si lo guarda en el expediente, la próxima vez sale lleno. Un nombre que empiece por «Fecha» se elige en el calendario.</p>

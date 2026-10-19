@@ -100,7 +100,7 @@
       if (!st.templates.some((x) => x.name === t.name)) {
         const now = new Date().toISOString().slice(0, 19).replace("T", " ");
         st.templates.push({ id: nextId(), name: t.name, category: t.category, description: t.description, format: "markdown",
-          body: t.body, filename: null, builtin: true, created_at: now, updated_at: now });
+          body: (TPL.firmFixes || []).reduce((b, [from, to]) => b.split(from).join(to), t.body), filename: null, builtin: true, created_at: now, updated_at: now });
       }
       st.info = { ...st.info, seededTemplates: [...st.info.seededTemplates, t.name] };
     }
@@ -325,7 +325,7 @@
     return out;
   };
   const uniq = (list, name, ignoreId) => list.some((x) => x.name.toLowerCase() === name.toLowerCase() && x.id !== ignoreId) && fail("Ya existe un registro con ese nombre.");
-  const CLIENT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes"];
+  const CLIENT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes", "gender"];
   const PERSON = window.JuanmaPerson;
   const nameFields = (b, existing = {}) => { try { return PERSON.personFields(b, existing); } catch (err) { fail(err.message); } };
   const placeClient = (c) => {
@@ -388,6 +388,7 @@
       Object.assign(v, {
         "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number, "cliente.correo": c.email,
         "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department,
+        ...CM.genderWords(c.person_type === "juridica" ? "" : c.gender),
         "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
         "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email,
@@ -1001,6 +1002,7 @@
       for (const f of CLIENT_FIELDS) c[f] = str(b[f]);
       Object.assign(c, nameFields(b));
       c.id_number = c.id_number.replace(/\s+/g, "");
+      c.gender = c.person_type === "juridica" ? "" : CM.normGender(c.gender);
       placeClient(c);
       c.office_id = officeFor(b.office_id);
       s.clients.push(c);
@@ -1013,6 +1015,7 @@
       for (const f of CLIENT_FIELDS) if (f in b) c[f] = str(b[f]);
       Object.assign(c, names);
       c.id_number = c.id_number.replace(/\s+/g, "");
+      c.gender = c.person_type === "juridica" ? "" : CM.normGender(c.gender);
       placeClient(c);
       c.office_id = officeFor(b.office_id, c.office_id);
       return clientOut(c, true);

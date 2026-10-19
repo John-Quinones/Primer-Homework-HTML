@@ -685,7 +685,7 @@ async function renderClientDetail() {
     </div>
     <dl class="facts">
       ${row("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
-      ${c.person_type === "juridica" ? "" : row("Nombres", c.first_names) + row("Apellidos", c.last_names)}
+      ${c.person_type === "juridica" ? "" : row("Nombres", c.first_names) + row("Apellidos", c.last_names) + row("Género", CMETA.GENDER_LABEL[c.gender] || "Sin indicar")}
       ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
@@ -735,6 +735,7 @@ async function renderClienteFicha(id) {
         ${clientPhotoBlock(c)}
         <dl class="facts">
           ${factRow("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
+          ${c.person_type === "juridica" ? "" : factRow("Género", CMETA.GENDER_LABEL[c.gender] || "Sin indicar")}
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
           ${factRow("Correo", c.email)}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
@@ -3877,6 +3878,8 @@ async function openTemplate(id) {
     t.optional = [];
     t.lines = [];
   }
+  // Version 2.50: «el suscrito / identificada…» all depend on one datum, the client's gender.
+  t.vars = [...new Set(t.vars.map((k) => (CMETA.GENDER_KEYS.includes(k) ? "cliente.genero" : k)))];
   tplActive = t;
   tplOverrides = {};
   $("#tpl-empty").hidden = true;
@@ -3967,10 +3970,22 @@ tplRecipient.addEventListener("recipientchange", () => {
 const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
 // Version 2.46: a datum that opens an optional passage ({{#…}}) may stay empty; the passage is then left out.
 const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
-const tplValues = () => ({ ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, v]) => v !== "")) });
+const tplValues = () => {
+  const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
+  return { ...v, ...CMETA.genderWords(v["cliente.genero"]) }; // the gendered words follow the chosen gender
+};
 
 // Data the document still lacks (an optional passage never counts).
 const tplMissing = () => { const vals = tplValues(); return tplActive.vars.filter((k) => !vals[k] && !isOptionalVar(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))); };
+// Version 2.50: «Género del cliente» picks the words (el suscrito / la suscrita…); a name-based suggestion is only a hint.
+function genderField(v) {
+  const hint = !v && !tplData["cliente.genero"] ? CMETA.guessGender(tplData["cliente.nombre"]) : "";
+  const canSave = $("#tpl-case").value && can("clients.write") && !tplData["cliente.genero"] && v;
+  return `<label>Género del cliente
+    <select data-var="cliente.genero" class="${v ? "" : "missing"}"><option value="">Falta</option>${["Hombre", "Mujer"].map((o) => `<option ${o === v ? "selected" : ""}>${o}</option>`).join("")}</select>
+    ${hint ? `<span class="muted">Sugerido por el nombre: ${CMETA.GENDER_LABEL[hint]}. Confírmelo.</span>` : ""}
+    ${canSave ? '<button type="button" class="mini" data-save-gender>Guardar en el cliente</button>' : ""}</label>`;
+}
 function renderTplVars() {
   const vals = tplValues();
   const missing = tplMissing();
@@ -3981,7 +3996,7 @@ function renderTplVars() {
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
   const ordered = tplActive.vars.filter((k) => tplRecipient.hidden || !k.startsWith("destinatario.")).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
-  $("#tpl-vars").innerHTML = ordered.map((k) => isDateVar(k)
+  $("#tpl-vars").innerHTML = ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
     <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
     : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>
@@ -4004,6 +4019,18 @@ $("#tpl-vars").addEventListener("input", (e) => {
   tplOverrides[i.dataset.var] = i.type === "date" ? CMETA.fieldDocValue({ field_type: "date" }, i.value) : i.value.trim();
   i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var] && !isOptionalVar(i.dataset.var));
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
+  if (i.tagName === "SELECT") renderTplVars();
+});
+$("#tpl-vars").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-save-gender]")) return;
+  guarded(async () => {
+    const k = await caseById(Number($("#tpl-case").value) || null);
+    if (!k) throw new Error("Elija primero el expediente.");
+    await api("PUT", `/clients/${k.client_id}`, { gender: tplOverrides["cliente.genero"] });
+    delete tplOverrides["cliente.genero"];
+    toast("Género guardado en el cliente: los próximos documentos ya lo traen.");
+    await loadTplData();
+  });
 });
 // Version 2.44: the minuta's own data ({{campo.…}}) typed here is kept in the case.
 $("#tpl-fields-save").addEventListener("click", () => guarded(async () => {
@@ -4018,7 +4045,7 @@ $("#tpl-fields-save").addEventListener("click", () => guarded(async () => {
 }));
 
 function filledText() {
-  const labels = Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)]));
+  const labels = tplLabels();
   return D.fillText(tplActive.body, tplValues(), labels);
 }
 function renderTplDoc() {
@@ -4047,7 +4074,7 @@ const currentText = () => ($("#tpl-edit-mode").checked ? $("#tpl-text").value : 
 
 // Version 2.47 (user's rule): the document keeps the minuta's layout; before it goes out, the user is told
 // which data are missing, and whatever stays missing comes out as [FILL: …] highlighted in yellow.
-const tplLabels = () => Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)]));
+const tplLabels = () => ({ ...Object.fromEntries(CMETA.GENDER_KEYS.map((k) => [k, varLabel("cliente.genero")])), ...Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)])) });
 async function missingOk() {
   const missing = tplMissing();
   if (!missing.length) return true;
@@ -4383,7 +4410,16 @@ async function openBlanksDialog(t) {
     if (key) return /^(oficina|abogado)\./.test(key) ? "" : key.split("|")[0];
     return f.text.includes(",") ? "fecha.ciudad_y_fecha" : "";
   };
-  blanksFor = { t, blanks, found };
+  // Version 2.50: gendered words of the Word (identificada, la suscrita…) become markers that follow the client's gender.
+  const gws = D.docxGenderWords(t.bytes, [tplData["abogado.nombre"], tplData["oficina.nombre"]].filter(Boolean));
+  $(".gender-table tbody", dlg).innerHTML = gws.map((g, i) => `<tr>
+    <td class="blank-ctx">${escapeHtml(g.context).replace(/\[\[(.*?)\]\]/, "<mark>$1</mark>")}</td>
+    <td><label class="inline"><input type="checkbox" data-gender="${i}" ${g.client ? "checked" : ""} /> Cambia según el género del cliente</label></td></tr>`).join("");
+  $("[data-gender-sub]", dlg).textContent = gws.length
+    ? `La App encontró ${gws.length} palabra(s) que cambian entre hombre y mujer. Quedan marcadas las que hablan del cliente; quite la marca a las del abogado u otra persona.`
+    : "No hay palabras como «identificado/a», «domiciliado/a» o «la suscrita» en este Word.";
+  $(".gender-table", dlg).hidden = !gws.length;
+  blanksFor = { t, blanks, found, gws };
   // The minuta's own data can be chosen here too (a found date → «Fecha del fallecimiento»).
   const ownMarkers = [...markers, ...OWN_FIELD_HINTS.filter((n) => !markers.some((m) => m.key === `campo.${n}`))
     .map((n) => ({ key: `campo.${n}`, label: n, group: "Datos propios de la minuta" }))];
@@ -4413,7 +4449,7 @@ $("#blanks-dialog").addEventListener("click", (e) => {
   if (del) del.closest("tr").remove();
 });
 wireDialog($("#blanks-dialog"), async (form) => {
-  const { t, blanks, found } = blanksFor;
+  const { t, blanks, found, gws } = blanksFor;
   const assign = new Map();
   for (const sel of $$("select[data-blank]", form)) if (sel.value) assign.set(Number(sel.dataset.blank), sel.value);
   // A dotted number (65.760.174) keeps its dots; a datum written in capitals stays in capitals.
@@ -4432,13 +4468,17 @@ wireDialog($("#blanks-dialog"), async (form) => {
     if (!hit) throw new Error(`«${text}» no aparece en el Word. Cópielo tal como está escrito.`);
     for (const as of hit.as) items.push({ text: as, marker: CMETA.fieldTypeFor(name) === "date" ? `campo.${name}` : marker(`campo.${name}`, as) });
   }
-  if (!assign.size && !items.length) throw new Error("Elija el dato de al menos un espacio o texto, o cancele.");
-  let bytes = assign.size ? D.applyBlanks(t.bytes, assign) : t.bytes;
+  const genderPicks = $$("input[data-gender]:checked", form).map((c) => gws[Number(c.dataset.gender)]);
+  if (!assign.size && !items.length && !genderPicks.length) throw new Error("Elija el dato de al menos un espacio o texto, o cancele.");
+  // The gendered words go first: they are found by position in the Word as it was loaded.
+  let bytes = t.bytes, genderChanged = 0;
+  if (genderPicks.length) ({ bytes, count: genderChanged } = D.docxReplaceAt(bytes, genderPicks));
+  if (assign.size) bytes = D.applyBlanks(bytes, assign);
   let changed = 0;
   if (items.length) ({ bytes, count: changed } = D.docxReplace(bytes, items));
   const vars = D.docxVariables(bytes);
   await api("PUT", `/templates/${t.id}`, { file_base64: bytesToB64(bytes), description: `Minuta de Word · ${vars.length} dato(s) del cliente o del expediente` });
-  toast(`Minuta lista: ${assign.size + changed} lugar(es) se llenarán con los datos del expediente.`);
+  toast(`Minuta lista: ${assign.size + changed + genderChanged} lugar(es) se llenarán con los datos del expediente${genderChanged ? `, ${genderChanged} según el género del cliente` : ""}.`);
   await renderBorradores();
   await openTemplate(t.id);
 });

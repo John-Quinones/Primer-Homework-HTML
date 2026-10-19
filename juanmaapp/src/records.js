@@ -5,7 +5,7 @@ import { str, HttpError, toInt } from "./http.js";
 import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
-import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor } from "./case-meta.js";
+import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
 import { AREAS, canonicalDepartment, canonicalCity, normalizeRadicado, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
@@ -14,7 +14,7 @@ const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
 const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
 const PHOTO_MAX = 1_500_000; // characters of the data URL (about 1.1 MB of image)
 const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id",
-  "person_type", "first_names", "last_names", "legal_rep"];
+  "person_type", "first_names", "last_names", "legal_rep", "gender"];
 const NAME_FIELDS = ["full_name", "id_type", "person_type", "first_names", "last_names", "legal_rep"];
 
 const fail400 = (msg) => { throw new HttpError(400, msg); };
@@ -95,6 +95,7 @@ export function recordsRouter(db) {
     // Names in proper case, split into first and last names; legal entities use their business name and NIT.
     try { Object.assign(v, personFields(body, existing)); } catch (err) { throw new HttpError(400, err.message); }
     v.id_number = v.id_number.replace(/\s+/g, "");
+    v.gender = v.person_type === "juridica" ? "" : normGender(v.gender);
     v.department = canonicalDepartment(v.department) || (v.department ? fail400("Departamento no reconocido.") : "");
     v.city = canonicalCity(v.city, v.department);
     v.address = properAddress(v.address);

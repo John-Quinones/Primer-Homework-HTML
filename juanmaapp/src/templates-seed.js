@@ -14,6 +14,14 @@ export const VARIABLES = [
   ["cliente.direccion", "Dirección del cliente", "Cliente"],
   ["cliente.ciudad", "Ciudad del cliente", "Cliente"],
   ["cliente.departamento", "Departamento del cliente", "Cliente"],
+  ["cliente.genero", "Género del cliente (Hombre o Mujer)", "Cliente"],
+  ["cliente.suscrito", "«el suscrito» o «la suscrita» según el género", "Género del cliente"],
+  ["cliente.identificado", "«identificado» o «identificada» según el género", "Género del cliente"],
+  ["cliente.domiciliado", "«domiciliado» o «domiciliada» según el género", "Género del cliente"],
+  ["cliente.el", "«el» o «la» según el género", "Género del cliente"],
+  ["cliente.senor", "«señor» o «señora» según el género", "Género del cliente"],
+  ["cliente.el_senor", "«el señor» o «la señora» según el género", "Género del cliente"],
+  ["cliente.del_senor", "«del señor» o «de la señora» según el género", "Género del cliente"],
   ["expediente.carpeta", "Número de carpeta (y del contrato)", "Expediente"],
   ["expediente.radicado", "Radicado", "Expediente"],
   ["expediente.numero", "Número de expediente", "Expediente"],
@@ -389,4 +397,8 @@ export const FIRM_FIXES = [
   ["Señor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:**", "{{destinatario.bloque}}\n\n**Referencia:**"],
   // Version 2.30: the addressee block carries the entity's address and e-mail.
   ["{{destinatario.bloque}}\n**[FILL: Dirección o correo de radicación de la entidad]**", "{{destinatario.bloque}}"],
+  // Version 2.50: the client's words follow the client's gender (the lawyer's «identificado(a)» and the funcionario's stay as they are).
+  ["{{cliente.nombre}}**, identificado(a)", "{{cliente.nombre}}**, {{cliente.identificado}}"],
+  ["{{cliente.nombre}}**, mayor de edad, identificado(a)", "{{cliente.nombre}}**, mayor de edad, {{cliente.identificado}}"],
+  ["{{cliente.documento}}, domiciliado(a)", "{{cliente.documento}}, {{cliente.domiciliado}}"],
 ];

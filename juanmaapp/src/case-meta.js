@@ -472,3 +472,43 @@ export function cleanCaseFields(list) {
   }
   return out;
 }
+
+// ----- Client's gender in documents (version 2.50): «el suscrito / identificado / domiciliado» or the feminine -----
+/** "hombre" | "mujer" | "" from what a form, a file or a document field gave. */
+export function normGender(v) {
+  const s = nrm(v);
+  if (/^(h|m|hombre|masculino|varon)$/.test(s)) return "hombre"; // «M/F» in a sex column: M = masculino
+  return /^(f|mujer|femenino)$/.test(s) ? "mujer" : "";
+}
+export const GENDER_LABEL = { hombre: "Hombre", mujer: "Mujer" };
+/** Marker keys that change with the client's gender; the document form asks only «Género del cliente». */
+export const GENDER_KEYS = ["cliente.suscrito", "cliente.suscrito_solo", "cliente.identificado", "cliente.domiciliado", "cliente.el", "cliente.senor", "cliente.el_senor", "cliente.del_senor"];
+/** The gendered words for a client, or {} while the gender is unknown (the document then shows [FILL: …]). */
+export function genderWords(v) {
+  const g = normGender(v);
+  if (!g) return {};
+  const m = g === "hombre";
+  return {
+    "cliente.genero": GENDER_LABEL[g],
+    "cliente.suscrito": m ? "el suscrito" : "la suscrita",
+    "cliente.suscrito_solo": m ? "suscrito" : "suscrita",
+    "cliente.identificado": m ? "identificado" : "identificada",
+    "cliente.domiciliado": m ? "domiciliado" : "domiciliada",
+    "cliente.el": m ? "el" : "la",
+    "cliente.senor": m ? "señor" : "señora",
+    "cliente.el_senor": m ? "el señor" : "la señora",
+    "cliente.del_senor": m ? "del señor" : "de la señora",
+  };
+}
+// Common male names ending in «a» and female names that do not end in it, so the suggestion is not wrong on the obvious ones.
+const MALE_A = new Set(["jose", "joshua", "luca", "bautista", "mustafa"]);
+const FEMALE_OTHER = new Set(["carmen", "beatriz", "luz", "mercedes", "dolores", "ines", "isabel", "raquel", "esther", "ruth", "miriam", "yaneth", "janeth", "elizabeth", "jennifer", "yuliet", "yulieth", "nancy", "marlen", "marleny", "maryory", "rocio", "pilar", "consuelo", "soledad", "amparo", "gladys", "liliana"]);
+/** Only a suggestion from the first given name; the person confirms it. Returns "hombre", "mujer" or "". */
+export function guessGender(fullName) {
+  const first = nrm(fullName).split(/\s+/)[0] || "";
+  if (!first) return "";
+  if (FEMALE_OTHER.has(first)) return "mujer";
+  if (MALE_A.has(first)) return "hombre";
+  if (first.endsWith("a")) return "mujer";
+  return /[aeiou]$|[nslrdz]$/.test(first) ? "hombre" : "";
+}

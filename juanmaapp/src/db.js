@@ -639,7 +639,8 @@ function migrate(db) {
   }
   // Clients: natural persons with first and last names; legal entities with business name and NIT (change 19).
   for (const [col, def] of [["person_type", "TEXT NOT NULL DEFAULT 'natural'"], ["first_names", "TEXT NOT NULL DEFAULT ''"],
-    ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def);
+    ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"],
+    ["gender", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def); // version 2.50: only adds a column; no client changes
   for (const c of db.prepare("SELECT id, full_name, id_type FROM clients WHERE first_names = '' AND last_names = '' AND person_type = 'natural'").all()) {
     if (looksLikeCompany(c.full_name, c.id_type)) {
       db.prepare("UPDATE clients SET person_type = 'juridica', id_type = 'NIT' WHERE id = ?").run(c.id);
