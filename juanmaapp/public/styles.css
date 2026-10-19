@@ -1202,3 +1202,4 @@ dialog:not([open]) { pointer-events: none; }
 .role-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; font-size: .85rem; background: var(--surface-muted); cursor: pointer; }
 .role-chip.on { background: var(--brand-navy); color: #fff; }
 .ad-litem-box { align-self: end; }
+.muted-line { display: block; margin: 4px 0; font-weight: 600; } .muted-line strong { display: inline; }

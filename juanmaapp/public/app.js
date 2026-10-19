@@ -1979,17 +1979,26 @@ function fillRoleSelect(selected = caseForm.elements.client_role.value) {
   caseForm.elements.client_role.value = selected || "";
   renderRoleChips();
 }
-// Version 2.61: the role is also a check list (one choice); the select stays as the stored value.
+// Version 2.61: the user marks the side of the process where our client is (Demandantes / Demandados…);
+// the hidden select keeps the stored role (the side's first role, or the one already chosen for that side).
 function renderRoleChips() {
   const sel = caseForm.elements.client_role, box = $("#role-chips");
-  const roles = [...sel.options].map((o) => o.value).filter(Boolean);
-  box.innerHTML = roles.map((r) => `<label class="role-chip${sel.value === r ? " on" : ""}"><input type="checkbox" data-role="${escapeHtml(r)}" ${sel.value === r ? "checked" : ""} /> ${escapeHtml(r)}</label>`).join("");
+  const cat = categoryOf(caseForm.elements.category_id.value);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
+  const mine = CMETA.sideOfRole(sel.value);
+  box.innerHTML = ["activa", "pasiva"].map((side) => `<label class="role-chip${mine === side ? " on" : ""}"><input type="checkbox" data-side-pick="${side}" ${mine === side ? "checked" : ""} /> ${escapeHtml(labels[side])}</label>`).join("");
 }
 $("#role-chips").addEventListener("change", (e) => {
-  const r = e.target.dataset.role;
-  if (r === undefined) return;
-  caseForm.elements.client_role.value = e.target.checked ? r : "";
-  caseForm.elements.client_role.dispatchEvent(new Event("change", { bubbles: true }));
+  const side = e.target.dataset.sidePick;
+  if (!side) return;
+  const sel = caseForm.elements.client_role;
+  const cat = categoryOf(caseForm.elements.category_id.value);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const first = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
+  if (e.target.checked && first && ![...sel.options].some((o) => o.value === first)) sel.add(new Option(first, first));
+  sel.value = e.target.checked ? first : "";
+  sel.dispatchEvent(new Event("change", { bubbles: true }));
 });
 const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : "", k.ad_litem ? "Curador ad-litem" : ""].filter(Boolean).join(" · ");
 
@@ -2200,7 +2209,7 @@ partyBox.addEventListener("input", (e) => {
     if (c) { p.id_number = c.id_number || ""; p.ours = true; $("[data-p=id_number]", row).value = p.id_number; $("[data-p=ours]", row).checked = true; }
   }
 });
-for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => { renderParties(); if (n === "client_role") renderRoleChips(); });
+for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => { renderParties(); renderRoleChips(); });
 
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
