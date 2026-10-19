@@ -687,11 +687,12 @@ async function renderClientDetail() {
       ${row("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
       ${c.person_type === "juridica" ? "" : row("Nombres", c.first_names) + row("Apellidos", c.last_names) + row("Género", CMETA.GENDER_LABEL[c.gender] || "Sin indicar")}
       ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
-      ${c.person_type === "juridica" ? "" : row("Expedida en", idPlace(c))}
+      ${c.person_type === "juridica" ? "" : row("Cédula expedida en", idPlace(c) || "Sin indicar")}
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
       ${row("Dirección", c.address)}
-      ${row("Ciudad de residencia", [c.city, c.department].filter(Boolean).join(" · "))}
+      ${row("Residencia", residence(c) || "Sin indicar")}
+      ${row("Afiliado", c.affiliated ? "Sí" : "No")}
       ${row("Oficina", c.office_name)}
       ${row("Notas", c.notes)}
     </dl>
@@ -738,10 +739,10 @@ async function renderClienteFicha(id) {
           ${factRow("Tipo", c.person_type === "juridica" ? "Persona jurídica" : "Persona natural")}
           ${c.person_type === "juridica" ? "" : factRow("Género", CMETA.GENDER_LABEL[c.gender] || "Sin indicar")}
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
-          ${c.person_type === "juridica" ? "" : factRow("Expedida en", idPlace(c))}
+          ${c.person_type === "juridica" ? "" : factRow("Cédula expedida en", idPlace(c) || "Sin indicar")}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
           ${factRow("Correo", c.email)}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
-          ${factRow("Ciudad de residencia", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
+          ${factRow("Residencia", residence(c) || "Sin indicar")}${factRow("Afiliado", c.affiliated ? "Sí" : "No")}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
       ${consents ? consentPanel(c, consents) : ""}
@@ -995,7 +996,7 @@ async function renderExpedienteFicha(id) {
       ${secId("datos", wide(panel("Datos del expediente", null, `<dl class="facts">
         ${factRow("Número de expediente", k.radicado && formatRadicado(k.radicado))}${k.radicado ? "" : factRow("Número como venía (sin radicado de 23 dígitos)", k.case_number)}${factRow("Despacho", k.court_name)}${factRow("Juez", k.judge_name)}${factRow("Correo del despacho", k.court_email)}
         ${factRow("Ciudad", [k.city, k.department].filter(Boolean).join(" · "))}${factRow("Área", k.area)}${factRow("Contraparte", k.counterparty)}
-        ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
+        ${factRow("Oficina", k.office_name)}${factRow("Afiliado", k.affiliated ? "Sí" : "")}${factRow("Curador ad-litem", k.ad_litem ? "Sí, somos curadores en este proceso" : "")}${factRow("Creado", k.created_at && k.created_at.slice(0, 10))}
         ${factRow("Consulta automática", k.radicado ? (k.monitor ? "Activada" : "Desactivada") : "")}${factRow("Última consulta", CMETA.utcToBogota(k.last_checked_at))}${factRow("Última actuación", k.last_action_date)}
         ${fields.filter((f) => !isFolderField(f) && !(k.case_number && CMETA.isImportedRadicadoLabel(f.label))).map((f) => factRow(escapeHtml(f.label), k.field_values[f.id])).join("")}
         ${factRow("Hechos", k.facts)}
@@ -1681,6 +1682,8 @@ $("#my-signature-dialog").addEventListener("click", (e) => {
 });
 
 /** Where the client's ID card was issued: «Ibagué (Tolima)» (version 2.56). */
+// «Ibagué · Tolima»: the client's place of residence (department and city of the client form).
+function residence(c) { return [c.city, c.department].filter(Boolean).join(" · "); }
 function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
 
 function openClientDialog(c) {
@@ -1693,12 +1696,14 @@ function openClientDialog(c) {
     id_number: type === "natural" ? c.id_number : "",
   } : {});
   setPersonType(type);
+  clientForm.elements.affiliated.checked = !!c?.affiliated;
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
   showFormPhoto(c?.photo || "", c || {});
 }
 
 wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
+  data.affiliated = form.elements.affiliated.checked;
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
   if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
@@ -1751,9 +1756,9 @@ function renderCaseRows() {
   const qDigits = q.replace(/\D/g, "");
   const matches = (k) => !q || [caseFolder(k), k.case_number, k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
-  const court = $("#case-court").value, status = $("#case-status").value;
+  const court = $("#case-court").value, status = $("#case-status").value, adLitem = $("#case-adlitem").checked;
   const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
-    && (!mine || k.assigned_user_id === me.id) && (!status || k.status === status)
+    && (!mine || k.assigned_user_id === me.id) && (!status || k.status === status) && (!adLitem || k.ad_litem)
     && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) : k.court_name === court.slice(2)))
     && matches(k));
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
@@ -1920,7 +1925,7 @@ $("#rad-rows").addEventListener("click", (e) => {
 });
 $("#case-office-filter").addEventListener("change", renderCaseRows);
 $("#case-mine").addEventListener("change", renderCaseRows);
-for (const id of ["#case-court", "#case-status"]) $(id).addEventListener("change", renderCaseRows);
+for (const id of ["#case-court", "#case-status", "#case-adlitem"]) $(id).addEventListener("change", renderCaseRows);
 for (const id of ["#case-dep", "#case-city", "#case-area"]) $(id).addEventListener("change", () => guarded(refreshCaseCourts));
 $("#case-search").addEventListener("input", renderCaseRows);
 $("#case-rows").addEventListener("change", (e) => guarded(async () => {
@@ -1972,8 +1977,21 @@ function roleOptions(selected, blank) {
 function fillRoleSelect(selected = caseForm.elements.client_role.value) {
   caseForm.elements.client_role.innerHTML = roleOptions(selected || "", "— Elija: demandante, demandado… —");
   caseForm.elements.client_role.value = selected || "";
+  renderRoleChips();
 }
-const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : ""].filter(Boolean).join(" · ");
+// Version 2.61: the role is also a check list (one choice); the select stays as the stored value.
+function renderRoleChips() {
+  const sel = caseForm.elements.client_role, box = $("#role-chips");
+  const roles = [...sel.options].map((o) => o.value).filter(Boolean);
+  box.innerHTML = roles.map((r) => `<label class="role-chip${sel.value === r ? " on" : ""}"><input type="checkbox" data-role="${escapeHtml(r)}" ${sel.value === r ? "checked" : ""} /> ${escapeHtml(r)}</label>`).join("");
+}
+$("#role-chips").addEventListener("change", (e) => {
+  const r = e.target.dataset.role;
+  if (r === undefined) return;
+  caseForm.elements.client_role.value = e.target.checked ? r : "";
+  caseForm.elements.client_role.dispatchEvent(new Event("change", { bubbles: true }));
+});
+const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : "", k.ad_litem ? "Curador ad-litem" : ""].filter(Boolean).join(" · ");
 
 function renderCustomFields(cat, values) {
   const box = $("#custom-fields");
@@ -2182,7 +2200,7 @@ partyBox.addEventListener("input", (e) => {
     if (c) { p.id_number = c.id_number || ""; p.ours = true; $("[data-p=id_number]", row).value = p.id_number; $("[data-p=ours]", row).checked = true; }
   }
 });
-for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => renderParties());
+for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => { renderParties(); if (n === "client_role") renderRoleChips(); });
 
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
@@ -2202,6 +2220,7 @@ async function openCaseDialog(k = null, clientId = null) {
   } : { affiliated: "0" });
   caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = !!k?.monitor; // v2.38: off until the user ticks it
+  caseForm.elements.ad_litem.checked = !!k?.ad_litem; // v2.61
   showCourtEmail(k?.court_name ? { email: k.court_email } : null);
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();
@@ -2233,7 +2252,7 @@ wireDialog($("#case-dialog"), async (form) => {
     client_role: d.client_role, affiliated: d.affiliated === "1",
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
-    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked,
+    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
   };
   if (d.id) await api("PUT", `/cases/${d.id}`, body);

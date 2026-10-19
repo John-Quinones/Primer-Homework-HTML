@@ -646,6 +646,7 @@ function migrate(db) {
     for (const id of ids) { off.run(id); log.run(id); }
     db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('monitor-off-from-number')").run();
   }
+  const copiedFor256 = !cols("clients").has("id_department");
   // Version 2.56: a copy of the database before the columns of the ID card's place of issue are added.
   if (!cols("clients").has("id_department") && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
     const copy = makeBackup(db, { trigger: "antes-v2.56" });
@@ -656,6 +657,13 @@ function migrate(db) {
     ["last_names", "TEXT NOT NULL DEFAULT ''"], ["legal_rep", "TEXT NOT NULL DEFAULT ''"],
     ["gender", "TEXT NOT NULL DEFAULT ''"], // version 2.50: only adds a column; no client changes
     ["id_department", "TEXT NOT NULL DEFAULT ''"], ["id_city", "TEXT NOT NULL DEFAULT ''"]]) add("clients", col, def); // version 2.56: where the ID card was issued, empty for every existing client
+  // Version 2.61: a copy of the database before the client's «afiliado» and the case's «curador ad-litem» columns are added.
+  if (!copiedFor256 && !cols("clients").has("affiliated") && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.61" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar afiliado y curador ad-litem: ${copy.error}`);
+  }
+  add("clients", "affiliated", "INTEGER NOT NULL DEFAULT 0"); // version 2.61: 0 for every existing client
+  add("cases", "ad_litem", "INTEGER NOT NULL DEFAULT 0"); // version 2.61: the firm acts as curador ad-litem; 0 for every existing case
   for (const c of db.prepare("SELECT id, full_name, id_type FROM clients WHERE first_names = '' AND last_names = '' AND person_type = 'natural'").all()) {
     if (looksLikeCompany(c.full_name, c.id_type)) {
       db.prepare("UPDATE clients SET person_type = 'juridica', id_type = 'NIT' WHERE id = ?").run(c.id);

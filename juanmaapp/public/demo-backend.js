@@ -1184,7 +1184,7 @@
       const k = {
         id: nextId(), client_id: c.id, process_type_id: +b.process_type_id, title: str(b.title),
         status: CM.normStatus(b.status), counterparty: str(b.counterparty), facts: str(b.facts),
-        client_role: partyRole(b.client_role), affiliated: !!b.affiliated,
+        client_role: partyRole(b.client_role), affiliated: !!b.affiliated, ad_litem: !!b.ad_litem,
         field_values: cleanValues(+b.process_type_id, b.field_values), office_id: officeId,
         assigned_user_id: b.assigned_user_id ? checkAssignee(b.assigned_user_id, officeId) : defaultAssignee(officeId), updated_at: stamp(),
         created_at: RR.openedAt(b.created_at) || stamp(),
@@ -1200,7 +1200,7 @@
       const officeId = officeFor(b.office_id, k.office_id);
       Object.assign(k, {
         process_type_id: typeId, title: str(b.title ?? k.title), status: str(b.status) ? CM.normStatus(b.status) : k.status,
-        client_role: "client_role" in b ? partyRole(b.client_role) : k.client_role || "", affiliated: "affiliated" in b ? !!b.affiliated : !!k.affiliated,
+        client_role: "client_role" in b ? partyRole(b.client_role) : k.client_role || "", affiliated: "affiliated" in b ? !!b.affiliated : !!k.affiliated, ad_litem: "ad_litem" in b ? !!b.ad_litem : !!k.ad_litem,
         counterparty: str(b.counterparty ?? k.counterparty), facts: str(b.facts ?? k.facts),
         field_values: cleanValues(typeId, b.field_values ?? k.field_values), office_id: officeId,
         assigned_user_id: "assigned_user_id" in b ? checkAssignee(b.assigned_user_id, officeId) : k.assigned_user_id,

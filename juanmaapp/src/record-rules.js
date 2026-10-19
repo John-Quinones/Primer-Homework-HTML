@@ -28,6 +28,7 @@ export function clientValues(body, existing, lib) {
   if (v.id_department && !idDepartment) lib.fail("Departamento de expedición de la cédula no reconocido.");
   v.id_department = v.person_type === "juridica" ? "" : idDepartment;
   v.id_city = v.person_type === "juridica" ? "" : lib.canonicalCity(v.id_city, idDepartment);
+  v.affiliated = "affiliated" in body ? (body.affiliated ? 1 : 0) : existing.affiliated ? 1 : 0; // version 2.61
   v.address = lib.properAddress(v.address);
   v.phone = lib.properPhone(v.phone);
   return v;

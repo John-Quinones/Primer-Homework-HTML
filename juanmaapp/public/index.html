@@ -255,6 +255,7 @@
             <select id="case-office-filter"><option value="">Todas mis oficinas</option></select>
             <select id="case-filter"><option value="">Todos los tipos de proceso</option></select>
             <label class="inline toggle"><input type="checkbox" id="case-mine" /> Solo míos</label>
+            <label class="inline toggle"><input type="checkbox" id="case-adlitem" /> Solo curaduría ad-litem</label>
             <button data-action="add-radicado">Cargar números de expediente</button>
             <button class="primary" data-action="new-case">+ Nuevo expediente</button>
           </div>
@@ -968,11 +969,12 @@
       <div class="grid2">
         <label>Correo electrónico <input name="email" type="email" /></label>
         <label>Teléfono <input name="phone" /></label>
-        <label>Departamento <input name="department" class="combo" data-combo="dep" placeholder="Escriba: C… Caldas, Cesar…" autocomplete="off" /></label>
-        <label>Ciudad o municipio <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
+        <label>Residencia: departamento <input name="department" class="combo" data-combo="dep" placeholder="Escriba: C… Caldas, Cesar…" autocomplete="off" /></label>
+        <label>Residencia: ciudad o municipio <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
         <label>Dirección <input name="address" /></label>
         <label>Oficina <select name="office_id"></select></label>
       </div>
+      <label class="inline toggle"><input type="checkbox" name="affiliated" /> Cliente afiliado</label>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
       <div class="photo-field" id="client-photo-field">
         <span class="client-photo" data-photo-preview></span>
@@ -1066,10 +1068,12 @@
         <label>Cliente afiliado
           <select name="affiliated"><option value="0">No</option><option value="1">Sí</option></select>
         </label>
+        <label class="inline toggle ad-litem-box"><input type="checkbox" name="ad_litem" /> Somos curadores ad-litem en este proceso</label>
       </div>
       <fieldset class="parties-box"><legend>Partes del proceso</legend>
         <label class="our-client-line">¿Qué es nuestro cliente <strong data-main-name></strong> en este proceso?
-          <select name="client_role"></select></label>
+          <select name="client_role" hidden></select></label>
+        <div id="role-chips" class="role-chips" role="group" aria-label="Qué es nuestro cliente en este proceso"></div>
         <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios), elija el <strong>rol</strong> de cada uno (demandante, demandado, denunciante, denunciado…) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
         <div class="parties-grid">
           <div class="party-side" data-side="activa"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="activa">+ Agregar</button></div>

@@ -1196,3 +1196,9 @@ dialog:not([open]) { pointer-events: none; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .client-photo.small { width: 40px; height: 40px; font-size: .85rem; border-width: 1px; }
 .user-cell { display: flex; align-items: center; gap: 10px; }
+
+/* Version 2.61: role check list in the case form */
+.role-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.role-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; font-size: .85rem; background: var(--surface-muted); cursor: pointer; }
+.role-chip.on { background: var(--brand-navy); color: #fff; }
+.ad-litem-box { align-self: end; }

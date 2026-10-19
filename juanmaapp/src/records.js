@@ -14,7 +14,7 @@ import { formatRadicado } from "./portals.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
 const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id",
-  "person_type", "first_names", "last_names", "legal_rep", "gender", "id_department", "id_city"];
+  "person_type", "first_names", "last_names", "legal_rep", "gender", "id_department", "id_city", "affiliated"];
 
 const fail400 = (msg) => { throw new HttpError(400, msg); };
 const PLACE = { canonicalDepartment, canonicalCity, placeFromRadicado, areas: AREAS, fail: fail400 };
@@ -315,7 +315,7 @@ export function recordsRouter(db) {
     LEFT JOIN users_shown u ON u.id = k.assigned_user_id
     LEFT JOIN courts cr ON cr.id = k.court_id`;
 
-  const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated, parties: JSON.parse(row.parties || "[]") });
+  const caseOut = (row) => ({ ...plain(row), field_values: JSON.parse(row.field_values), affiliated: !!row.affiliated, ad_litem: !!row.ad_litem, parties: JSON.parse(row.parties || "[]") });
   // Our clients among the parties are linked to their client record (given, or found by document number).
   const PARTY_CLIENT = "EXISTS (SELECT 1 FROM json_each(k.parties) j WHERE json_extract(j.value, '$.client_id') = ? AND json_extract(j.value, '$.ours') = 1)";
   function caseParties(req, list, mainClientId) {
@@ -385,11 +385,11 @@ export function recordsRouter(db) {
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);
     const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
-        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, judge_name, case_number, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
+        department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, judge_name, case_number, ad_litem, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
       .run(clientId, typeId, str(b.title), normStatus(b.status), str(b.counterparty), str(b.facts),
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
-        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId), loc.judge_name, cleanCaseNumber(b.case_number),
+        loc.court_email, loc.radicado, loc.monitor, partyRole(b.client_role), b.affiliated ? 1 : 0, caseParties(req, b.parties, clientId), loc.judge_name, cleanCaseNumber(b.case_number), b.ad_litem ? 1 : 0,
         openedAt(b.created_at)).lastInsertRowid;
     res.status(201);
     return getCase(req, id);
@@ -409,13 +409,13 @@ export function recordsRouter(db) {
     const loc = caseLocation(b, cur);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
       field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
-      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, judge_name = ?, case_number = ?, updated_at = datetime('now') WHERE id = ?`)
+      court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, judge_name = ?, case_number = ?, ad_litem = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(typeId, "title" in b ? str(b.title) : cur.title, str(b.status) ? normStatus(b.status) : cur.status,
         "counterparty" in b ? str(b.counterparty) : cur.counterparty, "facts" in b ? str(b.facts) : cur.facts,
         JSON.stringify(values), officeId, assignee, loc.department, loc.city, loc.area, loc.court_id, loc.court_name,
         loc.court_email, loc.radicado, loc.monitor, "client_role" in b ? partyRole(b.client_role) : cur.client_role,
         "affiliated" in b ? (b.affiliated ? 1 : 0) : cur.affiliated ? 1 : 0, "parties" in b ? caseParties(req, b.parties, cur.client_id) : JSON.stringify(cur.parties), loc.judge_name,
-        "case_number" in b ? cleanCaseNumber(b.case_number) : cur.case_number ?? "", id);
+        "case_number" in b ? cleanCaseNumber(b.case_number) : cur.case_number ?? "", "ad_litem" in b ? (b.ad_litem ? 1 : 0) : cur.ad_litem ? 1 : 0, id);
     return getCase(req, id);
   }));
 

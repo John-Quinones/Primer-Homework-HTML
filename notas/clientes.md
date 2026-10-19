@@ -17,3 +17,5 @@ Para no releer todo el código cada vez (regla de John, 19/10/2026). Leer esta n
 - Residencia: `department`, `city` (por defecto Ibagué, Tolima, v2.53).
 - Lugar de expedición de la cédula (v2.56): `id_department`, `id_city`; opcional, sin valor por defecto, vacío para persona jurídica. Marcadores `{{cliente.expedicion}}` («Ibagué (Tolima)»; Bogotá sola), `{{cliente.expedicion_ciudad}}`, `{{cliente.expedicion_departamento}}` (`idPlaceVariables` en `src/case-meta.js`). Azure hace copia de la base antes de crear las columnas.
 - Pruebas: `test/v2-logica-unica.test.js` (servidor = enlace) y `test/v256-lugar-expedicion.test.js`.
+
+- Afiliado y residencia (v2.61): `clients.affiliated` (0/1, casilla en el formulario, fila «Afiliado» en la ficha; `clientValues` en `record-rules.js`). Formulario: «Residencia: departamento / ciudad». Ficha: «Cédula expedida en» y «Residencia» (`residence()` y `idPlace()` en `app.js`), siempre visibles («Sin indicar»). Prueba: `test/v261-afiliado-curador.test.js`.
