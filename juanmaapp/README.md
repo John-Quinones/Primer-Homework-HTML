@@ -53,7 +53,7 @@ On first start the app asks for the Gerencia account. Passwords are hashed with 
 
 ## Test link (no installation)
 
-`npm run preview` writes `preview/juanmaapp-web.html`, the whole app in one page for the published claude.ai link, and `preview/juanmaapp-preview.html`, the same page to open from disk. There is **no sample data**: it starts with the Ibagué office, the process catalog and the starter templates, and asks for the Gerencia account.
+`npm run preview` writes `preview/juanmaapp-web.html`, the whole app in one page for the published claude.ai link, and `preview/juanmaapp-preview.html`, the same page to open from disk. Both are built files and are not kept in git (`preview/` is ignored); run the command again after each change. There is **no sample data**: it starts with the Ibagué office, the process catalog and the starter templates, and asks for the Gerencia account.
 
 - **Data** is kept by `public/web-store.js`: on the published link, in the link's own database (the same on every device that opens it, kept across updates of the app); opened from disk, in that browser. Updates migrate the stored data; they never reset it.
 - **Real on the link:** clients, cases, catalog, users and roles, offices, agenda, templates, import from Excel, reports, in-person e-signature, payments, receipts and portfolio, and NomosAI drafting and judgment analysis (the text is pasted), which run on the viewer's own Claude account.
