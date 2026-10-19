@@ -480,6 +480,21 @@ export function normGender(v) {
   if (/^(h|m|hombre|masculino|varon)$/.test(s)) return "hombre"; // «M/F» in a sex column: M = masculino
   return /^(f|mujer|femenino)$/.test(s) ? "mujer" : "";
 }
+/**
+ * The class of process and its radicado as the poderes and peticiones write them (version 2.52):
+ * «Proceso Ordinario Laboral de Primera Instancia. Radicación No. 73001…». Penal cases leave all three empty
+ * (not every poder is for a criminal case), so the passage is left out.
+ */
+export function processVariables(category, area, typeName, radicado) {
+  const penal = /penal/i.test(`${category || ""} ${area || ""}`);
+  const clase = penal ? "" : String(typeName || "").replace(/\s*›\s*/g, " ").trim();
+  const rad = penal || !radicado ? "" : `Radicación No. ${radicado}`;
+  return {
+    "expediente.clase_proceso": clase,
+    "expediente.radicacion": rad,
+    "expediente.proceso_linea": [clase && `Proceso ${clase}`, rad].filter(Boolean).join(". "),
+  };
+}
 export const GENDER_LABEL = { hombre: "Hombre", mujer: "Mujer" };
 /** Marker keys that change with the client's gender; the document form asks only «Género del cliente». */
 export const GENDER_KEYS = ["cliente.suscrito", "cliente.suscrito_solo", "cliente.identificado", "cliente.domiciliado", "cliente.el", "cliente.senor", "cliente.el_senor", "cliente.del_senor"];

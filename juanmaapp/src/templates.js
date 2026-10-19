@@ -6,7 +6,7 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords } from "./case-meta.js";
+import { isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, processVariables } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES } from "./templates-seed.js";
 
@@ -57,6 +57,7 @@ export function templateData(db, user, caseId) {
       "expediente.asunto": k.title, "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts,
       "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
       "expediente.ciudad": k.city, "expediente.departamento": k.department,
+      ...processVariables(k.category_name, k.area, k.type_name, k.radicado ? formatRadicado(k.radicado) : ""),
     });
     const fields = db.prepare("SELECT id, label, field_type FROM custom_fields WHERE category_id = (SELECT category_id FROM process_types WHERE id = ?)").all(k.process_type_id);
     const values = JSON.parse(k.field_values);

@@ -15,6 +15,9 @@ export const VARIABLES = [
   ["cliente.ciudad", "Ciudad del cliente", "Cliente"],
   ["cliente.departamento", "Departamento del cliente", "Cliente"],
   ["cliente.genero", "Género del cliente (Hombre o Mujer)", "Cliente"],
+  ["expediente.clase_proceso", "Clase de proceso del expediente (vacía en procesos penales)", "Expediente"],
+  ["expediente.radicacion", "«Radicación No. …» del expediente (vacía en procesos penales)", "Expediente"],
+  ["expediente.proceso_linea", "«Proceso … Radicación No. …» (vacía en procesos penales)", "Expediente"],
   ["cliente.suscrito", "«el suscrito» o «la suscrita» según el género", "Género del cliente"],
   ["cliente.identificado", "«identificado» o «identificada» según el género", "Género del cliente"],
   ["cliente.domiciliado", "«domiciliado» o «domiciliada» según el género", "Género del cliente"],
@@ -401,4 +404,8 @@ export const FIRM_FIXES = [
   ["{{cliente.nombre}}**, identificado(a)", "{{cliente.nombre}}**, {{cliente.identificado}}"],
   ["{{cliente.nombre}}**, mayor de edad, identificado(a)", "{{cliente.nombre}}**, mayor de edad, {{cliente.identificado}}"],
   ["{{cliente.documento}}, domiciliado(a)", "{{cliente.documento}}, {{cliente.domiciliado}}"],
+  // Version 2.52: poder and petición name the class of process and the radicado of the case; nothing for a criminal case.
+  ["**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n", "{{#expediente.proceso_linea}}**Referencia:** {{expediente.proceso_linea}}\n{{/expediente.proceso_linea}}"],
+  ["**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n", "**Demandado:** {{expediente.contraparte}}\n"],
+  ["**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n", "**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n{{#expediente.proceso_linea}}**Referencia:** {{expediente.proceso_linea}}\n\n{{/expediente.proceso_linea}}"],
 ];

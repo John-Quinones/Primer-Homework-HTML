@@ -164,12 +164,18 @@
 
   /** Replace {{variables}} in text; missing ones become [FILL: label] (highlighted on screen and in Word). */
   function fillText(text, data, labels = {}) {
+    // Optional passages {{#key}}…{{/key}} (as in Word): printed only when key has a value; a line left empty goes away.
+    text = text.replace(/\{\{\s*#\s*([^{}]+?)\s*\}\}([\s\S]*?)\{\{\s*\/\s*\1\s*\}\}\n?/g, (_, k, inner) => {
+      const v = markerValue(data, k);
+      return v !== undefined && v !== null && String(v).trim() !== "" ? inner + (/\n$/.test(inner) ? "" : "\n") : "";
+    });
     return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, tag) => {
       const key = markerKey(tag), v = markerValue(data, tag);
       // A multi-line value (the addressee block) keeps its lines: Markdown hard breaks.
       return v !== undefined && v !== null && String(v).trim() !== "" ? (String(v).includes("\n") ? String(v).replace(/\n/g, "  \n") + "  " : String(v)) : `[FILL: ${labels[key] || key}]`;
     });
   }
+  const textOptional = (text) => [...new Set([...text.matchAll(/\{\{\s*#\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])))];
   const textVariables = (text) => [...new Set([...text.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => markerKey(m[1])).filter(Boolean))];
 
   // ----- Firm's own Word forms (minutas): find the blanks and turn them into {{variables}} -----
@@ -478,6 +484,6 @@
     }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, docxGenderWords, docxReplaceAt, fillDocx, markdownToDocx, fillText, textVariables, docxBlanks, applyBlanks, guessVariable,
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, docxGenderWords, docxReplaceAt, fillDocx, markdownToDocx, fillText, textVariables, textOptional, docxBlanks, applyBlanks, guessVariable,
     markerKey, docxFind, docxReplace, caseTexts, markerFor, docxDates };
 })();

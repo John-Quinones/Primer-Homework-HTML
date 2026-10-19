@@ -3875,7 +3875,7 @@ async function openTemplate(id) {
     t.lines = D.docxLineVars(t.bytes);
   } else {
     t.vars = D.textVariables(t.body);
-    t.optional = [];
+    t.optional = D.textOptional(t.body);
     t.lines = [];
   }
   // Version 2.50: «el suscrito / identificada…» all depend on one datum, the client's gender.

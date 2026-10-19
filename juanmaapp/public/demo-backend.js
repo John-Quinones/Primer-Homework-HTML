@@ -332,6 +332,7 @@
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
         "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email,
         "expediente.area": k.area, "expediente.ciudad": k.city, "expediente.departamento": k.department,
+        ...CM.processVariables(o.category_name, k.area, o.type_name, k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : ""),
       });
       for (const f of s.fields.filter((f) => f.category_id === o.category_id)) v[`campo.${f.label}`] = CM.fieldDocValue(f, k.field_values[f.id]);
       const folder = s.fields.find((f) => f.category_id === o.category_id && CM.isFolderLabel(f.label) && String(k.field_values[f.id] ?? "").trim());
