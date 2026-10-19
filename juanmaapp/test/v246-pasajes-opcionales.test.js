@@ -61,3 +61,21 @@ test("a required datum that is missing still shows [FILL: …]", async () => {
   const out = await lines(D.fillDocx(poder, {}));
   assert.match(out.at(-1), /^\[FILL: cliente\.nombre\] recibe notificaciones en el móvil No\.\[FILL: cliente\.telefono\]\. Para/);
 });
+
+// Version 2.48: Word made the e-mail a link; an empty optional passage ending inside it broke the file.
+test("an optional passage that ends inside a Word link gives a valid file", async () => {
+  const zip = new PizZip();
+  zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file("word/document.xml", `<w:document ${W} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p>`
+    + '<w:r><w:t xml:space="preserve">móvil No.322{{#campo.Correo}} y al correo </w:t></w:r>'
+    + '<w:hyperlink r:id="rId9"><w:r><w:t>{{campo.Correo}}{{/campo.Correo}}</w:t></w:r></w:hyperlink>'
+    + '<w:r><w:t xml:space="preserve">. Para</w:t></w:r></w:p></w:body></w:document>');
+  const bytes = zip.generate({ type: "uint8array" });
+  for (const data of [{}, { "campo.Correo": "a@b.co" }]) {
+    const xml = new PizZip(new Uint8Array(await D.fillDocx(bytes, data).arrayBuffer())).file("word/document.xml").asText();
+    const stack = [];
+    for (const t of xml.matchAll(/<(\/?)([\w:]+)[^>]*?(\/?)>/g)) if (!t[3]) { if (!t[1]) stack.push(t[2]); else assert.equal(stack.pop(), t[2]); }
+    assert.equal(stack.length, 0);
+    assert.equal(xml.replace(/<[^>]+>/g, ""), data["campo.Correo"] ? "móvil No.322 y al correo a@b.co. Para" : "móvil No.322. Para");
+  }
+});

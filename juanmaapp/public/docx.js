@@ -73,8 +73,19 @@
     });
   }
   /** Fill a .docx template; missing values become [FILL: label] highlighted (`labels`: key → readable name). */
+  // Version 2.48: Word turns a typed e-mail into a link. A {{marker}} inside a link, or an optional
+  // passage that starts outside it and ends inside, would break the file (Word «detectó un error»):
+  // such links become plain text before filling.
+  function unwrapMarkerLinks(zip) {
+    for (const name of Object.keys(zip.files).filter((n) => PARTS.test(n))) {
+      const x = zip.file(name).asText();
+      const y = x.replace(/<w:hyperlink\b[^>]*>([\s\S]*?)<\/w:hyperlink>/g, (all, inner) => (/\{\{|\}\}/.test(inner.replace(/<[^>]+>/g, "")) ? inner : all));
+      if (y !== x) zip.file(name, y);
+    }
+  }
   function fillDocx(bytes, data, labels = {}) {
     const zip = new window.PizZip(bytes);
+    unwrapMarkerLinks(zip);
     const doc = new window.docxtemplater(zip, {
       delimiters: { start: "{{", end: "}}" },
       paragraphLoop: true,
