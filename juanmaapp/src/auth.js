@@ -12,6 +12,7 @@ import { canonicalDepartment, canonicalCity } from "./places.js";
 import { properAddress, properPhone } from "./person.js";
 import { sendEmail, sendWhatsapp, channelsStatus, channelReady } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
+import { backupStatus, makeBackup, backupPath, backupDir } from "./backup.js";
 import { createHash as hashOf } from "node:crypto";
 
 // Built-in roles; the firm can add more in Usuarios › Roles y permisos.
@@ -383,6 +384,20 @@ export function authRouter(db) {
 export function adminRouter(db) {
   const r = express.Router();
   const manage = requirePerm("users.manage");
+
+  // ----- Database copies (version 2.42): Gerencia sees, makes and downloads them -----
+  const gerenciaBackups = (req, res, next) => (req.user.role === "Gerencia" ? next() : res.status(403).json({ error: "Solo Gerencia maneja las copias de seguridad." }));
+  r.get("/backups", gerenciaBackups, (req, res) => res.json(backupStatus(db)));
+  r.post("/backups", gerenciaBackups, (req, res) => {
+    const out = makeBackup(db, { trigger: "manual" });
+    res.status(out.ok ? 201 : 500).json(out.ok ? out : { error: `No se pudo hacer la copia: ${out.error}` });
+  });
+  r.get("/backups/:name", gerenciaBackups, (req, res) => {
+    const file = backupPath(req.params.name, backupDir(db));
+    if (!file) return res.status(404).json({ error: "La copia no existe." });
+    audit(db, req, { action: "Descargó", module: "Configuración", entity: "copia de seguridad", ok: true, summary: `Descargó la copia ${req.params.name}` });
+    res.download(file, req.params.name);
+  });
 
   // ----- Delivery channels: status and a test message -----
   r.get("/channels", manage, (req, res) => {

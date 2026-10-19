@@ -200,7 +200,8 @@ Si la firma contrata **estampado cronológico** con una entidad acreditada ante 
 ## Datos y copias de seguridad
 
 - La base de datos queda en `/home/data/juanmaapp.db`, en el almacenamiento permanente de la app. No se borra al reiniciar ni al publicar versiones nuevas.
-- **Para descargar una copia:** App Service → **Herramientas de desarrollo → Herramientas avanzadas → Ir** → menú *Debug console → Bash* → carpeta `data` → descargue `juanmaapp.db`. Hágalo con regularidad mientras esté en el plan gratuito.
+- **Copias automáticas (versión 2.42):** cada 3 días el servidor hace una copia completa de la base en `/home/data/respaldos/` (por ejemplo `juanmaapp-2026-10-19-0800.db`) y guarda las 5 más recientes. Gerencia las ve y las descarga en **Configuración → Copias de seguridad**, donde también está el botón **«Hacer una copia ahora»**. Si una copia falla, la campana de Gerencia avisa y se reintenta una hora después. En el plan gratuito la App se duerme sin uso: la copia se hace en el primer minuto en que vuelva a estar despierta después de cumplirse los 3 días. Variables opcionales: `BACKUP_DAYS` (días entre copias, 3), `BACKUP_KEEP` (copias guardadas, 5), `BACKUP_DIR` (otra carpeta, u `off` para apagarlas). Las copias están en el mismo disco que la base: protegen contra un error o un borrado, no contra la pérdida del servicio; descargue una de vez en cuando y guárdela fuera de Azure.
+- **Para descargar una copia a mano:** App Service → **Herramientas de desarrollo → Herramientas avanzadas → Ir** → menú *Debug console → Bash* → carpeta `data` → descargue `juanmaapp.db`. Hágalo con regularidad mientras esté en el plan gratuito.
 
 ## Pasar al plan B1 (uso diario de la firma)
 

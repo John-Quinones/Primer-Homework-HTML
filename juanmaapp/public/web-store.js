@@ -28,6 +28,30 @@
     return snap.docs.filter((d) => d.exists).map((d) => ({ id: d.id, data: JSON.parse(JSON.stringify(d.data())) }));
   }
 
+  // jm_blob holds one document per 180 KB piece of every stored file (photos, templates, PDFs)
+  // and can pass the store's 1000-document read limit. Reading only the first 1000 would leave
+  // files out, and the next save would delete the pieces of the files it read in part. So it is
+  // read in windows ordered by key; if the store refuses that query, the single read is used as before.
+  async function readBlobDocs(from = "", to = null) {
+    try {
+      const byId = new Map();
+      for (let start = from; ;) {
+        let q = db.collection("jm_blob").where("key", ">=", start);
+        if (to !== null) q = q.where("key", "<", to);
+        const snap = await q.orderBy("key").limit(1000).get();
+        for (const d of snap.docs) if (d.exists) byId.set(d.id, JSON.parse(JSON.stringify(d.data())));
+        if (snap.docs.length < 1000) break;
+        const last = snap.docs[snap.docs.length - 1].data().key;
+        if (last === start) break; // a file has far fewer than 1000 pieces; never loop forever
+        start = last; // the next window starts again at this key, so its pieces are all read
+      }
+      return [...byId].map(([id, data]) => ({ id, data }));
+    } catch {
+      if (to !== null) return null;
+      return readCollection("jm_blob");
+    }
+  }
+
   async function load() {
     const ns = window.claude?.use ? await Promise.race([window.claude.use("db"), new Promise((r) => setTimeout(() => r(null), 12000))]).catch(() => null) : null;
     if (ns) {
@@ -50,7 +74,7 @@
         state[c].sort((a, b) => (a.id > b.id ? 1 : -1));
       }
       state.blobs = {};
-      const chunks = await readCollection("jm_blob");
+      const chunks = await readBlobDocs();
       const byKey = {};
       for (const d of chunks) { saved.set(`jm_blob/${d.id}`, JSON.stringify(d.data)); (byKey[d.data.key] ||= [])[d.data.n] = d.data.part; }
       for (const [key, parts] of Object.entries(byKey)) if (parts.length === (blobIndex[key] || parts.length)) state.blobs[key] = parts.join("");
@@ -118,11 +142,8 @@
     const blobs = {};
     if (blobPrefix) {
       const byKey = {};
-      const snap = await db.collection("jm_blob").where("key", ">=", blobPrefix).where("key", "<", blobPrefix + "\uffff").limit(1000).get().catch(() => null);
-      for (const d of snap?.docs || []) {
-        if (!d.exists) continue;
-        const data = JSON.parse(JSON.stringify(d.data()));
-        saved.set(`jm_blob/${d.id}`, JSON.stringify(data));
+      for (const { id, data } of (await readBlobDocs(blobPrefix, blobPrefix + "\uffff")) || []) {
+        saved.set(`jm_blob/${id}`, JSON.stringify(data));
         (byKey[data.key] ||= [])[data.n] = data.part;
       }
       for (const [key, parts] of Object.entries(byKey)) if (!parts.includes(undefined)) blobs[key] = parts.join("");

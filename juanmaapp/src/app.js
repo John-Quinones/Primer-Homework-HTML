@@ -74,7 +74,9 @@ export function createApp(db) {
   app.use("/api/auth", express.json({ limit: "32kb" }));
   app.use("/api/public", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "12mb" }));
-  app.use(sessionMiddleware(db));
+  // Only the API reads the session: page files (styles, scripts, images, /vendor) are the same
+  // for everyone, so loading them does not query the database.
+  app.use("/api", sessionMiddleware(db));
   app.use(express.static(path.join(root, "public")));
   app.get("/vendor/marked.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/marked/marked.min.js")));
   app.get("/vendor/read-excel-file.min.js", (_req, res) =>

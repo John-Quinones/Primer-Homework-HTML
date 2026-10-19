@@ -1,5 +1,6 @@
 // Tasks, hearings and deadlines on cases, plus each user's notifications.
 import express from "express";
+import { str } from "./http.js";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
 import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, taskLogEvents, taskNotice } from "./case-meta.js";
@@ -7,7 +8,6 @@ import { notify } from "./monitor.js";
 import { sendEmail, sendWhatsapp, channelReady } from "./notify.js";
 import { publicBase } from "./public-url.js";
 const STATUSES = ["pendiente", "hecha", "cancelada"];
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const LOCAL = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
