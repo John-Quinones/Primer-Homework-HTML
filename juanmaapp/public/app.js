@@ -4223,7 +4223,8 @@ const bytesToB64 = (bytes) => {
 let blanksFor = null;
 // Version 2.44: the data the minuta needs that the App has no field for yet, suggested as names.
 const OWN_FIELD_HINTS = ["Nombres y apellidos del afiliado fallecido", "Identificación del afiliado fallecido", "Lugar de expedición del documento del afiliado",
-  "Fecha del fallecimiento", "Lugar de expedición del documento del cliente"];
+  "Fecha del fallecimiento", "Hora del fallecimiento", "Lugar del fallecimiento", "NUNC de la Fiscalía", "Número del informe de necropsia",
+  "Nombres y apellidos del padre del afiliado", "Lugar de expedición del documento del cliente"];
 async function openBlanksDialog(t) {
   if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
   const markers = await markerList();
