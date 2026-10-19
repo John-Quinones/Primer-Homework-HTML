@@ -150,7 +150,8 @@ test("analysis of a Constitutional Court judgment goes straight to its page at m
   const req = stub.calls[0];
   assert.equal(req.output_config.effort, "medium");
   assert.ok(req.messages[0].content.includes(url));
-  assert.deepEqual(req.tools.map((t) => t.max_uses), [2, 3]);
+  assert.deepEqual(req.tools.map((t) => t.max_uses), [1, 2]);
+  assert.equal(req.tools[1].max_content_tokens, 80000);
 });
 
 test("the same analysis is answered from the database the second time", async () => {

@@ -4,7 +4,13 @@
 // tools actually returned, so a sentence that was not found on an official
 // page is never presented as verified.
 import Anthropic from "@anthropic-ai/sdk";
-import { MODEL } from "./engine.js";
+import { ccRelatoriaUrl, pageNamesJudgment } from "./court-links.js";
+import { addUsage } from "./ai-usage.js";
+
+export { ccRelatoriaUrl };
+
+// Version 2.49: Claude Sonnet 5.5 costs half of Opus and keeps the official-source rules.
+export const MODEL = process.env.JURIS_MODEL || "claude-sonnet-5-5";
 
 export const OFFICIAL_DOMAINS = [
   "corteconstitucional.gov.co",
@@ -101,44 +107,50 @@ export async function withRetry(run, waitMs = 2000) {
   }
 }
 
-/**
- * Official Corte Constitucional page for a reference like "T-760 de 2008",
- * "C-355/06" or "SU-214 de 2016", so the model reads it without searching.
- * It is only a hint: the URL still counts as verified only if web_fetch returned it.
- */
-export function ccRelatoriaUrl(reference) {
-  const m = String(reference || "").toUpperCase().match(/\b(SU|T|C)\s*-\s*(\d{1,4})\s*(?:\/|DE(?:L)?|-)\s*(\d{4}|\d{2})\b/);
-  if (!m) return null;
-  let year = Number(m[3]);
-  if (m[3].length === 2) year += year > 91 ? 1900 : 2000; // the Court started in 1992
-  if (year < 1992 || year > new Date().getFullYear()) return null;
-  return `https://www.corteconstitucional.gov.co/relatoria/${year}/${m[1]}-${Number(m[2])}-${String(year).slice(2)}.htm`;
-}
+// Limits on what one consultation may read (version 2.49). Every page read is
+// paid for and read again at each step, so search and citation checks read
+// little; an analysis keeps room for the whole judgment, whose decision
+// (parte resolutiva) is at the end.
+export const LIMITS = {
+  search: { maxSearches: 3, maxFetches: 2, pageTokens: 15000 },
+  analyze: { maxSearches: 3, maxFetches: 2, pageTokens: 80000 },
+  analyzeDirect: { maxSearches: 1, maxFetches: 2, pageTokens: 80000 },
+  verify: { maxSearches: 2, maxFetches: 2, pageTokens: 20000 },
+  verifyDirect: { maxSearches: 1, maxFetches: 2, pageTokens: 20000 },
+};
 
 /** One research turn with official-only web tools; resumes pause_turn. */
-async function research(prompt, { maxSearches = 6, maxFetches = 6 } = {}) {
+async function research(prompt, { maxSearches, maxFetches, pageTokens }, onUsage) {
   const tools = [
     { type: "web_search_20260209", name: "web_search", max_uses: maxSearches, allowed_domains: OFFICIAL_DOMAINS },
-    { type: "web_fetch_20260209", name: "web_fetch", max_uses: maxFetches, allowed_domains: OFFICIAL_DOMAINS },
+    { type: "web_fetch_20260209", name: "web_fetch", max_uses: maxFetches, allowed_domains: OFFICIAL_DOMAINS, max_content_tokens: pageTokens },
   ];
   const messages = [{ role: "user", content: prompt }];
   const content = [];
-  for (let i = 0; i < 5; i++) {
-    const msg = await withRetry(() => client.beta.messages.stream({
-      model: MODEL,
-      max_tokens: 32000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: EFFORT },
-      system: SYSTEM,
-      tools,
-      messages,
-    }).finalMessage());
+  const usage = {};
+  let model = MODEL;
+  try {
+    for (let i = 0; i < 5; i++) {
+      const msg = await withRetry(() => client.beta.messages.stream({
+        model: MODEL,
+        max_tokens: 32000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: EFFORT },
+        system: SYSTEM,
+        tools,
+        messages,
+      }).finalMessage());
 
-    content.push(...msg.content);
-    if (msg.stop_reason === "refusal") throw new Error("El modelo no pudo atender esta consulta.");
-    if (msg.stop_reason !== "pause_turn") break;
-    messages.push({ role: "assistant", content: msg.content });
+      content.push(...msg.content);
+      addUsage(usage, msg.usage);
+      model = msg.model || model;
+      if (msg.stop_reason === "refusal") throw new Error("El modelo no pudo atender esta consulta.");
+      if (msg.stop_reason !== "pause_turn") break;
+      messages.push({ role: "assistant", content: msg.content });
+    }
+  } finally {
+    onUsage?.({ model, usage }); // paid even when the answer fails
   }
   const text = content.filter((b) => b.type === "text").map((b) => b.text).join("");
   return { data: lastJsonBlock(text), seen: collectSeenUrls(content) };
@@ -150,7 +162,7 @@ function courtFilter({ court, sala }) {
 }
 
 // ---------- Search ----------
-export async function searchSentencias({ query, court, sala, yearFrom, yearTo }) {
+export async function searchSentencias({ query, court, sala, yearFrom, yearTo }, { onUsage } = {}) {
   const prompt = `Find up to 8 Colombian judgments relevant to this research question:
 "${query}"
 
@@ -165,13 +177,13 @@ Return:
   "topic": "one sentence on what it decides", "url": "official URL where you saw it"
 }], "notes": ""}
 \`\`\``;
-  const { data, seen } = await research(prompt);
+  const { data, seen } = await research(prompt, LIMITS.search, onUsage);
   const results = (data.results || []).map((r) => ({ ...r, verified: verifiedUrl(r.url, seen) }));
   return { results, notes: data.notes || "" };
 }
 
 // ---------- Analysis ----------
-export async function analyzeSentencia({ reference, url, court }) {
+export async function analyzeSentencia({ reference, url, court }, { onUsage } = {}) {
   const target = url ? `the judgment at ${url}` : `the judgment "${reference}"${court ? ` of the ${COURTS[court] || court}` : ""}`;
   const direct = !url && (!court || court === "CC") ? ccRelatoriaUrl(reference) : null;
   const prompt = `Locate ${target} on the official court website, read it, and analyze it.
@@ -194,14 +206,14 @@ Return:
 }
 \`\`\`
 If you cannot find it on an official site, return {"found": false, "notes": "why"}.`;
-  const { data, seen } = await research(prompt, url || direct ? { maxSearches: 2, maxFetches: 3 } : {});
+  const { data, seen } = await research(prompt, url || direct ? LIMITS.analyzeDirect : LIMITS.analyze, onUsage);
   return { ...data, verified: !!data.found && verifiedUrl(data.url, seen) };
 }
 
 // ---------- Analysis of a pasted judgment (no web tools) ----------
 const flat = (x) => String(x || "").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 
-export async function analyzeText({ text, reference }) {
+export async function analyzeText({ text, reference }, { onUsage } = {}) {
   const msg = await withRetry(() => client.beta.messages.stream({
     model: MODEL,
     max_tokens: 32000,
@@ -223,6 +235,7 @@ Return:
  "cited_norms": [""], "summary": "150-250 palabras", "key_quotes": [{"text": "verbatim", "section": ""}], "notes": ""}
 \`\`\`` }],
   }).finalMessage());
+  onUsage?.({ model: msg.model || MODEL, usage: msg.usage });
   if (msg.stop_reason === "refusal") throw new Error("El modelo no pudo atender esta consulta.");
   const data = lastJsonBlock(msg.content.filter((b) => b.type === "text").map((b) => b.text).join(""));
   // Keep only quotes that really appear in the text.
@@ -234,11 +247,13 @@ Return:
 }
 
 // ---------- Citation check ----------
-export async function verifyCitation({ citation, claim }) {
+export async function verifyCitation({ citation, claim }, { onUsage } = {}) {
+  const direct = ccRelatoriaUrl(citation);
   const prompt = `An attorney's draft cites this Colombian judgment:
 Citation: "${citation}"
 ${claim ? `Passage of the draft that relies on it: "${claim}"` : ""}
 
+${direct ? `Its official page should be ${direct}: fetch it first and search only if that page is missing or is another judgment.\n` : ""}
 1. Confirm on an official court website whether this judgment exists with this exact reference (court, number, year).
 2. If it exists, check whether it actually supports what the passage says. If the citation has errors (wrong number, year or court), give the correct reference if you found it.
 
@@ -253,7 +268,7 @@ Return:
   "explanation": "2-4 sentences in Spanish"
 }
 \`\`\``;
-  const { data, seen } = await research(prompt, { maxSearches: 4 });
+  const { data, seen } = await research(prompt, direct ? LIMITS.verifyDirect : LIMITS.verify, onUsage);
   const verified = verifiedUrl(data.url, seen);
   // Without an official page we read, existence cannot be confirmed.
   if (!verified && data.exists === "yes") {
@@ -261,4 +276,25 @@ Return:
     data.explanation = `${data.explanation || ""} (No se obtuvo la página oficial, así que no se puede confirmar.)`.trim();
   }
   return { citation, ...data, verified };
+}
+
+// ---------- Free existence check (no AI) ----------
+/**
+ * Version 2.49: for a Corte Constitucional citation the server opens the
+ * relatoría page itself, without AI and without credits. "yes" only when the
+ * official page answers and names the judgment; anything else stays "unknown"
+ * (old pages may live at another address), never "no".
+ */
+export async function checkExists(citation, { fetchImpl = fetch, timeoutMs = 10000 } = {}) {
+  const url = ccRelatoriaUrl(citation);
+  if (!url) return { exists: "unknown", checked: false, url: null, explanation: "Solo las sentencias de la Corte Constitucional se comprueban sin IA." };
+  try {
+    const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs), redirect: "follow" });
+    if (!res.ok) return { exists: "unknown", checked: true, url, explanation: `La relatoría no tiene esa sentencia en la dirección directa (respuesta ${res.status}).` };
+    const text = new TextDecoder("windows-1252").decode(await res.arrayBuffer());
+    if (!pageNamesJudgment(text, citation)) return { exists: "unknown", checked: true, url, explanation: "La página de la relatoría abrió, pero no nombra esa sentencia." };
+    return { exists: "yes", checked: true, url, verified: true, explanation: "Comprobada en la relatoría de la Corte Constitucional, sin IA." };
+  } catch (err) {
+    return { exists: "unknown", checked: false, url, explanation: `No se pudo abrir la relatoría (${err.name === "TimeoutError" ? "tiempo agotado" : "sin conexión"}). Puede abrirla con «Abrir fuente» o revisarla con IA.` };
+  }
 }

@@ -13,6 +13,7 @@ import { properAddress, properPhone } from "./person.js";
 import { sendEmail, sendWhatsapp, channelsStatus, channelReady } from "./notify.js";
 import { stamp, tsaUrl } from "./tsa.js";
 import { backupStatus, makeBackup, backupPath, backupDir } from "./backup.js";
+import { usageSummary } from "./ai-usage.js";
 import { createHash as hashOf } from "node:crypto";
 
 // Built-in roles; the firm can add more in Usuarios › Roles y permisos.
@@ -398,6 +399,9 @@ export function adminRouter(db) {
     audit(db, req, { action: "Descargó", module: "Configuración", entity: "copia de seguridad", ok: true, summary: `Descargó la copia ${req.params.name}` });
     res.download(file, req.params.name);
   });
+
+  // ----- What the AI cost this month (version 2.49): Gerencia only -----
+  r.get("/ai-usage", (req, res) => (req.user.role === "Gerencia" ? res.json(usageSummary(db)) : res.status(403).json({ error: "Solo Gerencia ve el consumo de IA." })));
 
   // ----- Delivery channels: status and a test message -----
   r.get("/channels", manage, (req, res) => {

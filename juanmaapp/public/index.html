@@ -660,6 +660,7 @@
       <section id="view-jurisprudencia" class="view" hidden>
         <div class="view-head"><h2>Jurisprudencia</h2></div>
         <p class="hint">Consulta solo los sitios oficiales de la Corte Constitucional, la Corte Suprema de Justicia, el Consejo de Estado y la Rama Judicial (tribunales). Una sentencia se marca <span class="badge ok">Fuente oficial verificada</span> únicamente si se encontró en esos sitios durante la consulta.</p>
+        <p class="hint">Los botones <strong>gratis</strong> abren la página de cada Corte sin IA. Los botones <strong>con IA</strong> gastan créditos de Anthropic: úselos cuando necesite que NomosAI lea y resuma por usted.</p>
         <div class="tabs" role="tablist" id="juris-tabs">
           <button role="tab" data-jtab="buscar" class="active">Buscar</button>
           <button role="tab" data-jtab="analizar">Analizar sentencia</button>
@@ -684,7 +685,14 @@
               <label>Desde (año) <input name="yearFrom" type="number" min="1991" max="2100" /></label>
               <label>Hasta (año) <input name="yearTo" type="number" min="1991" max="2100" /></label>
             </div>
-            <button class="primary">Buscar sentencias</button>
+            <div class="toolbar">
+              <button class="primary">Buscar con IA</button>
+              <span class="muted">o gratis, sin IA, en la página de:</span>
+              <button type="button" data-free-court="CC">Corte Constitucional</button>
+              <button type="button" data-free-court="CSJ">Corte Suprema</button>
+              <button type="button" data-free-court="CE">Consejo de Estado</button>
+            </div>
+            <p class="hint" id="j-free-search-note" hidden></p>
           </form>
           <div id="j-search-server" class="panel server-note" hidden></div>
           <div id="j-search-status" class="status" hidden></div>
@@ -708,7 +716,10 @@
             <label>…o enlace oficial <input name="url" type="url" placeholder="https://www.corteconstitucional.gov.co/relatoria/…" /></label>
             <label>…o pegue el texto de la sentencia <span class="muted">(copiado de la relatoría oficial)</span>
               <textarea name="text" rows="6" placeholder="Pegue aquí el texto completo. NomosAI lo analiza y solo conserva citas que aparecen textualmente."></textarea></label>
-            <button class="primary">Analizar</button>
+            <div class="toolbar">
+              <button class="primary">Analizar con IA</button>
+              <a class="button" id="j-free-open" target="_blank" rel="noopener noreferrer" hidden>Abrir en la Corte Constitucional (gratis)</a>
+            </div>
           </form>
           <div id="j-analyze-status" class="status" hidden></div>
           <article id="j-analysis" class="panel analysis" hidden></article>
@@ -720,7 +731,8 @@
               <textarea id="j-verify-text" rows="8" placeholder="Pegue aquí el texto del documento que está elaborando, o genere un borrador y use “Verificar citas” desde Borradores."></textarea>
             </label>
             <div class="toolbar">
-              <button id="j-detect" class="primary">Detectar y verificar citas</button>
+              <button id="j-detect" class="primary">Detectar citas (gratis)</button>
+              <button id="j-verify-all" hidden>Revisar todas con IA</button>
               <span id="j-detect-info" class="muted"></span>
             </div>
           </div>
@@ -883,6 +895,12 @@
             <button type="button" data-action="test-tsa">Probar sello de tiempo</button>
           </div>
           <p class="hint" id="channel-test-result"></p>
+        </div>
+        <div class="panel" id="ai-usage-panel" hidden>
+          <h3 class="panel-title">Consumo de IA</h3>
+          <p class="hint" id="ai-usage-summary"></p>
+          <ul id="ai-usage-list" class="channel-list"></ul>
+          <p class="hint">Es un cálculo con los precios públicos de Anthropic. El valor exacto está en console.anthropic.com → Usage; allí también puede ponerle un tope de gasto mensual (Limits).</p>
         </div>
         <div class="panel" id="backups-panel" hidden>
           <h3 class="panel-title">Copias de seguridad</h3>

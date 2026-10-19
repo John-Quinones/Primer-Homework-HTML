@@ -2,7 +2,8 @@ import express from "express";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { scopeOf } from "./auth.js";
-import { searchSentencias, analyzeSentencia, analyzeText, verifyCitation, COURTS, CSJ_SALAS } from "./jurisprudence.js";
+import { searchSentencias, analyzeSentencia, analyzeText, verifyCitation, checkExists, COURTS, CSJ_SALAS } from "./jurisprudence.js";
+import { recordUsage } from "./ai-usage.js";
 
 const str = (v) => (typeof v === "string" ? v.trim() : "");
 
@@ -55,9 +56,11 @@ export function jurisprudenceRouter(db) {
     return result;
   };
 
+  // Every answer that used the AI writes what it cost (version 2.49).
+  const meter = (req, kind) => ({ onUsage: ({ model, usage }) => recordUsage(db, { kind, userId: req.user.id, model, usage }) });
   const ai = (fn) => async (req, res) => {
     try {
-      res.json(await fn(req.body ?? {}));
+      res.json(await fn(req.body ?? {}, req));
     } catch (err) {
       console.error(err);
       const [status, error] = err.status && !(err instanceof Anthropic.APIError) ? [err.status, err.message] : apiError(err);
@@ -67,26 +70,34 @@ export function jurisprudenceRouter(db) {
 
   r.get("/courts", (_req, res) => res.json({ courts: COURTS, csjSalas: CSJ_SALAS }));
 
-  r.post("/search", ai((b) => {
+  r.post("/search", ai((b, req) => {
     const query = str(b.query);
     if (!query) throw Object.assign(new Error("Escriba qué busca."), { status: 400 });
     const args = {
       query, court: COURTS[b.court] ? b.court : "", sala: str(b.sala),
       yearFrom: Number(b.yearFrom) || null, yearTo: Number(b.yearTo) || null,
     };
-    return cached("search", args, () => searchSentencias(args), (o) => o.results.length > 0).then((out) => ({ ...out, results: out.results.map(withProof) }));
+    return cached("search", args, () => searchSentencias(args, meter(req, "search")), (o) => o.results.length > 0).then((out) => ({ ...out, results: out.results.map(withProof) }));
   }));
 
-  r.post("/analyze", ai((b) => {
-    if (str(b.text).length >= 400) return analyzeText({ text: str(b.text), reference: str(b.reference) });
+  r.post("/analyze", ai((b, req) => {
+    if (str(b.text).length >= 400) return analyzeText({ text: str(b.text), reference: str(b.reference) }, meter(req, "analyze_text"));
     if (!str(b.reference) && !str(b.url)) throw Object.assign(new Error("Indique la sentencia o su enlace."), { status: 400 });
     const args = { reference: str(b.reference), url: str(b.url), court: str(b.court) };
-    return cached("analyze", args, () => analyzeSentencia(args), (o) => !!o.found).then(withProof);
+    return cached("analyze", args, () => analyzeSentencia(args, meter(req, "analyze")), (o) => !!o.found).then(withProof);
   }));
 
-  r.post("/verify", ai((b) => {
+  r.post("/verify", ai((b, req) => {
     if (!str(b.citation)) throw Object.assign(new Error("Falta la cita."), { status: 400 });
-    return verifyCitation({ citation: str(b.citation), claim: str(b.claim).slice(0, 1200) });
+    const args = { citation: str(b.citation), claim: str(b.claim).slice(0, 1200) };
+    // Version 2.49: kept 30 days like search and analysis, only when an official page was read.
+    return cached("verify", args, () => verifyCitation(args, meter(req, "verify")), (o) => !!o.verified).then(withProof);
+  }));
+
+  // Free check (version 2.49): the server opens the Corte Constitucional page itself, no AI.
+  r.post("/exists", ai(async (b) => {
+    if (!str(b.citation)) throw Object.assign(new Error("Falta la cita."), { status: 400 });
+    return withProof(await checkExists(str(b.citation)));
   }));
 
   // ---------- Saved judgments ----------

@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateDraft, DOCUMENT_TYPES } from "./engine.js";
+import { recordUsage } from "./ai-usage.js";
 import { auditDraft } from "./validate.js";
 import { recordsRouter } from "./records.js";
 import { jurisprudenceRouter } from "./jurisprudence-routes.js";
@@ -154,6 +155,7 @@ export function createApp(db) {
 
     try {
       const result = await generateDraft(body, { onText: (text) => send({ type: "text", text }) });
+      recordUsage(db, { kind: "nomosai", userId: req.user.id, model: result.servedBy, usage: result.usage });
 
       if (result.stopReason === "refusal") {
         send({ type: "error", error: "The model declined this request.", details: result.stopDetails });

@@ -2241,8 +2241,32 @@ async function renderBackups() {
       <a class="mini" href="/api/admin/backups/${encodeURIComponent(f.file)}" download>Descargar</a></li>`).join("") : "<li class=\"muted\">Todavía no hay copias.</li>");
 }
 
+// What the AI cost this month (version 2.49): Gerencia only, estimated at list prices.
+async function renderAiUsage() {
+  const panel = $("#ai-usage-panel");
+  panel.hidden = !isGerencia();
+  if (panel.hidden) return;
+  const u = await api("GET", "/admin/ai-usage");
+  if (u.web) {
+    $("#ai-usage-summary").textContent = "En el enlace de prueba NomosAI usa la cuenta de Claude de quien lo abre y no gasta los créditos de la firma. El consumo de la App del servidor (Azure) se ve allí.";
+    $("#ai-usage-list").innerHTML = "";
+    return;
+  }
+  const usd = (n) => `US$ ${n.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 3 : 2 })}`;
+  const [y, m] = u.month.split("-");
+  const monthName = (ym) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+  $("#ai-usage-summary").textContent = u.count
+    ? `En ${monthName(`${y}-${m}`)} van ${u.count} consulta(s) con IA, por unos ${usd(u.total)}.`
+    : `En ${monthName(`${y}-${m}`)} todavía no hay consultas con IA.`;
+  $("#ai-usage-list").innerHTML = u.byKind.map((r) => `<li><strong>${escapeHtml(r.label)}</strong> ${r.count} · ${usd(r.cost)}
+      <span class="muted">${Math.round(r.input_tokens / 1000)} mil tokens leídos, ${Math.round(r.output_tokens / 1000)} mil escritos${r.web_searches ? `, ${r.web_searches} búsqueda(s)` : ""}</span></li>`).join("")
+    + (u.byUser.length ? `<li class="muted">Por persona: ${u.byUser.map((r) => `${escapeHtml(r.name)} ${usd(r.cost)}`).join(" · ")}</li>` : "")
+    + (u.months.length > 1 ? `<li class="muted">Meses anteriores: ${u.months.slice(1).map((r) => `${escapeHtml(monthName(r.month))} ${usd(r.cost)}`).join(" · ")}</li>` : "");
+}
+
 async function renderConfiguracion() {
   renderChannels().catch(() => {});
+  renderAiUsage().catch(() => {});
   renderBackups().catch(() => {});
   await loadCatalog();
   const open = new Set($$("#catalog details[open]").map((d) => d.dataset.cat));
@@ -3185,7 +3209,7 @@ jSearch.addEventListener("submit", async (e) => {
         <p class="muted">${escapeHtml([r.sala, r.date, r.reporting_judge && "M.P. " + r.reporting_judge].filter(Boolean).join(" · "))}</p>
         <p>${escapeHtml(r.topic || "")}</p>
         <div class="toolbar">
-          <button class="primary" data-jact="analyze" data-i="${i}">Analizar</button>
+          <button class="primary" data-jact="analyze" data-i="${i}">Analizar con IA</button>
           <button data-jact="save-result" data-i="${i}">Guardar</button>
           ${safeLink(r.url)}
         </div>
@@ -3198,7 +3222,32 @@ jSearch.addEventListener("submit", async (e) => {
   }
 });
 
+// Free, no AI (version 2.49): each court's own search page, with the question copied.
+const courtSearch = (id) => window.JuanmaCourtLinks.COURT_SEARCH.find((c) => c.id === id);
+jSearch.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-free-court]");
+  if (!b) return;
+  const c = courtSearch(b.dataset.freeCourt);
+  const q = jSearch.query.value.trim();
+  window.open(c.url, "_blank", "noopener");
+  const note = $("#j-free-search-note");
+  note.hidden = false;
+  note.textContent = `Se abrió el buscador de la ${c.name}, sin IA y sin costo.`;
+  if (q) copyText(q).then((ok) => { if (ok) note.textContent += ` Copié «${q}»: péguelo allí con Ctrl+V.`; });
+});
+
 const jAnalyze = $("#j-analyze");
+// A Corte Constitucional reference opens its relatoría page for free.
+function updateFreeOpen() {
+  const court = jAnalyze.court.value;
+  const url = !court || court === "CC" ? window.JuanmaCourtLinks.ccRelatoriaUrl(jAnalyze.reference.value) : null;
+  const a = $("#j-free-open");
+  a.hidden = !url;
+  if (url) a.href = url;
+}
+jAnalyze.reference.addEventListener("input", updateFreeOpen);
+jAnalyze.court.addEventListener("change", updateFreeOpen);
+
 async function runAnalysis(body) {
   showJTab("analizar");
   const box = $("#j-analysis");
@@ -3260,6 +3309,58 @@ const VERDICT = {
 };
 const chip = ([cls, label]) => (label ? `<span class="badge ${cls}">${label}</span>` : "");
 
+// Version 2.49: detecting citations is free; a Corte Constitucional citation is
+// checked at its relatoría without AI. The AI review (does it support what the
+// text says?) runs only per citation or after a question, because each one costs.
+let jCites = [];
+const verifyResult = (r) => `
+  ${r.correct_reference && r.correct_reference !== r.citation ? `<p><strong>Referencia correcta:</strong> ${escapeHtml(r.correct_reference)}</p>` : ""}
+  <p>${escapeHtml(r.explanation || "")}</p>
+  ${r.supporting_quote ? `<blockquote>“${escapeHtml(r.supporting_quote)}”</blockquote>` : ""}`;
+function paintCite(i) {
+  const c = jCites[i];
+  const li = $(`#j-verify-list [data-v="${i}"]`);
+  if (!li) return;
+  const r = c.ai || c.free;
+  li.innerHTML = `
+    <div class="result-head"><strong>${escapeHtml(c.citation)}</strong>
+      ${c.busy ? `<span class="badge">${c.busy}</span>` : ""}
+      ${r ? chip(VERDICT.exists[r.exists] || VERDICT.exists.unknown) : ""}
+      ${c.ai ? chip(VERDICT.supports[c.ai.supports_claim] || ["", ""]) : ""}
+      ${r ? verifiedBadge(r.verified) : ""}
+      ${c.error ? `<span class="badge bad">Error: ${escapeHtml(c.error)}</span>` : ""}
+    </div>
+    <p class="muted">“${escapeHtml(c.claim)}”</p>
+    ${c.ai ? verifyResult(c.ai) + (c.ai.cached ? '<p class="muted">Respuesta guardada de una revisión anterior (menos de 30 días), sin costo.</p>' : "")
+      : c.free ? `<p class="muted">${escapeHtml(c.free.explanation || "")}</p>` : ""}
+    <div class="toolbar">
+      ${!c.ai && !c.busy ? `<button data-verify-ai="${i}">Revisar con IA si respalda lo afirmado</button>` : ""}
+      ${safeLink((c.ai || c.free)?.url)}
+    </div>`;
+}
+function paintVerifyAll() {
+  const left = jCites.filter((c) => !c.ai && !c.busy).length;
+  const b = $("#j-verify-all");
+  b.hidden = !left;
+  b.textContent = `Revisar con IA las ${left} cita(s) pendientes`;
+}
+async function verifyWithAi(i) {
+  const c = jCites[i];
+  c.busy = "Revisando con IA…";
+  c.error = "";
+  paintCite(i);
+  paintVerifyAll();
+  try {
+    c.ai = await api("POST", "/jurisprudencia/verify", { citation: c.citation, claim: c.claim });
+  } catch (err) {
+    c.error = err.message;
+  } finally {
+    c.busy = "";
+    paintCite(i);
+    paintVerifyAll();
+  }
+}
+
 async function detectAndVerify() {
   if (WEB) {
     showServerNotes();
@@ -3267,40 +3368,41 @@ async function detectAndVerify() {
     return;
   }
   const text = $("#j-verify-text").value;
-  const cites = window.JuanmaCitations.extractCitations(text);
-  $("#j-detect-info").textContent = cites.length ? `${cites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";
+  jCites = window.JuanmaCitations.extractCitations(text).map((c) => ({ ...c, busy: "Comprobando gratis…" }));
+  $("#j-detect-info").textContent = jCites.length ? `${jCites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";
   const list = $("#j-verify-list");
-  list.innerHTML = cites.map((c, i) => `
-    <li class="panel verify-item" data-v="${i}">
-      <div class="result-head"><strong>${escapeHtml(c.citation)}</strong><span class="badge">Verificando…</span></div>
-      <p class="muted">“${escapeHtml(c.claim)}”</p>
-    </li>`).join("");
+  list.innerHTML = jCites.map((_, i) => `<li class="panel verify-item" data-v="${i}"></li>`).join("");
+  jCites.forEach((_, i) => paintCite(i));
+  $("#j-verify-all").hidden = true;
   $("#j-detect").disabled = true;
   try {
-    for (let i = 0; i < cites.length; i++) {
-      const li = $(`[data-v="${i}"]`, list);
+    for (let i = 0; i < jCites.length; i++) {
+      const c = jCites[i];
       try {
-        const r = await api("POST", "/jurisprudencia/verify", cites[i]);
-        li.innerHTML = `
-          <div class="result-head"><strong>${escapeHtml(r.citation)}</strong>
-            ${chip(VERDICT.exists[r.exists] || VERDICT.exists.unknown)}
-            ${chip(VERDICT.supports[r.supports_claim] || ["", ""])}
-            ${verifiedBadge(r.verified)}
-          </div>
-          <p class="muted">“${escapeHtml(cites[i].claim)}”</p>
-          ${r.correct_reference && r.correct_reference !== r.citation ? `<p><strong>Referencia correcta:</strong> ${escapeHtml(r.correct_reference)}</p>` : ""}
-          <p>${escapeHtml(r.explanation || "")}</p>
-          ${r.supporting_quote ? `<blockquote>“${escapeHtml(r.supporting_quote)}”</blockquote>` : ""}
-          ${safeLink(r.url)}`;
+        c.free = await api("POST", "/jurisprudencia/exists", { citation: c.citation });
       } catch (err) {
-        li.querySelector(".badge").textContent = `Error: ${err.message}`;
-        li.querySelector(".badge").className = "badge bad";
+        c.error = err.message;
       }
+      c.busy = "";
+      paintCite(i);
     }
   } finally {
     $("#j-detect").disabled = false;
+    paintVerifyAll();
   }
 }
+$("#j-verify-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-verify-ai]");
+  if (b) guarded(() => verifyWithAi(Number(b.dataset.verifyAi)));
+});
+$("#j-verify-all").addEventListener("click", () => guarded(async () => {
+  const left = jCites.map((c, i) => (!c.ai && !c.busy ? i : -1)).filter((i) => i >= 0);
+  if (!left.length) return;
+  const ok = await ask({ title: "Revisar citas con IA", okLabel: `Revisar ${left.length}`,
+    message: `Se van a revisar ${left.length} cita(s) con IA. Cada una consulta la página oficial y gasta créditos de Anthropic (las ya revisadas en los últimos 30 días no se cobran de nuevo). ¿Continuar?` });
+  if (!ok) return;
+  for (const i of left) await verifyWithAi(i);
+}));
 $("#j-detect").addEventListener("click", () => guarded(detectAndVerify));
 
 // ----- Saved -----
@@ -3350,6 +3452,7 @@ document.addEventListener("click", (e) => {
     if (b.dataset.jact === "analyze") {
       jAnalyze.reference.value = r.reference || "";
       jAnalyze.url.value = r.url || "";
+      updateFreeOpen();
       await runAnalysis({ reference: r.reference, url: r.verified ? r.url : "", court: "" });
     } else if (b.dataset.jact === "save-result") {
       await openSaveDialog({ reference: r.reference, court: r.court, url: r.url, verified: r.verified, proof: r.proof, analysis: { topic: r.topic, date: r.date } });

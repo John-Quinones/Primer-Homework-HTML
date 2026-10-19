@@ -72,7 +72,7 @@ npm test                               # output validator tests
 
 Requires Node.js 22.13 or newer; data is stored with Node's built-in SQLite.
 
-Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-opus-5-5`), `DB_PATH` (default `data/juanmaapp.db`).
+Env vars: `PORT` (default 3000), `NOMOS_MODEL` (default `claude-haiku-5-5`), `JURIS_MODEL` (default `claude-sonnet-5-5`), `DB_PATH` (default `data/juanmaapp.db`).
 
 Notifications and reports:
 

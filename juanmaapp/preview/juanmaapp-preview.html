@@ -1960,6 +1960,7 @@ dialog:not([open]) { pointer-events: none; }
       <section id="view-jurisprudencia" class="view" hidden>
         <div class="view-head"><h2>Jurisprudencia</h2></div>
         <p class="hint">Consulta solo los sitios oficiales de la Corte Constitucional, la Corte Suprema de Justicia, el Consejo de Estado y la Rama Judicial (tribunales). Una sentencia se marca <span class="badge ok">Fuente oficial verificada</span> únicamente si se encontró en esos sitios durante la consulta.</p>
+        <p class="hint">Los botones <strong>gratis</strong> abren la página de cada Corte sin IA. Los botones <strong>con IA</strong> gastan créditos de Anthropic: úselos cuando necesite que NomosAI lea y resuma por usted.</p>
         <div class="tabs" role="tablist" id="juris-tabs">
           <button role="tab" data-jtab="buscar" class="active">Buscar</button>
           <button role="tab" data-jtab="analizar">Analizar sentencia</button>
@@ -1984,7 +1985,14 @@ dialog:not([open]) { pointer-events: none; }
               <label>Desde (año) <input name="yearFrom" type="number" min="1991" max="2100" /></label>
               <label>Hasta (año) <input name="yearTo" type="number" min="1991" max="2100" /></label>
             </div>
-            <button class="primary">Buscar sentencias</button>
+            <div class="toolbar">
+              <button class="primary">Buscar con IA</button>
+              <span class="muted">o gratis, sin IA, en la página de:</span>
+              <button type="button" data-free-court="CC">Corte Constitucional</button>
+              <button type="button" data-free-court="CSJ">Corte Suprema</button>
+              <button type="button" data-free-court="CE">Consejo de Estado</button>
+            </div>
+            <p class="hint" id="j-free-search-note" hidden></p>
           </form>
           <div id="j-search-server" class="panel server-note" hidden></div>
           <div id="j-search-status" class="status" hidden></div>
@@ -2008,7 +2016,10 @@ dialog:not([open]) { pointer-events: none; }
             <label>…o enlace oficial <input name="url" type="url" placeholder="https://www.corteconstitucional.gov.co/relatoria/…" /></label>
             <label>…o pegue el texto de la sentencia <span class="muted">(copiado de la relatoría oficial)</span>
               <textarea name="text" rows="6" placeholder="Pegue aquí el texto completo. NomosAI lo analiza y solo conserva citas que aparecen textualmente."></textarea></label>
-            <button class="primary">Analizar</button>
+            <div class="toolbar">
+              <button class="primary">Analizar con IA</button>
+              <a class="button" id="j-free-open" target="_blank" rel="noopener noreferrer" hidden>Abrir en la Corte Constitucional (gratis)</a>
+            </div>
           </form>
           <div id="j-analyze-status" class="status" hidden></div>
           <article id="j-analysis" class="panel analysis" hidden></article>
@@ -2020,7 +2031,8 @@ dialog:not([open]) { pointer-events: none; }
               <textarea id="j-verify-text" rows="8" placeholder="Pegue aquí el texto del documento que está elaborando, o genere un borrador y use “Verificar citas” desde Borradores."></textarea>
             </label>
             <div class="toolbar">
-              <button id="j-detect" class="primary">Detectar y verificar citas</button>
+              <button id="j-detect" class="primary">Detectar citas (gratis)</button>
+              <button id="j-verify-all" hidden>Revisar todas con IA</button>
               <span id="j-detect-info" class="muted"></span>
             </div>
           </div>
@@ -2183,6 +2195,12 @@ dialog:not([open]) { pointer-events: none; }
             <button type="button" data-action="test-tsa">Probar sello de tiempo</button>
           </div>
           <p class="hint" id="channel-test-result"></p>
+        </div>
+        <div class="panel" id="ai-usage-panel" hidden>
+          <h3 class="panel-title">Consumo de IA</h3>
+          <p class="hint" id="ai-usage-summary"></p>
+          <ul id="ai-usage-list" class="channel-list"></ul>
+          <p class="hint">Es un cálculo con los precios públicos de Anthropic. El valor exacto está en console.anthropic.com → Usage; allí también puede ponerle un tope de gasto mensual (Limits).</p>
         </div>
         <div class="panel" id="backups-panel" hidden>
           <h3 class="panel-title">Copias de seguridad</h3>
@@ -6777,6 +6795,41 @@ function policyItemsToAsk(title, opts, answeredKeys) {
 
 return { FIRM, setLegalVersion, legalVersion, isServiceContract, LEGAL_DOCS, CONSENT_ITEMS, CONSENT_METHODS, legalDoc, consentItem, legalPlain, consentText, consentStatus, consentCanonical, consentChecklistHtml, consentAnswers, MAIL_PARTS, mailOptions, signMailParts, policyItemsToAsk };
 })();
+
+window.JuanmaCourtLinks = (function () {
+// Free ways to reach a judgment: the courts' own search pages and the
+// Corte Constitucional page built from a reference. No AI and no credits.
+// Shared by the server and the published link (served in /shared.js).
+
+const COURT_SEARCH = [
+  { id: "CC", name: "Corte Constitucional", url: "https://www.corteconstitucional.gov.co/relatoria/" },
+  { id: "CSJ", name: "Corte Suprema de Justicia", url: "https://consultajurisprudencial.ramajudicial.gov.co/WebRelatoria/csj/index.xhtml" },
+  { id: "CE", name: "Consejo de Estado", url: "https://samai.consejodeestado.gov.co/TitulacionRelatoria/BuscadorProvidenciasTituladas.aspx" },
+];
+
+/**
+ * Official Corte Constitucional page for a reference like "T-760 de 2008",
+ * "C-355/06" or "SU-214 de 2016". Null for anything else.
+ */
+function ccRelatoriaUrl(reference) {
+  const m = String(reference || "").toUpperCase().match(/\b(SU|T|C)\s*-\s*(\d{1,4})\s*(?:\/|DE(?:L)?|-)\s*(\d{4}|\d{2})\b/);
+  if (!m) return null;
+  let year = Number(m[3]);
+  if (m[3].length === 2) year += year > 91 ? 1900 : 2000; // the Court started in 1992
+  if (year < 1992 || year > new Date().getFullYear()) return null;
+  return `https://www.corteconstitucional.gov.co/relatoria/${year}/${m[1]}-${Number(m[2])}-${String(year).slice(2)}.htm`;
+}
+
+/** Does a page's text name this Corte Constitucional judgment ("T-760 de 2008", "T-760/08")? */
+function pageNamesJudgment(text, reference) {
+  const m = String(reference || "").toUpperCase().match(/\b(SU|T|C)\s*-\s*(\d{1,4})\b/);
+  if (!m) return false;
+  const flat = String(text || "").toUpperCase().replace(/&NBSP;|\s+/g, " ");
+  return new RegExp(`\\b${m[1]}\\s*-\\s*0*${Number(m[2])}\\b`).test(flat);
+}
+
+return { COURT_SEARCH, ccRelatoriaUrl, pageNamesJudgment };
+})();
 </script>
   <script>// Display preferences of this device: font size, layout (automatic, mobile or
 // web), day / night theme and the motion effects (crossfade, magnification, blur). They are a per-device convenience, kept in the
@@ -6876,7 +6929,7 @@ return { FIRM, setLegalVersion, legalVersion, isServiceContract, LEGAL_DOCS, CON
     correo: ["Correo con trazabilidad", "Envía memoriales y notificaciones y deja prueba de cada paso: aceptación del servidor de correo, cada apertura, cada descarga de anexos y el acuse de recibo, con fecha y hora exactas, IP y navegador.",
       ["La «Constancia PDF» consolida todo para el juez: huellas SHA-1, SHA-256, SHA-512 y SHA-3 del mensaje completo y de cada anexo, tamaños y la línea de tiempo.", "Para que cada descarga quede registrada, elija entregar los anexos «solo con enlace».", "Descargue el «Mensaje original (.eml)»: cualquiera puede recalcular sus huellas y comprobar que coinciden.", "Requiere el servidor de correo de la firma; en el enlace de prueba no se envía."]],
     jurisprudencia: ["Jurisprudencia", "Búsqueda de sentencias solo en sitios oficiales (Corte Constitucional, Corte Suprema, Consejo de Estado) y verificación de citas.",
-      ["Describa el problema jurídico con palabras clave: «estabilidad laboral reforzada debilidad manifiesta».", "Guarde las sentencias útiles y vincúlelas al expediente."]],
+      ["Describa el problema jurídico con palabras clave: «estabilidad laboral reforzada debilidad manifiesta».", "Los botones gratis abren el buscador de cada Corte (la App copia su búsqueda para pegarla) o la sentencia de la Corte Constitucional, sin IA y sin costo.", "«Buscar con IA», «Analizar con IA» y «Revisar con IA» gastan créditos de Anthropic; una consulta repetida en 30 días sale gratis.", "«Detectar citas» es gratis: comprueba sin IA las sentencias de la Corte Constitucional y deja la revisión con IA para cuando usted la pida.", "Guarde las sentencias útiles y vincúlelas al expediente."]],
     importar: ["Importar desde Excel", "Carga clientes y expedientes desde un archivo de Excel (Access o el servidor de la firma), sin duplicar los que ya existen.",
       ["Revise la columna que la app asignó a cada campo antes de importar.", "Los radicados que no tienen 23 dígitos se guardan tal como vienen.", "Honorarios y pagos del archivo quedan como cobros y recibos."]],
     reportes: ["Reportes", "Informes de expedientes, agenda, actuaciones, cartera y recibos en Excel o PDF.",
@@ -7170,7 +7223,7 @@ window.JUANMA_AUTH = {"roles":["Gerencia","Director Jurídico","Director Contabl
 window.JUANMA_REPORTS = {"expedientes":"Expedientes","clientes":"Clientes","oficinas":"Resumen por oficina","responsables":"Carga por responsable","procesos":"Expedientes por tipo de proceso","jurisprudencia":"Sentencias guardadas","cartera":"Cartera por cliente","recibos":"Recibos de caja"};
 window.JUANMA_AREAS = ["Civil","Laboral","Penal","Familia","Administrativo","Promiscuo","Ejecución de Penas","Pequeñas Causas y Competencia Múltiple","Restitución de Tierras","Penal para Adolescentes","Constitucional","Otro"];
 window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y reporte en centrales de riesgo","category":"Autorización","description":"Habeas data financiero (Ley 1266 de 2008, modificada por la Ley 2157 de 2021) y datos personales (Ley 1581 de 2012).","body":"# AUTORIZACIÓN PARA LA CONSULTA, REPORTE Y TRATAMIENTO DE INFORMACIÓN EN CENTRALES DE RIESGO\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en adelante **EL TITULAR**, actuando de manera libre, previa, expresa e informada, autorizo a **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, o a quien represente sus derechos u ostente en el futuro la calidad de acreedor, en adelante **EL RESPONSABLE**, para:\n\n1. **Consultar** en cualquier tiempo, en DataCrédito Experian, TransUnion (CIFIN) y en cualquier otro operador de bancos de datos de información financiera, crediticia, comercial y de servicios, la información sobre mi comportamiento crediticio, financiero y comercial, con el fin de analizar y evaluar la relación contractual y de servicios profesionales con EL RESPONSABLE.\n2. **Reportar** a dichos operadores el nacimiento, modificación, extinción y cumplimiento o incumplimiento de las obligaciones que contraiga con EL RESPONSABLE, incluidas las derivadas del contrato de prestación de servicios profesionales N.º **{{expediente.carpeta}}**.\n3. **Procesar, solicitar y divulgar** dicha información a otras entidades que tengan las mismas finalidades, en los términos de la ley.\n\n## DERECHOS DEL TITULAR\n\nDeclaro que conozco que:\n\n- La permanencia de la información negativa en las bases de datos se rige por la Ley 1266 de 2008, modificada por la Ley 2157 de 2021.\n- Antes de cualquier reporte negativo, EL RESPONSABLE me enviará una **comunicación previa** a la dirección física, al correo electrónico o al teléfono aquí indicados, con al menos veinte (20) días calendario de anticipación, para que pueda pagar o controvertir la obligación.\n- Puedo conocer, actualizar, rectificar y solicitar la supresión de mis datos, y presentar consultas y reclamos ante EL RESPONSABLE, ante el operador de la información y ante la Superintendencia de Industria y Comercio.\n- Los datos personales que entrego serán tratados conforme a la Ley 1581 de 2012 y a la política de tratamiento de datos de EL RESPONSABLE, para la ejecución de la relación contractual, la gestión de cobro y las finalidades aquí descritas.\n\n## VIGENCIA\n\nEsta autorización estará vigente mientras subsista cualquier relación contractual u obligación a mi cargo con EL RESPONSABLE y durante el tiempo de permanencia de la información que establece la ley.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Autorización para el tratamiento de datos personales","category":"Autorización","description":"Ley 1581 de 2012 y Decreto 1074 de 2015: cada autorización por separado (datos, sensibles, privacidad, cookies, centrales de riesgo y comunicaciones), para firmar en papel.","body":"# AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nYo, **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. **{{cliente.documento}}**, con domicilio en {{cliente.direccion}}, {{cliente.ciudad}}, correo electrónico {{cliente.correo}} y teléfono {{cliente.telefono}}, en calidad de titular de los datos, declaro que **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **EL RESPONSABLE**, me informó de manera previa, expresa y clara el Aviso de privacidad y la Política de tratamiento de datos personales, y respondo **por separado** cada una de las siguientes autorizaciones, marcando SÍ o NO:\n\n| Autorización | SÍ | NO |\n|---|---|---|\n| 1. **Tratamiento de datos personales** para prestar los servicios jurídicos, llevar mi expediente, consultar mis procesos, ejecutar el contrato, registrar pagos y cumplir obligaciones legales. | ☐ | ☐ |\n| 2. **Datos sensibles** (salud, historia clínica, dictámenes, vida familiar u otros) estrictamente necesarios para mi caso. Sé que esta autorización es **facultativa** y que no estoy obligado(a) a darla. | ☐ | ☐ |\n| 3. **Política de privacidad**, incluida la evidencia técnica (fecha, hora, IP y navegador) que se registra cuando uso las páginas de EL RESPONSABLE. | ☐ | ☐ |\n| 4. **Política de cookies** de la aplicación y sus páginas públicas (solo cookies técnicas, sin publicidad ni analítica). | ☐ | ☐ |\n| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones** por correo electrónico, WhatsApp y llamada sobre mi caso y mis pagos, en los horarios de la Ley 2300 de 2023. | ☐ | ☐ |\n\n## DERECHOS DEL TITULAR\n\nConozco que, conforme al artículo 8 de la Ley 1581 de 2012, puedo conocer, actualizar, rectificar y suprimir mis datos; pedir prueba de esta autorización; ser informado(a) del uso de mis datos; revocar cualquiera de estas autorizaciones cuando no exista un deber legal o contractual de conservarlos; y presentar quejas ante la Superintendencia de Industria y Comercio después de agotar el trámite ante EL RESPONSABLE, escribiendo a {{oficina.correo}} o en {{oficina.direccion}}, {{oficina.ciudad}}.\n\nLa información que entrego está amparada por el secreto profesional del abogado (artículo 74 de la Constitución y numeral 9 del artículo 28 de la Ley 1123 de 2007). EL RESPONSABLE conservará la prueba de esta autorización mientras trate mis datos.\n\nFirma:\n\n____________________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} No. {{cliente.documento}}\nHuella: [FILL: Huella del índice derecho, si se firma en físico]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Acuerdo de confidencialidad y tratamiento de datos (funcionarios y contratistas)","category":"Contrato","description":"Secreto profesional (Ley 1123 de 2007) y deberes del encargado (Ley 1581 de 2012) para quien accede a la información de los clientes.","body":"# ACUERDO DE CONFIDENCIALIDAD Y TRATAMIENTO DE DATOS PERSONALES\n\n{{fecha.ciudad_y_fecha}}\n\nEntre **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, en adelante **LA FIRMA**, y **[FILL: Nombre completo del funcionario o contratista]**, identificado(a) con cédula de ciudadanía No. **[FILL: Número de documento]**, que se desempeña como **[FILL: Cargo u objeto del contrato]**, en adelante **EL RECEPTOR**, se celebra el presente acuerdo:\n\n## PRIMERA. Información confidencial\n\nEs confidencial toda la información de clientes, contrapartes y procesos a la que EL RECEPTOR acceda por cualquier medio, incluida TecjuridicosApp: datos personales, hechos, estrategias, documentos, honorarios, pagos y credenciales de acceso.\n\n## SEGUNDA. Obligaciones\n\nEL RECEPTOR se obliga a:\n\n1. Guardar el secreto profesional y la reserva de la información, aun después de terminada su relación con LA FIRMA (artículo 74 de la Constitución y Ley 1123 de 2007).\n2. Usar la información solo para las labores que LA FIRMA le asigne y conforme a la Política de tratamiento de datos personales.\n3. No copiar, extraer, reenviar ni divulgar información fuera de lo que exige cada encargo, ni usar correos o dispositivos personales no autorizados para ello.\n4. Mantener en secreto su usuario y contraseña, no compartir su cuenta y cerrar sesión en equipos compartidos.\n5. Informar de inmediato a LA FIRMA cualquier pérdida, acceso indebido o incidente de seguridad.\n6. Devolver o destruir la información en su poder al terminar la relación.\n\n## TERCERA. Registro de actividad\n\nEL RECEPTOR conoce que TecjuridicosApp registra en una bitácora cada cambio que hace, con fecha, hora, dirección IP y dispositivo, y lo autoriza para fines de seguridad y control.\n\n## CUARTA. Incumplimiento\n\nEl incumplimiento de este acuerdo es falta grave y da lugar a las acciones laborales, contractuales, disciplinarias, civiles y penales que correspondan, sin perjuicio de la indemnización de los perjuicios causados.\n\n## QUINTA. Vigencia\n\nEste acuerdo rige desde su firma y sus obligaciones de confidencialidad no terminan con la relación.\n\nFirmas:\n\n____________________________________\n**LA FIRMA**\n{{abogado.nombre}}\n\n____________________________________\n**EL RECEPTOR**\n[FILL: Nombre completo]\nC.C. [FILL: Número de documento]\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Contrato de prestación de servicios profesionales de abogado","category":"Contrato","description":"Honorarios, alcance del mandato, obligaciones de las partes y terminación.","body":"# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n\nEntre **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, quien en adelante se denomina **EL CLIENTE**, y **{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante se denomina **EL ABOGADO**, se celebra el presente contrato, que se rige por las siguientes cláusulas:\n\n## PRIMERA. OBJETO\n\nEL ABOGADO prestará sus servicios profesionales para atender el asunto: **{{expediente.asunto}}**, correspondiente a un proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}, en contra de {{expediente.contraparte}}.\n\n## SEGUNDA. ALCANCE\n\nEl servicio comprende el estudio del caso, la elaboración y radicación de los escritos necesarios, la asistencia a las audiencias y la vigilancia del proceso hasta **[FILL: Etapa hasta la que se presta el servicio]**. No incluye **[FILL: Actuaciones excluidas]**.\n\n## TERCERA. HONORARIOS\n\nEL CLIENTE pagará a EL ABOGADO:\n\n1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**.\n2. Un porcentaje del **[FILL: Porcentaje]%** sobre lo que efectivamente se obtenga a favor de EL CLIENTE, pagadero cuando se reciba.\n\nLos gastos del proceso (copias, notificaciones, peritajes, pólizas) corren por cuenta de EL CLIENTE.\n\n## CUARTA. OBLIGACIONES DE EL ABOGADO\n\nAtender el asunto con diligencia, informar a EL CLIENTE sobre el estado del proceso cuando lo solicite y guardar reserva sobre la información recibida.\n\n## QUINTA. OBLIGACIONES DE EL CLIENTE\n\nEntregar la información y los documentos completos y veraces, pagar los honorarios y gastos en las fechas acordadas y comunicar cualquier cambio de datos de contacto.\n\n## SEXTA. TERMINACIÓN\n\nEl contrato termina por cumplimiento del objeto, por mutuo acuerdo o por decisión de cualquiera de las partes con aviso escrito de **[FILL: Días de aviso]** días. Si EL CLIENTE revoca el poder sin justa causa, pagará los honorarios causados hasta esa fecha.\n\n## SÉPTIMA. DATOS PERSONALES\n\nEL CLIENTE autoriza el tratamiento de sus datos personales para la ejecución de este contrato, conforme a la política de tratamiento de datos de la oficina.\n\n## OCTAVA. NOTIFICACIONES\n\nEL CLIENTE: {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}} · {{cliente.telefono}}\nEL ABOGADO: {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}} · {{oficina.telefono}}\n\nSe firma en {{fecha.ciudad_y_fecha}}.\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\nEL CLIENTE\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}}\nEL ABOGADO\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Poder especial","category":"Poder","description":"Poder para iniciar y llevar hasta su terminación un proceso, con facultades expresas.","body":"{{fecha.ciudad_y_fecha}}\n\n{{destinatario.bloque}}\n\n**Referencia:** Proceso {{expediente.tipo_proceso}} — {{expediente.subproceso}}\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n**Radicado:** {{expediente.radicado}}\n\n**{{cliente.nombre}}**, mayor de edad, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}, con correo electrónico {{cliente.correo}}, otorgo **poder especial, amplio y suficiente** a **{{abogado.nombre}}**, abogado(a) titulado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}} del Consejo Superior de la Judicatura y correo electrónico {{abogado.correo}}, para que en mi nombre y representación inicie y lleve hasta su terminación el proceso de la referencia en contra de **{{expediente.contraparte}}**, con el fin de: **[FILL: Objeto del poder: qué se pretende]**.\n\nMi apoderado(a) queda facultado(a) para presentar la demanda y sus reformas, recibir, transigir, conciliar, desistir, sustituir, reasumir, interponer recursos, solicitar y aportar pruebas, y en general para realizar todas las actuaciones necesarias para el cumplimiento de este mandato, en los términos del artículo 74 del Código General del Proceso. **[FILL: Indique si se excluye alguna facultad, por ejemplo recibir]**\n\nEste poder se otorga mediante mensaje de datos conforme a la Ley 2213 de 2022. El correo electrónico de mi apoderado(a), inscrito en el Registro Nacional de Abogados, es {{abogado.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n\nAcepto,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Derecho de petición","category":"Derecho de petición","description":"Petición respetuosa ante una entidad pública o privada, con hechos, peticiones y notificaciones.","body":"{{fecha.ciudad_y_fecha}}\n\n{{destinatario.bloque}}\n\n**Asunto:** Derecho de petición — {{expediente.asunto}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, en ejercicio del derecho fundamental de petición consagrado en el artículo 23 de la Constitución Política y regulado por la Ley 1755 de 2015, respetuosamente presento la siguiente petición:\n\n## HECHOS\n\n{{expediente.hechos}}\n\n## PETICIONES\n\n1. **[FILL: Primera petición, concreta]**\n2. **[FILL: Segunda petición, si la hay]**\n\n## FUNDAMENTOS DE DERECHO\n\nArtículo 23 de la Constitución Política y Ley 1755 de 2015. **[FILL: Normas especiales aplicables al caso, verificadas por el abogado]**\n\n## ANEXOS\n\n1. Copia del documento de identidad.\n2. **[FILL: Documentos que soportan la petición]**\n\n## NOTIFICACIONES\n\nRecibiré respuesta en {{cliente.direccion}}, {{cliente.ciudad}}, y en el correo electrónico {{cliente.correo}}.\n\nAtentamente,\n\n_______________________________\n**{{cliente.nombre}}**\n{{cliente.tipo_documento}} {{cliente.documento}}\n{{cliente.telefono}}\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"},{"name":"Demanda ordinaria laboral de primera instancia","category":"Demanda","description":"Estructura de demanda laboral: partes, pretensiones, hechos, fundamentos, pruebas, cuantía, competencia y notificaciones.","body":"Señor(a)\n**JUEZ LABORAL DEL CIRCUITO DE {{expediente.ciudad}} (REPARTO)**\nE. S. D.\n\n**Referencia:** Demanda ordinaria laboral de primera instancia\n**Demandante:** {{cliente.nombre}}\n**Demandado:** {{expediente.contraparte}}\n\n**{{abogado.nombre}}**, abogado(a) con tarjeta profesional No. {{abogado.tarjeta_profesional}}, en calidad de apoderado(a) de **{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}, según el poder que adjunto, presento demanda ordinaria laboral de primera instancia en contra de **{{expediente.contraparte}}**, identificada con **[FILL: NIT o documento del demandado]**, representada legalmente por **[FILL: Representante legal]**, en los siguientes términos:\n\n## I. PARTES\n\n**Demandante:** {{cliente.nombre}}, {{cliente.tipo_documento}} {{cliente.documento}}, domiciliado(a) en {{cliente.ciudad}}.\n**Demandado:** {{expediente.contraparte}}, domiciliado en **[FILL: Domicilio del demandado]**.\n\n## II. PRETENSIONES\n\n**Declarativas**\n\n1. Que se declare que entre {{cliente.nombre}} y {{expediente.contraparte}} existió un contrato de trabajo **[FILL: Modalidad]** entre el **[FILL: Fecha de inicio]** y el **[FILL: Fecha de terminación]**.\n2. **[FILL: Otras declaraciones]**\n\n**De condena**\n\n1. Que se condene a {{expediente.contraparte}} a pagar **[FILL: Conceptos y valores: cesantías, intereses, prima, vacaciones, indemnizaciones]**.\n2. Que se condene en costas y agencias en derecho.\n\n## III. HECHOS\n\n{{expediente.hechos}}\n\n**[FILL: Complete los hechos numerados, uno por cada circunstancia relevante]**\n\n## IV. FUNDAMENTOS DE DERECHO\n\n**[FILL: Normas sustantivas y procesales aplicables, verificadas por el abogado]**\n\n## V. PRUEBAS\n\n**Documentales:** **[FILL: Contrato, desprendibles de pago, carta de terminación, certificados]**\n**Testimoniales:** **[FILL: Nombre, documento y dirección de cada testigo, y lo que declarará]**\n**Interrogatorio de parte** al representante legal de la demandada.\n\n## VI. CUANTÍA Y COMPETENCIA\n\nLa cuantía se estima en **[FILL: Valor]**. Es competente el juez laboral del circuito de {{expediente.ciudad}} por **[FILL: Factor de competencia: lugar de prestación del servicio o domicilio del demandado]**.\n\n## VII. ANEXOS\n\nPoder, documentos relacionados en pruebas, certificado de existencia y representación legal de la demandada y **[FILL: Otros anexos]**.\n\n## VIII. NOTIFICACIONES\n\n**Demandante:** {{cliente.direccion}}, {{cliente.ciudad}} · {{cliente.correo}}\n**Apoderado(a):** {{oficina.direccion}}, {{oficina.ciudad}} · {{abogado.correo}}\n**Demandado:** **[FILL: Dirección física y correo de notificaciones judiciales del demandado]**\n\nAtentamente,\n\n_______________________________\n**{{abogado.nombre}}**\nT.P. {{abogado.tarjeta_profesional}} del C. S. de la J.\n\n---\n\n*Borrador generado con TecjuridicosApp a partir de una plantilla. Revíselo y ajústelo antes de firmarlo o radicarlo.*"}],"categories":["Contrato","Poder","Autorización","Derecho de petición","Demanda","Tutela","Recurso","Memorial","Otro"],"variables":[{"key":"cliente.nombre","label":"Nombre del cliente","group":"Cliente"},{"key":"cliente.tipo_documento","label":"Tipo de documento","group":"Cliente"},{"key":"cliente.documento","label":"Número de documento","group":"Cliente"},{"key":"cliente.correo","label":"Correo del cliente","group":"Cliente"},{"key":"cliente.telefono","label":"Teléfono del cliente","group":"Cliente"},{"key":"cliente.direccion","label":"Dirección del cliente","group":"Cliente"},{"key":"cliente.ciudad","label":"Ciudad del cliente","group":"Cliente"},{"key":"cliente.departamento","label":"Departamento del cliente","group":"Cliente"},{"key":"expediente.carpeta","label":"Número de carpeta (y del contrato)","group":"Expediente"},{"key":"expediente.radicado","label":"Radicado","group":"Expediente"},{"key":"expediente.numero","label":"Número de expediente","group":"Expediente"},{"key":"expediente.tipo_proceso","label":"Tipo de proceso","group":"Expediente"},{"key":"expediente.subproceso","label":"Subproceso","group":"Expediente"},{"key":"expediente.asunto","label":"Asunto","group":"Expediente"},{"key":"expediente.contraparte","label":"Contraparte / entidad","group":"Expediente"},{"key":"expediente.hechos","label":"Hechos","group":"Expediente"},{"key":"expediente.despacho","label":"Despacho","group":"Expediente"},{"key":"expediente.juez","label":"Juez del despacho","group":"Expediente"},{"key":"expediente.correo_despacho","label":"Correo del despacho","group":"Expediente"},{"key":"expediente.area","label":"Área","group":"Expediente"},{"key":"expediente.ciudad","label":"Ciudad del proceso","group":"Expediente"},{"key":"expediente.departamento","label":"Departamento del proceso","group":"Expediente"},{"key":"destinatario.bloque","label":"Destinatario completo (Señor(a), nombre, cargo, entidad, ciudad)","group":"Destinatario"},{"key":"destinatario.tratamiento","label":"Tratamiento (Señor(a), Doctor(a)…)","group":"Destinatario"},{"key":"destinatario.nombre","label":"Nombre y apellido del funcionario","group":"Destinatario"},{"key":"destinatario.cargo","label":"Cargo del funcionario (Juez, Magistrado(a) ponente…)","group":"Destinatario"},{"key":"destinatario.entidad","label":"Entidad o despacho destinatario","group":"Destinatario"},{"key":"destinatario.direccion","label":"Dirección del destinatario","group":"Destinatario"},{"key":"destinatario.ciudad","label":"Ciudad del destinatario","group":"Destinatario"},{"key":"destinatario.correo","label":"Correo del destinatario","group":"Destinatario"},{"key":"abogado.nombre","label":"Nombre del abogado responsable","group":"Abogado"},{"key":"abogado.tarjeta_profesional","label":"Tarjeta profesional","group":"Abogado"},{"key":"abogado.correo","label":"Correo del abogado","group":"Abogado"},{"key":"abogado.telefono","label":"Teléfono del abogado","group":"Abogado"},{"key":"oficina.nombre","label":"Oficina","group":"Oficina"},{"key":"oficina.ciudad","label":"Ciudad de la oficina","group":"Oficina"},{"key":"oficina.direccion","label":"Dirección de la oficina","group":"Oficina"},{"key":"oficina.telefono","label":"Teléfono de la oficina","group":"Oficina"},{"key":"oficina.correo","label":"Correo de la oficina","group":"Oficina"},{"key":"honorarios.valor","label":"Valor de los honorarios ($)","group":"Honorarios"},{"key":"honorarios.valor_letras","label":"Valor de los honorarios en letras","group":"Honorarios"},{"key":"honorarios.forma_pago","label":"Forma de pago (cuotas y fechas)","group":"Honorarios"},{"key":"honorarios.cuotas","label":"Número de cuotas","group":"Honorarios"},{"key":"honorarios.pagado","label":"Valor ya pagado","group":"Honorarios"},{"key":"honorarios.saldo","label":"Saldo por pagar","group":"Honorarios"},{"key":"fecha.hoy","label":"Fecha de hoy (14 de octubre de 2026)","group":"Fecha"},{"key":"fecha.ciudad_y_fecha","label":"Ciudad y fecha (Ibagué, 14 de octubre de 2026)","group":"Fecha"}],"feeClause":["1. Una suma fija de **[FILL: Valor en pesos]** pagadera así: **[FILL: Forma y fechas de pago]**.","1. Una suma fija de **{{honorarios.valor}}** ({{honorarios.valor_letras}}), pagadera así: **{{honorarios.forma_pago}}**."],"contractHead":["# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO\n","# CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES DE ABOGADO N.º {{expediente.carpeta}}\n"],"firmFixes":[["**{{oficina.nombre}}** (TEC Jurídicos),","**Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4,"],["| 5. **Comunicaciones**","| 5. **Centrales de riesgo**: consulta de mi información, reporte del cumplimiento o incumplimiento de mis obligaciones, previa comunicación con veinte (20) días calendario de anticipación, y su actualización (Ley 1266 de 2008, modificada por la Ley 2157 de 2021). | ☐ | ☐ |\n| 6. **Comunicaciones**"],["quien actúa en nombre de la oficina **{{oficina.nombre}}** y en adelante","quien actúa en nombre de **Tecjuridicos S.A.S.** (TEC Jurídicos), NIT 901.269.714-4, oficina de {{oficina.nombre}}, y en adelante"],["Señores\n**{{expediente.contraparte}}**\n**[FILL: Dirección o correo de radicación de la entidad]**","{{destinatario.bloque}}\n**[FILL: Dirección o correo de radicación de la entidad]**"],["Señor(a)\n**{{expediente.despacho}}**\n{{expediente.ciudad}}\nE. S. D.\n\n**Referencia:**","{{destinatario.bloque}}\n\n**Referencia:**"],["{{destinatario.bloque}}\n**[FILL: Dirección o correo de radicación de la entidad]**","{{destinatario.bloque}}"]]};</script>
-<script>window.JUANMA_VERSION = {"change":112,"sha":"","date":"2026-10-18","name":"2.48","news":[{"n":"2.48","date":"19/10/2026","title":"Corrige el error de Word «detectó un error al intentar abrir el archivo» en los poderes","text":"Cuando el correo del poderdante quedaba vacío, el Word generado salía dañado porque Word había convertido el correo en un enlace y la frase opcional terminaba dentro de él. Ahora la App…"},{"n":"2.47","date":"19/10/2026","title":"Los documentos de las minutas avisan y resaltan los datos que faltan","text":"El documento que sale de una minuta de Word conserva toda su estructura (logos, encabezado, pie de página, letra y formato) y se llena solo con los datos que ya tienen el cliente y el…"},{"n":"2.46","date":"19/10/2026","title":"Frases opcionales en las minutas de Word, y dos poderes de víctima listos","text":"Una minuta puede tener frases que solo aparecen si se escribe su dato: en Word se encierran entre {{#campo.Nombre}} y {{/campo.Nombre}}. En Documentos → Datos del documento esos datos…"}]};</script>
+<script>window.JUANMA_VERSION = {"change":113,"sha":"921cde9","date":"2026-10-19","name":"2.49","news":[{"n":"2.49","date":"19/10/2026","title":"La IA gasta menos créditos de Anthropic","text":"NomosAI escribe los borradores con Claude Haiku 5.5, el modelo más económico, y Jurisprudencia usa Claude Sonnet 5.5, que cuesta la mitad del modelo anterior. En Jurisprudencia hay…"},{"n":"2.48","date":"19/10/2026","title":"Corrige el error de Word «detectó un error al intentar abrir el archivo» en los poderes","text":"Cuando el correo del poderdante quedaba vacío, el Word generado salía dañado porque Word había convertido el correo en un enlace y la frase opcional terminaba dentro de él. Ahora la App…"},{"n":"2.47","date":"19/10/2026","title":"Los documentos de las minutas avisan y resaltan los datos que faltan","text":"El documento que sale de una minuta de Word conserva toda su estructura (logos, encabezado, pie de página, letra y formato) y se llena solo con los datos que ya tienen el cliente y el…"}]};</script>
 <script>window.JUANMA_LINK_URL = "";</script>
 <script>window.JUANMA_SERVER_URL = "https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net";</script>
 <script>window.JUANMA_PROMPT = "# IDENTITY & ROLE\nYou are \"NomosAI Engine\", an advanced AI engine designed for paralegals, legal technicians, and attorneys. Your core purpose is to automate the draft generation of Powers of Attorney, Contracts, Lawsuits (Demandas), and Rights of Petition (Administrative/Constitutional Petitions), while seamlessly integrating e-signature blocks and Bold payment gateway links. You write with the exact precision, rhythm, and fluency of a senior trial and transactional attorney, strictly eliminating any robotic or synthetic AI writing style.\n\n# FORBIDDEN AI PATTERNS (STRICT ANTI-SYNTHETIC RULES)\n1. NO PREAMBLES OR CONVERSATIONAL FILLER: Never start your response with phrases like \"Sure, here is your draft\", \"Below is the requested contract\", or \"As an AI language model\". Begin IMMEDIATELY with the legal document title or header.\n2. FORBIDDEN TOKEN BLACKLIST: You are strictly forbidden from using generic AI clichés and buzzwords, including but not limited to:\n   - \"In today's fast-paced world\" / \"In the ever-evolving landscape\"\n   - \"It is imperative to highlight\" / \"It is worth noting that\" / \"Needless to say\"\n   - \"Crucial\" / \"Pivotal\" / \"Invaluable\" / \"Delve into\" / \"Beacon\"\n   - \"In summary\" / \"In conclusion\" / \"To summarize\"\n   The same prohibition applies to their equivalents in any output language (for Spanish, e.g. \"En el mundo actual\", \"Cabe destacar\", \"Es importante resaltar\", \"Crucial\", \"Fundamental\", \"Ahondar\", \"En resumen\", \"En conclusión\").\n3. RHYTHM, CADENCE & HUMAN FLOW:\n   - Use active voice and direct syntax (Subject + Verb + Object).\n   - Vary sentence lengths naturally. Interleave short, punchy statements with compound clauses to mirror human thought and avoid rhythmic monotony.\n   - Plain Legal Language: Maintain rigorous technical accuracy without resorting to archaic jargon or unnecessary Latinisms.\n\n# CORE FUNCTIONAL MODULES\n\n## 1. ADMINISTRATIVE & CONSTITUTIONAL PETITIONS (RIGHTS OF PETITION)\nMandatory structure:\n- Addressee / Recipient Authority or Entity & Channel.\n- Full Petitioner & Legal Representative Identification.\n- STATEMENT OF FACTS: Chronologically ordered, numbered, clear, and objective.\n- CLAIMS / PETITIONS: Formulated specifically, concisely, and numbered.\n- LEGAL BASIS: Applicable constitutional and statutory provisions (Zero hallucinated statutes).\n- EVIDENCE & ANNEXES: Detailed itemized list.\n- NOTIFICATIONS: Physical address and official email.\n- STATUTORY ALERTER: Include a final calculation of the legal deadline for response (e.g., 15 business days).\n\n## 2. POWERS OF ATTORNEY (SPECIAL & GENERAL)\nMandatory structure:\n- Formal identification of Principal (Poderdante) and Attorney-in-Fact (Apoderado).\n- Precise scope and purpose of the mandate.\n- Explicit faculties (e.g., to receive, withdraw, substitute, settle, resume).\n- Liabilities and limitation clauses.\n\n## 3. CONTRACTS & AGREEMENTS\nMandatory structure:\n- Contracting parties, legal capacity, and status.\n- Subject matter (Scope of Work / Deliverables) and obligations of each party.\n- Consideration, payment terms, adjustments, and late penalty fees.\n- Term, termination clauses, and dispute resolution mechanism.\n\n## 4. LAWSUITS (DEMANDAS)\nMandatory structure:\n- Judge or court addressed (with \"Reparto\" when the court is not yet assigned).\n- Parties: plaintiff and defendant, identification, domicile and legal representatives.\n- CLAIMS (PRETENSIONES): declaratory and condemnatory, numbered and specific.\n- FACTS: numbered, one circumstance per item, in chronological order.\n- LEGAL BASIS: only provisions you are certain exist and apply; otherwise `**[FILL: Legal basis to be verified by attorney]**`.\n- EVIDENCE: documentary, testimonial (name, ID, address, purpose) and other requests.\n- AMOUNT IN CONTROVERSY (CUANTÍA) and JURISDICTION/COMPETENCE.\n- ANNEXES and NOTIFICATIONS (physical address and e-mail of each party and the attorney).\n\n## 5. FIRM TEMPLATES\nWhen the request includes a base template from the firm, keep its structure, headings and wording; fill it with the case data, resolve every `{{variable}}` and `[FILL: …]` you can from the data given, and leave the rest as `**[FILL: …]**`.\n\n## 6. E-SIGNATURE INTEGRATION MODULE\nAppend a standardized digital validation block at the end of every legal draft:\n- Designated signature lines for all parties.\n- E-Signature Validity Clause: Enforce legal enforceability under applicable e-commerce and electronic signature laws.\n- Technical Traceability Metadata Fields: `[OTP_VERIFICATION_CODE]`, `[TIMESTAMP]`, `[IP_ADDRESS]`.\n\n## 7. BOLD PAYMENT GATEWAY INTEGRATION\nWhenever legal fee collection or administrative filing costs are required, generate a Fee & Settlement Section:\n- Itemized breakdown of legal service fees.\n- Dynamic Bold Checkout API URL format:\n  `https://checkout.bold.co/payment/link/[TRANSACTION_ID]`\n  Use exactly the transaction ID supplied in the request. Never invent one.\n- Client Instructions: \"Secure payment processed via Bold Gateway (Credit Card, PSE Debit, or QR Code).\"\n\n# OUTPUT FORMAT (FOR CUSTOM CODE BACKENDS)\nAlways format your response into two distinct sections, each introduced by its exact marker line:\n\nSECTION 1: LEGAL DOCUMENT\n(Clean Markdown, ready to export to .docx / PDF.)\n\nSECTION 2: JSON VARIABLES PAYLOAD\n(A single fenced ```json block, parsed by Python / Node.js backends, with this shape:)\n\n```json\n{\n  \"document_type\": \"PETITION | CONTRACT | POWER_OF_ATTORNEY | LAWSUIT\",\n  \"client_data\": {\n    \"full_name\": \"\",\n    \"id_number\": \"\",\n    \"email\": \"\"\n  },\n  \"payment_required\": true,\n  \"bold_transaction_id\": \"REF_12345\",\n  \"missing_fields\": [\"LIST_OF_UNFILLED_VARIABLES_IF_ANY\"]\n}\n```\n\n# CRITICAL SAFEGUARDS\n* ZERO HALLUCINATION: Never invent statutory articles, case law citations, or decree numbers. If you are not certain a provision exists and applies, write `**[FILL: Legal basis to be verified by attorney]**` instead.\n* MISSING DATA: If any critical variable is missing (e.g., ID number, address, fee amount), insert `**[FILL: Name of missing data]**` in bold text and list it in `missing_fields`.\n* HUMAN AUDIT FOOTER: Every generated document MUST conclude with: \"Draft generated by NomosAI for final review, verification, and execution by the attorney of record.\"\n";</script>
@@ -7923,6 +7976,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
     ["GET", /^\/admin\/backups$/, () => ({ web: true, enabled: false, files: [], log: [] })],
+    ["GET", /^\/admin\/ai-usage$/, () => ({ web: true })],
     ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
     ["POST", /^\/admin\/test-tsa$/, () => fail("En el enlace de prueba no se piden sellos de tiempo: pruebe desde la app en Azure.")],
     ["POST", /^\/admin\/test-channel$/, () => fail("En el enlace de prueba no se envían mensajes: pruebe desde la app en Azure.")],
@@ -8686,6 +8740,7 @@ window.JUANMA_TEMPLATES = {"seed":[{"name":"Autorización para consulta y report
     // ----- case law: analysis of a pasted judgment; official-site search needs the server -----
     ["POST", /^\/jurisprudencia\/search$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
     ["POST", /^\/jurisprudencia\/verify$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
+    ["POST", /^\/jurisprudencia\/exists$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
     ["POST", /^\/jurisprudencia\/analyze$/, async (m, b) => { need("jurisprudence.use"); return analyzePasted(b); }],
     ["GET", /^\/jurisprudencia\/saved(?:\?caseId=(\d+))?$/, (m) => { need("jurisprudence.use"); return clone(s.saved.filter((r) => savedVisible(r) && (!m[1] || r.case_id === +m[1])).slice().reverse()); }],
     ["POST", /^\/jurisprudencia\/saved$/, (m, b) => {
@@ -11621,8 +11676,32 @@ async function renderBackups() {
       <a class="mini" href="/api/admin/backups/${encodeURIComponent(f.file)}" download>Descargar</a></li>`).join("") : "<li class=\"muted\">Todavía no hay copias.</li>");
 }
 
+// What the AI cost this month (version 2.49): Gerencia only, estimated at list prices.
+async function renderAiUsage() {
+  const panel = $("#ai-usage-panel");
+  panel.hidden = !isGerencia();
+  if (panel.hidden) return;
+  const u = await api("GET", "/admin/ai-usage");
+  if (u.web) {
+    $("#ai-usage-summary").textContent = "En el enlace de prueba NomosAI usa la cuenta de Claude de quien lo abre y no gasta los créditos de la firma. El consumo de la App del servidor (Azure) se ve allí.";
+    $("#ai-usage-list").innerHTML = "";
+    return;
+  }
+  const usd = (n) => `US$ ${n.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 3 : 2 })}`;
+  const [y, m] = u.month.split("-");
+  const monthName = (ym) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+  $("#ai-usage-summary").textContent = u.count
+    ? `En ${monthName(`${y}-${m}`)} van ${u.count} consulta(s) con IA, por unos ${usd(u.total)}.`
+    : `En ${monthName(`${y}-${m}`)} todavía no hay consultas con IA.`;
+  $("#ai-usage-list").innerHTML = u.byKind.map((r) => `<li><strong>${escapeHtml(r.label)}</strong> ${r.count} · ${usd(r.cost)}
+      <span class="muted">${Math.round(r.input_tokens / 1000)} mil tokens leídos, ${Math.round(r.output_tokens / 1000)} mil escritos${r.web_searches ? `, ${r.web_searches} búsqueda(s)` : ""}</span></li>`).join("")
+    + (u.byUser.length ? `<li class="muted">Por persona: ${u.byUser.map((r) => `${escapeHtml(r.name)} ${usd(r.cost)}`).join(" · ")}</li>` : "")
+    + (u.months.length > 1 ? `<li class="muted">Meses anteriores: ${u.months.slice(1).map((r) => `${escapeHtml(monthName(r.month))} ${usd(r.cost)}`).join(" · ")}</li>` : "");
+}
+
 async function renderConfiguracion() {
   renderChannels().catch(() => {});
+  renderAiUsage().catch(() => {});
   renderBackups().catch(() => {});
   await loadCatalog();
   const open = new Set($$("#catalog details[open]").map((d) => d.dataset.cat));
@@ -12565,7 +12644,7 @@ jSearch.addEventListener("submit", async (e) => {
         <p class="muted">${escapeHtml([r.sala, r.date, r.reporting_judge && "M.P. " + r.reporting_judge].filter(Boolean).join(" · "))}</p>
         <p>${escapeHtml(r.topic || "")}</p>
         <div class="toolbar">
-          <button class="primary" data-jact="analyze" data-i="${i}">Analizar</button>
+          <button class="primary" data-jact="analyze" data-i="${i}">Analizar con IA</button>
           <button data-jact="save-result" data-i="${i}">Guardar</button>
           ${safeLink(r.url)}
         </div>
@@ -12578,7 +12657,32 @@ jSearch.addEventListener("submit", async (e) => {
   }
 });
 
+// Free, no AI (version 2.49): each court's own search page, with the question copied.
+const courtSearch = (id) => window.JuanmaCourtLinks.COURT_SEARCH.find((c) => c.id === id);
+jSearch.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-free-court]");
+  if (!b) return;
+  const c = courtSearch(b.dataset.freeCourt);
+  const q = jSearch.query.value.trim();
+  window.open(c.url, "_blank", "noopener");
+  const note = $("#j-free-search-note");
+  note.hidden = false;
+  note.textContent = `Se abrió el buscador de la ${c.name}, sin IA y sin costo.`;
+  if (q) copyText(q).then((ok) => { if (ok) note.textContent += ` Copié «${q}»: péguelo allí con Ctrl+V.`; });
+});
+
 const jAnalyze = $("#j-analyze");
+// A Corte Constitucional reference opens its relatoría page for free.
+function updateFreeOpen() {
+  const court = jAnalyze.court.value;
+  const url = !court || court === "CC" ? window.JuanmaCourtLinks.ccRelatoriaUrl(jAnalyze.reference.value) : null;
+  const a = $("#j-free-open");
+  a.hidden = !url;
+  if (url) a.href = url;
+}
+jAnalyze.reference.addEventListener("input", updateFreeOpen);
+jAnalyze.court.addEventListener("change", updateFreeOpen);
+
 async function runAnalysis(body) {
   showJTab("analizar");
   const box = $("#j-analysis");
@@ -12640,6 +12744,58 @@ const VERDICT = {
 };
 const chip = ([cls, label]) => (label ? `<span class="badge ${cls}">${label}</span>` : "");
 
+// Version 2.49: detecting citations is free; a Corte Constitucional citation is
+// checked at its relatoría without AI. The AI review (does it support what the
+// text says?) runs only per citation or after a question, because each one costs.
+let jCites = [];
+const verifyResult = (r) => `
+  ${r.correct_reference && r.correct_reference !== r.citation ? `<p><strong>Referencia correcta:</strong> ${escapeHtml(r.correct_reference)}</p>` : ""}
+  <p>${escapeHtml(r.explanation || "")}</p>
+  ${r.supporting_quote ? `<blockquote>“${escapeHtml(r.supporting_quote)}”</blockquote>` : ""}`;
+function paintCite(i) {
+  const c = jCites[i];
+  const li = $(`#j-verify-list [data-v="${i}"]`);
+  if (!li) return;
+  const r = c.ai || c.free;
+  li.innerHTML = `
+    <div class="result-head"><strong>${escapeHtml(c.citation)}</strong>
+      ${c.busy ? `<span class="badge">${c.busy}</span>` : ""}
+      ${r ? chip(VERDICT.exists[r.exists] || VERDICT.exists.unknown) : ""}
+      ${c.ai ? chip(VERDICT.supports[c.ai.supports_claim] || ["", ""]) : ""}
+      ${r ? verifiedBadge(r.verified) : ""}
+      ${c.error ? `<span class="badge bad">Error: ${escapeHtml(c.error)}</span>` : ""}
+    </div>
+    <p class="muted">“${escapeHtml(c.claim)}”</p>
+    ${c.ai ? verifyResult(c.ai) + (c.ai.cached ? '<p class="muted">Respuesta guardada de una revisión anterior (menos de 30 días), sin costo.</p>' : "")
+      : c.free ? `<p class="muted">${escapeHtml(c.free.explanation || "")}</p>` : ""}
+    <div class="toolbar">
+      ${!c.ai && !c.busy ? `<button data-verify-ai="${i}">Revisar con IA si respalda lo afirmado</button>` : ""}
+      ${safeLink((c.ai || c.free)?.url)}
+    </div>`;
+}
+function paintVerifyAll() {
+  const left = jCites.filter((c) => !c.ai && !c.busy).length;
+  const b = $("#j-verify-all");
+  b.hidden = !left;
+  b.textContent = `Revisar con IA las ${left} cita(s) pendientes`;
+}
+async function verifyWithAi(i) {
+  const c = jCites[i];
+  c.busy = "Revisando con IA…";
+  c.error = "";
+  paintCite(i);
+  paintVerifyAll();
+  try {
+    c.ai = await api("POST", "/jurisprudencia/verify", { citation: c.citation, claim: c.claim });
+  } catch (err) {
+    c.error = err.message;
+  } finally {
+    c.busy = "";
+    paintCite(i);
+    paintVerifyAll();
+  }
+}
+
 async function detectAndVerify() {
   if (WEB) {
     showServerNotes();
@@ -12647,40 +12803,41 @@ async function detectAndVerify() {
     return;
   }
   const text = $("#j-verify-text").value;
-  const cites = window.JuanmaCitations.extractCitations(text);
-  $("#j-detect-info").textContent = cites.length ? `${cites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";
+  jCites = window.JuanmaCitations.extractCitations(text).map((c) => ({ ...c, busy: "Comprobando gratis…" }));
+  $("#j-detect-info").textContent = jCites.length ? `${jCites.length} cita(s) encontradas.` : "No se encontraron citas de sentencias.";
   const list = $("#j-verify-list");
-  list.innerHTML = cites.map((c, i) => `
-    <li class="panel verify-item" data-v="${i}">
-      <div class="result-head"><strong>${escapeHtml(c.citation)}</strong><span class="badge">Verificando…</span></div>
-      <p class="muted">“${escapeHtml(c.claim)}”</p>
-    </li>`).join("");
+  list.innerHTML = jCites.map((_, i) => `<li class="panel verify-item" data-v="${i}"></li>`).join("");
+  jCites.forEach((_, i) => paintCite(i));
+  $("#j-verify-all").hidden = true;
   $("#j-detect").disabled = true;
   try {
-    for (let i = 0; i < cites.length; i++) {
-      const li = $(`[data-v="${i}"]`, list);
+    for (let i = 0; i < jCites.length; i++) {
+      const c = jCites[i];
       try {
-        const r = await api("POST", "/jurisprudencia/verify", cites[i]);
-        li.innerHTML = `
-          <div class="result-head"><strong>${escapeHtml(r.citation)}</strong>
-            ${chip(VERDICT.exists[r.exists] || VERDICT.exists.unknown)}
-            ${chip(VERDICT.supports[r.supports_claim] || ["", ""])}
-            ${verifiedBadge(r.verified)}
-          </div>
-          <p class="muted">“${escapeHtml(cites[i].claim)}”</p>
-          ${r.correct_reference && r.correct_reference !== r.citation ? `<p><strong>Referencia correcta:</strong> ${escapeHtml(r.correct_reference)}</p>` : ""}
-          <p>${escapeHtml(r.explanation || "")}</p>
-          ${r.supporting_quote ? `<blockquote>“${escapeHtml(r.supporting_quote)}”</blockquote>` : ""}
-          ${safeLink(r.url)}`;
+        c.free = await api("POST", "/jurisprudencia/exists", { citation: c.citation });
       } catch (err) {
-        li.querySelector(".badge").textContent = `Error: ${err.message}`;
-        li.querySelector(".badge").className = "badge bad";
+        c.error = err.message;
       }
+      c.busy = "";
+      paintCite(i);
     }
   } finally {
     $("#j-detect").disabled = false;
+    paintVerifyAll();
   }
 }
+$("#j-verify-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-verify-ai]");
+  if (b) guarded(() => verifyWithAi(Number(b.dataset.verifyAi)));
+});
+$("#j-verify-all").addEventListener("click", () => guarded(async () => {
+  const left = jCites.map((c, i) => (!c.ai && !c.busy ? i : -1)).filter((i) => i >= 0);
+  if (!left.length) return;
+  const ok = await ask({ title: "Revisar citas con IA", okLabel: `Revisar ${left.length}`,
+    message: `Se van a revisar ${left.length} cita(s) con IA. Cada una consulta la página oficial y gasta créditos de Anthropic (las ya revisadas en los últimos 30 días no se cobran de nuevo). ¿Continuar?` });
+  if (!ok) return;
+  for (const i of left) await verifyWithAi(i);
+}));
 $("#j-detect").addEventListener("click", () => guarded(detectAndVerify));
 
 // ----- Saved -----
@@ -12730,6 +12887,7 @@ document.addEventListener("click", (e) => {
     if (b.dataset.jact === "analyze") {
       jAnalyze.reference.value = r.reference || "";
       jAnalyze.url.value = r.url || "";
+      updateFreeOpen();
       await runAnalysis({ reference: r.reference, url: r.verified ? r.url : "", court: "" });
     } else if (b.dataset.jact === "save-result") {
       await openSaveDialog({ reference: r.reference, court: r.court, url: r.url, verified: r.verified, proof: r.proof, analysis: { topic: r.topic, date: r.date } });

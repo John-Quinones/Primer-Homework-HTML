@@ -8,7 +8,11 @@ import { recipientPrompt } from "./case-meta.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PROMPT = readFileSync(path.join(here, "..", "prompts", "nomosai-system-prompt.md"), "utf8");
 
-export const MODEL = process.env.NOMOS_MODEL || "claude-opus-5-5";
+// Version 2.49 (user's rule): drafts are written with Claude Haiku 5.5, the
+// lowest-priced model; NOMOS_MODEL can choose another one.
+export const MODEL = process.env.NOMOS_MODEL || "claude-haiku-5-5";
+// Claude Haiku has no server-side fallback after a refusal; the larger models do.
+const HAS_FALLBACK = !/^claude-haiku/.test(MODEL);
 const client = new Anthropic();
 
 export const DOCUMENT_TYPES = {
@@ -82,8 +86,7 @@ export async function generateDraft(req, { onText } = {}) {
   const stream = client.beta.messages.stream({
     model: MODEL,
     max_tokens: 64000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...(HAS_FALLBACK ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
     output_config: { effort: "high" },
     system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: buildUserMessage(req, transactionId) }],

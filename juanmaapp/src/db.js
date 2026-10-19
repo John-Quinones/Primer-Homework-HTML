@@ -582,6 +582,12 @@ function migrate(db) {
   add("sessions", "last_seen", "TEXT");
   // Version 2.19: answers of case-law research kept 30 days so the same query returns at once.
   db.exec("CREATE TABLE IF NOT EXISTS jurisprudence_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL, created_ms INTEGER NOT NULL)");
+  // Version 2.49: what each call to the Anthropic API cost (src/ai-usage.js). A new table: nothing saved changes.
+  db.exec(`CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY, at_ms INTEGER NOT NULL, user_id INTEGER, kind TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, web_searches INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0)`);
+  db.exec("CREATE INDEX IF NOT EXISTS ai_usage_at ON ai_usage (at_ms)");
   add("users", "ms_oid", "TEXT");
   // Version 2.11: hidden users. Their actions read "Asistente" everywhere through this view;
   // the real author stays in user_id columns and is shown only after the hidden-users password.

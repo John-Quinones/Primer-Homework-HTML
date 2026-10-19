@@ -591,6 +591,7 @@
     }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
     ["GET", /^\/admin\/backups$/, () => ({ web: true, enabled: false, files: [], log: [] })],
+    ["GET", /^\/admin\/ai-usage$/, () => ({ web: true })],
     ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
     ["POST", /^\/admin\/test-tsa$/, () => fail("En el enlace de prueba no se piden sellos de tiempo: pruebe desde la app en Azure.")],
     ["POST", /^\/admin\/test-channel$/, () => fail("En el enlace de prueba no se envían mensajes: pruebe desde la app en Azure.")],
@@ -1354,6 +1355,7 @@
     // ----- case law: analysis of a pasted judgment; official-site search needs the server -----
     ["POST", /^\/jurisprudencia\/search$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
     ["POST", /^\/jurisprudencia\/verify$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
+    ["POST", /^\/jurisprudencia\/exists$/, () => { need("jurisprudence.use"); fail(NEEDS_SERVER.juris); }],
     ["POST", /^\/jurisprudencia\/analyze$/, async (m, b) => { need("jurisprudence.use"); return analyzePasted(b); }],
     ["GET", /^\/jurisprudencia\/saved(?:\?caseId=(\d+))?$/, (m) => { need("jurisprudence.use"); return clone(s.saved.filter((r) => savedVisible(r) && (!m[1] || r.case_id === +m[1])).slice().reverse()); }],
     ["POST", /^\/jurisprudencia\/saved$/, (m, b) => {
