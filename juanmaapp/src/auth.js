@@ -173,9 +173,10 @@ export function rolePermissions(db, role) {
 
 export function loadUser(db, id) {
   const row = db.prepare(`SELECT id, name, email, phone, professional_card, legal_name, id_number, role, active, custom_permissions, created_at, must_change_password, invited_at,
-    password_hash != '!' AS has_password, hidden, EXISTS (SELECT 1 FROM user_photos p WHERE p.user_id = users.id) AS has_photo FROM users WHERE id = ?`).get(id);
+    password_hash != '!' AS has_password, hidden, EXISTS (SELECT 1 FROM user_photos p WHERE p.user_id = users.id) AS has_photo,
+    EXISTS (SELECT 1 FROM user_signatures s WHERE s.user_id = users.id) AS has_signature FROM users WHERE id = ?`).get(id);
   if (!row) return null;
-  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password, hidden: !!row.hidden, has_photo: !!row.has_photo };
+  const u = { ...row, must_change_password: !!row.must_change_password, has_password: !!row.has_password, hidden: !!row.hidden, has_photo: !!row.has_photo, has_signature: !!row.has_signature };
   const offices = db.prepare(`SELECT o.id, o.name FROM user_offices uo JOIN offices o ON o.id = uo.office_id
     WHERE uo.user_id = ? ORDER BY o.is_main DESC, o.name`).all(id).map((o) => ({ ...o }));
   // A user's own checklist replaces the role's when it is turned on.
@@ -576,6 +577,26 @@ export function adminRouter(db) {
         ON CONFLICT(user_id) DO UPDATE SET photo = excluded.photo, updated_at = datetime('now')`).run(id, photo);
     }
     res.json({ ...loadUser(db, id), photo: photoOf(id) });
+  });
+
+  // ----- Electronic signature of the user (version 2.59): drawn PNG, set only by its owner, used to sign receipts -----
+  const signatureOf = (id) => db.prepare("SELECT image FROM user_signatures WHERE user_id = ?").get(id)?.image || "";
+  r.get("/users/:id/signature", (req, res) => {
+    const id = Number(req.params.id), u = db.prepare("SELECT id, hidden FROM users WHERE id = ?").get(id);
+    if (!u) return res.status(404).json({ error: "El usuario no existe." });
+    res.json({ signature: u.hidden && id !== req.user.id ? "" : signatureOf(id) });
+  });
+  r.put("/users/:id/signature", (req, res) => {
+    const id = Number(req.params.id);
+    if (id !== req.user.id) return res.status(403).json({ error: "Solo cada usuario registra su propia firma." });
+    const image = str(req.body?.signature);
+    if (!image) db.prepare("DELETE FROM user_signatures WHERE user_id = ?").run(id);
+    else {
+      if (!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(image) || image.length > 400_000) return res.status(400).json({ error: "La firma debe ser una imagen PNG pequeña." });
+      db.prepare(`INSERT INTO user_signatures (user_id, image) VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET image = excluded.image, updated_at = datetime('now')`).run(id, image);
+    }
+    res.json({ signature: signatureOf(id), has_signature: !!image });
   });
 
   const setUserPermissions = (userId, custom, perms) => {

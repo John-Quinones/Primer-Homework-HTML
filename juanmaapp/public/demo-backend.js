@@ -221,7 +221,7 @@
     id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, created_at: u.created_at, hidden: !!u.hidden,
     offices: s.offices.filter((o) => u.office_ids.includes(o.id)).map((o) => ({ id: o.id, name: o.name })),
     permissions: userPerms(u), phone: u.phone || "", professional_card: u.professional_card || "", legal_name: u.legal_name || "", id_number: u.id_number || "", custom_permissions: !!u.custom_permissions,
-    has_photo: !!s.blobs[`user-photo-${u.id}`],
+    has_photo: !!s.blobs[`user-photo-${u.id}`], has_signature: !!s.blobs[`user-sign-${u.id}`],
   });
   // Who signs a receipt: its creator's legal name, cédula and tarjeta profesional (empty for a hidden user).
   const signerOf = (id) => {
@@ -681,6 +681,21 @@
         u.foto = "Sí"; // only for the audit diff, like the client's
       }
       return { ...userOut(u), photo };
+    }],
+    // Electronic signature of the user (version 2.59): own only, like the server.
+    ["GET", /^\/admin\/users\/(\d+)\/signature$/, (m) => {
+      me(); const u = s.users.find((x) => x.id === +m[1]) || fail("El usuario no existe.");
+      return { signature: u.hidden && u.id !== currentId ? "" : s.blobs[`user-sign-${u.id}`] || "" };
+    }],
+    ["PUT", /^\/admin\/users\/(\d+)\/signature$/, (m, b) => {
+      me(); +m[1] === currentId || fail("Solo cada usuario registra su propia firma.");
+      const image = str(b.signature);
+      if (!image) delete s.blobs[`user-sign-${currentId}`];
+      else {
+        (/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(image) && image.length <= 400000) || fail("La firma debe ser una imagen PNG pequeña.");
+        s.blobs[`user-sign-${currentId}`] = image;
+      }
+      return { signature: image, has_signature: !!image };
     }],
     ["POST", /^\/admin\/users$/, (m, b) => {
       need("users.manage");

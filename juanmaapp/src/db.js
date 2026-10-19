@@ -537,6 +537,9 @@ function migrate(db) {
   // Optional photo of each user (funcionario), same rules as the client photo. Existing users simply have none.
   db.exec(`CREATE TABLE IF NOT EXISTS user_photos (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, photo TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  // Version 2.59: each user's own electronic signature (a drawn PNG), stamped on the receipts they sign. Existing users simply have none.
+  db.exec(`CREATE TABLE IF NOT EXISTS user_signatures (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, image TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS process_types_unique ON process_types(category_id, COALESCE(parent_id, 0), name)");
   const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
   add("clients", "office_id", "INTEGER REFERENCES offices(id)");

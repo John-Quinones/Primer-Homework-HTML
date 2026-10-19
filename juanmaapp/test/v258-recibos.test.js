@@ -115,3 +115,17 @@ test("deleting a receipt makes a copy of the database first (and refuses if it c
     assert.equal(log.trigger, "antes-de-borrar-recibo");
   } finally { server.close(); }
 });
+
+test("version 2.59: each user keeps their own drawn signature, nobody else's", async () => {
+  const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  await same(async (call) => {
+    const id = (await call("GET", "/auth/status")).body.user.id;
+    assert.equal((await call("GET", `/admin/users/${id}/signature`)).body.signature, "");
+    assert.equal((await call("PUT", `/admin/users/${id}/signature`, { signature: "no es imagen" })).status >= 400, true);
+    await call("PUT", `/admin/users/${id}/signature`, { signature: PNG });
+    assert.equal((await call("GET", `/admin/users/${id}/signature`)).body.signature, PNG);
+    assert.equal((await call("PUT", `/admin/users/${id + 999}/signature`, { signature: PNG })).status >= 400, true);
+    await call("PUT", `/admin/users/${id}/signature`, { signature: "" });
+    return (await call("GET", `/admin/users/${id}/signature`)).body.signature;
+  });
+});

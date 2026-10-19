@@ -1645,6 +1645,41 @@ $("#my-photo-dialog").addEventListener("click", (e) => {
   });
 });
 
+// «Mi firma electrónica» (version 2.59): the user's drawn signature, stamped on the receipts they sign.
+let mySignPad = null;
+const userSignatures = new Map();
+async function userSignature(id) {
+  if (!userSignatures.has(id)) userSignatures.set(id, (await api("GET", `/admin/users/${id}/signature`).catch(() => ({ signature: "" }))).signature || "");
+  return userSignatures.get(id);
+}
+async function openMySignature() {
+  $(".user-menu").open = false;
+  const dlg = $("#my-signature-dialog");
+  dlg.showModal();
+  mySignPad ||= window.JuanmaSigPad($("#my-signature-pad"));
+  mySignPad.clear();
+  const have = await userSignature(me.id);
+  $('#my-signature-dialog [data-my-sign="remove"]').hidden = !have;
+  const canvas = $("#my-signature-pad");
+  if (have) { const img = new Image(); img.onload = () => canvas.getContext("2d").drawImage(img, 0, 0, canvas.getBoundingClientRect().width, canvas.getBoundingClientRect().height); img.src = have; }
+}
+$("#my-signature-dialog").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-my-sign]");
+  if (!b) return;
+  e.preventDefault();
+  guarded(async () => {
+    const mode = b.dataset.mySign;
+    if (mode === "clear") return mySignPad.clear();
+    if (mode === "save" && mySignPad.isEmpty()) throw new Error("Dibuje su firma o use «Quitar mi firma».");
+    if (mode === "remove" && !(await ask({ title: "Quitar firma", okLabel: "Quitar", message: "Su firma se quitará; los recibos nuevos saldrán sin ella." }))) return;
+    const signature = mode === "save" ? mySignPad.toPng() : "";
+    const out = await api("PUT", `/admin/users/${me.id}/signature`, { signature });
+    userSignatures.set(me.id, out.signature || "");
+    $("#my-signature-dialog").close();
+    toast(signature ? "Su firma electrónica quedó guardada." : "Firma quitada.");
+  });
+});
+
 /** Where the client's ID card was issued: «Ibagué (Tolima)» (version 2.56). */
 function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
 
@@ -2442,6 +2477,7 @@ document.addEventListener("click", (e) => {
     },
     "display-prefs": () => openPrefs(),
     "my-photo": () => openMyPhoto(),
+    "my-signature": () => openMySignature(),
     "change-email": () => openDialog($("#email-dialog"), "Cambiar correo", { email: me?.email || "" }),
     "change-password": () => {
       $(".user-menu").open = false;
@@ -6075,12 +6111,31 @@ async function buildReceiptFiles(r) {
     "recibo.estado": r.voided_at ? `ANULADO · ${r.void_reason}` : "",
     "firma.nombre": r.signer_name, "firma.cedula": r.signer_id, "firma.tarjeta": r.signer_card,
   };
-  const word = D.fillDocx(await receiptBaseBytes(), data, RECEIPT_LABELS);
+  let word = D.fillDocx(await receiptBaseBytes(), data, RECEIPT_LABELS);
+  const sign = r.created_by ? await userSignature(r.created_by) : "";
+  if (sign) word = await stampSignature(word, sign);
   const base = `Recibo ${receiptNo(r.number)} ${safeName(r.client_name)}`;
   let pdf;
   try { pdf = await window.JuanmaDocxPdf.docxToPdf(new Uint8Array(await word.arrayBuffer())); }
   catch { pdf = await simpleReceiptPdf(r); }
   return { word, pdf, base, missingSigner: !r.signer_name || !r.signer_id };
+}
+/** Puts the user's drawn signature (PNG data URL) above the signature line of the receipt's Word. */
+async function stampSignature(word, dataUrl) {
+  const zip = new window.PizZip(await word.arrayBuffer());
+  zip.file("word/media/firma-usuario.png", dataUrl.split(",")[1], { base64: true });
+  let rels = zip.file("word/_rels/document.xml.rels").asText();
+  rels = rels.replace("</Relationships>", '<Relationship Id="rIdFirmaUsuario" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/firma-usuario.png"/></Relationships>');
+  zip.file("word/_rels/document.xml.rels", rels);
+  const dims = await new Promise((ok) => { const i = new Image(); i.onload = () => ok([i.naturalWidth, i.naturalHeight]); i.onerror = () => ok([400, 160]); i.src = dataUrl; });
+  const cx = 1800000, cy = Math.round(cx * dims[1] / dims[0]); // 5 cm wide
+  const drawing = `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9001" name="Firma electrónica"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="9001" name="firma-usuario.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdFirmaUsuario" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+  let doc = zip.file("word/document.xml").asText();
+  const at = doc.indexOf("______");
+  const start = doc.lastIndexOf("<w:p>", at);
+  doc = doc.slice(0, start) + `<w:p><w:pPr><w:pStyle w:val="Sinespaciado"/><w:keepNext/><w:jc w:val="left"/></w:pPr>${drawing}</w:p>` + doc.slice(start);
+  zip.file("word/document.xml", doc);
+  return zip.generate({ type: "blob", mimeType: word.type });
 }
 /** Saves Word and PDF in the case, once per receipt. Returns true when they are (now) in the case. */
 async function saveReceiptToCase(r, files) {

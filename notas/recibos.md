@@ -19,3 +19,5 @@ Pedido de John (19/10/2026, hilo «Recibos de pago con firma»). Instrucciones c
 - Firmante: columnas `users.legal_name` e `id_number` (Usuarios → editar) y `professional_card`; el recibo toma los del usuario que lo registró.
 - Borrado: `DELETE /payments/receipts/:id` y borrar un documento `recibo` solo Gerencia, con `backupBeforeReceiptDelete` antes; el enlace guarda lo borrado en `receiptTrash`.
 - Pruebas: `test/v258-recibos.test.js` (servidor y enlace dan lo mismo).
+
+- v2.59 (19/10/2026, John): el recibo debe quedar con el formato (proforma), membrete y pie exactamente iguales a los demás Word; y lleva la firma electrónica del usuario (menú del usuario → «Mi firma electrónica», dibujada; se estampa sobre su nombre).

@@ -146,6 +146,7 @@
         <div class="user-pop">
           <p class="muted" id="user-offices"></p>
           <button type="button" data-action="my-photo">Mi foto</button>
+          <button type="button" data-action="my-signature">Mi firma electrónica</button>
           <button type="button" data-action="display-prefs">Pantalla: letra, vista, día o noche</button>
           <button type="button" data-action="change-email">Cambiar correo</button>
           <button type="button" data-action="change-password">Cambiar contraseña</button>
@@ -1023,6 +1024,20 @@
       </div>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+  <!-- Firma electrónica propia del funcionario (versión 2.59) -->
+  <dialog id="my-signature-dialog">
+    <form method="dialog">
+      <h3>Mi firma electrónica</h3>
+      <p class="hint">Dibújela con el mouse, el dedo o un lápiz. Se estampa sobre su nombre en los recibos que usted genere. Solo usted puede cambiarla.</p>
+      <canvas id="my-signature-pad" class="sig-canvas"></canvas>
+      <div class="dialog-actions">
+        <button type="button" data-my-sign="clear">Borrar trazo</button>
+        <button type="button" data-my-sign="remove" hidden>Quitar mi firma</button>
+        <button value="cancel" formnovalidate>Cerrar</button>
+        <button type="button" class="primary" data-my-sign="save">Guardar firma</button>
       </div>
     </form>
   </dialog>
