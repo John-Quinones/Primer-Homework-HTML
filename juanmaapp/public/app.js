@@ -2233,7 +2233,7 @@ async function renderBackups() {
   const when = (ms) => new Date(ms).toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "medium", timeStyle: "short" });
   const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
   $("#backups-summary").textContent = !b.enabled ? "Las copias automáticas están desactivadas en este servidor (BACKUP_DIR=off)."
-    : `Se hace una copia completa cada ${b.every_days} días y se guardan las ${b.keep} más recientes. Próxima copia: ${when(b.next_ms)}.`;
+    : `Se hace una copia completa cada ${b.every_days} días y se guardan las ${b.keep} más recientes. Próxima copia: ${when(b.next_ms)} (o en cuanto la App vuelva a estar en uso).`;
   const failed = b.log.find((r) => !r.ok);
   $("#backups-list").innerHTML = (failed && b.log[0] === failed ? `<li><span class="badge warn">Falló</span> ${escapeHtml(when(failed.at_ms))} <span class="muted">${escapeHtml(failed.error)}</span></li>` : "")
     + (b.files.length ? b.files.map((f) => `<li><span class="badge ok">Copia</span> <strong>${escapeHtml(f.file)}</strong> <span class="muted">${mb(f.size)}</span>
