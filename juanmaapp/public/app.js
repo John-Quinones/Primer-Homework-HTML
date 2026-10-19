@@ -691,7 +691,7 @@ async function renderClientDetail() {
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
       ${row("Correo", c.email)}${row("Teléfono", c.phone)}
       ${row("Dirección", c.address)}
-      ${row("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}
+      ${row("Ciudad de residencia", [c.city, c.department].filter(Boolean).join(" · "))}
       ${row("Oficina", c.office_name)}
       ${row("Notas", c.notes)}
     </dl>
@@ -741,7 +741,7 @@ async function renderClienteFicha(id) {
           ${c.person_type === "juridica" ? "" : factRow("Expedida en", idPlace(c))}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
           ${factRow("Correo", c.email)}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
-          ${factRow("Ciudad", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
+          ${factRow("Ciudad de residencia", [c.city, c.department].filter(Boolean).join(" · "))}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
       ${consents ? consentPanel(c, consents) : ""}
