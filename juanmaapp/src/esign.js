@@ -4,6 +4,7 @@
 // Signers can also sign in person on an office device.
 import { publicBase } from "./public-url.js";
 import express from "express";
+import { str } from "./http.js";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { can, scopeOf } from "./auth.js";
 import { sendEmail, sendSms, sendWhatsapp, sendWhatsappCode, channelReady } from "./notify.js";
@@ -14,7 +15,6 @@ import { legalVersion, legalDoc, signMailParts, mailOptions } from "./legal.js";
 import { signersProblem } from "./person.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const MAX_PDF = 10 * 1024 * 1024;
 const OTP_MINUTES = 10;
 const PNG = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;

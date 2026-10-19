@@ -287,6 +287,7 @@ export function deviceOf(ua = "") {
 }
 // Module and record for an API path (method + path without /api).
 const AUDIT_ENTITIES = [
+  [/^\/admin\/backups/, "Configuración", "copia de seguridad"],
   [/^\/cases\/(\d+)\/documents/, "Expedientes", "documento del expediente", "case"],
   [/^\/cases(?:\/(\d+))?/, "Expedientes", "expediente", "case"],
   [/^\/clients\/(\d+)\/consent/, "Clientes", "autorización de datos"],

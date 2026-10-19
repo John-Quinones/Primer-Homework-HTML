@@ -1,6 +1,7 @@
 // Document templates: the firm's own Word (.docx) or text files plus the
 // starter ones, and the values a case provides to fill {{variables}}.
 import express from "express";
+import { str } from "./http.js";
 import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
@@ -10,7 +11,6 @@ import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES } from "./templates-seed.js";
 
 const MAX_FILE = 8 * 1024 * 1024;
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
 export function seedTemplates(db) {

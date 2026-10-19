@@ -3,11 +3,12 @@
 import { TASK_KIND_LABEL } from "./case-meta.js";
 import { findByRadicado, actuaciones } from "./ramajudicial.js";
 import { sendEmail, sendWhatsapp } from "./notify.js";
-import { loadUser, scopeOf } from "./auth.js";
+import { loadUser, scopeOf, inTransaction } from "./auth.js";
 import { LIVE_STATUSES } from "./case-meta.js";
 import { paymentReminders } from "./payments.js";
 import { withDecisions } from "./decision.js";
 import { formatRadicado } from "./portals.js";
+import { backupIfDue } from "./backup.js";
 
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
 const OPEN = LIVE_STATUSES;
@@ -20,9 +21,10 @@ export function bogota(date = new Date()) {
 export const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
 const sqlUtc = (ms) => new Date(ms).toISOString().slice(0, 19).replace("T", " ");
 
+/** Adds a bell notification; a repeated key is ignored. Returns true when a new one was added. */
 export function notify(db, userId, kind, title, body, link, key) {
-  db.prepare(`INSERT OR IGNORE INTO notifications (user_id, kind, title, body, link, key) VALUES (?, ?, ?, ?, ?, ?)`)
-    .run(userId, kind, title, body, link, key ?? null);
+  return db.prepare(`INSERT OR IGNORE INTO notifications (user_id, kind, title, body, link, key) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(userId, kind, title, body, link, key ?? null).changes > 0;
 }
 
 // ---------- Rama Judicial checks ----------
@@ -45,8 +47,8 @@ export async function checkCase(db, caseId) {
     const acts = await actuaciones(processId);
     const ins = db.prepare(`INSERT OR IGNORE INTO actuaciones (case_id, ext_key, fecha, actuacion, anotacion, fecha_inicial, fecha_final)
       VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    let inserted = 0;
-    for (const a of acts) inserted += ins.run(caseId, a.key, a.fecha, a.actuacion, a.anotacion, a.fecha_inicial, a.fecha_final).changes;
+    // One transaction for the whole list: one disk write instead of one per actuación.
+    const inserted = inTransaction(db, () => acts.reduce((n, a) => n + ins.run(caseId, a.key, a.fecha, a.actuacion, a.anotacion, a.fecha_inicial, a.fecha_final).changes, 0));
     // The first successful check only records history; novelties start after it.
     const newCount = hadBaseline ? inserted : 0;
     const last = acts.map((a) => a.fecha).sort().at(-1) || null;
@@ -191,24 +193,22 @@ export function taskReminders(db, now = new Date()) {
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id WHERE t.status = 'pendiente'`).all();
   const KIND = TASK_KIND_LABEL;
   let created = 0;
-  for (const t of tasks) {
-    const due = bogotaMs(t.due_at);
-    const who = t.assigned_user_id || t.case_user || t.created_by;
-    if (!who) continue;
-    for (const d of JSON.parse(t.remind_days || "[]")) {
-      if (nowMs >= due - d * 86400000 && nowMs < due) {
-        const when = d === 0 ? "hoy" : d === 1 ? "mañana" : `en ${d} días`;
-        const before = db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE key = ?").get(`task:${t.id}:${d}`).n;
-        notify(db, who, t.kind, `${KIND[t.kind]} ${when}: ${t.title}`, `${t.due_at} · ${t.client}${t.location ? " · " + t.location : ""}`, `#expediente-${t.case_id}`, `task:${t.id}:${d}`);
-        if (!before) created++;
+  // Runs every minute: one transaction, and notify() itself says whether the reminder is new
+  // (its key makes each one fire once), instead of a separate count query per reminder.
+  inTransaction(db, () => {
+    for (const t of tasks) {
+      const due = bogotaMs(t.due_at);
+      const who = t.assigned_user_id || t.case_user || t.created_by;
+      if (!who) continue;
+      for (const d of JSON.parse(t.remind_days || "[]")) {
+        if (nowMs >= due - d * 86400000 && nowMs < due) {
+          const when = d === 0 ? "hoy" : d === 1 ? "mañana" : `en ${d} días`;
+          if (notify(db, who, t.kind, `${KIND[t.kind]} ${when}: ${t.title}`, `${t.due_at} · ${t.client}${t.location ? " · " + t.location : ""}`, `#expediente-${t.case_id}`, `task:${t.id}:${d}`)) created++;
+        }
       }
+      if (nowMs >= due && notify(db, who, "vencida", `${KIND[t.kind]} vencida: ${t.title}`, `${t.due_at} · ${t.client}`, `#expediente-${t.case_id}`, `task:${t.id}:overdue`)) created++;
     }
-    if (nowMs >= due) {
-      const before = db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE key = ?").get(`task:${t.id}:overdue`).n;
-      notify(db, who, "vencida", `${KIND[t.kind]} vencida: ${t.title}`, `${t.due_at} · ${t.client}`, `#expediente-${t.case_id}`, `task:${t.id}:overdue`);
-      if (!before) created++;
-    }
-  }
+  });
   return created;
 }
 
@@ -220,6 +220,11 @@ export function startScheduler(db, { intervalMs = 60000 } = {}) {
   const tick = async (at = new Date()) => {
     try {
       taskReminders(db, at);
+      // Copy of the database every BACKUP_DAYS days (version 2.42); a failure rings Gerencia's bell.
+      backupIfDue(db, { now: at.getTime(), onFail: (r) => {
+        for (const u of db.prepare("SELECT id FROM users WHERE role = 'Gerencia' AND active = 1").all())
+          notify(db, u.id, "respaldo", "No se pudo hacer la copia de seguridad", r.error, "#configuracion", `backup-fail:${bogota(at).slice(0, 10)}`);
+      } });
       const now = bogota(at);
       const hhmm = now.slice(11, 16);
       // Payment reminders once a day at 8:00 (Colombia).

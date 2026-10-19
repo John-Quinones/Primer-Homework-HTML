@@ -2218,8 +2218,31 @@ async function renderChannels() {
   $$("[data-action=test-email], [data-action=test-whatsapp], [data-action=test-tsa], #channel-test-to").forEach((el) => (el.disabled = !!c.web));
 }
 
+// Database copies (version 2.42): every 3 days on the server, Gerencia sees and downloads them.
+async function renderBackups() {
+  const panel = $("#backups-panel");
+  panel.hidden = !isGerencia();
+  if (panel.hidden) return;
+  const b = await api("GET", "/admin/backups");
+  $("[data-action=backup-now]").disabled = !b.enabled;
+  if (b.web) {
+    $("#backups-summary").textContent = "En el enlace de prueba los datos viven en la base del enlace; las copias automáticas se hacen en el servidor (Azure).";
+    $("#backups-list").innerHTML = "";
+    return;
+  }
+  const when = (ms) => new Date(ms).toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "medium", timeStyle: "short" });
+  const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
+  $("#backups-summary").textContent = !b.enabled ? "Las copias automáticas están desactivadas en este servidor (BACKUP_DIR=off)."
+    : `Se hace una copia completa cada ${b.every_days} días y se guardan las ${b.keep} más recientes. Próxima copia: ${when(b.next_ms)}.`;
+  const failed = b.log.find((r) => !r.ok);
+  $("#backups-list").innerHTML = (failed && b.log[0] === failed ? `<li><span class="badge warn">Falló</span> ${escapeHtml(when(failed.at_ms))} <span class="muted">${escapeHtml(failed.error)}</span></li>` : "")
+    + (b.files.length ? b.files.map((f) => `<li><span class="badge ok">Copia</span> <strong>${escapeHtml(f.file)}</strong> <span class="muted">${mb(f.size)}</span>
+      <a class="mini" href="/api/admin/backups/${encodeURIComponent(f.file)}" download>Descargar</a></li>`).join("") : "<li class=\"muted\">Todavía no hay copias.</li>");
+}
+
 async function renderConfiguracion() {
   renderChannels().catch(() => {});
+  renderBackups().catch(() => {});
   await loadCatalog();
   const open = new Set($$("#catalog details[open]").map((d) => d.dataset.cat));
   const arrows = (kind, id, first, last) => `<span class="order-btns">
@@ -2372,6 +2395,11 @@ document.addEventListener("click", (e) => {
     "test-email": async () => {
       const r = await api("POST", "/admin/test-channel", { channel: "email", to: $("#channel-test-to").value });
       $("#channel-test-result").textContent = r.ok ? `Correo de prueba enviado a ${r.detail}. Revise la bandeja (y el correo no deseado).` : `No se envió: ${r.detail}`;
+    },
+    "backup-now": async () => {
+      const r = await api("POST", "/admin/backups");
+      toast(`Copia hecha: ${r.file}`);
+      renderBackups().catch(() => {});
     },
     "test-tsa": async () => {
       const r = await api("POST", "/admin/test-tsa");

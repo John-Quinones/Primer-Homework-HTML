@@ -2,13 +2,13 @@
 // with consecutive numbers, the accounts-receivable portfolio (cartera) with
 // aging, and payment reminders to the client by e-mail or WhatsApp.
 import express from "express";
+import { str, HttpError } from "./http.js";
 import { scopeOf } from "./auth.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 import { bogota } from "./monitor.js";
 import { METHODS, AGING, STATE_LABELS, applyPayments, portfolio, clientRows, reminderMessage, splitAmount, addMonths, addDays, fmtCOP,
   RECEIPT_START, nextReceiptNumber, receiptLabel, collectionWindow } from "./ledger.js";
 
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (v) => (typeof v === "number" ? Math.round(v) : Number(String(v ?? "").replace(/[^\d]/g, "")));
 const today = (now = new Date()) => bogota(now).slice(0, 10);
@@ -28,10 +28,6 @@ export function paymentSettings(db) {
 let clock = () => new Date();
 export const setPaymentsClock = (fn) => { clock = fn || (() => new Date()); };
 const colombiaNow = (d) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
-
-class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
 
 // Visible rows: in my offices (everything with scope.all).
 const officeSql = (user, col) => {

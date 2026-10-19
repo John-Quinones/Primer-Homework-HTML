@@ -1,12 +1,12 @@
 // Court directory (despachos judiciales) loaded from the Rama Judicial's
 // official directory file, filtered by department, city and area.
 import express from "express";
+import { str } from "./http.js";
 import { can } from "./auth.js";
 import { courtCircuit, filterCourts } from "./case-meta.js";
 import { judgeByRadicado } from "./ramajudicial.js";
 import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
 
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 
 export function courtsRouter(db) {
   const r = express.Router();

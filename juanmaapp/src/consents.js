@@ -4,6 +4,7 @@
 // consent_texts), when, how (private link or in person with a drawn
 // signature), the IP and browser, and a hash chained to the previous record.
 import express from "express";
+import { str, HttpError } from "./http.js";
 import { createHash, randomBytes } from "node:crypto";
 import { can, scopeOf, inTransaction } from "./auth.js";
 import { sendEmail, sendWhatsapp } from "./notify.js";
@@ -12,7 +13,6 @@ import { VERSION } from "./version.js";
 import { CONSENT_ITEMS, CONSENT_METHODS, legalVersion, setLegalVersion, FIRM, consentItem, consentText, consentCanonical, consentStatus, isServiceContract, policyItemsToAsk } from "./legal.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const digits = (v) => String(v || "").replace(/\D/g, "");
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const PNG = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
@@ -74,9 +74,6 @@ CREATE TRIGGER IF NOT EXISTS consent_records_no_delete BEFORE DELETE ON consent_
   BEGIN SELECT RAISE(ABORT, 'Las autorizaciones no se borran.'); END;
 `;
 
-class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; this.expose = true; }
-}
 const fail = (msg, status = 400) => { throw new HttpError(status, msg); };
 
 /** Store each answer of one submission, chained to the last record. */

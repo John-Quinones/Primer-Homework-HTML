@@ -8,6 +8,7 @@
 // evidence of sending and receipt; legally "certified" e-mail requires an
 // accredited provider (ONAC), which can be connected later.
 import express from "express";
+import { str } from "./http.js";
 import { createHash, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { scopeOf } from "./auth.js";
@@ -26,7 +27,6 @@ function mailEvent(db, messageId, event, detail = "", req = null) {
 }
 // Builds the MIME message once, so the bytes hashed are exactly the bytes handed to the SMTP server.
 const composer = nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "windows" });
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 // req.ip honours "trust proxy" (TRUST_PROXY=1 behind Render), so a client cannot forge it otherwise.
 const clientIp = (req) => String(req.ip || req.socket.remoteAddress || "");

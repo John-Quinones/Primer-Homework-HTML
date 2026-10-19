@@ -12,6 +12,7 @@ import { normStatus, courtCircuit, isImportedRadicadoLabel, radicadosFromNumbers
 import { placeFromRadicado } from "./places.js";
 import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
+import { dbFiles } from "./backup.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -456,6 +457,7 @@ export const SEED_CATALOG = [
 export function openDb(file = process.env.DB_PATH || "data/juanmaapp.db") {
   if (file !== ":memory:") mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
+  dbFiles.set(db, file); // where the automatic copies go (version 2.42)
   db.exec(SCHEMA);
 
   migrate(db);

@@ -1,6 +1,7 @@
 // REST routes for clients, the process catalog (categories → sub-processes →
 // custom fields) and cases. Mounted under /api by app.js.
 import express from "express";
+import { str, HttpError, toInt } from "./http.js";
 import { createHash } from "node:crypto";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
@@ -18,25 +19,11 @@ const NAME_FIELDS = ["full_name", "id_type", "person_type", "first_names", "last
 
 const fail400 = (msg) => { throw new HttpError(400, msg); };
 
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-const str = (v) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 
 function requireText(value, label) {
   const s = str(value);
   if (!s) throw new HttpError(400, `${label} es obligatorio.`);
   return s;
-}
-
-function toInt(value, label) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0) throw new HttpError(400, `${label} no es válido.`);
-  return n;
 }
 
 function plain(row) {
@@ -343,10 +330,12 @@ export function recordsRouter(db) {
     const { parties, error } = cleanParties(list);
     if (error) throw new HttpError(400, error);
     const digits = (x) => String(x || "").replace(/\D/g, "");
+    let allClients = null; // read once per request, only when a party needs a lookup by document
     for (const p of parties) {
       if (p.client_id && !clientVisible(req, p.client_id)) p.client_id = null;
       if (p.ours && !p.client_id && digits(p.id_number).length >= 5) {
-        const found = db.prepare("SELECT id, id_number FROM clients").all().find((c) => digits(c.id_number) === digits(p.id_number));
+        allClients ??= db.prepare("SELECT id, id_number FROM clients").all();
+        const found = allClients.find((c) => digits(c.id_number) === digits(p.id_number));
         if (found && clientVisible(req, found.id)) p.client_id = found.id;
       }
       if (!p.ours) p.client_id = null;
