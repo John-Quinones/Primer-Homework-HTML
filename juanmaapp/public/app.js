@@ -1987,7 +1987,7 @@ function renderRoleChips() {
   const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
   const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
   const mine = CMETA.sideOfRole(sel.value);
-  box.innerHTML = ["activa", "pasiva"].map((side) => `<label class="role-chip${mine === side ? " on" : ""}"><input type="checkbox" data-side-pick="${side}" ${mine === side ? "checked" : ""} /> ${escapeHtml(labels[side])}</label>`).join("");
+  box.innerHTML = ["activa", "pasiva"].map((side) => `<label class="inline toggle"><input type="checkbox" data-side-pick="${side}" ${mine === side ? "checked" : ""} /> ${escapeHtml(labels[side])}</label>`).join("");
 }
 $("#role-chips").addEventListener("change", (e) => {
   const side = e.target.dataset.sidePick;
@@ -2225,8 +2225,9 @@ async function openCaseDialog(k = null, clientId = null) {
   openDialog($("#case-dialog"), k ? `Editar expediente${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}` : "Nuevo expediente", k ? {
     id: k.id, title: k.title, status: k.status, counterparty: k.counterparty, facts: k.facts,
     radicado: k.radicado ? formatRadicado(k.radicado) : "", department: k.department, city: k.city, area: k.area,
-    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "", affiliated: k.affiliated ? "1" : "0",
-  } : { affiliated: "0" });
+    court_search: k.court_name, court_id: k.court_id ?? "", judge_name: k.judge_name || "",
+  } : {});
+  caseForm.elements.affiliated.checked = !!k?.affiliated;
   caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = !!k?.monitor; // v2.38: off until the user ticks it
   caseForm.elements.ad_litem.checked = !!k?.ad_litem; // v2.61
@@ -2258,7 +2259,7 @@ wireDialog($("#case-dialog"), async (form) => {
     client_id: Number(form.elements.client_id.value),
     process_type_id: Number(d.process_type_id),
     title: d.title, status: d.status, counterparty: d.counterparty, facts: d.facts, field_values,
-    client_role: d.client_role, affiliated: d.affiliated === "1",
+    client_role: d.client_role, affiliated: form.elements.affiliated.checked,
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
