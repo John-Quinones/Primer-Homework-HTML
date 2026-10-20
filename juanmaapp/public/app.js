@@ -689,7 +689,7 @@ async function renderClientDetail() {
       ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
       ${c.person_type === "juridica" ? "" : row("Cédula expedida en", idPlace(c) || "Sin indicar")}
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
-      ${row("Correo", c.email)}${row("Teléfono", c.phone)}
+      ${row("Correo", c.email || "Sin indicar")}${row("Teléfono", c.phone)}
       ${row("Dirección", c.address)}
       ${row("Residencia", residence(c) || "Sin indicar")}
       ${row("Afiliado", c.affiliated ? "Sí" : "No")}
@@ -741,7 +741,7 @@ async function renderClienteFicha(id) {
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
           ${c.person_type === "juridica" ? "" : factRow("Cédula expedida en", idPlace(c) || "Sin indicar")}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
-          ${factRow("Correo", c.email)}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
+          ${factRow("Correo", c.email || "Sin indicar")}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
           ${factRow("Residencia", residence(c) || "Sin indicar")}${factRow("Afiliado", c.affiliated ? "Sí" : "No")}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
