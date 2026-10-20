@@ -65,6 +65,10 @@ export const VARIABLES = [
   ["honorarios.cuotas", "Número de cuotas", "Honorarios"],
   ["honorarios.pagado", "Valor ya pagado", "Honorarios"],
   ["honorarios.saldo", "Saldo por pagar", "Honorarios"],
+  ["honorarios.modalidad", "Modalidad de honorarios (marque Honorarios, Cuota de litis o Mixto y escriba los valores)", "Honorarios"],
+  ["honorarios.fijo", "Honorarios fijos en número y letras (según la casilla)", "Honorarios"],
+  ["honorarios.litis_valor", "Cuota de litis en pesos, en número y letras (según la casilla)", "Honorarios"],
+  ["honorarios.litis_porcentaje", "Cuota de litis en porcentaje, en número y letras (según la casilla)", "Honorarios"],
   ["fecha.hoy", "Fecha de hoy (14 de octubre de 2026)", "Fecha"],
   ["fecha.ciudad_y_fecha", "Ciudad y fecha (Ibagué, 14 de octubre de 2026)", "Fecha"],
 ].map(([key, label, group]) => ({ key, label, group }));

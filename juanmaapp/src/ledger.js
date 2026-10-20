@@ -156,8 +156,8 @@ export function collectionWindow(when) {
   return { ok: true, reason: "" };
 }
 
-/** "Un millón quinientos mil pesos m/cte." — amounts in words for receipts and contracts. */
-export function pesosEnLetras(n) {
+/** Whole number in Spanish words, lower case: 35 → "treinta y cinco", 2000000 → "dos millones". */
+export function numeroEnLetras(n) {
   const U = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince",
     "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco",
     "veintiséis", "veintisiete", "veintiocho", "veintinueve"];
@@ -179,10 +179,55 @@ export function pesosEnLetras(n) {
     if (rest) out.push(under1000(rest));
     return out.join(" ");
   };
+  return apocope(words(Math.round(n)));
+}
+
+/** "Un millón quinientos mil pesos m/cte." — amounts in words for receipts and contracts. */
+export function pesosEnLetras(n) {
   const n0 = Math.round(n);
-  const w = apocope(words(n0));
+  const w = numeroEnLetras(n0);
   const de = n0 >= 1e6 && n0 % 1e6 === 0 ? " de" : "";
   return (w.charAt(0).toUpperCase() + w.slice(1) + de + (n0 === 1 ? " peso" : " pesos") + " m/cte.");
+}
+
+/** Pesos typed by a person: "2000", "$2000", "2.000.000", "2,000,000" → 2000, 2000, 2000000, 2000000 (null if none). */
+export function pesosFromText(text) {
+  let s = String(text ?? "").replace(/[$\s]/g, "").replace(/[.,]\d{1,2}$/, "");
+  s = s.replace(/[.,]/g, "");
+  return /^\d+$/.test(s) && Number(s) > 0 ? Number(s) : null;
+}
+const dots = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+/** "$2.000" — the way a contract writes an amount typed as a plain number. */
+export const fmtPesos = (n) => "$" + dots(Math.round(n));
+
+/**
+ * Fee terms of a services contract (version 2.67). `tipo` is "Honorarios", "Cuota de litis" or "Mixto";
+ * `fijo` and `litis` are what the person typed (pesos, or a percentage such as «35%» for the cuota de litis).
+ * Every amount comes out as number and words: «$2.000.000 (dos millones de pesos m/cte.)».
+ * Only the parts that apply are returned, so the passages of the Word for the others disappear, and
+ * `honorarios.modalidad` appears only when every amount the type needs is valid (otherwise the Word shows it as missing).
+ */
+export function feeTerms(tipo, fijo, litis) {
+  const t = String(tipo ?? "").trim().toLowerCase();
+  const money = (n) => `${fmtPesos(n)} (${pesosEnLetras(n).replace(/^./, (c) => c.toLowerCase())})`;
+  const out = {};
+  const wantFijo = t === "honorarios" || t === "mixto", wantLitis = t === "cuota de litis" || t === "mixto";
+  const n = wantFijo ? pesosFromText(fijo) : null;
+  if (n) out["honorarios.fijo"] = money(n);
+  if (wantLitis) {
+    const text = String(litis ?? "").trim();
+    const pct = text.match(/^(\d{1,3})\s*(?:%|por\s*ciento)$/i);
+    if (pct) {
+      const p = Number(pct[1]);
+      if (p > 0 && p <= 100) out["honorarios.litis_porcentaje"] = `${numeroEnLetras(p)} por ciento (${p} %)`;
+    } else {
+      const v = pesosFromText(text);
+      if (v) out["honorarios.litis_valor"] = money(v);
+    }
+  }
+  const ok = (!wantFijo || out["honorarios.fijo"]) && (!wantLitis || out["honorarios.litis_porcentaje"] || out["honorarios.litis_valor"]);
+  if ((wantFijo || wantLitis) && ok) out["honorarios.modalidad"] = t === "mixto" ? "honorarios fijos y cuota de litis" : wantFijo ? "honorarios fijos" : "cuota de litis";
+  return out;
 }
 
 const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];

@@ -646,6 +646,13 @@ body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-ja
 #case-rows .row-actions button { margin: 2px 0; }
 .fees-box { margin: 10px 0; }
 .fees-box .grid4 { align-items: end; }
+/* Contract fee checklist (version 2.66). */
+.fee-kind { grid-column: 1 / -1; margin: 0 0 10px; padding: 10px 14px; border: 1px solid var(--border, #c4c8cb); border-radius: 12px; }
+.fee-kind legend { font-weight: 600; padding: 0 6px; }
+.fee-kind .fee-choices { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-bottom: 8px; }
+.fee-kind label[hidden] { display: none; }
+.fee-kind label:not(.inline) { display: block; margin-bottom: 10px; }
+.fee-kind label:not(.inline) .muted { display: block; margin-top: 2px; }
 
 /* Display preferences (change 37): badge with the layout in use, forced mobile layout on wide screens. */
 .view-badge {

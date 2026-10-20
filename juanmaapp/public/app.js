@@ -4070,7 +4070,37 @@ const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label ||
 const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
-  return { ...v, ...CMETA.genderWords(v["cliente.genero"]) }; // the gendered words follow the chosen gender
+  // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
+  return { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis]) };
+};
+// Version 2.67: «Honorarios / Cuota de litis / Mixto» checklist of the services contract; the amounts are typed as plain
+// numbers and the contract writes them as «$2.000 (dos mil pesos m/cte.)». The three data are kept in the case.
+const FEE = { tipo: "campo.Tipo de honorarios", fijo: "campo.Honorarios valor", litis: "campo.Cuota de litis" };
+const FEE_VARS = ["honorarios.modalidad", "honorarios.fijo", "honorarios.litis_porcentaje", "honorarios.litis_valor"];
+const usesFeeChecklist = () => !!tplActive?.vars.some((k) => FEE_VARS.includes(k));
+function feeChecklist(vals) {
+  const tipo = vals[FEE.tipo] || "";
+  const show = (kind) => (kind === "fijo" ? ["Honorarios", "Mixto"] : ["Cuota de litis", "Mixto"]).includes(tipo);
+  const preview = (k, extra) => { const t = L.feeTerms(tipo, vals[FEE.fijo], vals[FEE.litis]); return t[k] || extra ? `En el contrato: ${t[k] || extra}` : ""; };
+  const choice = (o, label) => `<label class="inline"><input type="checkbox" data-fee-kind="${o}" ${tipo === o ? "checked" : ""} /> ${label}</label>`;
+  return `<fieldset class="fee-kind" data-fee-block><legend>Honorarios del contrato</legend>
+    <div class="fee-choices">${choice("Honorarios", "Honorarios")}${choice("Cuota de litis", "Cuota de litis")}${choice("Mixto", "Mixto (ambos)")}</div>
+    <input type="hidden" data-var="${FEE.tipo}" value="${escapeHtml(tipo)}" />
+    <label data-fee-field="fijo" ${show("fijo") ? "" : "hidden"}>Valor de los honorarios (solo números)
+      <input data-var="${FEE.fijo}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.fijo] ?? "")}" placeholder="Ej. 2000000" class="${vals[FEE.fijo] && L.pesosFromText(vals[FEE.fijo]) ? "" : "missing"}" />
+      <span class="muted" data-fee-preview="fijo">${escapeHtml(preview("honorarios.fijo"))}</span></label>
+    <label data-fee-field="litis" ${show("litis") ? "" : "hidden"}>Cuota de litis (valor en números o porcentaje, ej. 35%)
+      <input data-var="${FEE.litis}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.litis] ?? "")}" placeholder="Ej. 5000000 o 35%" class="${vals[FEE.litis] ? "" : "missing"}" />
+      <span class="muted" data-fee-preview="litis">${escapeHtml(preview("honorarios.litis_valor") || preview("honorarios.litis_porcentaje"))}</span></label>
+    ${tipo ? "" : '<p class="muted">Marque una opción para que el contrato lleve los honorarios.</p>'}
+  </fieldset>`;
+}
+// The number the person typed becomes «$2.000» (or «35 %») when they leave the box.
+const feeShown = (key, text) => {
+  const t = String(text).trim();
+  if (key === FEE.litis && /^\d{1,3}\s*(%|por\s*ciento)$/i.test(t)) return `${parseInt(t, 10)} %`;
+  const n = L.pesosFromText(t);
+  return n ? L.fmtPesos(n) : t;
 };
 
 // Data the document still lacks (an optional passage never counts).
@@ -4092,9 +4122,9 @@ function renderTplVars() {
   $("#tpl-vars-box").open = missing.length > 0;
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
-  const ordered = tplActive.vars.filter((k) => tplRecipient.hidden || !k.startsWith("destinatario.")).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
+  const ordered = tplActive.vars.filter((k) => !FEE_VARS.includes(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
-  $("#tpl-vars").innerHTML = ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
+  $("#tpl-vars").innerHTML = (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
     <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
     : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>
@@ -4102,7 +4132,7 @@ function renderTplVars() {
     : `<label>${escapeHtml(varLabel(k))}
     <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea)" : "Falta"}" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
     || '<p class="muted">Esta plantilla no tiene variables.</p>';
-  $("#tpl-fields-row").hidden = !($("#tpl-case").value && can("cases.write") && tplActive.vars.some((k) => k.startsWith("campo.")));
+  $("#tpl-fields-row").hidden = !($("#tpl-case").value && can("cases.write") && (usesFeeChecklist() || tplActive.vars.some((k) => k.startsWith("campo."))));
 }
 const isDateVar = (k) => k.startsWith("campo.") && CMETA.fieldTypeFor(k.slice(6)) === "date";
 const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -4118,6 +4148,23 @@ $("#tpl-vars").addEventListener("input", (e) => {
   i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var] && !isOptionalVar(i.dataset.var));
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
   if (i.tagName === "SELECT") renderTplVars();
+});
+// Checklist of the fees: one box at a time (Mixto = both); typed numbers are shown as $ with dots when the box is left.
+$("#tpl-vars").addEventListener("change", (e) => {
+  const kind = e.target.closest("[data-fee-kind]");
+  if (kind) {
+    tplOverrides[FEE.tipo] = kind.checked ? kind.dataset.feeKind : "";
+    renderTplVars();
+    if (!$("#tpl-edit-mode").checked) renderTplDoc();
+    return;
+  }
+  const money = e.target.closest("[data-fee-money]");
+  if (money) {
+    money.value = feeShown(money.dataset.var, money.value);
+    tplOverrides[money.dataset.var] = money.value.trim();
+    renderTplVars();
+    if (!$("#tpl-edit-mode").checked) renderTplDoc();
+  }
 });
 $("#tpl-vars").addEventListener("click", (e) => {
   if (!e.target.closest("[data-save-gender]")) return;
