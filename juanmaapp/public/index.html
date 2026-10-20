@@ -1064,14 +1064,14 @@
           </select>
         </label>
       </div>
-      <div class="grid2">
-        <label class="inline toggle"><input type="checkbox" name="affiliated" /> Cliente afiliado</label>
-        <label class="inline toggle"><input type="checkbox" name="ad_litem" /> Somos curadores ad-litem en este proceso</label>
-      </div>
       <fieldset class="parties-box"><legend>Partes del proceso</legend>
         <p class="muted-line">Marque en qué parte del proceso está nuestro cliente: <strong data-main-name></strong></p>
         <select name="client_role" hidden></select>
         <div id="role-chips" class="role-chips" role="group" aria-label="Parte del proceso en la que está nuestro cliente"></div>
+        <div class="role-chips" role="group" aria-label="Condición del cliente en el proceso">
+          <label class="inline toggle"><input type="checkbox" name="affiliated" /> Cliente afiliado</label>
+          <label class="inline toggle"><input type="checkbox" name="ad_litem" /> Actuamos como curadores ad-litem</label>
+        </div>
         <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios), elija el <strong>rol</strong> de cada uno (demandante, demandado, denunciante, denunciado…) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
         <div class="parties-grid">
           <div class="party-side" data-side="activa"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="activa">+ Agregar</button></div>

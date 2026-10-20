@@ -23,16 +23,20 @@ export function normStatus(x) {
 export const PARTY_ROLES = {
   judicial: ["Demandante", "Demandado"],
   ejecutivo: ["Ejecutante", "Ejecutado"],
-  penal: ["Querellante", "Querellado", "Denunciante", "Denunciado", "Víctima", "Defendido"],
+  penal: ["Denunciante", "Denunciado", "Víctima", "Indiciado", "Acusado", "Procesado"],
+  conciliacion: ["Convocante", "Convocado"],
   peticion: ["Peticionario"],
   reclamo: ["Reclamante"],
 };
-export const ALL_PARTY_ROLES = [...new Set(Object.values(PARTY_ROLES).flat())];
+// Version 2.64: roles that older cases may carry; still accepted, no longer offered.
+const LEGACY_PARTY_ROLES = ["Querellante", "Querellado", "Defendido"];
+export const ALL_PARTY_ROLES = [...new Set([...Object.values(PARTY_ROLES).flat(), ...LEGACY_PARTY_ROLES])];
 
 /** Roles offered for a category and sub-process (e.g. "Laboral", "Ejecutivo Laboral"). */
 export function partyRolesFor(category, type = "") {
   const c = nrm(category), t = nrm(type);
   if (c.includes("penal")) return PARTY_ROLES.penal;
+  if (c.includes("concili") || t.includes("concili")) return PARTY_ROLES.conciliacion;
   if (t.includes("ejecutiv") || c.includes("ejecutiv")) return PARTY_ROLES.ejecutivo;
   if (c.includes("peticion")) return PARTY_ROLES.peticion;
   if (c.includes("datacredito")) return PARTY_ROLES.reclamo;
@@ -241,13 +245,13 @@ export const LEGAL_TERMS = [
 ].map(([area, items]) => [area, items.map(([name, days, unit, norm, kind, judicial = true]) => ({ area, name, days, unit, norm, kind, judicial }))]);
 
 // ----- Parties of the case (change 49): several plaintiffs / defendants, marking which are our clients -----
-const ACTIVE_ROLES = ["Demandante", "Ejecutante", "Querellante", "Denunciante", "Víctima", "Peticionario", "Reclamante"];
+const ACTIVE_ROLES = ["Demandante", "Ejecutante", "Convocante", "Querellante", "Denunciante", "Víctima", "Peticionario", "Reclamante"];
 /** "activa" for the side that sues (demandante, ejecutante…), "pasiva" for the other; "" when unknown. */
 export const sideOfRole = (role) => (!role ? "" : ACTIVE_ROLES.includes(role) ? "activa" : "pasiva");
 /** Plural names of each side for a process: { activa: "Demandantes", pasiva: "Demandados" }. */
 export function sideLabels(category, type = "") {
   const roles = partyRolesFor(category, type);
-  if (roles === PARTY_ROLES.penal) return { activa: "Víctimas o denunciantes", pasiva: "Procesados o denunciados" };
+  if (roles === PARTY_ROLES.penal) return { activa: "Denunciantes o víctimas", pasiva: "Denunciados, indiciados o procesados" };
   if (roles.length < 2) return { activa: `${roles[0]}s`, pasiva: "Entidades o contrapartes" };
   return { activa: `${roles[0]}s`, pasiva: `${roles[1]}s` };
 }

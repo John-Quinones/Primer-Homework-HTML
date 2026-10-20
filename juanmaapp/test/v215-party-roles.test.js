@@ -17,8 +17,11 @@ test("unknown roles are refused", () => {
 
 test("role lists follow the process and keep the others available", () => {
   const penal = sideRoles("Penal");
-  assert.deepEqual(penal.activa, ["Querellante", "Denunciante", "Víctima"]);
-  assert.deepEqual(penal.pasiva, ["Querellado", "Denunciado", "Defendido"]);
+  assert.deepEqual(penal.activa, ["Denunciante", "Víctima"]);
+  assert.deepEqual(penal.pasiva, ["Denunciado", "Indiciado", "Acusado", "Procesado"]);
+  const conc = sideRoles("Conciliación");
+  assert.deepEqual([conc.activa, conc.pasiva], [["Convocante"], ["Convocado"]]);
+  assert.equal(cleanParties([{ side: "pasiva", role: "Querellado", name: "X" }]).error, undefined); // older cases keep their role
   const civil = sideRoles("Civil");
   assert.deepEqual([civil.activa, civil.pasiva], [["Demandante"], ["Demandado"]]);
   assert.ok(civil.others.includes("Denunciado"));
