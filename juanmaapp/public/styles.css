@@ -1211,4 +1211,3 @@ dialog:not([open]) { pointer-events: none; }
 .ad-litem-box { align-self: end; }
 .muted-line { display: block; margin: 4px 0; font-weight: 600; } .muted-line strong { display: inline; }
 .role-chips { gap: 18px; }
-.case-flags { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 8px; }

@@ -923,42 +923,15 @@ const VER_CASE = [["", "Ver expediente"], ["tareas", "Ver tareas"], ["actuacione
 const verCaseButtons = (k, keys = ["", "tareas", "actuaciones", "pagos", "correos"]) => VER_CASE.filter(([x]) => keys.includes(x))
   .map(([x, label]) => `<button class="mini ${x === "" ? "primary" : ""}" data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}">${label}</button>`).join("");
 /** Parties by side, our clients marked (main client included). */
-function partiesView(k, canWrite = false) {
+function partiesView(k) {
   const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
   const mainSide = CMETA.sideOfRole(k.client_role);
   const list = [...(mainSide ? [{ side: mainSide, role: k.client_role, name: k.client_name, ours: true, client_id: k.client_id, main: true }] : []), ...(k.parties || [])];
-  // Version 2.66: the case's own marks are boxes right here (afiliado, curador ad-litem and the side where our client is).
-  const flags = `<div class="case-flags">
-      <label class="inline toggle"><input type="checkbox" data-case-flag="affiliated" data-id="${k.id}" ${k.affiliated ? "checked" : ""} ${canWrite ? "" : "disabled"} /> Cliente afiliado</label>
-      <label class="inline toggle"><input type="checkbox" data-case-flag="ad_litem" data-id="${k.id}" ${k.ad_litem ? "checked" : ""} ${canWrite ? "" : "disabled"} /> Somos curadores ad-litem</label>
-    </div>
-    <p class="muted-line">Marque en qué parte del proceso está nuestro cliente <strong>${escapeHtml(k.client_name || "")}</strong>:</p>`;
-  const sidePick = (side) => `<label class="inline toggle"><input type="checkbox" data-case-side="${side}" data-id="${k.id}" ${mainSide === side ? "checked" : ""} ${canWrite ? "" : "disabled"} /> Nuestro cliente está en esta parte</label>`;
-  const col = (side) => `<div><h4>${escapeHtml(labels[side])}</h4>${sidePick(side)}<ul class="ficha-list">${list.filter((p) => p.side === side).map((p) => `<li><span><strong>${escapeHtml(p.name)}</strong>${p.role ? ` <span class="role-tag">${escapeHtml(p.role)}</span>` : ""}${p.id_number ? ` <span class="muted">${escapeHtml(p.id_number)}</span>` : ""}${p.main ? ' <span class="muted">· cliente principal</span>' : ""}</span>
+  if (!list.length) return "";
+  const col = (side) => `<div><h4>${escapeHtml(labels[side])}</h4><ul class="ficha-list">${list.filter((p) => p.side === side).map((p) => `<li><span><strong>${escapeHtml(p.name)}</strong>${p.role ? ` <span class="role-tag">${escapeHtml(p.role)}</span>` : ""}${p.id_number ? ` <span class="muted">${escapeHtml(p.id_number)}</span>` : ""}${p.main ? ' <span class="muted">· cliente principal</span>' : ""}</span>
       <span>${p.ours ? '<span class="follow ok">Nuestro cliente</span>' : ""}${p.client_id && !p.main ? ` <button class="mini" data-action="go" data-to="#cliente-${p.client_id}">Ver cliente</button>` : ""}</span></li>`).join("") || '<li class="muted">Sin registrar</li>'}</ul></div>`;
-  return `${flags}<div class="parties-view">${col("activa")}${col("pasiva")}</div>`;
+  return `<div class="parties-view">${col("activa")}${col("pasiva")}</div>`;
 }
-// Case screen, «Partes del proceso»: the boxes save at once with a partial PUT.
-document.addEventListener("change", async (e) => {
-  const flag = e.target.dataset?.caseFlag, side = e.target.dataset?.caseSide, id = Number(e.target.dataset?.id);
-  if (!id || !(flag || side)) return;
-  try {
-    let body;
-    if (flag) body = { [flag]: e.target.checked };
-    else {
-      const k = state.cases.find((x) => x.id === id) || await api("GET", `/cases/${id}`);
-      const cat = categoryOf(k.category_id), type = cat?.types.find((t) => t.id === k.process_type_id);
-      const roles = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side];
-      body = { client_role: e.target.checked ? (CMETA.sideOfRole(k.client_role) === side ? k.client_role : roles[0] || "") : "" };
-    }
-    const saved = await api("PUT", `/cases/${id}`, body);
-    const i = state.cases.findIndex((x) => x.id === id);
-    if (i >= 0) state.cases[i] = { ...state.cases[i], ...saved };
-    toast("Guardado.");
-    await refreshView();
-    goToSection("partes");
-  } catch (err) { toast(err.message, true); await refreshView(); }
-});
 async function renderExpedienteFicha(id) {
   const box = $("#ficha-expediente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
@@ -1029,7 +1002,7 @@ async function renderExpedienteFicha(id) {
         ${factRow("Hechos", k.facts)}
       </dl>`)))}
       ${secId("responsable", wide(panel("Funcionario responsable", null, responsiblePanel(k, tasks || []))))}
-      ${secId("partes", wide(panel("Partes del proceso", null, partiesView(k, canWrite))))}
+      ${secId("partes", wide(panel("Partes del proceso", null, partiesView(k) || '<p class="empty">Registre las partes con «Editar» (sección «Partes del proceso»).</p>')))}
       ${secId("tareas", wide(panel("Tareas, audiencias y términos", work.length, `${followSummary(work)}${work.length ? taskTable(work, false) : empty("Sin tareas, audiencias ni términos. Asigne uno con los botones de arriba.")}`,
         canWrite ? kindButtons(k.id, ["tarea", "audiencia", "termino", "recurso"]) : "")))}
       ${secId("oficios", wide(panel("Oficios, peticiones y requerimientos", answers.length, answers.length ? taskTable(answers, true)
