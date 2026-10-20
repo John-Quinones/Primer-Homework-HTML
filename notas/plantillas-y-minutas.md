@@ -27,3 +27,12 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Medios de pago fijos (pedido de John): Bancolombia ahorros 869 00000 527, Nequi 314 415 6914, Llave Bre-B 314 415 6914, cada uno con su logo.
 - El contenedor no alcanza las páginas de los bancos ni Wikimedia: los logos los debe subir John.
 - Se arma con un guion python-docx que reemplaza texto entre runs conservando el formato del primero; se prueba llenándolo con `public/docx.js` en Node (docxtemplater de juanmaapp/node_modules).
+
+## Poder de reconsideración ante el Ministerio de Defensa (19/10/2026)
+- Archivo: /mnt/project-files/poder-reconsideracion/Poder_Reconsideracion_Mindefensa 19Oct2026.docx (John lo carga en Documentos; no sembrado).
+- Origen: Word de John con Dany Gutierrez; destinatario (Ministro y juntas) queda fijo en el texto, igual que los datos del apoderado.
+- Marcadores: `{{fecha.ciudad_y_fecha}}`, nombre/domiciliado/identificado/suscrito del cliente, ciudad y departamento, `{{cliente.direccion}}`, teléfono, correo opcional (`{{#cliente.correo}}`), firma `{{cliente.tipo_documento}}. No.{{cliente.documento|puntos}} de {{cliente.expedicion}}`.
+- Campo propio: `{{campo.Pretensión del recurso}}` (ej. «ser recomendado para realizar el curso de ascenso al grado de Sargento Mayor»); Gerencia lo crea al cargar la plantilla.
+- Ref.: `Poder.{{#expediente.proceso_linea}} …{{/expediente.proceso_linea}}` (clase de proceso y radicado; se omite en penales).
+- Encabezado/QR ya venían en RGB 31/56/100 con fondo transparente; no se tocaron.
+- Se arma con python-docx (cambia el texto de los runs y quita el hipervínculo del correo del cliente) y se prueba con `fillDocx` en Node.
