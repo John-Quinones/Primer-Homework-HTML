@@ -23,3 +23,6 @@ Pedido de John (19/10/2026, hilo «Recibos de pago con firma»). Instrucciones c
 - v2.59 (19/10/2026, John): el recibo debe quedar con el formato (proforma), membrete y pie exactamente iguales a los demás Word; y lleva la firma electrónica del usuario (menú del usuario → «Mi firma electrónica», dibujada; se estampa sobre su nombre).
 
 - v2.60 (19/10/2026, John): la firma electrónica (módulo Firmas y recibos) se plasma como su imagen de ejemplo: QR, nombre, CC, «Firma Electrónica» con fecha y hora -05:00 y bloque de datos; con el logo de Tecjuridicos SAS como marca de agua al fondo del sello. John la llamó «certificada»: la App hace firma electrónica con evidencia, no certificada por entidad acreditada (ONAC); explicárselo.
+
+## Firma certificada: proveedores (20/10/2026, pregunta de John)
+La firma de la App es electrónica con evidencia, no certificada. Entidades de certificación digital acreditadas por el ONAC que citan las fuentes: Certicámara, GSE, Andes SCD, Camerfirma Colombia, Thomas Signe, Viafirma (acreditada marzo 2024), OlimpIA. Precio: solo una referencia de un blog (POS Colombia): $120.000 a $180.000 COP por año por un certificado de firma digital; ninguna entidad publica tarifa verificada, los planes de empresa con API se cotizan. Recomendado: pedir cotización a Certicámara, Andes SCD y Viafirma (firma en la nube con API). Pendiente de John.
