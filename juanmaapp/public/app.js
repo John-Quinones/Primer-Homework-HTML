@@ -4268,9 +4268,11 @@ async function exportDocument(action, doc) {
 let waDoc = null;
 const waForm = $("#wa-dialog form");
 const waNumber = (phone) => { const d = String(phone || "").replace(/\D/g, ""); return d.length === 10 ? "57" + d : d; };
+// Every «Enviar por WhatsApp» button opens WhatsApp Web (Business) with the chat and the text ready (user's rule, version 2.69); nothing is sent by the server.
+function waUrl(phone, text) { return `https://web.whatsapp.com/send?phone=${waNumber(phone)}&text=${encodeURIComponent(text || "")}`; }
 function refreshWaLink() {
   const n = waNumber(waForm.elements.phone.value);
-  $("[data-wa-open]", waForm).href = `https://wa.me/${n}?text=${encodeURIComponent(waForm.elements.message.value)}`;
+  $("[data-wa-open]", waForm).href = waUrl(n, waForm.elements.message.value);
 }
 async function openWhatsappDialog(doc) {
   waDoc = doc;
@@ -4886,7 +4888,7 @@ function openSignSend(title, list) {
   const btns = (d, kind) => {
     const via = d[`${kind}_via`], text = d[`${kind}_text`];
     const out = [];
-    if (via === "whatsapp" && d.wa) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="https://wa.me/${d.wa}?text=${encodeURIComponent(text)}">Enviar por WhatsApp</a>`);
+    if (via === "whatsapp" && d.wa) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="${waUrl(d.wa, text)}">Enviar por WhatsApp</a>`);
     if (via === "email" && d.email) out.push(`<a class="button mini primary" target="_blank" rel="noopener" href="mailto:${encodeURIComponent(d.email)}?subject=${encodeURIComponent(kind === "code" ? `Código para firmar: ${title}` : d.subject)}&body=${encodeURIComponent(text)}">Enviar por correo</a>`);
     out.push(`<button type="button" class="mini" data-copy="${escapeHtml(text)}">Copiar mensaje</button>`);
     return out.join(" ");
@@ -5336,7 +5338,7 @@ function showNoticeResult(n) {
   const digits = String(n.to.phone || "").replace(/\D/g, "");
   $("[data-links]", dlg).innerHTML = [
     failed("email") && n.to.email && `<a class="button primary" target="_blank" rel="noopener" href="mailto:${encodeURIComponent(n.to.email)}?subject=${encodeURIComponent(n.mail.subject)}&body=${encodeURIComponent(n.mail.text)}">Enviar desde mi correo</a>`,
-    failed("whatsapp") && digits && `<a class="button primary" target="_blank" rel="noopener" href="https://wa.me/${digits.length === 10 ? "57" + digits : digits}?text=${encodeURIComponent(n.short)}">Enviar por WhatsApp</a>`,
+    failed("whatsapp") && digits && `<a class="button primary" target="_blank" rel="noopener" href="${waUrl(digits, n.short)}">Enviar por WhatsApp</a>`,
   ].filter(Boolean).join("");
   $("[data-copy]", dlg).onclick = async () => {
     try { await navigator.clipboard.writeText(n.mail.text); toast("Texto copiado."); } catch { toast("No se pudo copiar: selecciónelo en «Ver el texto del aviso».", true); }
@@ -6094,7 +6096,7 @@ async function openRemindDialog(id) {
   const digits = String(c.client_phone || "").replace(/\D/g, "");
   const wa = $("#remind-wa");
   wa.hidden = !digits;
-  wa.href = digits ? `https://wa.me/${digits.length === 10 ? "57" + digits : digits}?text=${encodeURIComponent(msg.text)}` : "#";
+  wa.href = digits ? waUrl(digits, msg.text) : "#";
   $("[data-remind-email]").textContent = c.client_email || "(el cliente no tiene correo)";
   $("[data-remind-phone]").textContent = c.client_phone || "(sin teléfono)";
   remindForm.elements.email.checked = !!c.client_email;
