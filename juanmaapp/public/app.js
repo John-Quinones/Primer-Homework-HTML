@@ -1747,6 +1747,8 @@ function casesByPlace() {
     && (!city || plainText(k.city) === city || (caseCourtIds && k.court_id && caseCourtIds.has(k.court_id)))
     && (!area || k.area === area || (!k.area && caseCourtIds && k.court_id && caseCourtIds.has(k.court_id))));
 }
+// Version 2.70: the list hides archived cases unless «Estado» asks for them (Archivo provisional / Archivo definitivo / Todos).
+const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo"]);
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
@@ -1758,10 +1760,11 @@ function renderCaseRows() {
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const court = $("#case-court").value, status = $("#case-status").value, adLitem = $("#case-adlitem").checked;
   const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
-    && (!mine || k.assigned_user_id === me.id) && (!status || k.status === status) && (!adLitem || k.ad_litem)
+    && (!mine || k.assigned_user_id === me.id) && (status === "todos" || (status ? k.status === status : !ARCHIVED_STATUSES.has(k.status))) && (!adLitem || k.ad_litem)
     && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) : k.court_name === court.slice(2)))
     && matches(k));
-  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)`;
+  const hidden = status ? 0 : state.cases.filter((k) => ARCHIVED_STATUSES.has(k.status)).length;
+  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} archivado(s) oculto(s)` : ""}`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
