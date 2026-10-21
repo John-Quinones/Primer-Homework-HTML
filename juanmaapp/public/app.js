@@ -650,16 +650,29 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- Clientes ----------
+// Version 2.71: archived cases (and the clients whose cases are all archived) stay out of Clientes unless the
+// «Archivados» filter asks for them. Nothing is stored: the client's state comes from its cases.
+const clientArchiveFilter = () => $("#client-archive")?.value || "";
+const archivedOnly = (k) => k.status === "Archivo provisional" || k.status === "Archivo definitivo";
+const caseShownInClients = (k) => { const f = clientArchiveFilter(); return f === "todos" || (f ? k.status === f : !archivedOnly(k)); };
 function renderClientList() {
   const ul = $("#client-list");
-  if (!state.clients.length) {
+  const byClient = new Map();
+  for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
+  const f = clientArchiveFilter();
+  // A client with no cases shows only without a filter; with cases it shows when any of them matches the filter.
+  const shown = state.clients.filter((c) => { const ks = byClient.get(c.id) || []; return f === "todos" || (!ks.length ? !f : ks.some(caseShownInClients)); });
+  const hiddenClients = state.clients.length - shown.length;
+  const note = $("#client-archive-note");
+  if (note) note.textContent = !f && hiddenClients ? `${hiddenClients} cliente(s) con todos sus expedientes archivados, ocultos` : "";
+  if (!shown.length) {
     ul.innerHTML = '<li class="empty">No hay clientes. Cree el primero con “+ Nuevo cliente”.</li>';
     return;
   }
-  ul.innerHTML = state.clients.map((c) => `
+  ul.innerHTML = shown.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
       <strong>${escapeHtml(c.full_name)}</strong>
-      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${c.case_count} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
+      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).filter(caseShownInClients).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
 
@@ -670,7 +683,7 @@ async function renderClientDetail() {
     box.innerHTML = '<p class="empty">Seleccione un cliente o cree uno nuevo.</p>';
     return;
   }
-  const cases = await api("GET", `/cases?clientId=${c.id}`);
+  const cases = (await api("GET", `/cases?clientId=${c.id}`)).filter(caseShownInClients);
   const row = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
   box.innerHTML = `
     <div class="detail-head">
@@ -708,7 +721,8 @@ const factRow = (label, v) => (v ? `<div tabindex="0"><dt>${label}</dt><dd>${esc
 async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
-  const [c, cases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
+  const [c, allCases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
+  const cases = allCases.filter(caseShownInClients);
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -1223,11 +1237,12 @@ function caseCard(k) {
 }
 
 async function renderClientes() {
-  await Promise.all([loadClients($("#client-search").value), loadCatalog()]);
+  await Promise.all([loadClients($("#client-search").value), loadCatalog(), loadCases()]);
   renderClientList();
   await renderClientDetail();
 }
 
+$("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
   renderClientList();
@@ -1266,8 +1281,9 @@ async function openClientMenu(anchor, clientId) {
   dlgNav.reopenPop = null;
   syncPageNav();
   placeClientMenu(pop, anchor);
-  const [c, cases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
+  const [c, allCases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
   if (clientMenu !== pop) return;
+  const cases = allCases.filter(caseShownInClients);
   const doc = [c.person_type === "juridica" ? "NIT" : c.id_type, c.id_number].filter(Boolean).join(" ");
   pop.innerHTML = `
     <div class="cm-head"><strong>${escapeHtml(c.full_name)}</strong><button type="button" class="cm-close" aria-label="Cerrar">✕</button></div>

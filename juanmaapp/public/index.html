@@ -223,9 +223,11 @@
               <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
             </select>
             <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
+            <select id="client-archive" aria-label="Archivados"><option value="">Sin archivados</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option><option value="todos">Todos (con archivados)</option></select>
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
         </div>
+        <p class="muted" id="client-archive-note"></p>
         <div class="split">
           <div class="panel list-panel">
             <ul id="client-list" class="item-list"></ul>
