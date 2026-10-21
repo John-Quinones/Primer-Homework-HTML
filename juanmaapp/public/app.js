@@ -2101,7 +2101,14 @@ function showCourtEmail(court) {
     ? `Correo del despacho: <strong class="copyable">${escapeHtml(court.email)}</strong>${court.phone ? ` · Tel. ${escapeHtml(court.phone)}` : ""}`
     : court ? "El directorio no trae correo para este despacho." : "";
 }
-window.JuanmaCombo.attach(caseForm.elements.court_search, {
+// v2.72: courts are matched with ordinals as numbers («Quinto» finds «005», «Juzgado 5»), accents ignored.
+const ORDINALS = { primero: 1, primer: 1, segundo: 2, tercero: 3, tercer: 3, cuarto: 4, quinto: 5, sexto: 6, septimo: 7, octavo: 8, noveno: 9, decimo: 10,
+  undecimo: 11, duodecimo: 12, decimotercero: 13, decimocuarto: 14, decimoquinto: 15, decimosexto: 16, decimoseptimo: 17, decimooctavo: 18, decimonoveno: 19, vigesimo: 20 };
+const courtKey = (t) => window.JuanmaCombo.norm(t).split(/[\s,.()\-]+/).filter(Boolean)
+  .map((w) => ORDINALS[w] !== undefined ? String(ORDINALS[w]) : /^\d+$/.test(w) ? String(Number(w)) : w).join(" ");
+const courtTyped = new WeakSet();
+const courtInput = caseForm.elements.court_search;
+window.JuanmaCombo.attach(courtInput, {
   limit: 200,
   get emptyText() {
     return courtsTotal ? "Ningún despacho del directorio coincide con este departamento, ciudad y área."
@@ -2109,7 +2116,13 @@ window.JuanmaCombo.attach(caseForm.elements.court_search, {
   },
   items: async () => (await courtsFor(caseForm.elements.department.value, caseForm.elements.city.value, caseForm.elements.area.value))
     .map((c) => ({ label: c.name, sub: [c.area, c.city !== caseForm.elements.city.value ? c.city : "", c.circuit && `Circuito de ${c.circuit}`, c.email].filter(Boolean).join(" · "), court: c })),
+  // Right after focusing, the field may already hold a name written by hand or imported: list every court of the filter until the user types.
+  filter: (all, q, limit) => {
+    const words = courtTyped.has(courtInput) ? courtKey(q).split(" ").filter(Boolean) : [];
+    return all.filter((it) => { const hay = courtKey(it.label + " " + it.sub); return words.every((w) => hay.includes(w)); }).slice(0, limit);
+  },
   onPick: (it) => {
+    courtTyped.delete(courtInput);
     caseForm.elements.court_id.value = it.court.id;
     if (!caseForm.elements.area.value) caseForm.elements.area.value = it.court.area;
     if (!caseForm.elements.department.value) caseForm.elements.department.value = it.court.department;
@@ -2117,8 +2130,20 @@ window.JuanmaCombo.attach(caseForm.elements.court_search, {
     showCourtEmail(it.court);
     suggestJudge();
   },
-  onType: () => { caseForm.elements.court_id.value = ""; showCourtEmail(null); },
+  onType: () => { courtTyped.add(courtInput); caseForm.elements.court_id.value = ""; showCourtEmail(null); },
 });
+courtInput.addEventListener("focus", () => { courtTyped.delete(courtInput); courtInput.select(); });
+// v2.72: a court written by hand or imported without link: if the directory has exactly one that fits the name, link it so its e-mail shows.
+async function linkCourtByName(k) {
+  if (!k?.court_name || k.court_id) return;
+  const words = courtKey(k.court_name).split(" ");
+  const all = (await courtsFor(k.department || "", "", "")).filter((c) => !k.city || courtKey(c.city) === courtKey(k.city) || courtKey(c.circuit) === courtKey(k.city));
+  // Every word of the written name inside one court's name («Juzgado Quinto de Familia del Circuito» → «Juzgado 005 de Familia del Circuito de Ibagué»).
+  const hits = all.filter((c) => { const hay = courtKey(c.name).split(" "); return words.every((w) => hay.includes(w)); });
+  if (hits.length !== 1 || courtInput.value !== k.court_name || caseForm.elements.court_id.value) return;
+  caseForm.elements.court_id.value = hits[0].id;
+  showCourtEmail(hits[0]);
+}
 caseForm.elements.court_search.addEventListener("change", () => suggestJudge());
 
 // Version 2.27: when a court is chosen, show the judge's name the Rama Judicial has for the
@@ -2251,6 +2276,7 @@ async function openCaseDialog(k = null, clientId = null) {
   caseForm.elements.monitor.checked = !!k?.monitor; // v2.38: off until the user ticks it
   caseForm.elements.ad_litem.checked = !!k?.ad_litem; // v2.61
   showCourtEmail(k?.court_name ? { email: k.court_email } : null);
+  linkCourtByName(k).catch(() => {});
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();
   caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
