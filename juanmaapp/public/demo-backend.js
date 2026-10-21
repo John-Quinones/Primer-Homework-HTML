@@ -804,7 +804,7 @@
         const city = canonCity(row.city, department);
         const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), judge: str(row.judge).replace(/\s+/g, " "), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city);
-        if (hit) { Object.assign(hit, { ...v, judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
+        if (hit) { Object.assign(hit, { ...v, email: v.email || hit.email || "", phone: v.phone || hit.phone || "", address: v.address || hit.address || "", judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
       });
       return out;
     }],
