@@ -1,4 +1,4 @@
-// Version 2.85: the court written by hand in a case is recognised as the directory court (expedientes filter).
+// Version 2.96: the court written by hand in a case is recognised as the directory court (expedientes filter).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sameCourtName } from "../src/case-meta.js";

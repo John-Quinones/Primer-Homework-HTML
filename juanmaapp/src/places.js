@@ -13,7 +13,7 @@ export const DIVIPOLA = JSON.parse(readFileSync(path.join(here, "..", "public", 
 
 export const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
-export const { canonicalDepartment, canonicalCity, placeFromRadicado } = makePlaces(DIVIPOLA, properName);
+export const { canonicalDepartment, canonicalCity, placeFromRadicado, cityFromText } = makePlaces(DIVIPOLA, properName);
 
 export function cityCode(city, department) {
   const dep = DIVIPOLA.departamentos.find((d) => d.name === department)?.code;

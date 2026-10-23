@@ -19,7 +19,29 @@ export function makePlaces(divipola, properName) {
     if (n.startsWith("san andres") || n.startsWith("archipielago")) return depByCode.get("88") || "";
     if (n.startsWith("valle")) return "Valle del Cauca";
     if (n === "guajira") return "La Guajira";
-    return "";
+    // v2.84: abbreviations and messy cells from the official file ("N. De Santander", "Norte Santander", "N de S").
+    if (/^(n|nte|norte)( de)?( s| sder| santander)$/.test(n)) return divipola.departamentos.find((d) => bare(d.name) === "norte de santander")?.name || "";
+    // A cell with more text around the name ("906 Y 1098) - Cundinamarca - Mosquera"): the longest department named in it.
+    const words = ` ${n.replace(/[^a-z0-9ñ]+/g, " ").trim()} `;
+    let found = "";
+    for (const d of divipola.departamentos) {
+      const b = ` ${bare(d.name).replace(/[^a-z0-9ñ]+/g, " ").trim()} `;
+      if (words.includes(b) && b.length > found.length) found = d.name;
+    }
+    return found;
+  }
+
+  /** Municipality of a department named inside free text ("… - Cundinamarca - Mosquera" → "Mosquera"), or "". */
+  function cityFromText(text, department) {
+    const dep = divipola.departamentos.find((d) => d.name === department)?.code;
+    const words = ` ${bare(text).replace(/[^a-z0-9ñ]+/g, " ").trim()} `;
+    let found = "";
+    for (const m of divipola.municipios) {
+      if (dep && m.dep !== dep) continue;
+      const b = ` ${bare(m.name).replace(/[^a-z0-9ñ]+/g, " ").trim()} `;
+      if (words.includes(b) && b.length > found.length) found = m.name;
+    }
+    return found;
   }
 
   /** Canonical municipality name within a department ("IBAGUE" → "Ibagué"), or the input in proper case if not found. */
@@ -42,7 +64,7 @@ export function makePlaces(divipola, properName) {
     return m ? { department: depByCode.get(m.dep), city: m.name, city_code: m.code } : null;
   }
 
-  return { canonicalDepartment, canonicalCity, placeFromRadicado };
+  return { canonicalDepartment, canonicalCity, placeFromRadicado, cityFromText };
 }
 
 /** Keep digits only; a valid radicado has exactly 23. */

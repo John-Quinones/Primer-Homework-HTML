@@ -6,7 +6,7 @@ import { can } from "./auth.js";
 import { courtCircuit, filterCourts } from "./case-meta.js";
 import { judgeByRadicado } from "./ramajudicial.js";
 import { properName } from "./person.js";
-import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
+import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityFromText, cityCode, inferArea } from "./places.js";
 
 
 export function courtsRouter(db) {
@@ -93,7 +93,7 @@ export function courtsRouter(db) {
           out.skipped.push({ row: row.rowNumber ?? i + 2, reason: !name ? "Sin nombre de despacho." : `Departamento no reconocido: "${str(row.department)}".` });
           return;
         }
-        const city = canonicalCity(row.city, department);
+        const city = canonicalCity(str(row.city) || cityFromText(row.department, department), department);
         const v = {
           code: str(row.code), name, department, city, city_code: cityCode(city, department), circuit: courtCircuit(name, row.circuit),
           area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address),

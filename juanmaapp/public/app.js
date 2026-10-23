@@ -175,7 +175,7 @@ function applyPermissions() {
   showMyAvatar();
   $("#courts-import-btn").hidden = !can("catalog.manage");
   // Creating process types and sub-processes from the case form or an import is for Gerencia only.
-  $$("[data-new-cat], [data-new-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
+  $$("[data-new-cat], [data-new-type], [data-del-cat], [data-del-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
   const createCat = $("#import-create-catalog");
   createCat.disabled = !can("catalog.manage");
   if (createCat.disabled) createCat.checked = false;
@@ -653,31 +653,42 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- Clientes ----------
-// Version 2.71: archived cases (and the clients whose cases are all archived) stay out of Clientes unless the
-// «Archivados» filter asks for them. Nothing is stored: the client's state comes from its cases.
+// Version 2.87: a client is Activo or sent to «Archivo provisional» / «Archivo definitivo» (clients.archive_status,
+// "" = activo). The views are exclusive: the list shows only the clients of the state chosen in #client-archive.
+// Archiving never touches the client's cases, charges or documents.
+const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo"];
 const clientArchiveFilter = () => $("#client-archive")?.value || "";
-const archivedOnly = (k) => k.status === "Archivo provisional" || k.status === "Archivo definitivo";
-const caseShownInClients = (k) => { const f = clientArchiveFilter(); return f === "todos" || (f ? k.status === f : !archivedOnly(k)); };
 function renderClientList() {
   const ul = $("#client-list");
   const byClient = new Map();
   for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
   const f = clientArchiveFilter();
-  // A client with no cases shows only without a filter; with cases it shows when any of them matches the filter.
-  const shown = state.clients.filter((c) => { const ks = byClient.get(c.id) || []; return f === "todos" || (!ks.length ? !f : ks.some(caseShownInClients)); });
-  const hiddenClients = state.clients.length - shown.length;
+  const shown = state.clients.filter((c) => (c.archive_status || "") === f);
+  const others = CLIENT_ARCHIVE.map((st) => [st, state.clients.filter((c) => c.archive_status === st).length]);
   const note = $("#client-archive-note");
-  if (note) note.textContent = !f && hiddenClients ? `${hiddenClients} cliente(s) con todos sus expedientes archivados, ocultos` : "";
+  if (note) note.textContent = f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
   if (!shown.length) {
-    ul.innerHTML = '<li class="empty">No hay clientes. Cree el primero con “+ Nuevo cliente”.</li>';
+    ul.innerHTML = `<li class="empty">${f ? `No hay clientes en ${f.toLowerCase()}.` : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
     return;
   }
   ul.innerHTML = shown.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
       <strong>${escapeHtml(c.full_name)}</strong>
-      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).filter(caseShownInClients).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
+      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
+
+// Buttons to send a client to archive or back to activos (needs clients.write); «definitivo» asks first.
+const archiveButtons = (c) => {
+  if (!can("clients.write")) return "";
+  const btn = (to, label) => `<button data-action="archive-client" data-id="${c.id}" data-to="${to}">${label}</button>`;
+  const final = isGerencia(); // «Archivo definitivo» (to or from) is only for the administrator (user's rule, 2.94)
+  if (c.archive_status === "Archivo definitivo") return final ? btn("", "Devolver a activos") + btn("Archivo provisional", "Pasar a archivo provisional") : "";
+  return c.archive_status
+    ? btn("", "Devolver a activos") + (final ? btn("Archivo definitivo", "Pasar a archivo definitivo") : "")
+    : btn("Archivo provisional", "Archivo provisional") + (final ? btn("Archivo definitivo", "Archivo definitivo") : "");
+};
+const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
 
 async function renderClientDetail() {
   const box = $("#client-detail");
@@ -686,16 +697,17 @@ async function renderClientDetail() {
     box.innerHTML = '<p class="empty">Seleccione un cliente o cree uno nuevo.</p>';
     return;
   }
-  const cases = (await api("GET", `/cases?clientId=${c.id}`)).filter(caseShownInClients);
+  const cases = (await api("GET", `/cases?clientId=${c.id}`));
   const row = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
   box.innerHTML = `
     <div class="detail-head">
-      <h3>${escapeHtml(c.full_name)}</h3>
+      <h3>${escapeHtml(c.full_name)} ${archiveBadge(c)}</h3>
       <div class="toolbar">
         <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
+        ${archiveButtons(c)}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
     </div>
@@ -725,7 +737,7 @@ async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
   const [c, allCases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
-  const cases = allCases.filter(caseShownInClients);
+  const cases = allCases;
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -736,6 +748,7 @@ async function renderClienteFicha(id) {
       <h2>${escapeHtml(c.full_name)}</h2>
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
+        ${archiveButtons(c)}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
@@ -743,6 +756,7 @@ async function renderClienteFicha(id) {
       </div>
     </div>
     <div class="ficha-chips">
+      ${archiveBadge(c)}
       <span class="chip-stat">Expedientes <strong>${cases.length}</strong></span>
       <span class="chip-stat">Activos <strong>${active}</strong></span>
       ${pay ? `<span class="chip-stat">Honorarios <strong>${cop(pay.billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(pay.received)}</strong></span>
@@ -1120,11 +1134,13 @@ function followSummary(list) {
 function taskTable(list, answers) {
   const canWrite = can("cases.write");
   const rows = list.map((t) => {
-    const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
+    const closing = t.status === "pendiente" && !answers && (canWrite || t.assigned_user_id === me.id)
+      ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button><button class="mini" data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : "";
+    const actions = canWrite ? `${closing}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
       ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
-    const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing;
+    const done = t.status === "cancelada" ? `No cumplida${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
@@ -1245,6 +1261,8 @@ async function renderClientes() {
   await renderClientDetail();
 }
 
+// Inicio's «Clientes con Casos de Éxito!» links open Clientes already on that archive view.
+document.addEventListener("click", (e) => { const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView; });
 $("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
@@ -1286,7 +1304,7 @@ async function openClientMenu(anchor, clientId) {
   placeClientMenu(pop, anchor);
   const [c, allCases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
   if (clientMenu !== pop) return;
-  const cases = allCases.filter(caseShownInClients);
+  const cases = allCases;
   const doc = [c.person_type === "juridica" ? "NIT" : c.id_type, c.id_number].filter(Boolean).join(" ");
   pop.innerHTML = `
     <div class="cm-head"><strong>${escapeHtml(c.full_name)}</strong><button type="button" class="cm-close" aria-label="Cerrar">✕</button></div>
@@ -1719,6 +1737,11 @@ function openClientDialog(c) {
   } : {});
   setPersonType(type);
   clientForm.elements.affiliated.checked = !!c?.affiliated;
+  // Version 2.94: state of the client. «Archivo definitivo» (to or from) is only for Gerencia.
+  const st = clientForm.elements.archive_status;
+  st.value = c?.archive_status || "";
+  st.querySelector('[value="Archivo definitivo"]').disabled = !isGerencia();
+  st.disabled = !isGerencia() && c?.archive_status === "Archivo definitivo";
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
   showFormPhoto(c?.photo || "", c || {});
 }
@@ -1727,7 +1750,16 @@ wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   data.affiliated = form.elements.affiliated.checked;
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
+  const wantedState = form.elements.archive_status.value, before = id ? state.clients.find((x) => x.id === Number(id))?.archive_status || "" : "";
+  if (id && wantedState && wantedState !== before) {
+    const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
+    if (open && !(await ask({ title: `¿Enviar a ${wantedState.toLowerCase()}?`, message: `Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes. No se borra nada.`, okLabel: "Archivar" }))) throw new Error("No se guardó: confirme el archivo del cliente o déjelo en activo.");
+  }
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
+  if (wantedState !== (saved.archive_status || "")) {
+    try { await api("PUT", `/clients/${saved.id}/archive`, { status: wantedState }); await loadClients(); }
+    catch (err) { toast(`El cliente quedó guardado, pero el estado no: ${err.message}`, true); }
+  }
   if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
   pendingPhoto = undefined;
   state.selectedClientId = saved.id;
@@ -1983,6 +2015,8 @@ $("#case-rows").addEventListener("change", (e) => guarded(async () => {
 
 const caseForm = $("#case-dialog form");
 // Client pickers are search boxes: any letter or word of the name or the document filters the list.
+// Version 2.94: client searchers outside Clientes list only activos (an archived client stays when it is already chosen).
+const activeClients = (list, keepId = null) => list.filter((c) => !c.archive_status || c.id === keepId);
 const clientOption = (c) => `<option value="${c.id}" data-sub="${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}">${escapeHtml(c.full_name)}</option>`;
 window.JuanmaCombo.searchSelect(caseForm.elements.client_id);
 
@@ -2088,6 +2122,31 @@ async function newCatalogEntry(kind) {
     toast(kind === "cat" ? `Tipo de proceso «${made.name}» creado.` : `Subproceso «${made.name}» creado.`);
   } catch (err) { toast(err.message, true); }
 }
+// Gerencia deletes the chosen type or sub-process; the server refuses while any case uses it.
+async function deleteCatalogEntry(kind) {
+  const catId = Number(caseForm.elements.category_id.value);
+  const cat = categoryOf(catId);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const item = kind === "cat" ? cat : type;
+  if (!item) return toast("Elija primero cuál eliminar.", true);
+  const kids = kind === "cat" ? cat.types.length : cat.types.filter((t) => t.parent_id === item.id).length;
+  const ok = await confirmAsk(kind === "cat" ? "Eliminar tipo de proceso" : "Eliminar subproceso",
+    `¿Eliminar «${item.name}» del catálogo?` + (kids ? ` También se eliminarán ${kids} subproceso${kids === 1 ? "" : "s"} y, en el tipo, sus campos propios.` : "") +
+    " Solo se elimina si ningún expediente lo usa; la acción queda en la bitácora.");
+  if (!ok) return;
+  try {
+    await api("DELETE", kind === "cat" ? `/categories/${item.id}` : `/types/${item.id}`);
+    await loadCatalog();
+    caseForm.elements.category_id.innerHTML = state.catalog.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    const keep = kind === "cat" ? state.catalog[0]?.id : catId;
+    caseForm.elements.category_id.value = keep;
+    fillTypeSelect(keep);
+    renderParties();
+    toast(`«${item.name}» eliminado.`);
+  } catch (err) { toast(err.message, true); }
+}
+$("[data-del-cat]").addEventListener("click", () => deleteCatalogEntry("cat"));
+$("[data-del-type]").addEventListener("click", () => deleteCatalogEntry("type"));
 $("[data-new-cat]").addEventListener("click", () => newCatalogEntry("cat"));
 $("[data-new-type]").addEventListener("click", () => newCatalogEntry("type"));
 caseForm.elements.process_type_id.addEventListener("change", () => fillRoleSelect());
@@ -2280,7 +2339,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = state.clients.map(clientOption).join("");
+  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id).map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -2297,7 +2356,9 @@ async function openCaseDialog(k = null, clientId = null) {
   linkCourtByName(k).catch(() => {});
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();
-  caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
+  const firstActive = activeClients(state.clients)[0];
+  if (!k && !firstActive) { toast("No hay clientes activos. Cree uno o devuelva uno a activos.", true); location.hash = "#clientes"; return; }
+  caseForm.elements.client_id.value = k?.client_id ?? (activeClients(state.clients, clientId).some((c) => c.id === clientId) ? clientId : firstActive.id);
   caseForm.elements.client_id.disabled = !!k;
   caseForm.elements.office_id.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   const clientOffice = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value))?.office_id;
@@ -2310,7 +2371,7 @@ async function openCaseDialog(k = null, clientId = null) {
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
   partyRows = (k?.parties || []).map((p) => ({ ...p }));
-  $("#party-clients").innerHTML = state.clients.map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
+  $("#party-clients").innerHTML = activeClients(state.clients).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
   renderParties();
 }
 
@@ -2662,6 +2723,13 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
+    "task-notdone": async () => {
+      const why = await ask({ title: "Tarea no cumplida", message: "Escriba por qué no se cumplió. Queda en el historial de tareas.", input: "", okLabel: "Marcar como no cumplida" });
+      if (!why) return;
+      await api("PUT", `/tasks/${id}`, { status: "cancelada", done_notes: why });
+      toast("Marcada como no cumplida.");
+      await refreshView();
+    },
     "act-remind": () => {
       const a = ACTS_CACHE[Number(btn.dataset.act)];
       return openTaskDialog(null, Number(btn.dataset.case), "termino", { title: `Actuación: ${a.actuacion || ""}`.slice(0, 140), notes: `${String(a.fecha || "").slice(0, 10)} · ${a.anotacion || ""}`.trim() });
@@ -2751,6 +2819,20 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
+    "archive-client": async () => {
+      const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
+      const to = btn.dataset.to || "";
+      const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
+      const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
+      const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
+        : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede devolverlo a activos cuando quiera.`;
+      if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Enviar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: to ? "Archivar" : "Devolver" }))) return; }
+      await api("PUT", `/clients/${id}/archive`, { status: to });
+      toast(to ? `Cliente enviado a ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
+      await loadClients();
+      if (location.hash === "#clientes") state.selectedClientId = null; // it left this list
+      await refreshView();
+    },
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
@@ -3020,9 +3102,9 @@ $(".actions").addEventListener("click", async (e) => {
 
 // ---------- Importar ----------
 const IMP = window.JuanmaImport;
-const imp = { sheets: [], headers: [], body: [], mapping: [] };
+const imp = { sheets: [], headers: [], body: [], mapping: [], kind: null };
 
-const importMode = () => $("input[name=import-mode]:checked").value;
+const importMode = () => (imp.kind ? IMPORT_KINDS[imp.kind].mode : $("input[name=import-mode]:checked").value);
 
 async function renderImportar() {
   await loadCatalog();
@@ -3033,6 +3115,7 @@ async function renderImportar() {
   catSel.value = cur;
   fillDefaultTypes();
   renderImportKinds();
+  importDivipola ||= await window.JuanmaCombo.loadPlaces();
 }
 
 function fillDefaultTypes() {
@@ -3044,10 +3127,14 @@ $("#import-default-cat").addEventListener("change", fillDefaultTypes);
 
 $("#import-file").addEventListener("change", (e) => guarded(async () => {
   const file = e.target.files[0];
-  if (file) await loadImportFile(file);
+  if (file) {
+    imp.kind = null;
+    await loadImportFile(file);
+  }
 }));
 async function loadImportFile(file) {
   $("#import-result").hidden = true;
+  $("input[name=import-update][value=fill]").checked = true; // each new file starts on «solo lo vacío»
   imp.sheets = await IMP.readFile(file);
   const sel = $("#import-sheet");
   sel.innerHTML = imp.sheets.map((s, i) => `<option value="${i}">${escapeHtml(s.name)} (${s.rows.length} filas)</option>`).join("");
@@ -3056,11 +3143,37 @@ async function loadImportFile(file) {
 }
 $("#import-sheet").addEventListener("change", (e) => loadSheet(Number(e.target.value)));
 
+// Column mapping per tab, remembered in this browser by column name (version 2.85).
+const mapKey = (kind) => `jm-import-map-${kind}`;
+function savedImportMapping(kind) {
+  try { return JSON.parse(localStorage.getItem(mapKey(kind)) || "{}"); } catch { return {}; }
+}
+function saveImportMapping(kind, headers, mapping) {
+  if (!kind) return;
+  try {
+    const saved = savedImportMapping(kind);
+    headers.forEach((h, i) => { saved[IMP.norm(h)] = mapping[i] || ""; });
+    localStorage.setItem(mapKey(kind), JSON.stringify(saved));
+  } catch { /* private window: the mapping is simply not remembered */ }
+}
+// Guess first, then what the user chose last time for the same column name; anything this tab does not offer → none.
+function fitMapping(kind, headers, guess) {
+  const ok = new Set(IMP.targetsFor(kind).map((t) => t.key));
+  const saved = savedImportMapping(kind);
+  return headers.map((h, i) => {
+    const want = IMP.norm(h) in saved ? saved[IMP.norm(h)] : guess[i];
+    if (ok.has(want)) return want;
+    const plain = IMP.guessTarget(h);
+    return ok.has(plain) ? plain : "";
+  });
+}
+
 function loadSheet(i) {
   const { headers, body } = IMP.splitHeader(imp.sheets[i].rows);
   imp.headers = headers;
   imp.body = body;
   imp.mapping = IMP.guessAll(headers);
+  if (imp.kind) imp.mapping = fitMapping(imp.kind, headers, imp.mapping);
   const info = $("#import-file-info");
   info.hidden = false;
   if (!headers.length) {
@@ -3071,15 +3184,23 @@ function loadSheet(i) {
   info.textContent = `${body.length} filas de datos y ${headers.length} columnas.`;
   // A file with process columns is most likely one row per case.
   const hasCase = imp.mapping.some((m) => m.startsWith("case."));
-  $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
+  if (!imp.kind) $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
   ["#import-step2", "#import-step3", "#import-step4"].forEach((s) => ($(s).hidden = false));
+  // From a tab the type of file is already chosen: no «Solo clientes / Clientes y expedientes» question.
+  $("#import-step2 .radio-row").hidden = !!imp.kind;
+  $("#import-step2").hidden = imp.kind === "clientes";
+  $("#import-step3-title").innerHTML = imp.kind
+    ? `<span class="step-no">3</span> Columnas del Excel de ${IMPORT_KINDS[imp.kind].title}`
+    : '<span class="step-no">3</span> Columnas';
   renderMapping();
 }
 
 function renderMapping() {
   const casesMode = importMode() === "cases";
   $("#import-case-opts").hidden = !casesMode;
-  const targets = IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  const targets = imp.kind ? IMP.targetsFor(imp.kind) : IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  // A column whose guessed field this tab does not offer stays unassigned (never silently falls to the first option).
+  imp.mapping = imp.mapping.map((m) => (targets.some((t) => t.key === m) ? m : ""));
   $("#import-map").innerHTML = imp.headers.map((h, i) => {
     const sample = imp.body.find((r) => r[i])?.[i] ?? "";
     return `<tr>
@@ -3099,18 +3220,72 @@ $("#import-map").addEventListener("change", (e) => {
   const sel = e.target.closest("select[data-col]");
   if (!sel) return;
   imp.mapping[sel.dataset.col] = sel.value;
+  saveImportMapping(imp.kind, imp.headers, imp.mapping);
   renderImportPreview();
 });
 
+// Place of issue of the ID card (version 2.83): matched against DIVIPOLA ignoring accents and capitals
+// ("CARTAGENA" → "Cartagena de Indias"). What is not recognized is left out and reported, never blocks the row.
+let importDivipola = null;
+function resolveIdPlace(rec) {
+  const c = rec.client;
+  if (!c.id_department && !c.id_city) return [];
+  const warn = [];
+  const places = window.JuanmaPlaces.makePlaces(importDivipola, window.JuanmaPerson.properName);
+  const depName = c.id_department;
+  const dep = places.canonicalDepartment(depName);
+  const depCode = importDivipola.departamentos.find((d) => d.name === dep)?.code;
+  if (depName && !dep) warn.push(`departamento de expedición «${depName}» no reconocido`);
+  let city = "";
+  if (c.id_city && !(depName && !dep)) {
+    const name = places.canonicalCity(c.id_city, dep);
+    const hits = importDivipola.municipios.filter((m) => m.name === name && (!depCode || m.dep === depCode));
+    if (hits.length === 1) {
+      city = hits[0].name;
+      if (!dep) c.id_department = importDivipola.departamentos.find((d) => d.code === hits[0].dep)?.name;
+    } else warn.push(hits.length ? `ciudad de expedición «${c.id_city}» está en varios departamentos: indique el departamento` : `ciudad de expedición «${c.id_city}» no reconocida`);
+  }
+  if (dep) c.id_department = dep; else if (!(city && c.id_department)) delete c.id_department;
+  if (city) c.id_city = city; else delete c.id_city;
+  return warn;
+}
+
+const updateMode = () => $("input[name=import-update]:checked")?.value || "fill";
+const FIELD_LABEL = { full_name: "Nombre", id_type: "Tipo de documento", email: "Correo", phone: "Teléfono", address: "Dirección", city: "Ciudad",
+  department: "Departamento", notes: "Notas", id_department: "Depto. expedición", id_city: "Ciudad expedición", person_type: "Tipo de persona", gender: "Género" };
+let changesToken = 0;
+// Before / after for the clients that already exist (dry run, nothing is written).
+async function renderImportChanges() {
+  const box = $("#import-changes");
+  const token = ++changesToken;
+  const clientsData = importMode() === "clients" || importMode() === "cases";
+  $("#import-update-opts").hidden = !clientsData;
+  if (!clientsData) { box.hidden = true; return; }
+  const plan = await IMP.plan(importRecords(), api, { withCases: false, updateMode: updateMode() });
+  if (token !== changesToken) return;
+  const rows = plan.changes;
+  box.hidden = false;
+  const upd = rows.filter((c) => c.kind === "update").length;
+  box.innerHTML = `<p><strong>${plan.clientsExisting}</strong> cliente(s) del archivo ya existen: se completarán <strong>${rows.filter((c) => c.kind === "fill").length}</strong> dato(s) vacío(s)${updateMode() === "update" ? ` y se actualizarán <strong>${upd}</strong> dato(s) que difieren` : ""}. ${rows.length ? "" : "No hay cambios."}</p>
+    ${rows.length ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Fila</th><th>Cliente</th><th>Dato</th><th>Antes</th><th>Después</th></tr></thead><tbody>${rows.slice(0, 40).map((c) =>
+      `<tr><td>${c.row}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(FIELD_LABEL[c.field] || c.field)}</td><td>${escapeHtml(c.before || "(vacío)")}</td><td>${escapeHtml(c.after)}</td></tr>`).join("")}</tbody></table></div>
+      ${rows.length > 40 ? `<p class="hint">… y ${rows.length - 40} cambio(s) más.</p>` : ""}` : ""}`;
+}
+$$("input[name=import-update]").forEach((r) => r.addEventListener("change", () => guarded(renderImportChanges)));
+
 function importRecords() {
   return imp.body.map((row, i) => ({ ...IMP.buildRecord(row, imp.headers, imp.mapping), rowNumber: i + 2 }))
-    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length);
+    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length)
+    .map((r) => ({ ...r, placeWarnings: importDivipola ? resolveIdPlace(r) : [] }));
 }
 
 function renderImportPreview() {
   const casesMode = importMode() === "cases";
   const recs = importRecords();
   const cols = [["client.full_name", "Cliente"], ["client.id_number", "Documento"], ["client.email", "Correo"], ["client.phone", "Teléfono"]];
+  if (imp.mapping.includes("client.id_city") || imp.mapping.includes("client.id_department")) {
+    cols.push(["client.id_department", "Depto. expedición"], ["client.id_city", "Ciudad expedición"]);
+  }
   if (casesMode) {
     cols.push(["case.category", "Tipo de proceso"], ["case.type", "Subproceso"]);
     for (const [k, l] of [["case.radicado", "Radicado"], ["case.status", "Estado"], ["case.court_name", "Despacho"], ["case.folder", "Carpeta"], ["pay.fees", "Honorarios"], ["pay.paid", "Pagos"], ["case.title", "Asunto"]])
@@ -3123,14 +3298,29 @@ function renderImportPreview() {
     return `<td>${escapeHtml(k === "case.status" && v ? window.JuanmaCaseMeta.normStatus(v) : o === "pay" && v ? cop(IMP.parsePesos(v)) : v)}</td>`;
   }).join("")}${casesMode ? `<td>${escapeHtml(Object.entries(r.custom).map(([k, v]) => `${k}: ${v}`).join("\n"))}</td>` : ""}</tr>`).join("");
   $("#import-preview").innerHTML = head + `<tbody>${rows}</tbody>`;
+  const warned = recs.filter((r) => r.placeWarnings.length);
+  $("#import-place-warnings").hidden = !warned.length;
+  $("#import-place-warnings").innerHTML = warned.length
+    ? `<strong>Lugar de expedición sin reconocer en ${warned.length} fila(s)</strong> (se importa la fila sin ese dato):<ul>${warned.slice(0, 8).map((r) =>
+      `<li>Fila ${r.rowNumber}: ${escapeHtml(r.placeWarnings.join("; "))}</li>`).join("")}${warned.length > 8 ? `<li>… y ${warned.length - 8} más</li>` : ""}</ul>` : "";
   const noName = !imp.mapping.includes("client.full_name") && !imp.mapping.includes("client.first_names");
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
   btn.textContent = noName ? "Asigne la columna del nombre del cliente" : `Importar ${recs.length} filas`;
+  renderImportChanges().catch(() => {});
 }
 
 $("#import-run").addEventListener("click", () => guarded(async () => {
+  saveImportMapping(imp.kind, imp.headers, imp.mapping);
   const records = importRecords();
+  if (updateMode() === "update") {
+    const plan = await IMP.plan(records, api, { withCases: false, updateMode: "update" });
+    const n = plan.changes.filter((c) => c.kind === "update").length;
+    if (n) {
+      if (!(await ask({ title: "Actualizar clientes existentes", message: `Se cambiarán ${n} dato(s) que ya estaban guardados. Antes se descarga un Excel con los clientes tal como están hoy, para poder volver atrás. Nada se borra.`, okLabel: "Descargar copia y actualizar" }))) return;
+      await downloadImportKind("clientes", "data", `clientes-antes-de-actualizar-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+  }
   const casesMode = importMode() === "cases";
   const btn = $("#import-run");
   const bar = $("#import-progress");
@@ -3144,6 +3334,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       defaultCategory: $("#import-default-cat").value,
       defaultType: $("#import-default-type").value,
       canPay: can("payments.manage"),
+      updateMode: updateMode(),
       onProgress: (done, total) => (bar.value = done / total),
     });
     const res = $("#import-result");
@@ -3152,7 +3343,8 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       <p class="${sum.errors.length ? "" : "ok"}"><strong>Importación terminada.</strong></p>
       <ul>
         <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
-        <li>Clientes existentes completados: <strong>${sum.clientsCompleted}</strong></li>
+        ${sum.clientsArchived ? `<li>Clientes con estado de archivo cambiado: <strong>${sum.clientsArchived}</strong></li>` : ""}
+        <li>Clientes existentes completados o actualizados: <strong>${sum.clientsCompleted}</strong>${sum.clientsUpdated ? ` (con datos cambiados: ${sum.clientsUpdated})` : ""}</li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
         ${sum.charges ? `<li>Honorarios registrados en Pagos: <strong>${sum.charges}</strong></li>` : ""}
@@ -3177,7 +3369,8 @@ const IMPORT_KINDS = {
   clientes: {
     title: "Clientes", mode: "clients",
     cols: [["Nombre completo", (c) => c.full_name], ["Tipo de documento", (c) => c.id_type], ["Número de documento", (c) => c.id_number],
-      ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city], ["Notas", (c) => c.notes]],
+      ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city],
+      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Estado del cliente", (c) => c.archive_status || "Activo"], ["Notas", (c) => c.notes]],
     rows: async () => api("GET", "/clients"),
   },
   expedientes: {
@@ -3210,6 +3403,10 @@ function renderImportKinds() {
     <div class="import-card" data-kind="${key}">
       <h4>${k.title}</h4>
       <p class="hint">${escapeHtml(IMPORT_KIND_HINT[key])}</p>
+      ${key === "clientes" ? `<div class="toolbar import-filters">
+        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+        <label>Cédula expedida en <input id="import-clients-idplace" type="search" placeholder="Ciudad o departamento" /></label>
+      </div>` : ""}
       <div class="toolbar">
         <button type="button" data-imp-dl="template">Plantilla vacía</button>
         <button type="button" data-imp-dl="data">Descargar datos actuales</button>
@@ -3218,15 +3415,19 @@ function renderImportKinds() {
     </div>`).join("");
 }
 
-async function downloadImportKind(key, what) {
+async function downloadImportKind(key, what, filename) {
   const k = IMPORT_KINDS[key];
   const header = k.cols.map(([label]) => ({ value: label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
-  const data = what === "data" ? await k.rows() : [];
+  let data = what === "data" ? await k.rows() : [];
+  if (what === "data" && key === "clientes") { // filters of the clients card: state and place where the ID card was issued
+    const st = $("#import-clients-state")?.value || "", place = $("#import-clients-idplace")?.value || "";
+    data = data.filter((c) => (!st || (st === "activo" ? !c.archive_status : c.archive_status === st)) && (!place.trim() || window.JuanmaPerson.clientMatches(c, place, "idplace")));
+  }
   const body = data.map((r) => k.cols.map(([, get]) => ({ value: String(get(r) ?? ""), type: String })));
   const widths = k.cols.map(([label]) => ({ width: Math.max(16, label.length + 2) }));
   const blob = await window.writeXlsxFile([header, ...body], { columns: widths, sheet: k.title }).toBlob();
   const day = new Date().toISOString().slice(0, 10);
-  await saveFile(what === "data" ? `${key}-${day}.xlsx` : `plantilla-${key}.xlsx`, blob);
+  await saveFile(filename || (what === "data" ? `${key}-${day}.xlsx` : `plantilla-${key}.xlsx`), blob);
   if (what === "data") toast(`${data.length} ${k.title.toLowerCase()} en el archivo.`);
 }
 
@@ -3234,26 +3435,163 @@ async function downloadImportKind(key, what) {
 async function uploadImportKind(key, file) {
   const k = IMPORT_KINDS[key];
   if (k.mode === "courts") {
-    const rows = await readCourtRows(file);
-    const sample = rows.slice(0, 5).map((r) => `${r.name} · ${r.city}`).join("\n");
-    if (!(await ask({ title: "Cargar despachos", message: `Se leyeron ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.\n\n${sample}${rows.length > 5 ? "\n…" : ""}`, okLabel: "Cargar" }))) return;
-    const out = await importCourtRows(rows);
-    showImportResult(`<li>Despachos nuevos: <strong>${out.created}</strong></li><li>Despachos actualizados: <strong>${out.updated}</strong></li>
-      <li>Omitidos: <strong>${out.skipped.length}</strong></li>`, out.skipped.map((e) => `Fila ${e.row}: ${e.reason}`));
+    imp.kind = null;
+    ["#import-step2", "#import-step3", "#import-step4", "#import-result"].forEach((id) => ($(id).hidden = true));
+    await openCourtMapping(file);
     return;
   }
+  $("#courts-map-panel").hidden = true;
+  imp.kind = key;
   // Clients / cases go through the regular mapping, preview and confirmation below.
   await loadImportFile(file);
-  $(`input[name=import-mode][value=${k.mode}]`).checked = true;
   renderMapping();
-  const plan = await IMP.plan(importRecords(), api, { withCases: k.mode === "cases" });
+  const recs = importRecords();
+  const plan = await IMP.plan(recs, api, { withCases: k.mode === "cases" });
+  const placeWarn = recs.filter((r) => r.placeWarnings.length).length;
   const res = $("#import-result");
   res.hidden = false;
-  res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. Revise la vista previa y pulse «Importar».</p>`;
+  res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. ${placeWarn ? ` El lugar de expedición no se reconoció en ${placeWarn} fila(s): se importan sin ese dato (ver el aviso debajo de la vista previa).` : ""} Revise la vista previa y pulse «Importar».</p>`;
   $("#import-step4").scrollIntoView({ behavior: "smooth" });
 }
 
+// ---------- Despachos: the user assigns the file's columns (version 2.85) ----------
+const COURT_FIELDS = [["name", "Nombre del despacho"], ["department", "Departamento"], ["city", "Ciudad"], ["area", "Corporación o Área"],
+  ["circuit", "Circuito"], ["email", "Correo (Email)"], ["code", "Código"], ["judge", "Juez o titular"], ["phone", "Teléfono"], ["address", "Dirección"]];
+const courtMap = { headers: [], body: [], mapping: [] };
+
+async function openCourtMapping(file) {
+  const sheets = await IMP.readFile(file);
+  // The sheet with the most data rows (the official file may carry a cover sheet).
+  const parsed = sheets.map((sh) => IMP.splitHeader(sh.rows)).sort((a, b) => b.body.length - a.body.length)[0];
+  if (!parsed?.headers.length) throw new Error("No se encontró una fila de encabezados en el archivo.");
+  courtMap.headers = parsed.headers;
+  courtMap.body = parsed.body;
+  const saved = savedImportMapping("despachos");
+  const taken = new Set();
+  courtMap.mapping = parsed.headers.map((h) => {
+    const n = IMP.norm(h);
+    let want = n in saved ? saved[n] : (COURT_FIELDS.map(([k]) => k).find((k) => COURT_COLS[k]?.includes(n)) || "");
+    if (want && taken.has(want)) want = ""; // one column per field
+    if (want) taken.add(want);
+    return want;
+  });
+  renderCourtMapping();
+  $("#courts-map-panel").hidden = false;
+  $("#courts-map-panel").scrollIntoView({ behavior: "smooth" });
+}
+
+function courtMapRows() {
+  const col = Object.fromEntries(COURT_FIELDS.map(([k]) => [k, courtMap.mapping.indexOf(k)]));
+  return courtMap.body.map((r, j) => ({ rowNumber: j + 2, ...Object.fromEntries(Object.entries(col).map(([k, i]) => [k, i < 0 ? "" : r[i]])) }))
+    .filter((r) => r.name || r.department);
+}
+
+function renderCourtMapping() {
+  $("#courts-map").innerHTML = courtMap.headers.map((h, i) => {
+    const sample = courtMap.body.find((r) => r[i])?.[i] ?? "";
+    return `<tr><td><strong>${escapeHtml(h)}</strong></td><td title="${escapeHtml(sample)}">${escapeHtml(sample)}</td>
+      <td><select data-ccol="${i}"><option value="">— No importar —</option>${COURT_FIELDS.map(([k, l]) =>
+        `<option value="${k}" ${courtMap.mapping[i] === k ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select></td></tr>`;
+  }).join("");
+  const rows = courtMapRows();
+  const used = COURT_FIELDS.filter(([k]) => courtMap.mapping.includes(k));
+  $("#courts-map-preview").innerHTML = `<thead><tr>${used.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${rows.slice(0, 5).map((r) =>
+    `<tr>${used.map(([k]) => `<td>${escapeHtml(r[k])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  const missing = ["name", "department"].filter((k) => !courtMap.mapping.includes(k));
+  const btn = $("#courts-map-run");
+  btn.disabled = !!missing.length || !rows.length;
+  btn.textContent = missing.length ? `Asigne la columna de ${missing.map((k) => COURT_FIELDS.find(([f]) => f === k)[1].toLowerCase()).join(" y ")}` : `Cargar ${rows.length.toLocaleString("es-CO")} despachos`;
+}
+
+$("#courts-map").addEventListener("change", (e) => {
+  const sel = e.target.closest("select[data-ccol]");
+  if (!sel) return;
+  const i = Number(sel.dataset.ccol);
+  if (sel.value) courtMap.mapping = courtMap.mapping.map((m, j) => (j !== i && m === sel.value ? "" : m)); // one column per field
+  courtMap.mapping[i] = sel.value;
+  saveImportMapping("despachos", courtMap.headers, courtMap.mapping);
+  renderCourtMapping();
+});
+$("#courts-map-run").addEventListener("click", () => guarded(async () => {
+  const rows = courtMapRows();
+  if (!(await ask({ title: "Cargar despachos", message: `Se cargarán ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.`, okLabel: "Cargar" }))) return;
+  saveImportMapping("despachos", courtMap.headers, courtMap.mapping);
+  await runCourtImport(rows);
+}));
+
+// Cases whose saved court name matches a directory court get linked to it (version 2.86): the case then carries the
+// court's e-mail, department, city and area. Same tolerant match as the case form (accents, capitals, «Primero» = «001»,
+// the case's city or circuit). Only cases with a court name and no link are considered; nothing is overwritten.
+const clientLabel = (k) => `${k.client_name}${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}`;
+async function planCourtLinks() {
+  const cases = (await api("GET", "/cases")).filter((k) => k.court_name && !k.court_id);
+  const links = [], none = [], several = [];
+  const byDep = new Map();
+  for (const k of cases) {
+    const dep = k.department || "";
+    if (!byDep.has(dep)) byDep.set(dep, dep ? await api("GET", `/courts?${new URLSearchParams({ department: dep, limit: "2000" })}`) : []);
+    const words = courtKey(k.court_name).split(" ");
+    const pool = byDep.get(dep).filter((c) => !k.city || courtKey(c.city) === courtKey(k.city) || courtKey(c.circuit) === courtKey(k.city));
+    const hits = pool.filter((c) => { const hay = courtKey(c.name).split(" "); return words.every((w) => hay.includes(w)); });
+    if (hits.length === 1) links.push({ k, court: hits[0] });
+    else (hits.length ? several : none).push({ k, why: dep ? (hits.length ? `${hits.length} despachos posibles` : "sin coincidencia en el directorio") : "el expediente no tiene departamento" });
+  }
+  return { links, none, several, total: cases.length };
+}
+
+async function showCourtLinks() {
+  courtCache.clear();
+  const plan = await planCourtLinks();
+  const res = $("#import-result");
+  if (!plan.total) return;
+  const list = (rows) => rows.slice(0, 12).map(({ k, why }) => `<li>${escapeHtml(clientLabel(k))} · ${escapeHtml(k.court_name)} (${escapeHtml(why)})</li>`).join("");
+  res.insertAdjacentHTML("beforeend", `<div id="court-links"><h4>Expedientes con despacho escrito</h4>
+    <p><strong>${plan.links.length}</strong> expediente(s) se pueden enlazar con el despacho del directorio (traen su correo, departamento, ciudad y área);
+    <strong>${plan.several.length}</strong> tienen varios despachos posibles y <strong>${plan.none.length}</strong> no tienen coincidencia.</p>
+    ${plan.links.length ? `<div class="toolbar"><button type="button" class="primary" id="court-links-run">Enlazar ${plan.links.length} expediente(s)</button></div>` : ""}
+    ${plan.none.length + plan.several.length ? `<details><summary>Ver los que no se enlazan</summary><ul>${list([...plan.several, ...plan.none])}${plan.none.length + plan.several.length > 12 ? "<li>…</li>" : ""}</ul></details>` : ""}</div>`);
+  $("#court-links-run")?.addEventListener("click", () => guarded(async () => {
+    const btn = $("#court-links-run");
+    btn.disabled = true;
+    let done = 0;
+    const failed = [];
+    for (const { k, court } of plan.links) {
+      try { await api("PUT", `/cases/${k.id}`, { court_id: court.id }); done++; } catch (e) { failed.push(`${clientLabel(k)}: ${e.message}`); }
+    }
+    $("#court-links").insertAdjacentHTML("beforeend", `<p class="ok"><strong>${done}</strong> expediente(s) enlazado(s).${failed.length ? ` No se pudo enlazar ${failed.length}: ${escapeHtml(failed.slice(0, 3).join("; "))}` : ""}</p>`);
+    btn.remove();
+    await loadCases();
+    toast(`${done} expediente(s) enlazado(s) con su despacho.`);
+  }));
+}
+
+// Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.84).
+async function runCourtImport(rows) {
+  const out = await importCourtRows(rows);
+  const byRow = new Map(rows.map((r) => [r.rowNumber, r]));
+  const skipped = out.skipped.map((e) => ({ ...e, data: byRow.get(e.row) }));
+  showImportResult(`<li>Despachos nuevos: <strong>${out.created}</strong></li><li>Despachos actualizados: <strong>${out.updated}</strong></li>
+    <li>Omitidos: <strong>${skipped.length}</strong></li>`, skipped.map((e) => `Fila ${e.row}: ${e.reason}`));
+  const res = $("#import-result");
+  res.insertAdjacentHTML("beforeend", `<div class="toolbar">
+    ${skipped.length ? `<button type="button" id="courts-retry">Reintentar las ${skipped.length} omitidas</button>
+    <button type="button" id="courts-skipped-xlsx">Descargar las omitidas (Excel con el motivo)</button>` : ""}
+    <button type="button" class="primary" data-go-view="despachos">Ver los despachos cargados</button></div>
+    ${skipped.length ? '<p class="hint">Corrija el departamento o el nombre en el Excel de omitidas y súbalo de nuevo en «Despachos»: los ya cargados no se duplican.</p>' : ""}`);
+  await showCourtLinks().catch(() => {});
+  $("#courts-retry")?.addEventListener("click", () => guarded(() => runCourtImport(skipped.map((e) => e.data).filter(Boolean))));
+  $("#courts-skipped-xlsx")?.addEventListener("click", () => guarded(async () => {
+    const cols = [["Departamento", "department"], ["Ciudad", "city"], ["Nombre", "name"], ["Corporación o Área", "area"], ["Email", "email"],
+      ["Código", "code"], ["Teléfono", "phone"], ["Dirección", "address"]];
+    const header = [...cols.map(([l]) => l), "Motivo (no se importa)"].map((value) => ({ value, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
+    const body = skipped.map((e) => [...cols.map(([, k]) => ({ value: String(e.data?.[k] ?? ""), type: String })), { value: e.reason, type: String }]);
+    const blob = await window.writeXlsxFile([header, ...body], { columns: [...cols.map(() => ({ width: 24 })), { width: 50 }], sheet: "Omitidas" }).toBlob();
+    await saveFile(`despachos-omitidos-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+  }));
+}
+
 function showImportResult(items, errors = []) {
+  $("#courts-map-panel").hidden = true;
   const res = $("#import-result");
   res.hidden = false;
   res.innerHTML = `<p class="ok"><strong>Importación terminada.</strong></p><ul>${items}</ul>
@@ -3262,6 +3600,10 @@ function showImportResult(items, errors = []) {
   toast("Importación terminada.");
 }
 
+$("#import-result").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-go-view]");
+  if (b) location.hash = `#${b.dataset.goView}`;
+});
 $("#import-kind-cards").addEventListener("click", (e) => {
   const b = e.target.closest("[data-imp-dl]");
   if (b) guarded(() => downloadImportKind(b.closest("[data-kind]").dataset.kind, b.dataset.impDl));
@@ -3289,7 +3631,9 @@ async function renderInicio() {
   ]);
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
-  $("#kpi-clients").textContent = clients.length;
+  $("#kpi-clients").textContent = clients.filter((c) => !c.archive_status).length; // version 2.87: only activos
+  const nProv = clients.filter((c) => c.archive_status === "Archivo provisional").length, nDef = clients.filter((c) => c.archive_status === "Archivo definitivo").length;
+  $("#kpi-success").textContent = nProv + nDef; $("#kpi-success-prov").textContent = nProv; $("#kpi-success-def").textContent = nDef;
   $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
   $("#kpi-total").textContent = `de ${cases.length} en total`;
   $("#kpi-due").textContent = tasks.filter((t) => t.due_at <= in7).length;
@@ -5417,9 +5761,10 @@ async function renderAgenda() {
             ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
-          <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
+          <span class="toolbar">${can("scope.all") || myOfficeIds().includes(t.office_id) ? `<button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>` : ""}
+          ${!can("cases.write") && t.status === "pendiente" && t.assigned_user_id === me.id && !CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : ""}
           ${can("cases.write") ? `
-            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
+            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>`) : ""}
             ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>
@@ -6075,7 +6420,7 @@ async function renderPagos() {
   const [sum, clients] = await Promise.all([api("GET", "/payments/summary"), api("GET", "/clients")]);
   payClients = clients;
   const sel = $("#pay-client");
-  sel.innerHTML = '<option value="">Todos los clientes</option>' + clients.map(clientOption).join("");
+  sel.innerHTML = '<option value="">Todos los clientes</option>' + activeClients(clients).map(clientOption).join("");
   sel.value = clientId;
   $("#pay-balance").textContent = cop(sum.totals.balance);
   $("#pay-overdue").textContent = cop(sum.totals.overdue);
@@ -6166,7 +6511,7 @@ window.JuanmaCombo.searchSelect(chargeForm.elements.client_id);
 async function fillClientSelect(select, selected) {
   if (!payClients.length) payClients = await api("GET", "/clients");
   if (!payClients.length) throw new Error("Primero cree un cliente.");
-  select.innerHTML = payClients.map(clientOption).join("");
+  select.innerHTML = activeClients(payClients, Number(selected)).map(clientOption).join("");
   // defaultSelected: openDialog resets the form, and the client chosen in Pagos must survive it.
   const opt = selected && [...select.options].find((o) => o.value === String(selected));
   if (opt) { opt.defaultSelected = true; select.value = opt.value; }

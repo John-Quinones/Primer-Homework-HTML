@@ -146,7 +146,7 @@ export function nextFolder(values) {
 // ----- Task history (version 2.18): what each person did on each task, and when -----
 export const TASK_LOG_LABEL = {
   creada: "Creó", editada: "Editó", reasignada: "Reasignó", reprogramada: "Cambió el plazo", hecha: "Marcó como hecha",
-  cancelada: "Canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
+  cancelada: "Marcó como no cumplida o canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
   notificada: "Notificó al asignado",
 };
 const TASK_EDIT_FIELDS = { kind: "tipo", title: "título", notes: "notas", location: "lugar", remind_days: "avisos", done_notes: "cumplimiento",
@@ -170,7 +170,7 @@ export function taskLogEvents(before, after, nameOf = () => "") {
     detail: `${before.assigned_user_id ? `De ${who(before.assigned_user_id)}` : "Del responsable del expediente"} ${after.assigned_user_id ? `a ${who(after.assigned_user_id)}` : "al responsable del expediente"}` });
   if (after.delivered_at && !same("delivered_at")) out.push({ action: "entregada", detail: `Entregada el ${after.delivered_at}` });
   if (after.response_at && !same("response_at")) out.push({ action: "respondida", detail: [`Respuesta del ${after.response_at}`, after.response_notes].filter(Boolean).join(" · ") });
-  if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" ? after.done_notes || "" : "" });
+  if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" || after.status === "cancelada" ? after.done_notes || "" : "" });
   return out;
 }
 
@@ -209,7 +209,7 @@ export const utcToBogota = (utc) => (utc ? new Date(Date.parse(String(utc).repla
  */
 export function taskFollowUp(t, now) {
   const answered = RESPONSE_KINDS.includes(t.kind);
-  if (t.status === "cancelada") return { key: "cancelada", label: "Cancelada", tone: "muted" };
+  if (t.status === "cancelada") return { key: "cancelada", label: "No cumplida", tone: "bad" };
   if (t.status === "hecha") {
     const when = (answered && t.response_at) || utcToBogota(t.done_at);
     const late = when && t.due_at && when.slice(0, 16) > t.due_at && !(when.length === 10 && when <= t.due_at.slice(0, 10));
@@ -355,7 +355,7 @@ export const AUDIT_FIELDS = {
   court_name: "Despacho", judge_name: "Juez", court_email: "Correo del despacho", department: "Departamento", city: "Ciudad", area: "Área", counterparty: "Contraparte",
   facts: "Hechos", field_values: "Campos del proceso", office_id: "Oficina", assigned_user_id: "Responsable", process_type_id: "Tipo de proceso",
   monitor: "Consulta automática", full_name: "Nombre", first_names: "Nombres", last_names: "Apellidos", id_type: "Tipo de documento", id_number: "Documento",
-  email: "Correo", phone: "Teléfono", address: "Dirección", notes: "Notas", legal_rep: "Representante legal", person_type: "Tipo de persona", foto: "Foto",
+  email: "Correo", phone: "Teléfono", address: "Dirección", notes: "Notas", legal_rep: "Representante legal", person_type: "Tipo de persona", foto: "Foto", archive_status: "Archivo del cliente",
   kind: "Tipo", due_at: "Plazo", location: "Lugar", remind_days: "Avisos", done_notes: "Cumplimiento", delivered_at: "Entregado", response_at: "Respuesta",
   response_notes: "Detalle de la respuesta", term_days: "Días del término", term_from: "Término desde", term_unit: "Clase de días", term_label: "Término",
   concept: "Concepto", amount: "Valor", due_date: "Vence", plan_label: "Cuota", voided_at: "Anulado", void_reason: "Motivo de anulación",

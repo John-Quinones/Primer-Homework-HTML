@@ -190,7 +190,7 @@
   const officeName = (id) => s.offices.find((o) => o.id === id)?.name || "";
   const clientOut = (c, withPhoto) => {
     const { foto, ...out } = clone(c), photo = s.blobs[`photo-${c.id}`] || "";
-    return { ...out, office_name: officeName(c.office_id), has_photo: !!photo, ...(withPhoto ? { photo } : {}) };
+    return { ...out, archive_status: c.archive_status || "", office_name: officeName(c.office_id), has_photo: !!photo, ...(withPhoto ? { photo } : {}) };
   };
   const permsOf = (role) => {
     const p = [...(s.matrix[role] || [])];
@@ -207,7 +207,7 @@
   const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
   // Department, city, area and radicado place: the same code as the server (src/place-rules.js).
   const PL = window.JuanmaPlaces;
-  const { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad } = PL.makePlaces(DIV, window.JuanmaPerson.properName);
+  const { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad, cityFromText } = PL.makePlaces(DIV, window.JuanmaPerson.properName);
   const inferArea = PL.inferArea;
   const bogotaNow = (d = new Date()) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
@@ -235,7 +235,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/fields$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/fields$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/clients\/(\d+)\/archive$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -398,8 +398,9 @@
     const key = `assign:${t.id}:${t.assigned_user_id}`;
     if (s.notes.some((n) => n.key === key)) return;
     const o = taskOut(t);
+    const who = userOut(s.users.find((u) => u.id === t.assigned_user_id)), canOpen = who.permissions.includes("scope.all") || who.offices.some((x) => x.id === o.office_id);
     s.notes.push({ id: nextId(), user_id: t.assigned_user_id, kind: "asignada", title: `${me().name} le asignó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
-      body: `Plazo ${t.due_at} · ${o.client_name}`, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
+      body: `Plazo ${t.due_at} · ${o.client_name}`, link: canOpen ? `#expediente-${t.case_id}` : "#agenda", key, created_at: stamp(), read_at: null });
   };
   // Version 2.26, same as the server's sendNotice: the bell always; e-mail and WhatsApp need the server,
   // so the link says so and hands the office the text to send from its own e-mail or WhatsApp.
@@ -800,8 +801,8 @@
       const out = { created: 0, updated: 0, skipped: [] };
       (b.rows || []).forEach((row, i) => {
         const name = str(row.name), department = canonDep(row.department);
-        if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
-        const city = canonCity(row.city, department);
+        if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: !name ? "Sin nombre de despacho." : `Departamento no reconocido: "${str(row.department)}".` }); return; }
+        const city = canonCity(str(row.city) || cityFromText(row.department, department), department);
         const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), judge: str(row.judge).replace(/\s+/g, " "), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city) || s.courts.find((c) => c.name === name && c.city === window.JuanmaPerson.properName(str(row.city)));
         if (hit) { Object.assign(hit, { ...v, email: v.email || hit.email || "", phone: v.phone || hit.phone || "", address: v.address || hit.address || "", judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
@@ -840,7 +841,7 @@
       const q = qs(url);
       return s.tasks.filter((t) => {
         const k = s.cases.find((x) => x.id === t.case_id);
-        if (!k || !inScope(k.office_id)) return false;
+        if (!k || !(inScope(k.office_id) || t.assigned_user_id === me().id)) return false;
         if (q.caseId && t.case_id !== +q.caseId) return false;
         if (q.mine === "1" && !(t.assigned_user_id === me().id || (!t.assigned_user_id && (k.assigned_user_id === me().id
           || (!k.assigned_user_id && t.created_by === me().id))))) return false;
@@ -864,9 +865,12 @@
       return { ...taskOut(t), ...(notice ? { notice } : {}) };
     }],
     ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
-      need("cases.write");
-      const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
-      visibleCase(t.case_id);
+      const t = s.tasks.find((x) => x.id === +m[1]);
+      const kase = t && s.cases.find((x) => x.id === t.case_id);
+      (t && kase && (inScope(kase.office_id) || t.assigned_user_id === me().id)) || fail("La tarea no existe.");
+      // Version 2.82, same as the server: the assignee may always say whether it was fulfilled.
+      const full = me().permissions.includes("cases.write") && inScope(kase.office_id);
+      if (!full && !(t.assigned_user_id === me().id && Object.keys(b).every((x) => ["status", "done_notes"].includes(x)))) fail("Su rol no tiene permiso para esta acción.");
       const prev = clone(t), before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
       Object.assign(t, taskValues(b, t));
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
@@ -990,6 +994,15 @@
       c.office_id = officeFor(b.office_id, c.office_id);
       return clientOut(c, true);
     }],
+    // Archive state (version 2.87): "" = activo; nothing else changes.
+    ["PUT", /^\/clients\/(\d+)\/archive$/, (m, b) => {
+      need("clients.write");
+      const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
+      const status = RR.clientArchive(b.status, fail);
+      if ((status === "Archivo definitivo" || c.archive_status === "Archivo definitivo") && status !== (c.archive_status || "") && me().role !== "Gerencia") fail("Solo Gerencia maneja el archivo definitivo de clientes.", 403);
+      c.archive_status = status;
+      return clientOut(c, true);
+    }],
     // Optional photo (version 2.22), kept as a blob so the client buckets stay small; "" removes it.
     ["PUT", /^\/clients\/(\d+)\/photo$/, (m, b) => {
       need("clients.write");
@@ -1059,7 +1072,8 @@
     ["DELETE", /^\/categories\/(\d+)$/, (m) => {
       need("catalog.manage");
       const typeIds = s.types.filter((t) => t.category_id === +m[1]).map((t) => t.id);
-      s.cases.some((k) => typeIds.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      const n = s.cases.filter((k) => typeIds.includes(k.process_type_id)).length;
+      n && fail(`No se puede eliminar el tipo de proceso: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`);
       s.categories = s.categories.filter((c) => c.id !== +m[1]);
       s.types = s.types.filter((t) => t.category_id !== +m[1]);
       s.fields = s.fields.filter((f) => f.category_id !== +m[1]);
@@ -1090,7 +1104,8 @@
     ["DELETE", /^\/types\/(\d+)$/, (m) => {
       need("catalog.manage");
       const ids = [+m[1], ...s.types.filter((t) => t.parent_id === +m[1]).map((t) => t.id)];
-      s.cases.some((k) => ids.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      const n = s.cases.filter((k) => ids.includes(k.process_type_id)).length;
+      n && fail(`No se puede eliminar el subproceso: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`);
       s.types = s.types.filter((t) => !ids.includes(t.id));
       return null;
     }],

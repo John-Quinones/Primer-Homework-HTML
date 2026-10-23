@@ -8,7 +8,7 @@ import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
-import { clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
+import { clientArchive, clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
 import { AREAS, canonicalDepartment, canonicalCity, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
 
@@ -134,6 +134,18 @@ export function recordsRouter(db) {
     return getClient(req, id);
   }));
 
+  // Archive state (version 2.87): '' = activo, or one of the two archive states. Touches nothing else: cases, charges and documents stay.
+  r.put("/clients/:id/archive", h((req) => {
+    checkPerm(req, "clients.write");
+    const id = toInt(req.params.id, "id");
+    const before = getClient(req, id).archive_status;
+    const status = clientArchive(req.body?.status, fail400);
+    // Only the administrator (Gerencia) sends a client to «Archivo definitivo» or takes one out of it.
+    if ((status === "Archivo definitivo" || before === "Archivo definitivo") && status !== before && req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia maneja el archivo definitivo de clientes.");
+    db.prepare("UPDATE clients SET archive_status = ? WHERE id = ?").run(status, id);
+    return getClient(req, id);
+  }));
+
   // Optional photo (version 2.22): taken with the camera or uploaded, sent as a small JPEG/PNG/WebP data URL; "" removes it.
   r.put("/clients/:id/photo", h((req) => {
     checkPerm(req, "clients.write");
@@ -196,10 +208,15 @@ export function recordsRouter(db) {
     return getOr404("SELECT * FROM process_categories WHERE id = ?", id, "El tipo de proceso");
   }));
 
+  // Never leaves cases without a type: a type in use is refused with the number of cases, nothing is deleted.
+  const inUse = (n, what) => { if (n) throw new HttpError(409, `No se puede eliminar ${what}: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`); };
+
   r.delete("/categories/:id", h((req, res) => {
     checkPerm(req, "catalog.manage");
-    const { changes } = db.prepare("DELETE FROM process_categories WHERE id = ?").run(toInt(req.params.id, "id"));
-    if (!changes) throw new HttpError(404, "El tipo de proceso no existe.");
+    const id = toInt(req.params.id, "id");
+    const cat = getOr404("SELECT * FROM process_categories WHERE id = ?", id, "El tipo de proceso");
+    inUse(db.prepare("SELECT COUNT(*) AS n FROM cases WHERE process_type_id IN (SELECT id FROM process_types WHERE category_id = ?)").get(id).n, `el tipo de proceso «${cat.name}»`);
+    db.prepare("DELETE FROM process_categories WHERE id = ?").run(id);
     res.status(204).end();
   }));
 
@@ -273,8 +290,10 @@ export function recordsRouter(db) {
 
   r.delete("/types/:id", h((req, res) => {
     checkPerm(req, "catalog.manage");
-    const { changes } = db.prepare("DELETE FROM process_types WHERE id = ?").run(toInt(req.params.id, "id"));
-    if (!changes) throw new HttpError(404, "El subproceso no existe.");
+    const id = toInt(req.params.id, "id");
+    const t = getOr404("SELECT * FROM process_types WHERE id = ?", id, "El subproceso");
+    inUse(db.prepare("SELECT COUNT(*) AS n FROM cases WHERE process_type_id = ? OR process_type_id IN (SELECT id FROM process_types WHERE parent_id = ?)").get(id, id).n, `el subproceso «${t.name}»`);
+    db.prepare("DELETE FROM process_types WHERE id = ?").run(id);
     res.status(204).end();
   }));
 

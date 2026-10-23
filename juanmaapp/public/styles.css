@@ -1219,3 +1219,7 @@ dialog:not([open]) { pointer-events: none; }
 .import-card { padding: 12px; border-radius: 12px; background: var(--surface, #fff); box-shadow: 4px 4px 10px rgba(0,0,0,.08), -4px -4px 10px rgba(255,255,255,.7); }
 .import-card h4 { margin: 0 0 6px; }
 .import-card .toolbar { flex-wrap: wrap; gap: 6px; }
+
+/* Version 2.87: breakdown links inside Inicio's «Clientes con Casos de Éxito!» tile. */
+.kpi .kpi-label a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.kpi .kpi-label a:hover { text-decoration-thickness: 2px; }

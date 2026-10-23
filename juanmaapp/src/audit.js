@@ -47,7 +47,10 @@ const SNAP = [
   [/^\/cases\/(\d+)\/radicado$/, "SELECT * FROM cases WHERE id = ?"],
   [/^\/cases\/(\d+)\/number$/, "SELECT * FROM cases WHERE id = ?"],
   [/^\/clients\/(\d+)$/, "SELECT * FROM clients WHERE id = ?"],
+  [/^\/clients\/(\d+)\/archive$/, "SELECT id, full_name, archive_status FROM clients WHERE id = ?"],
   [/^\/clients\/(\d+)\/photo$/, "SELECT id, full_name, CASE WHEN EXISTS (SELECT 1 FROM client_photos WHERE client_id = clients.id) THEN 'Sí' ELSE 'No' END AS foto FROM clients WHERE id = ?"],
+  [/^\/categories\/(\d+)$/, "SELECT id, name FROM process_categories WHERE id = ?"],
+  [/^\/types\/(\d+)$/, "SELECT id, name FROM process_types WHERE id = ?"],
   [/^\/tasks\/(\d+)$/, "SELECT * FROM tasks WHERE id = ?"],
   [/^\/payments\/charges\/(\d+)/, "SELECT * FROM charges WHERE id = ?"],
   [/^\/payments\/receipts\/(\d+)/, "SELECT * FROM receipts WHERE id = ?"],
@@ -96,7 +99,7 @@ export function auditMiddleware(db) {
       const extra = path.match(/\/(void|cancel|resend|invite|monitor|documents|folder|photo|radicado|number)\b/)?.[1];
       audit(db, req, {
         action: verb, module: t.module, entity: t.entity, record_id: record, case_id: caseId, ok,
-        summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto", radicado: "radicado", number: "número de expediente" }[extra]})` : ""}`,
+        summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto", archive: "archivo del cliente", radicado: "radicado", number: "número de expediente" }[extra]})` : ""}`,
         changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : [],
       });
     });

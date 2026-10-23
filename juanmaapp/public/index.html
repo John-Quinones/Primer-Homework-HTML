@@ -191,7 +191,8 @@
           </div>
           <div class="kpis">
             <a class="kpi" href="#expedientes"><svg class="ico k1" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span class="kpi-value" id="kpi-open">–</span><span class="kpi-label">Procesos activos</span><span class="kpi-sub" id="kpi-total"></span></a>
-            <a class="kpi" href="#clientes"><svg class="ico k2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/></svg><span class="kpi-value" id="kpi-clients">–</span><span class="kpi-label">Clientes</span></a>
+            <a class="kpi" href="#clientes"><svg class="ico k2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/></svg><span class="kpi-value" id="kpi-clients">–</span><span class="kpi-label">Clientes activos</span></a>
+            <div class="kpi" id="kpi-success-tile"><svg class="ico k2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="kpi-value" id="kpi-success">–</span><span class="kpi-label">Clientes con Casos de Éxito!</span><span class="kpi-label"><a href="#clientes" data-archive-view="Archivo provisional">Provisional <b id="kpi-success-prov">0</b></a> · <a href="#clientes" data-archive-view="Archivo definitivo">Definitivo <b id="kpi-success-def">0</b></a></span></div>
             <a class="kpi" href="#agenda"><svg class="ico k3" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg><span class="kpi-value" id="kpi-due">–</span><span class="kpi-label">Vencen en 7 días</span></a>
             <a class="kpi" href="#agenda"><svg class="ico k4" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg><span class="kpi-value" id="kpi-hearings">–</span><span class="kpi-label">Audiencias en 14 días</span></a>
             <a class="kpi" href="#consulta" id="kpi-news-tile"><svg class="ico k5" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="kpi-value" id="kpi-news">–</span><span class="kpi-label">Actuaciones nuevas (7 días)</span></a>
@@ -220,10 +221,10 @@
           <div class="toolbar">
             <select id="client-search-by" aria-label="Buscar por">
               <option value="">Buscar en todo</option><option value="first">Nombres</option><option value="last">Apellidos</option>
-              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
+              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option><option value="idplace">Cédula expedida en</option>
             </select>
             <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
-            <select id="client-archive" aria-label="Archivados"><option value="">Sin archivados</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option><option value="todos">Todos (con archivados)</option></select>
+            <select id="client-archive" aria-label="Estado del cliente"><option value="">Clientes activos</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option></select>
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
         </div>
@@ -783,7 +784,7 @@
         </div>
 
         <div id="import-step3" class="panel step" hidden>
-          <h3><span class="step-no">3</span> Columnas</h3>
+          <h3 id="import-step3-title"><span class="step-no">3</span> Columnas</h3>
           <p class="hint">Revise a qué campo va cada columna. Si asigna varias columnas al mismo campo (por ejemplo Nombres y Apellidos), se unen en el orden del archivo.</p>
           <div class="table-scroll">
             <table class="data-table map-table">
@@ -796,11 +797,32 @@
         <div id="import-step4" class="panel step" hidden>
           <h3><span class="step-no">4</span> Vista previa e importación</h3>
           <div class="table-scroll"><table class="data-table" id="import-preview"></table></div>
+          <div id="import-place-warnings" class="errors" hidden></div>
+          <fieldset id="import-update-opts" class="radio-row">
+            <legend>Clientes que ya existen</legend>
+            <label class="inline"><input type="radio" name="import-update" value="fill" checked /> Completar solo lo vacío (recomendado)</label>
+            <label class="inline"><input type="radio" name="import-update" value="update" /> Completar y también actualizar los datos que difieren</label>
+          </fieldset>
+          <div id="import-changes" hidden></div>
           <p class="hint">Si el cliente ya existe (mismo número de documento o mismo nombre), no se duplica: solo se completan los datos que tenga vacíos. Un expediente igual (mismo cliente, subproceso y asunto) no se vuelve a crear.</p>
           <button id="import-run" class="primary">Importar</button>
           <progress id="import-progress" value="0" max="1" hidden></progress>
-          <div id="import-result" hidden></div>
         </div>
+
+        <div id="courts-map-panel" class="panel step" hidden>
+          <h3>Despachos: asigne las columnas</h3>
+          <p class="hint">Cada columna del Excel puede ir a un dato del despacho o quedar en «No importar». Se recuerda para la próxima carga. El nombre del despacho y el departamento son obligatorios.</p>
+          <div class="table-scroll">
+            <table class="data-table map-table">
+              <thead><tr><th>Columna del archivo</th><th>Ejemplo</th><th>Importar como</th></tr></thead>
+              <tbody id="courts-map"></tbody>
+            </table>
+          </div>
+          <div class="table-scroll"><table class="data-table" id="courts-map-preview"></table></div>
+          <button type="button" id="courts-map-run" class="primary">Cargar despachos</button>
+        </div>
+
+        <div id="import-result" class="panel" hidden></div>
       </section>
 
       <!-- ============ REPORTES ============ -->
@@ -982,6 +1004,7 @@
         <label>Dirección <input name="address" /></label>
         <label>Oficina <select name="office_id"></select></label>
       </div>
+      <label>Estado del cliente <select name="archive_status"><option value="">Activo</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option></select></label>
       <label class="inline toggle"><input type="checkbox" name="affiliated" /> Cliente afiliado</label>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
       <div class="photo-field" id="client-photo-field">
@@ -1061,8 +1084,8 @@
       <input type="hidden" name="id" />
       <label>Cliente * <select name="client_id" required></select></label>
       <div class="grid2">
-        <label>Tipo de proceso * <span class="select-add"><select name="category_id" required></select><button type="button" class="mini" data-new-cat title="Crear un tipo de proceso nuevo (solo Gerencia)">+ Nuevo</button></span></label>
-        <label>Subproceso * <span class="select-add"><select name="process_type_id" required></select><button type="button" class="mini" data-new-type title="Crear un subproceso nuevo (solo Gerencia)">+ Nuevo</button></span></label>
+        <label>Tipo de proceso * <span class="select-add"><select name="category_id" required></select><button type="button" class="mini" data-new-cat title="Crear un tipo de proceso nuevo (solo Gerencia)">+ Nuevo</button><button type="button" class="mini danger" data-del-cat title="Eliminar el tipo de proceso elegido (solo Gerencia)" aria-label="Eliminar tipo de proceso">Eliminar</button></span></label>
+        <label>Subproceso * <span class="select-add"><select name="process_type_id" required></select><button type="button" class="mini" data-new-type title="Crear un subproceso nuevo (solo Gerencia)">+ Nuevo</button><button type="button" class="mini danger" data-del-type title="Eliminar el subproceso elegido (solo Gerencia)" aria-label="Eliminar subproceso">Eliminar</button></span></label>
       </div>
       <div class="grid2">
         <label>Asunto <input name="title" placeholder="Ej. Cobro de prestaciones sociales" /></label>
