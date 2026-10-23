@@ -1299,3 +1299,9 @@ dialog:not([open]) { pointer-events: none; }
 .mony-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
 .mony-form textarea { flex: 1; resize: vertical; }
 @media (max-width: 560px) { .mony-msg, .mony-cards { max-width: 94%; } }
+.mony-id { display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 8px; border-radius: 14px; background: #0F172A; border: 1px solid #243352; color: #e2e8f0; }
+.mony-id img { width: 56px; height: 56px; border-radius: 50%; filter: drop-shadow(0 0 8px #22d3ee88); }
+.mony-id b { display: block; letter-spacing: .1em; }
+.mony-id small { color: #6ee7b7; }
+.mony-id img { transition: transform .12s ease-out; will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .mony-id img { transition: none; } }
