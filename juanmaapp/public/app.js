@@ -3280,7 +3280,7 @@ function resolveIdPlace(rec) {
 
 const updateMode = () => $("input[name=import-update]:checked")?.value || "fill";
 const FIELD_LABEL = { full_name: "Nombre", id_type: "Tipo de documento", email: "Correo", phone: "Teléfono", address: "Dirección", city: "Ciudad",
-  department: "Departamento", notes: "Notas", id_department: "Depto. expedición", id_city: "Ciudad expedición", person_type: "Tipo de persona", gender: "Género" };
+  department: "Departamento", notes: "Notas", id_department: "Depto. expedición", id_city: "Ciudad expedición", person_type: "Tipo de persona", gender: "Género", archive_status: "Estado del cliente", case_status: "Estado del expediente" };
 let changesToken = 0;
 // Before / after for the clients that already exist (dry run, nothing is written).
 async function renderImportChanges() {
@@ -3289,7 +3289,7 @@ async function renderImportChanges() {
   const clientsData = importMode() === "clients" || importMode() === "cases";
   $("#import-update-opts").hidden = !clientsData;
   if (!clientsData) { box.hidden = true; return; }
-  const plan = await IMP.plan(importRecords(), api, { withCases: false, updateMode: updateMode() });
+  const plan = await IMP.plan(importRecords(), api, { withCases: importMode() === "cases", updateMode: updateMode() });
   if (token !== changesToken) return;
   const rows = plan.changes;
   box.hidden = false;
@@ -3350,11 +3350,13 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
   saveImportMapping(imp.kind, imp.headers, imp.mapping);
   const records = importRecords();
   if (updateMode() === "update") {
-    const plan = await IMP.plan(records, api, { withCases: false, updateMode: "update" });
+    const plan = await IMP.plan(records, api, { withCases: importMode() === "cases", updateMode: "update" });
     const n = plan.changes.filter((c) => c.kind === "update").length;
     if (n) {
-      if (!(await ask({ title: "Actualizar clientes existentes", message: `Se cambiarán ${n} dato(s) que ya estaban guardados. Antes se descarga un Excel con los clientes tal como están hoy, para poder volver atrás. Nada se borra.`, okLabel: "Descargar copia y actualizar" }))) return;
-      await downloadImportKind("clientes", "data", `clientes-antes-de-actualizar-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      if (!(await ask({ title: "Actualizar clientes existentes", message: `Se cambiarán ${n} dato(s) que ya estaban guardados. Antes se descarga un Excel con los clientes${plan.changes.some((c) => c.field === "case_status") ? " y los expedientes" : ""} tal como están hoy, para poder volver atrás. Nada se borra.`, okLabel: "Descargar copia y actualizar" }))) return;
+      const day = new Date().toISOString().slice(0, 10);
+      await downloadImportKind("clientes", "data", `clientes-antes-de-actualizar-${day}.xlsx`);
+      if (plan.changes.some((c) => c.field === "case_status")) await downloadImportKind("expedientes", "data", `expedientes-antes-de-actualizar-${day}.xlsx`);
     }
   }
   const casesMode = importMode() === "cases";
@@ -3380,6 +3382,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       <ul>
         <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
         ${sum.clientsArchived ? `<li>Clientes con estado de archivo cambiado: <strong>${sum.clientsArchived}</strong></li>` : ""}
+        ${sum.casesUpdated ? `<li>Expedientes con estado actualizado: <strong>${sum.casesUpdated}</strong></li>` : ""}
         <li>Clientes existentes completados o actualizados: <strong>${sum.clientsCompleted}</strong>${sum.clientsUpdated ? ` (con datos cambiados: ${sum.clientsUpdated})` : ""}</li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}

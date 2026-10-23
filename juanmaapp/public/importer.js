@@ -226,6 +226,11 @@
     if (t.includes("definitiv")) return "Archivo definitivo";
     return /^(activo|activa|vigente)/.test(t) ? "" : undefined;
   }
+  /** Client state to apply: the client column if the file has one, else «Pendiente Pago Sentencia» when the case's state says so. */
+  function wantedClientState(clientCol, caseState) {
+    const w = archiveState(clientCol);
+    return w === undefined && caseState === "Pendiente Pago Sentencia" ? caseState : w;
+  }
   function normClient(raw) {
     const c = { ...raw };
     if (c.person_type) c.person_type = /jur/i.test(norm(c.person_type)) ? "juridica" : "natural";
@@ -258,11 +263,11 @@
     const cases = opts.withCases ? await api("GET", "/cases") : [];
     // A case already in TecjuridicosApp: same radicado, or same client + sub-process + folder number, or + subject.
     const folderFieldIds = () => new Set(catalog.flatMap((c) => c.fields).filter((f) => norm(f.label) === "no carpeta").map((f) => String(f.id)));
-    const caseKeys = new Set();
+    const caseKeys = new Map(); // key -> the case (version 2.104: a re-uploaded file can update the state of a case that already exists)
     const addKeys = (k) => {
-      if (k.radicado) caseKeys.add(`r:${radDigits(k.radicado)}`);
-      for (const fid of folderFieldIds()) if (k.field_values?.[fid]) caseKeys.add(`${k.client_id}|${k.process_type_id}|c:${norm(k.field_values[fid])}`);
-      caseKeys.add(`${k.client_id}|${k.process_type_id}|${norm(k.title)}`);
+      if (k.radicado) caseKeys.set(`r:${radDigits(k.radicado)}`, k);
+      for (const fid of folderFieldIds()) if (k.field_values?.[fid]) caseKeys.set(`${k.client_id}|${k.process_type_id}|c:${norm(k.field_values[fid])}`, k);
+      caseKeys.set(`${k.client_id}|${k.process_type_id}|${norm(k.title)}`, k);
     };
     cases.forEach(addKeys);
     let courts = null;
@@ -313,7 +318,9 @@
       try {
         // ----- client: match by document number, else by exact name -----
         const c = normClient(rec.client);
-        const wanted = archiveState(c.archive_status); // version 2.94: «Estado del cliente» column, applied after the client is saved
+        const caseState = rec.case.status ? window.JuanmaCaseMeta?.statusFrom(rec.case.status) : undefined;
+        // version 2.94: «Estado del cliente» column, applied after the client is saved; version 2.104: without that column, a case in «Pago de Sentencia» puts its client there too
+        const wanted = wantedClientState(c.archive_status, caseState);
         delete c.archive_status;
         let client = (docKey(c.id_number) && byDoc.get(docKey(c.id_number))) || (c.full_name && byName.get(norm(c.full_name)));
         let created = false;
@@ -353,6 +360,12 @@
             !radOk && !rc.folder && `${client.id}|${type.id}|${norm(rc.title)}`].filter(Boolean);
           if (keys.some((k) => caseKeys.has(k))) {
             summary.casesSkipped++;
+            const old = keys.map((k) => caseKeys.get(k)).find(Boolean);
+            if (opts.updateMode === "update" && old && caseState && caseState !== old.status) {
+              const upd = await api("PUT", `/cases/${old.id}`, { status: caseState }); // only the state; nothing else of the case changes
+              addKeys(upd);
+              summary.casesUpdated = (summary.casesUpdated || 0) + 1;
+            }
           } else {
             const field_values = {};
             for (const [label, value] of Object.entries(rec.custom)) field_values[(await ensureField(cat, label)).id] = value;
@@ -388,7 +401,7 @@
               kase = await api("POST", "/cases", body);
             }
             addKeys(kase);
-            keys.forEach((k) => caseKeys.add(k));
+            keys.forEach((k) => caseKeys.set(k, kase));
             summary.casesCreated++;
 
             // ----- fees and payments -----
@@ -426,6 +439,7 @@
     const byDoc = new Map(clients.filter((c) => docKey(c.id_number)).map((c) => [docKey(c.id_number), c]));
     const byName = new Map(clients.map((c) => [norm(c.full_name), c]));
     const cases = opts.withCases ? await api("GET", "/cases") : [];
+    const folderIds = new Set(opts.withCases ? (await api("GET", "/catalog")).flatMap((c) => c.fields).filter((f) => norm(f.label) === "no carpeta").map((f) => String(f.id)) : []);
     const seenClients = new Set(), seenCases = new Set();
     const rads = new Set(cases.filter((k) => k.radicado).map((k) => radDigits(k.radicado)));
     const out = { rows: records.length, clientsNew: 0, clientsExisting: 0, casesNew: 0, casesExisting: 0, changes: [] };
@@ -440,13 +454,24 @@
         if (exists) {
           out.clientsExisting++;
           for (const d of clientDiff(found, normClient(c), opts.updateMode)) out.changes.push({ row: rec.rowNumber, name: found.full_name, ...d });
+          const caseState = rec.case.status ? window.JuanmaCaseMeta?.statusFrom(rec.case.status) : undefined;
+          const wanted = wantedClientState(c.archive_status, caseState);
+          if (opts.updateMode === "update" && wanted !== undefined && wanted !== (found.archive_status || ""))
+            out.changes.push({ row: rec.rowNumber, name: found.full_name, field: "archive_status", before: found.archive_status || "Activo", after: wanted || "Activo", kind: "update" });
         } else out.clientsNew++;
       }
       if (opts.withCases) {
         const rad = radDigits(rec.case.radicado);
         const dup = (rad.length === 23 && rads.has(rad)) || seenCases.has(`${key}|${norm(rec.case.type)}|${norm(rec.case.folder || rec.case.title)}`);
         seenCases.add(`${key}|${norm(rec.case.type)}|${norm(rec.case.folder || rec.case.title)}`);
-        if (dup) out.casesExisting++; else out.casesNew++;
+        if (dup) {
+          out.casesExisting++;
+          const st = rec.case.status ? window.JuanmaCaseMeta?.statusFrom(rec.case.status) : undefined;
+          const old = found && cases.find((k) => (rad.length === 23 && radDigits(k.radicado) === rad) ||
+            (k.client_id === found.id && ((rec.case.folder && [...folderIds].some((f) => norm(k.field_values?.[f]) === norm(rec.case.folder))) || (!rec.case.folder && norm(k.title) === norm(rec.case.title)))));
+          if (opts.updateMode === "update" && old && st && st !== old.status)
+            out.changes.push({ row: rec.rowNumber, name: found.full_name, field: "case_status", before: old.status, after: st, kind: "update" });
+        } else out.casesNew++;
       }
     }
     return out;

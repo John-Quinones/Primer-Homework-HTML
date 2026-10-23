@@ -129,3 +129,37 @@ test("version 2.97: a case waiting for its sentence payment stays among the moni
   const { LIVE_STATUSES } = await import("../src/case-meta.js");
   assert.ok(LIVE_STATUSES.includes("Pendiente Pago Sentencia"));
 });
+
+test("version 2.104: re-uploading the Excel updates «Pago de Sentencia» on existing cases and clients, only the state", async () => {
+  const IMP = await importerApi();
+  window.JuanmaCaseMeta = await import("../src/case-meta.js");
+  const headers = ["Nombre completo", "Número de documento", "Estado", "Radicado"];
+  const mapping = IMP.guessAll(headers);
+  const rad = "73001333100120170000200";
+  const rec = ["Vieja Cliente", "111", "Pago de Sentencia", rad];
+  const records = [{ ...IMP.buildRecord(rec, headers, mapping), rowNumber: 2 }];
+  const make = () => {
+    const calls = [];
+    const api = async (method, path, body) => {
+      calls.push(`${method} ${path} ${JSON.stringify(body ?? "")}`);
+      if (path === "/clients" && method === "GET") return [{ id: 1, full_name: "Vieja Cliente", id_number: "111", archive_status: "" }];
+      if (path === "/cases" && method === "GET") return [{ id: 7, client_id: 1, process_type_id: 3, title: "", radicado: rad, status: "Activo", field_values: {} }];
+      if (path === "/catalog") return [{ id: 1, name: "Laboral", fields: [], types: [{ id: 3, name: "Ordinario" }] }];
+      if (path.endsWith("/archive")) return { id: 1, archive_status: body.status, full_name: "Vieja Cliente", id_number: "111" };
+      if (path === "/cases/7") return { id: 7, client_id: 1, process_type_id: 3, title: "", radicado: rad, status: body.status, field_values: {} };
+      return [];
+    };
+    return { calls, api };
+  };
+  const p = make();
+  const plan = await IMP.plan(records, p.api, { withCases: true, updateMode: "update" });
+  assert.deepEqual(plan.changes.map((c) => [c.field, c.before, c.after]), [["archive_status", "Activo", "Pendiente Pago Sentencia"], ["case_status", "Activo", "Pendiente Pago Sentencia"]]);
+  assert.equal(p.calls.some((c) => c.startsWith("PUT")), false);
+  const fill = make();
+  await IMP.run(records, fill.api, { withCases: true, defaultCategory: "Laboral", defaultType: "Ordinario", updateMode: "fill" });
+  assert.equal(fill.calls.some((c) => c.startsWith("PUT")), false);
+  const upd = make();
+  const sum = await IMP.run(records, upd.api, { withCases: true, defaultCategory: "Laboral", defaultType: "Ordinario", updateMode: "update" });
+  assert.deepEqual(upd.calls.filter((c) => c.startsWith("PUT")), ['PUT /clients/1/archive {"status":"Pendiente Pago Sentencia"}', 'PUT /cases/7 {"status":"Pendiente Pago Sentencia"}']);
+  assert.equal(sum.casesUpdated, 1);
+});
