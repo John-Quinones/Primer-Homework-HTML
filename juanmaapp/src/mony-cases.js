@@ -106,3 +106,63 @@ export function caseReport(db, user, input = {}, now = Date.now()) {
     fuente: "Base de datos de la App (actuaciones guardadas de la Rama Judicial); para el estado al día usa consultar_estado_proceso con el caso_id.",
   };
 }
+
+/**
+ * preparar_whatsapp (version 2.2.25): drafts a WhatsApp message to a client (by case, folder, client name or a
+ * phone number). It sends NOTHING: the page shows the text in a card and the person decides to open WhatsApp.
+ */
+export function prepareWhatsapp(db, user, input = {}) {
+  const text = String(input.mensaje ?? "").trim().slice(0, 3000);
+  if (!text) throw new Error("Falta el texto del mensaje.");
+  let phone = digits(input.telefono), who = String(input.destinatario ?? "").trim(), caseId = null;
+  if (!phone) {
+    let k = null;
+    if (input.caso_id || String(input.carpeta ?? "").trim()) k = loadCases(db, user).find((x) => (input.caso_id ? x.id === Number(input.caso_id) : sameFolder(x.folder, input.carpeta)));
+    else if (String(input.cliente ?? "").trim()) {
+      const f = findCases(db, user, { cliente: input.cliente });
+      const ids = [...new Set(f.expedientes.map((e) => e.cliente))];
+      if (ids.length > 1) throw new Error(`Hay ${ids.length} clientes con ese nombre (${ids.slice(0, 5).join("; ")}); pide el nombre completo o el número de carpeta.`);
+      k = f.expedientes[0] ? loadCases(db, user).find((x) => x.id === f.expedientes[0].caso_id) : null;
+    } else throw new Error("Indica el cliente, la carpeta, el caso_id o un número de teléfono.");
+    if (!k) throw new Error("No encontré ese cliente o expediente (o este usuario no puede verlo).");
+    const c = db.prepare("SELECT full_name, phone FROM clients WHERE id = ?").get(k.client_id);
+    phone = digits(c.phone); who = c.full_name; caseId = k.id;
+    if (!phone) throw new Error(`${c.full_name} no tiene teléfono registrado en la App.`);
+  }
+  if (phone.length === 10 && phone.startsWith("3")) phone = "57" + phone;
+  if (phone.length < 10) throw new Error("El número de teléfono no es válido.");
+  return { destinatario: who || null, telefono: phone, caso_id: caseId, texto: text,
+    estado: "BORRADOR: no se ha enviado nada. La persona debe pulsar «Abrir WhatsApp» en la tarjeta y enviarlo ella misma." };
+}
+
+/**
+ * preparar_correo (version 2.2.25): drafts an e-mail to the client or the case's court. It sends NOTHING: the page
+ * offers «Revisar y enviar», which opens the App's traced mail dialog filled in for the person to edit and send.
+ */
+export function prepareEmail(db, user, input = {}) {
+  const body = String(input.mensaje ?? "").trim().slice(0, 12000), subject = String(input.asunto ?? "").trim().slice(0, 300);
+  if (!body || !subject) throw new Error("Faltan el asunto y el texto del correo.");
+  let to = String(input.para ?? "").trim(), who = "", k = null;
+  if (input.caso_id || String(input.carpeta ?? "").trim()) k = loadCases(db, user).find((x) => (input.caso_id ? x.id === Number(input.caso_id) : sameFolder(x.folder, input.carpeta)));
+  else if (String(input.cliente ?? "").trim()) {
+    const f = findCases(db, user, { cliente: input.cliente });
+    const names = [...new Set(f.expedientes.map((e) => e.cliente))];
+    if (names.length > 1) throw new Error(`Hay ${names.length} clientes con ese nombre (${names.slice(0, 5).join("; ")}); pide el nombre completo o la carpeta.`);
+    k = f.expedientes[0] ? loadCases(db, user).find((x) => x.id === f.expedientes[0].caso_id) : null;
+  } else if (!to) throw new Error("Indica el cliente, la carpeta, el caso_id o la dirección de correo.");
+  if ((input.caso_id || input.carpeta || input.cliente) && !k) throw new Error("No encontré ese cliente o expediente (o este usuario no puede verlo).");
+  if (k && !to) {
+    if (input.destino === "despacho") {
+      to = db.prepare("SELECT court_email FROM cases WHERE id = ?").get(k.id)?.court_email || "";
+      who = k.court_name || "el despacho";
+      if (!to) throw new Error("El despacho del expediente no tiene correo registrado en la App.");
+    } else {
+      const c = db.prepare("SELECT full_name, email FROM clients WHERE id = ?").get(k.client_id);
+      to = c.email || ""; who = c.full_name;
+      if (!to) throw new Error(`${c.full_name} no tiene correo registrado en la App.`);
+    }
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("La dirección de correo no es válida.");
+  return { destinatario: who || null, para: to, asunto: subject, cuerpo: body, caso_id: k?.id ?? null,
+    estado: "BORRADOR: no se ha enviado nada. La persona debe pulsar «Revisar y enviar» en la tarjeta, revisarlo y enviarlo ella misma." };
+}
