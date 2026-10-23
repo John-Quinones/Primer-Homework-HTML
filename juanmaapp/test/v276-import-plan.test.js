@@ -7,12 +7,12 @@ createRequire(import.meta.url)("../public/importer.js");
 const { guessAll, buildRecord, plan } = window.JuanmaImport;
 
 // Headers of the downloadable Excel files (Importar → Plantilla / Descargar datos actuales).
-const CLIENT_HEADERS = ["Nombre completo", "Tipo de documento", "Número de documento", "Correo", "Teléfono", "Dirección", "Ciudad", "Notas"];
+const CLIENT_HEADERS = ["Nombre completo", "Tipo de documento", "Número de documento", "Correo", "Teléfono", "Dirección", "Ciudad", "Departamento de expedición", "Ciudad de expedición", "Notas"];
 const CASE_HEADERS = ["Nombre del cliente", "Número de documento", "Tipo de proceso", "Subproceso", "Asunto", "Estado", "Fecha de creación",
   "Radicado", "No. carpeta", "Despacho judicial", "Ciudad del proceso", "Calidad del cliente"];
 
 test("the downloadable headers map to the importer's own fields", () => {
-  assert.deepEqual(guessAll(CLIENT_HEADERS), ["client.full_name", "client.id_type", "client.id_number", "client.email", "client.phone", "client.address", "client.city", "client.notes"]);
+  assert.deepEqual(guessAll(CLIENT_HEADERS), ["client.full_name", "client.id_type", "client.id_number", "client.email", "client.phone", "client.address", "client.city", "client.id_department", "client.id_city", "client.notes"]);
   assert.deepEqual(guessAll(CASE_HEADERS), ["client.full_name", "client.id_number", "case.category", "case.type", "case.title", "case.status", "case.created_at",
     "case.radicado", "case.folder", "case.court_name", "case.city", "case.client_role"]);
 });

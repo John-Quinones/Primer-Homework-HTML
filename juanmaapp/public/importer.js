@@ -20,6 +20,10 @@
     { key: "client.phone", label: "Cliente · Teléfono", join: " / ", match: ["telefono", "celular", "movil", "tel", "telefonos", "whatsapp"] },
     { key: "client.address", label: "Cliente · Dirección", match: ["direccion", "domicilio", "direccion residencia"] },
     { key: "client.city", label: "Cliente · Ciudad", match: ["ciudad", "municipio"] },
+    { key: "client.id_department", label: "Cliente · Departamento de expedición de la cédula",
+      match: ["departamento de expedicion", "departamento expedicion", "depto expedicion", "departamento de expedicion de la cedula", "departamento expedicion cedula"] },
+    { key: "client.id_city", label: "Cliente · Ciudad de expedición de la cédula",
+      match: ["ciudad de expedicion", "ciudad expedicion", "lugar de expedicion", "lugar expedicion", "ciudad de expedicion de la cedula", "ciudad expedicion cedula", "expedida en", "expedicion"] },
     { key: "client.notes", label: "Cliente · Notas", join: "\n", match: ["notas", "observaciones", "comentarios"] },
     { key: "case.category", label: "Expediente · Tipo de proceso", match: ["tipo proceso", "tipo de proceso", "area", "especialidad", "categoria", "materia"] },
     { key: "case.type", label: "Expediente · Subproceso", match: ["subproceso", "clase proceso", "clase de proceso", "accion", "tipo accion", "medio de control", "proceso"] },
@@ -277,6 +281,8 @@
         } else {
           // Only fill blanks; never overwrite data already in TecjuridicosApp.
           const fill = Object.fromEntries(Object.entries(c).filter(([k, v]) => v && !client[k]));
+          // The place of issue is one pair: a saved department keeps its own city, not one from another department.
+          if (client.id_department && c.id_department && client.id_department !== c.id_department) delete fill.id_city;
           if (Object.keys(fill).length) {
             client = await api("PUT", `/clients/${client.id}`, fill);
             summary.clientsCompleted++;

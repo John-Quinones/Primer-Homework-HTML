@@ -3021,6 +3021,7 @@ async function renderImportar() {
   catSel.value = cur;
   fillDefaultTypes();
   renderImportKinds();
+  importDivipola ||= await window.JuanmaCombo.loadPlaces();
 }
 
 function fillDefaultTypes() {
@@ -3090,15 +3091,45 @@ $("#import-map").addEventListener("change", (e) => {
   renderImportPreview();
 });
 
+// Place of issue of the ID card (version 2.81): matched against DIVIPOLA ignoring accents and capitals
+// ("CARTAGENA" → "Cartagena de Indias"). What is not recognized is left out and reported, never blocks the row.
+let importDivipola = null;
+function resolveIdPlace(rec) {
+  const c = rec.client;
+  if (!c.id_department && !c.id_city) return [];
+  const warn = [];
+  const places = window.JuanmaPlaces.makePlaces(importDivipola, window.JuanmaPerson.properName);
+  const depName = c.id_department;
+  const dep = places.canonicalDepartment(depName);
+  const depCode = importDivipola.departamentos.find((d) => d.name === dep)?.code;
+  if (depName && !dep) warn.push(`departamento de expedición «${depName}» no reconocido`);
+  let city = "";
+  if (c.id_city && !(depName && !dep)) {
+    const name = places.canonicalCity(c.id_city, dep);
+    const hits = importDivipola.municipios.filter((m) => m.name === name && (!depCode || m.dep === depCode));
+    if (hits.length === 1) {
+      city = hits[0].name;
+      if (!dep) c.id_department = importDivipola.departamentos.find((d) => d.code === hits[0].dep)?.name;
+    } else warn.push(hits.length ? `ciudad de expedición «${c.id_city}» está en varios departamentos: indique el departamento` : `ciudad de expedición «${c.id_city}» no reconocida`);
+  }
+  if (dep) c.id_department = dep; else if (!(city && c.id_department)) delete c.id_department;
+  if (city) c.id_city = city; else delete c.id_city;
+  return warn;
+}
+
 function importRecords() {
   return imp.body.map((row, i) => ({ ...IMP.buildRecord(row, imp.headers, imp.mapping), rowNumber: i + 2 }))
-    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length);
+    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length)
+    .map((r) => ({ ...r, placeWarnings: importDivipola ? resolveIdPlace(r) : [] }));
 }
 
 function renderImportPreview() {
   const casesMode = importMode() === "cases";
   const recs = importRecords();
   const cols = [["client.full_name", "Cliente"], ["client.id_number", "Documento"], ["client.email", "Correo"], ["client.phone", "Teléfono"]];
+  if (imp.mapping.includes("client.id_city") || imp.mapping.includes("client.id_department")) {
+    cols.push(["client.id_department", "Depto. expedición"], ["client.id_city", "Ciudad expedición"]);
+  }
   if (casesMode) {
     cols.push(["case.category", "Tipo de proceso"], ["case.type", "Subproceso"]);
     for (const [k, l] of [["case.radicado", "Radicado"], ["case.status", "Estado"], ["case.court_name", "Despacho"], ["case.folder", "Carpeta"], ["pay.fees", "Honorarios"], ["pay.paid", "Pagos"], ["case.title", "Asunto"]])
@@ -3111,6 +3142,11 @@ function renderImportPreview() {
     return `<td>${escapeHtml(k === "case.status" && v ? window.JuanmaCaseMeta.normStatus(v) : o === "pay" && v ? cop(IMP.parsePesos(v)) : v)}</td>`;
   }).join("")}${casesMode ? `<td>${escapeHtml(Object.entries(r.custom).map(([k, v]) => `${k}: ${v}`).join("\n"))}</td>` : ""}</tr>`).join("");
   $("#import-preview").innerHTML = head + `<tbody>${rows}</tbody>`;
+  const warned = recs.filter((r) => r.placeWarnings.length);
+  $("#import-place-warnings").hidden = !warned.length;
+  $("#import-place-warnings").innerHTML = warned.length
+    ? `<strong>Lugar de expedición sin reconocer en ${warned.length} fila(s)</strong> (se importa la fila sin ese dato):<ul>${warned.slice(0, 8).map((r) =>
+      `<li>Fila ${r.rowNumber}: ${escapeHtml(r.placeWarnings.join("; "))}</li>`).join("")}${warned.length > 8 ? `<li>… y ${warned.length - 8} más</li>` : ""}</ul>` : "";
   const noName = !imp.mapping.includes("client.full_name") && !imp.mapping.includes("client.first_names");
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
@@ -3165,7 +3201,8 @@ const IMPORT_KINDS = {
   clientes: {
     title: "Clientes", mode: "clients",
     cols: [["Nombre completo", (c) => c.full_name], ["Tipo de documento", (c) => c.id_type], ["Número de documento", (c) => c.id_number],
-      ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city], ["Notas", (c) => c.notes]],
+      ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city],
+      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Notas", (c) => c.notes]],
     rows: async () => api("GET", "/clients"),
   },
   expedientes: {
@@ -3234,10 +3271,12 @@ async function uploadImportKind(key, file) {
   await loadImportFile(file);
   $(`input[name=import-mode][value=${k.mode}]`).checked = true;
   renderMapping();
-  const plan = await IMP.plan(importRecords(), api, { withCases: k.mode === "cases" });
+  const recs = importRecords();
+  const plan = await IMP.plan(recs, api, { withCases: k.mode === "cases" });
+  const placeWarn = recs.filter((r) => r.placeWarnings.length).length;
   const res = $("#import-result");
   res.hidden = false;
-  res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. Revise la vista previa y pulse «Importar».</p>`;
+  res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. ${placeWarn ? ` El lugar de expedición no se reconoció en ${placeWarn} fila(s): se importan sin ese dato (ver el aviso debajo de la vista previa).` : ""} Revise la vista previa y pulse «Importar».</p>`;
   $("#import-step4").scrollIntoView({ behavior: "smooth" });
 }
 
