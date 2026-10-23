@@ -82,3 +82,22 @@ test("preparar_whatsapp and preparar_correo only draft: client phone/e-mail, car
   await assert.rejects(runTool("preparar_correo", { cliente: "Luis Prada", asunto: "a", mensaje: "b" }, ctx), /no tiene correo/);
   await assert.rejects(runTool("preparar_correo", { para: "mal", asunto: "a", mensaje: "b" }, ctx), /no es válida/);
 });
+
+test("agenda: consult, propose (never saves), overlaps and the card", async () => {
+  const ctx = { db, user };
+  const tasks = (await admin.call("GET", "/tasks")).body;
+  const pending = tasks.find((t) => t.title === "Llamar al cliente");
+  const list = await runTool("consultar_agenda", { desde: "2099-01-01", hasta: "2099-01-31" }, ctx);
+  assert.equal(list.eventos[0].titulo, "Llamar al cliente");
+  const p = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseA, tipo: "audiencia", titulo: "Audiencia inicial", fecha_hora: "2099-01-10 09:30" }, ctx);
+  assert.equal(p.hay_cruce, true); // 09:00 task is within the hour
+  assert.equal(p.cambios.kind, "audiencia");
+  const free = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseA, titulo: "Audiencia", fecha_hora: "2099-01-10 14:00" }, ctx);
+  assert.equal(free.hay_cruce, false);
+  const mv = await runTool("proponer_cambio_agenda", { accion: "posponer", tarea_id: pending.id, dias: 7 }, ctx);
+  assert.equal(mv.cambios.due_at, "2099-01-17 09:00");
+  assert.equal(cardFor("proponer_cambio_agenda", {}, mv).type, "agenda");
+  await assert.rejects(runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseA, titulo: "x", fecha_hora: "2001-01-01 10:00" }, ctx), /ya pasó/);
+  await assert.rejects(runTool("proponer_cambio_agenda", { accion: "crear", titulo: "x", fecha_hora: "2099-01-01 10:00" }, ctx), /expediente/);
+  assert.equal((await admin.call("GET", "/tasks")).body.length, tasks.length); // nothing was saved
+});

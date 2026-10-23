@@ -1380,3 +1380,6 @@ dialog:not([open]) { pointer-events: none; }
 .mony-wa-text { width: 100%; margin-top: 6px; background: #0f172a; color: #e2e8f0; border: 1px solid #22d3ee55; border-radius: 10px; padding: 8px; font: inherit; resize: vertical; }
 .mony-wa-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .mony-mail-body { white-space: pre-wrap; max-height: 180px; overflow: auto; margin: 6px 0 8px; padding: 8px; border-radius: 10px; background: #0f172a; border: 1px solid #22d3ee33; font-size: 13px; }
+.mony-panel header img, .mony-panel header .mony-cv { cursor: zoom-in; }
+.mony-conflict { margin: 6px 0; padding: 6px 8px; border-radius: 8px; background: #7f1d1d55; border: 1px solid #f8717199; color: #fecaca; font-size: 13px; }
+.mony-wa-check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }

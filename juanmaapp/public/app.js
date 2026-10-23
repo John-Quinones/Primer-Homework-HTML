@@ -7064,6 +7064,39 @@ function monyCard(c) {
     row.append(open, copy);
     const box = document.createElement("div"); box.append(head("WhatsApp para " + c.title, "+" + c.phone + " · borrador, aún no enviado"), ta, row);
     d.append(box);
+  } else if (c.type === "agenda") {
+    // Version 2.2.26: Mony only proposes; the change is saved (with the App's own rules) when the person presses «Confirmar».
+    d.classList.add("mony-wa");
+    const box = document.createElement("div");
+    const b = document.createElement("b"); b.textContent = c.summary;
+    const sub = document.createElement("small"); sub.textContent = "Propuesta · aún no guardada";
+    box.append(b, sub);
+    if (c.conflicts?.length) {
+      const w = document.createElement("div"); w.className = "mony-conflict";
+      w.textContent = "⚠ Se cruza con: " + c.conflicts.map((x) => `${x.titulo} (${x.cuando}${x.cliente ? " · " + x.cliente : ""})`).join("; ");
+      box.append(w);
+    }
+    const row = document.createElement("div"); row.className = "mony-wa-row";
+    const mk = (id, text) => { const l = document.createElement("label"); l.className = "mony-wa-check"; const i = document.createElement("input"); i.type = "checkbox"; i.dataset.k = id; l.append(i, " " + text); return l; };
+    if (["crear", "modificar", "posponer"].includes(c.action)) row.append(mk("email", "Avisar por correo"), mk("whatsapp", "Avisar por WhatsApp"));
+    const ok = document.createElement("button"); ok.type = "button"; ok.className = "mini primary";
+    ok.textContent = c.conflicts?.length ? "Confirmar de todos modos" : c.action === "eliminar" ? "Eliminar" : "Confirmar";
+    const no = document.createElement("button"); no.type = "button"; no.className = "mini"; no.textContent = "Cancelar";
+    no.addEventListener("click", () => { d.remove(); });
+    ok.addEventListener("click", () => guarded(async () => {
+      ok.disabled = no.disabled = true;
+      const notify = { email: row.querySelector('[data-k=email]')?.checked, whatsapp: row.querySelector('[data-k=whatsapp]')?.checked };
+      const body = { ...c.changes, ...(notify.email || notify.whatsapp ? { notify } : {}) };
+      try {
+        if (c.action === "crear") await api("POST", "/tasks", body);
+        else if (c.action === "eliminar") await api("DELETE", `/tasks/${c.taskId}`);
+        else await api("PUT", `/tasks/${c.taskId}`, body);
+      } catch (e) { ok.disabled = no.disabled = false; throw e; }
+      sub.textContent = "✓ Guardado en la agenda"; row.remove(); toast("Agenda actualizada.");
+    }));
+    row.append(ok, no);
+    box.append(row);
+    d.append(box);
   } else if (c.type === "correo") {
     d.classList.add("mony-wa");
     const sub = document.createElement("small"); sub.textContent = `Para ${c.to} · borrador, aún no enviado`;
@@ -7128,19 +7161,19 @@ function monyZoom(mode) {
 }
 document.addEventListener("click", (e) => {
   const d = $("#mony-zoom");
-  if (e.target.closest(".mony-id img, .mony-id .mony-cv")) { clearTimeout(monyClickTimer); monyClickTimer = setTimeout(() => monyZoom("mid"), 250); return; }
+  if (e.target.closest(".mony-id img, .mony-id .mony-cv, #mony-panel header img, #mony-panel header .mony-cv")) { clearTimeout(monyClickTimer); monyClickTimer = setTimeout(() => monyZoom("mid"), 250); return; }
   if (d.open && (e.target === d || e.target.closest("#mony-zoom-close"))) { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); d.close(); }
 });
 document.addEventListener("dblclick", (e) => {
   const d = $("#mony-zoom");
-  if (e.target.closest(".mony-id img, .mony-id .mony-cv")) { clearTimeout(monyClickTimer); monyZoom("full"); }
+  if (e.target.closest(".mony-id img, .mony-id .mony-cv, #mony-panel header img, #mony-panel header .mony-cv")) { clearTimeout(monyClickTimer); monyZoom("full"); }
   else if (d.open && e.target.closest("#mony-zoom img, #mony-zoom .mony-cv")) monyZoom(d.classList.contains("full") ? "mid" : "full");
 });
 document.addEventListener("fullscreenchange", () => { // leaving the browser's full screen with Esc returns to the large picture
   const d = $("#mony-zoom");
   if (!document.fullscreenElement && d.open && d.classList.contains("full")) monyZoom("mid");
 });
-document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img, .mony-id .mony-cv")) { e.preventDefault(); monyZoom("mid"); } });
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img, .mony-id .mony-cv, #mony-panel header img, #mony-panel header .mony-cv")) { e.preventDefault(); monyZoom("mid"); } });
 // Floating Mony (version 2.2.13): a round button with her face, bottom right on every screen, that opens her chat over
 // the screen. The chat itself (#mony-body) is the same one as in the «Mony» screen: it moves to the panel and back.
 function monyFabSync(name = route().name) {
@@ -7159,7 +7192,9 @@ function monyPanel(open) {
   else { $("#view-mony").append(body); }
   fab.hidden = open || !me || !can("drafts.generate") || route().name === "mony";
 }
-$("#mony-fab").addEventListener("click", () => monyPanel(true));
+// Version 2.2.26: the round button opens the chat and, as the avatar of the «Mony» screen does, enlarges her face
+// (same sizes: a click here or on the chat's face enlarges it, a double click fills the screen; «Cerrar» goes back to the chat).
+$("#mony-fab").addEventListener("click", () => { monyPanel(true); monyZoom("mid"); });
 $("#mony-panel-close").addEventListener("click", () => { monyPanel(false); $("#mony-fab").focus(); });
 $("#mony-panel-clear").addEventListener("click", () => $("#mony-clear").click());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#mony-panel").hidden && !document.querySelector("dialog[open]")) monyPanel(false); });
@@ -7348,7 +7383,7 @@ function renderMony() {
   monyLoad();
   const log = $("#mony-log");
   log.replaceChildren();
-  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo redactar WhatsApp y correos para que usted los apruebe y envíe, buscar los expedientes de un cliente o por número de carpeta, rendir el informe de un proceso con sus pendientes, consultar la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
+  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo agendar, mover o cancelar audiencias (con su confirmación y avisando cruces), redactar WhatsApp y correos para que usted los apruebe y envíe, buscar los expedientes de un cliente o por número de carpeta, rendir el informe de un proceso con sus pendientes, consultar la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
   for (const m of monyMsgs) { const b = monyBubble(m.role, m.content); if (m.role === "assistant") monyActions(b); }
   monyVoiceUi();
 }
@@ -7380,6 +7415,8 @@ $("#mony-form").addEventListener("submit", (e) => {
           const what = { consultar_estado_proceso: ["Conectando a la Rama Judicial…", "Rama Judicial consultada", "Rama Judicial no respondió"],
             calcular_terminos_legales: ["Calculando términos…", "Términos calculados", "No se pudo calcular el término"],
             buscar_expedientes: ["Buscando expedientes…", "Expedientes consultados", "No se pudo buscar"],
+            consultar_agenda: ["Revisando la agenda…", "Agenda consultada", "No se pudo leer la agenda"],
+            proponer_cambio_agenda: ["Preparando el cambio de agenda…", "Propuesta de agenda lista", "No se pudo preparar el cambio"],
             preparar_correo: ["Redactando el correo…", "Borrador de correo listo", "No se pudo preparar el correo"],
             preparar_whatsapp: ["Preparando el mensaje…", "Borrador de WhatsApp listo", "No se pudo preparar el mensaje"],
             informe_expediente: ["Armando el informe…", "Informe del expediente listo", "No se pudo armar el informe"],

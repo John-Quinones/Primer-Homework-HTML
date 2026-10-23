@@ -49,8 +49,8 @@ test("judicial calendar: weekends, Ley Emiliani holidays and the vacancy do not 
   assert.throws(() => addJudicialDays("2026-10-23", 0), /entero/);
 });
 
-test("Mony: seven tools, a current model, the name and the lawyer's-review warning", () => {
-  assert.deepEqual(TOOLS.map((t) => t.name), ["buscar_expedientes", "preparar_whatsapp", "preparar_correo", "informe_expediente", "consultar_estado_proceso", "calcular_terminos_legales", "redactar_plantilla_memorial"]);
+test("Mony: nine tools, a current model, the name and the lawyer's-review warning", () => {
+  assert.deepEqual(TOOLS.map((t) => t.name), ["buscar_expedientes", "preparar_whatsapp", "preparar_correo", "consultar_agenda", "proponer_cambio_agenda", "informe_expediente", "consultar_estado_proceso", "calcular_terminos_legales", "redactar_plantilla_memorial"]);
   assert.equal(MODEL, "claude-haiku-5-5");
   assert.match(systemPrompt(), /Eres Mony/);
   assert.match(systemPrompt(), /revisión final del abogado/);
