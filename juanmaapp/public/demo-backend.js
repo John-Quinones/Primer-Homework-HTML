@@ -207,7 +207,7 @@
   const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
   // Department, city, area and radicado place: the same code as the server (src/place-rules.js).
   const PL = window.JuanmaPlaces;
-  const { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad } = PL.makePlaces(DIV, window.JuanmaPerson.properName);
+  const { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad, cityFromText } = PL.makePlaces(DIV, window.JuanmaPerson.properName);
   const inferArea = PL.inferArea;
   const bogotaNow = (d = new Date()) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
@@ -800,8 +800,8 @@
       const out = { created: 0, updated: 0, skipped: [] };
       (b.rows || []).forEach((row, i) => {
         const name = str(row.name), department = canonDep(row.department);
-        if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
-        const city = canonCity(row.city, department);
+        if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: !name ? "Sin nombre de despacho." : `Departamento no reconocido: "${str(row.department)}".` }); return; }
+        const city = canonCity(str(row.city) || cityFromText(row.department, department), department);
         const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), judge: str(row.judge).replace(/\s+/g, " "), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city) || s.courts.find((c) => c.name === name && c.city === window.JuanmaPerson.properName(str(row.city)));
         if (hit) { Object.assign(hit, { ...v, email: v.email || hit.email || "", phone: v.phone || hit.phone || "", address: v.address || hit.address || "", judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }

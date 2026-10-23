@@ -3262,9 +3262,7 @@ async function uploadImportKind(key, file) {
     const rows = await readCourtRows(file);
     const sample = rows.slice(0, 5).map((r) => `${r.name} · ${r.city}`).join("\n");
     if (!(await ask({ title: "Cargar despachos", message: `Se leyeron ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.\n\n${sample}${rows.length > 5 ? "\n…" : ""}`, okLabel: "Cargar" }))) return;
-    const out = await importCourtRows(rows);
-    showImportResult(`<li>Despachos nuevos: <strong>${out.created}</strong></li><li>Despachos actualizados: <strong>${out.updated}</strong></li>
-      <li>Omitidos: <strong>${out.skipped.length}</strong></li>`, out.skipped.map((e) => `Fila ${e.row}: ${e.reason}`));
+    await runCourtImport(rows);
     return;
   }
   // Clients / cases go through the regular mapping, preview and confirmation below.
@@ -3280,6 +3278,30 @@ async function uploadImportKind(key, file) {
   $("#import-step4").scrollIntoView({ behavior: "smooth" });
 }
 
+// Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.82).
+async function runCourtImport(rows) {
+  const out = await importCourtRows(rows);
+  const byRow = new Map(rows.map((r) => [r.rowNumber, r]));
+  const skipped = out.skipped.map((e) => ({ ...e, data: byRow.get(e.row) }));
+  showImportResult(`<li>Despachos nuevos: <strong>${out.created}</strong></li><li>Despachos actualizados: <strong>${out.updated}</strong></li>
+    <li>Omitidos: <strong>${skipped.length}</strong></li>`, skipped.map((e) => `Fila ${e.row}: ${e.reason}`));
+  const res = $("#import-result");
+  res.insertAdjacentHTML("beforeend", `<div class="toolbar">
+    ${skipped.length ? `<button type="button" id="courts-retry">Reintentar las ${skipped.length} omitidas</button>
+    <button type="button" id="courts-skipped-xlsx">Descargar las omitidas (Excel con el motivo)</button>` : ""}
+    <button type="button" class="primary" data-go-view="despachos">Ver los despachos cargados</button></div>
+    ${skipped.length ? '<p class="hint">Corrija el departamento o el nombre en el Excel de omitidas y súbalo de nuevo en «Despachos»: los ya cargados no se duplican.</p>' : ""}`);
+  $("#courts-retry")?.addEventListener("click", () => guarded(() => runCourtImport(skipped.map((e) => e.data).filter(Boolean))));
+  $("#courts-skipped-xlsx")?.addEventListener("click", () => guarded(async () => {
+    const cols = [["Departamento", "department"], ["Ciudad", "city"], ["Nombre", "name"], ["Corporación o Área", "area"], ["Email", "email"],
+      ["Código", "code"], ["Teléfono", "phone"], ["Dirección", "address"]];
+    const header = [...cols.map(([l]) => l), "Motivo (no se importa)"].map((value) => ({ value, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
+    const body = skipped.map((e) => [...cols.map(([, k]) => ({ value: String(e.data?.[k] ?? ""), type: String })), { value: e.reason, type: String }]);
+    const blob = await window.writeXlsxFile([header, ...body], { columns: [...cols.map(() => ({ width: 24 })), { width: 50 }], sheet: "Omitidas" }).toBlob();
+    await saveFile(`despachos-omitidos-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+  }));
+}
+
 function showImportResult(items, errors = []) {
   const res = $("#import-result");
   res.hidden = false;
@@ -3289,6 +3311,10 @@ function showImportResult(items, errors = []) {
   toast("Importación terminada.");
 }
 
+$("#import-result").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-go-view]");
+  if (b) location.hash = `#${b.dataset.goView}`;
+});
 $("#import-kind-cards").addEventListener("click", (e) => {
   const b = e.target.closest("[data-imp-dl]");
   if (b) guarded(() => downloadImportKind(b.closest("[data-kind]").dataset.kind, b.dataset.impDl));
