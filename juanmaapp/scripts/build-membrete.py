@@ -112,7 +112,7 @@ for n in ("pin", "tel", "web", "mail", "loc"):
     bb = ic.getchannel("A").point(lambda v: 255 if v > 40 else 0).getbbox(); ic = ic.crop(bb)
     ic.thumbnail((96, 96)); icons[n] = {"w": ic.width, "h": ic.height, "png": png_b64(ic)}
 import json
-js = (f"// Letterhead images of the PDF documents (version 2.2.3), taken from the template «Plantilla Membrete_Pie_Encab_Pagina». Built by scripts/build-membrete.py.\n"
+js = (f"// Letterhead images of the PDF documents (version 2.2.4), taken from the template «Plantilla Membrete_Pie_Encab_Pagina». Built by scripts/build-membrete.py.\n"
       f"window.JuanmaMembreteAssets = {{ logo: {{ w: {logo_s.width}, h: {logo_s.height}, png: \"{png_b64(logo_s)}\" }}, qr: {{ png: \"{png_b64(qr)}\" }}, "
       f"wm: {{ w: {wm_s.width}, h: {wm_s.height}, png: \"{png_b64(wm_s)}\" }}, "
       f"icons: {json.dumps(icons)}, docx: \"{base64.b64encode((ROOT / 'public/membrete-base.docx').read_bytes()).decode()}\" }};\n")

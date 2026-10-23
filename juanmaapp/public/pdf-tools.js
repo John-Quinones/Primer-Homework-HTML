@@ -11,7 +11,7 @@
   const methodText = (x) => (x.method === "presencial" ? "en persona, con testigo"
     : `enlace privado y código de un solo uso enviado por ${CHANNEL[x.otp_channel] || CHANNEL.email}${x.otp_to ? " a " + x.otp_to : x.email ? " a " + x.email : ""}`);
 
-  // Every PDF has the letterhead (public/membrete.js, version 2.2.3); without it (tests) a plain letter page.
+  // Every PDF has the letterhead (public/membrete.js, version 2.2.4); without it (tests) a plain letter page.
   const MB = () => window.JuanmaMembrete || {
     newPdf: () => new window.jspdf.jsPDF({ unit: "pt", format: "letter" }), finishPdf: (d) => d,
     pdfBox: (d) => ({ left: 64, right: d.internal.pageSize.getWidth() - 64, top: 64, bottom: d.internal.pageSize.getHeight() - 64, W: d.internal.pageSize.getWidth(), H: d.internal.pageSize.getHeight() }),
@@ -119,7 +119,7 @@
    * Where each of `n` signature stamps goes on a page (PDF points, origin bottom-left).
    * Corners line the stamps up from that corner; a chosen spot puts the first stamp
    * there and the rest to its right, then below, always inside the page and above
-   * the verification footer. `lift` raises the corner stamps of a document the App wrote itself: its letterhead footer is at the bottom (2.2.3).
+   * the verification footer. `lift` raises the corner stamps of a document the App wrote itself: its letterhead footer is at the bottom (2.2.4).
    */
   function stampBoxes(width, height, n, pos = "br", top = 0, lift = 0) {
     const { w, h, gap, margin, footer } = STAMP, out = [];

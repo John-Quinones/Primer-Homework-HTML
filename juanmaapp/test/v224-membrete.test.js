@@ -1,4 +1,4 @@
-// Version 2.2.3: the letterhead (template of 23/10/2026) is on every PDF and on the Word the App writes.
+// Version 2.2.4: the letterhead (template of 23/10/2026) is on every PDF and on the Word the App writes.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

@@ -1,4 +1,4 @@
-// Letterhead of every PDF the App writes (version 2.2.3), the same as John's Word template «Plantilla Membrete_Pie_Encab_Pagina»:
+// Letterhead of every PDF the App writes (version 2.2.4), the same as John's Word template «Plantilla Membrete_Pie_Encab_Pagina»:
 // page border, logo and QR on top, contact footer, «Página X de Y» and the faded Tecjuridicos logo as a watermark.
 // One place for all the jsPDF documents: newPdf() makes the document with the letterhead already on page 1 (and on each page
 // added later, behind the content), pdfBox() says where the text may go, finishPdf() writes the page numbers.

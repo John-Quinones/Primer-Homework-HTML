@@ -145,7 +145,7 @@
   /** Build a .docx Blob from Markdown text (letter size, 2.5 cm margins, Times New Roman 12). */
   function markdownToDocx(md, title = "Documento") {
     const body = md.replace(/\r\n/g, "\n").split("\n").map((l) => (l.trim() ? paragraph(l.trimEnd()) : '<w:p/>')).join("");
-    // Version 2.2.3: every Word the App writes comes out of John's letterhead template (logo, QR, footer, border, watermark, page
+    // Version 2.2.4: every Word the App writes comes out of John's letterhead template (logo, QR, footer, border, watermark, page
     // number; public/membrete-base.docx). The plain package below is only the fallback when the letterhead images are not loaded.
     const letterhead = window.JuanmaMembreteAssets?.docx;
     if (letterhead) {
