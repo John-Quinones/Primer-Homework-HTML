@@ -1120,11 +1120,13 @@ function followSummary(list) {
 function taskTable(list, answers) {
   const canWrite = can("cases.write");
   const rows = list.map((t) => {
-    const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
+    const closing = t.status === "pendiente" && !answers && (canWrite || t.assigned_user_id === me.id)
+      ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button><button class="mini" data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : "";
+    const actions = canWrite ? `${closing}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
       ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
-    const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing;
+    const done = t.status === "cancelada" ? `No cumplida${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
@@ -2675,6 +2677,13 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
+    "task-notdone": async () => {
+      const why = await ask({ title: "Tarea no cumplida", message: "Escriba por qué no se cumplió. Queda en el historial de tareas.", input: "", okLabel: "Marcar como no cumplida" });
+      if (!why) return;
+      await api("PUT", `/tasks/${id}`, { status: "cancelada", done_notes: why });
+      toast("Marcada como no cumplida.");
+      await refreshView();
+    },
     "act-remind": () => {
       const a = ACTS_CACHE[Number(btn.dataset.act)];
       return openTaskDialog(null, Number(btn.dataset.case), "termino", { title: `Actuación: ${a.actuacion || ""}`.slice(0, 140), notes: `${String(a.fecha || "").slice(0, 10)} · ${a.anotacion || ""}`.trim() });
@@ -5430,9 +5439,10 @@ async function renderAgenda() {
             ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
-          <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
+          <span class="toolbar">${can("scope.all") || myOfficeIds().includes(t.office_id) ? `<button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>` : ""}
+          ${!can("cases.write") && t.status === "pendiente" && t.assigned_user_id === me.id && !CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : ""}
           ${can("cases.write") ? `
-            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
+            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>`) : ""}
             ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>

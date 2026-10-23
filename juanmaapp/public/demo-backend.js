@@ -398,8 +398,9 @@
     const key = `assign:${t.id}:${t.assigned_user_id}`;
     if (s.notes.some((n) => n.key === key)) return;
     const o = taskOut(t);
+    const who = userOut(s.users.find((u) => u.id === t.assigned_user_id)), canOpen = who.permissions.includes("scope.all") || who.offices.some((x) => x.id === o.office_id);
     s.notes.push({ id: nextId(), user_id: t.assigned_user_id, kind: "asignada", title: `${me().name} le asignó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
-      body: `Plazo ${t.due_at} · ${o.client_name}`, link: `#expediente-${t.case_id}`, key, created_at: stamp(), read_at: null });
+      body: `Plazo ${t.due_at} · ${o.client_name}`, link: canOpen ? `#expediente-${t.case_id}` : "#agenda", key, created_at: stamp(), read_at: null });
   };
   // Version 2.26, same as the server's sendNotice: the bell always; e-mail and WhatsApp need the server,
   // so the link says so and hands the office the text to send from its own e-mail or WhatsApp.
@@ -840,7 +841,7 @@
       const q = qs(url);
       return s.tasks.filter((t) => {
         const k = s.cases.find((x) => x.id === t.case_id);
-        if (!k || !inScope(k.office_id)) return false;
+        if (!k || !(inScope(k.office_id) || t.assigned_user_id === me().id)) return false;
         if (q.caseId && t.case_id !== +q.caseId) return false;
         if (q.mine === "1" && !(t.assigned_user_id === me().id || (!t.assigned_user_id && (k.assigned_user_id === me().id
           || (!k.assigned_user_id && t.created_by === me().id))))) return false;
@@ -864,9 +865,12 @@
       return { ...taskOut(t), ...(notice ? { notice } : {}) };
     }],
     ["PUT", /^\/tasks\/(\d+)$/, (m, b) => {
-      need("cases.write");
-      const t = s.tasks.find((x) => x.id === +m[1]) || fail("La tarea no existe.");
-      visibleCase(t.case_id);
+      const t = s.tasks.find((x) => x.id === +m[1]);
+      const kase = t && s.cases.find((x) => x.id === t.case_id);
+      (t && kase && (inScope(kase.office_id) || t.assigned_user_id === me().id)) || fail("La tarea no existe.");
+      // Version 2.82, same as the server: the assignee may always say whether it was fulfilled.
+      const full = me().permissions.includes("cases.write") && inScope(kase.office_id);
+      if (!full && !(t.assigned_user_id === me().id && Object.keys(b).every((x) => ["status", "done_notes"].includes(x)))) fail("Su rol no tiene permiso para esta acción.");
       const prev = clone(t), before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
       Object.assign(t, taskValues(b, t));
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;
