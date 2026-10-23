@@ -1223,3 +1223,5 @@ dialog:not([open]) { pointer-events: none; }
 /* Version 2.87: breakdown links inside Inicio's «Clientes con Casos de Éxito!» tile. */
 .kpi .kpi-label a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .kpi .kpi-label a:hover { text-decoration-thickness: 2px; }
+/* Version 2.96: the longest status («Pendiente Pago Sentencia») must not spill over the recent-movement rows. */
+.recent li > span:last-child { max-width: 9rem; text-align: right; overflow-wrap: anywhere; font-size: .8rem; }

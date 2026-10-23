@@ -656,7 +656,7 @@ document.addEventListener("keydown", (e) => {
 // Version 2.87: a client is Activo or sent to «Archivo provisional» / «Archivo definitivo» (clients.archive_status,
 // "" = activo). The views are exclusive: the list shows only the clients of the state chosen in #client-archive.
 // Archiving never touches the client's cases, charges or documents.
-const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo"];
+const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"];
 const clientArchiveFilter = () => $("#client-archive")?.value || "";
 function renderClientList() {
   const ul = $("#client-list");
@@ -683,10 +683,10 @@ const archiveButtons = (c) => {
   if (!can("clients.write")) return "";
   const btn = (to, label) => `<button data-action="archive-client" data-id="${c.id}" data-to="${to}">${label}</button>`;
   const final = isGerencia(); // «Archivo definitivo» (to or from) is only for the administrator (user's rule, 2.94)
-  if (c.archive_status === "Archivo definitivo") return final ? btn("", "Devolver a activos") + btn("Archivo provisional", "Pasar a archivo provisional") : "";
-  return c.archive_status
-    ? btn("", "Devolver a activos") + (final ? btn("Archivo definitivo", "Pasar a archivo definitivo") : "")
-    : btn("Archivo provisional", "Archivo provisional") + (final ? btn("Archivo definitivo", "Archivo definitivo") : "");
+  const cur = c.archive_status || "";
+  if (cur === "Archivo definitivo" && !final) return "";
+  return (cur ? btn("", "Devolver a activos") : "") + CLIENT_ARCHIVE.filter((st) => st !== cur && (final || st !== "Archivo definitivo"))
+    .map((st) => btn(st, cur ? `Pasar a ${st.toLowerCase()}` : st)).join("");
 };
 const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
 
@@ -1262,7 +1262,10 @@ async function renderClientes() {
 }
 
 // Inicio's «Clientes con Casos de Éxito!» links open Clientes already on that archive view.
-document.addEventListener("click", (e) => { const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView; });
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView;
+  const t = e.target.closest("[data-case-status]"); if (t) $("#case-status").value = t.dataset.caseStatus; // Inicio → Expedientes on that state
+});
 $("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
@@ -1802,7 +1805,7 @@ function casesByPlace() {
     && (!area || k.area === area || (!k.area && caseCourtIds && k.court_id && caseCourtIds.has(k.court_id))));
 }
 // Version 2.70: the list hides archived cases unless «Estado» asks for them (Archivo provisional / Archivo definitivo / Todos).
-const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo"]);
+const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"]); // everything but Activo: the views are exclusive (v2.96 adds Pendiente Pago Sentencia)
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
@@ -1818,7 +1821,7 @@ function renderCaseRows() {
     && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) : k.court_name === court.slice(2)))
     && matches(k));
   const hidden = status ? 0 : state.cases.filter((k) => ARCHIVED_STATUSES.has(k.status)).length;
-  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} archivado(s) oculto(s)` : ""}`;
+  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} en otro estado, ocultos` : ""}`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
@@ -2327,7 +2330,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id).map(clientOption).join("");
+  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id ?? clientId).map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -3291,6 +3294,14 @@ function renderImportPreview() {
   $("#import-place-warnings").innerHTML = warned.length
     ? `<strong>Lugar de expedición sin reconocer en ${warned.length} fila(s)</strong> (se importa la fila sin ese dato):<ul>${warned.slice(0, 8).map((r) =>
       `<li>Fila ${r.rowNumber}: ${escapeHtml(r.placeWarnings.join("; "))}</li>`).join("")}${warned.length > 8 ? `<li>… y ${warned.length - 8} más</li>` : ""}</ul>` : "";
+  // Version 2.96: a state the file writes but the App does not recognize is said here (the row is imported as it was: client active, case Activo).
+  const stateWarn = recs.flatMap((r) => [
+    r.client.archive_status && IMP.archiveState(r.client.archive_status) === undefined ? `Fila ${r.rowNumber}: estado del cliente «${r.client.archive_status}»` : "",
+    r.case.status && window.JuanmaCaseMeta.statusFrom(r.case.status) === null ? `Fila ${r.rowNumber}: estado del expediente «${r.case.status}»` : "",
+  ]).filter(Boolean);
+  const sw = $("#import-state-warnings");
+  sw.hidden = !stateWarn.length;
+  sw.innerHTML = stateWarn.length ? `<strong>Estado sin reconocer en ${stateWarn.length} caso(s)</strong>. Use Activo, Archivo provisional, Archivo definitivo o Pendiente Pago Sentencia; mientras tanto queda Activo:<ul>${stateWarn.slice(0, 8).map((w) => `<li>${escapeHtml(w)}</li>`).join("")}${stateWarn.length > 8 ? `<li>… y ${stateWarn.length - 8} más</li>` : ""}</ul>` : "";
   const noName = !imp.mapping.includes("client.full_name") && !imp.mapping.includes("client.first_names");
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
@@ -3392,7 +3403,7 @@ function renderImportKinds() {
       <h4>${k.title}</h4>
       <p class="hint">${escapeHtml(IMPORT_KIND_HINT[key])}</p>
       ${key === "clientes" ? `<div class="toolbar import-filters">
-        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option><option>Pendiente Pago Sentencia</option></select></label>
         <label>Cédula expedida en <input id="import-clients-idplace" type="search" placeholder="Ciudad o departamento" /></label>
       </div>` : ""}
       <div class="toolbar">
@@ -3619,6 +3630,7 @@ async function renderInicio() {
   ]);
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
+  $("#kpi-pps").textContent = cases.filter((k) => k.status === "Pendiente Pago Sentencia").length; // version 2.96
   $("#kpi-clients").textContent = clients.filter((c) => !c.archive_status).length; // version 2.87: only activos
   const nProv = clients.filter((c) => c.archive_status === "Archivo provisional").length, nDef = clients.filter((c) => c.archive_status === "Archivo definitivo").length;
   $("#kpi-success").textContent = nProv + nDef; $("#kpi-success-prov").textContent = nProv; $("#kpi-success-def").textContent = nDef;

@@ -11,7 +11,7 @@ const str = (v) => (v == null ? "" : String(v).trim());
 export const CLIENT_TEXT_FIELDS = ["id_number", "email", "phone", "address", "department", "city", "notes", "gender", "id_department", "id_city"];
 
 /** Client archive states (version 2.87): "" = activo. Returns the cleaned state or fails. */
-export const CLIENT_ARCHIVE_STATES = ["Archivo provisional", "Archivo definitivo"];
+export const CLIENT_ARCHIVE_STATES = ["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"];
 export function clientArchive(value, fail) {
   const v = str(value);
   if (v && !CLIENT_ARCHIVE_STATES.includes(v)) fail("Estado de archivo no válido.");

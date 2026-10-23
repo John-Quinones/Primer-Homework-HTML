@@ -70,11 +70,14 @@ test("search by the place where the ID card was issued", async () => {
   assert.equal(clientMatches(c, "bogota", "city"), true);
 });
 
-test("import: the «Estado del cliente» column archives new clients, and existing ones only when updating", async () => {
+async function importerApi() {
   const { createRequire } = await import("node:module");
-  globalThis.window = {};
-  createRequire(import.meta.url)("../public/importer.js");
-  const IMP = window.JuanmaImport;
+  if (!globalThis.window?.JuanmaImport) { globalThis.window = globalThis.window || {}; createRequire(import.meta.url)("../public/importer.js"); }
+  return window.JuanmaImport;
+}
+
+test("import: the «Estado del cliente» column archives new clients, and existing ones only when updating", async () => {
+  const IMP = await importerApi();
   const headers = ["Nombre completo", "Número de documento", "Estado del cliente"];
   const mapping = IMP.guessAll(headers);
   assert.deepEqual(mapping, ["client.full_name", "client.id_number", "client.archive_status"]);
@@ -96,4 +99,28 @@ test("import: the «Estado del cliente» column archives new clients, and existi
   const upd = await run("update");
   assert.equal(upd.archives.length, 2);
   assert.ok(upd.archives.some((c) => c.includes("/clients/1/archive") && c.includes("Archivo definitivo")));
+});
+
+test("version 2.96: «Pendiente Pago Sentencia» is a fourth status for cases and clients", async () => {
+  const { statusFrom, normStatus, STATUSES } = await import("../src/case-meta.js");
+  assert.ok(STATUSES.includes("Pendiente Pago Sentencia"));
+  for (const t of ["Pendiente Pago Sentencia", "pendiente de pago de sentencia", "PENDIENTE PAGO SENTENCIA", "Pago de sentencia", "PPS"]) assert.equal(statusFrom(t), "Pendiente Pago Sentencia", t);
+  assert.equal(normStatus("2"), "Archivo definitivo");
+  assert.equal(normStatus("Archivo provisional"), "Archivo provisional");
+  assert.equal(statusFrom("algo raro"), null);
+  assert.equal(normStatus("algo raro"), "Activo");
+  const out = await same(async (call) => {
+    const c = (await call("POST", "/clients", { full_name: "Pedro Pendiente", id_number: "8004" })).body;
+    const type = (await call("GET", "/catalog")).body.find((g) => g.types.length).types[0].id;
+    const k = (await call("POST", "/cases", { client_id: c.id, process_type_id: type, status: "pendiente pago sentencia" })).body;
+    const edited = (await call("PUT", `/cases/${k.id}`, { status: "Pendiente Pago Sentencia" })).body.status;
+    const client = (await call("PUT", `/clients/${c.id}/archive`, { status: "Pendiente Pago Sentencia" })).body.archive_status;
+    return [k.status, edited, client];
+  });
+  assert.deepEqual(out, ["Pendiente Pago Sentencia", "Pendiente Pago Sentencia", "Pendiente Pago Sentencia"]);
+  const { archiveState } = await importerApi();
+  assert.equal(archiveState("Pendiente Pago Sentencia"), "Pendiente Pago Sentencia");
+  assert.equal(archiveState("pendiente pago de sentencia"), "Pendiente Pago Sentencia");
+  assert.equal(archiveState("Activo"), "");
+  assert.equal(archiveState("quién sabe"), undefined);
 });
