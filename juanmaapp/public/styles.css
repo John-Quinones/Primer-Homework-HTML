@@ -1223,3 +1223,7 @@ dialog:not([open]) { pointer-events: none; }
 /* Version 2.87: breakdown links inside Inicio's «Clientes con Casos de Éxito!» tile. */
 .kpi .kpi-label a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .kpi .kpi-label a:hover { text-decoration-thickness: 2px; }
+.recent.moves li { grid-template-columns: auto 1fr auto; }
+.recent.moves li div strong, .recent.moves li div span { white-space: normal; }
+#dash-moves-panel { margin-top: 16px; }
+#dash-moves-more a { color: var(--brand-blue, #027cc6); font-weight: 600; }
