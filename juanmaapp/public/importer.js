@@ -212,12 +212,35 @@
   const ID_TYPES = { "cedula de ciudadania": "CC", cedula: "CC", cc: "CC", nit: "NIT", "cedula de extranjeria": "CE", ce: "CE", pasaporte: "PA", pa: "PA", "tarjeta de identidad": "TI", ti: "TI" };
   const docKey = (s) => String(s || "").replace(/[^0-9a-zA-Z]/g, "").toUpperCase();
 
+  // Existing client vs the file's values (version 2.84). «fill» = the client's value is empty; «update» = it differs
+  // (accents, capitals, spacing and phone punctuation do not count as a difference). The document number is the
+  // match key and is never rewritten.
+  const sameValue = (k, a, b) => (k === "phone" ? radDigits(a) === radDigits(b) : norm(a) === norm(b));
+  function normClient(raw) {
+    const c = { ...raw };
+    if (c.person_type) c.person_type = /jur/i.test(norm(c.person_type)) ? "juridica" : "natural";
+    if (!c.full_name && (c.first_names || c.last_names)) c.full_name = [c.first_names, c.last_names].filter(Boolean).join(" ");
+    if (c.id_type) c.id_type = ID_TYPES[norm(c.id_type)] || c.id_type.toUpperCase().slice(0, 4);
+    return c;
+  }
+  function clientDiff(client, c, mode) {
+    const out = [];
+    for (const [k, v] of Object.entries(c)) {
+      if (!v || ["id_number", "first_names", "last_names"].includes(k)) continue;
+      if (!client[k]) out.push({ field: k, before: "", after: v, kind: "fill" });
+      else if (mode === "update" && !sameValue(k, client[k], v)) out.push({ field: k, before: client[k], after: v, kind: "update" });
+    }
+    // The place of issue is one pair: a saved department keeps its own city, not one from another department.
+    if (client.id_department && c.id_department && client.id_department !== c.id_department) return out.filter((d) => d.field !== "id_city");
+    return out;
+  }
+
   /**
    * Import mapped rows. api(method, url, body) is the app's API helper.
    * opts: { withCases, createCatalog, defaultCategory, defaultType, onProgress }
    */
   async function run(records, api, opts) {
-    const summary = { clientsCreated: 0, clientsCompleted: 0, casesCreated: 0, casesSkipped: 0, catalogCreated: [], errors: [] };
+    const summary = { clientsCreated: 0, clientsCompleted: 0, clientsUpdated: 0, casesCreated: 0, casesSkipped: 0, catalogCreated: [], errors: [] };
     const clients = await api("GET", "/clients");
     const byDoc = new Map(clients.filter((c) => docKey(c.id_number)).map((c) => [docKey(c.id_number), c]));
     const byName = new Map(clients.map((c) => [norm(c.full_name), c]));
@@ -279,23 +302,19 @@
       const rowNo = rec.rowNumber;
       try {
         // ----- client: match by document number, else by exact name -----
-        const c = { ...rec.client };
-        if (c.person_type) c.person_type = /jur/i.test(norm(c.person_type)) ? "juridica" : "natural";
-        if (!c.full_name && (c.first_names || c.last_names)) c.full_name = [c.first_names, c.last_names].filter(Boolean).join(" ");
-        if (c.id_type) c.id_type = ID_TYPES[norm(c.id_type)] || c.id_type.toUpperCase().slice(0, 4);
+        const c = normClient(rec.client);
         let client = (docKey(c.id_number) && byDoc.get(docKey(c.id_number))) || (c.full_name && byName.get(norm(c.full_name)));
         if (!client) {
           if (!c.full_name) throw new Error("Sin nombre de cliente.");
           client = await api("POST", "/clients", c);
           summary.clientsCreated++;
         } else {
-          // Only fill blanks; never overwrite data already in TecjuridicosApp.
-          const fill = Object.fromEntries(Object.entries(c).filter(([k, v]) => v && !client[k]));
-          // The place of issue is one pair: a saved department keeps its own city, not one from another department.
-          if (client.id_department && c.id_department && client.id_department !== c.id_department) delete fill.id_city;
-          if (Object.keys(fill).length) {
-            client = await api("PUT", `/clients/${client.id}`, fill);
+          // Default: only fill blanks. With opts.updateMode === "update" the values that differ are rewritten too (the screen asked, with before/after).
+          const diff = clientDiff(client, c, opts.updateMode);
+          if (diff.length) {
+            client = await api("PUT", `/clients/${client.id}`, Object.fromEntries(diff.map((d) => [d.field, d.after])));
             summary.clientsCompleted++;
+            if (diff.some((d) => d.kind === "update")) summary.clientsUpdated++;
           }
         }
         if (docKey(client.id_number)) byDoc.set(docKey(client.id_number), client);
@@ -385,20 +404,24 @@
   // Dry run for the upload summary: counts what run() would create or skip, writes nothing.
   async function plan(records, api, opts) {
     const clients = await api("GET", "/clients");
-    const byDoc = new Set(clients.map((c) => docKey(c.id_number)).filter(Boolean));
-    const byName = new Set(clients.map((c) => norm(c.full_name)));
+    const byDoc = new Map(clients.filter((c) => docKey(c.id_number)).map((c) => [docKey(c.id_number), c]));
+    const byName = new Map(clients.map((c) => [norm(c.full_name), c]));
     const cases = opts.withCases ? await api("GET", "/cases") : [];
     const seenClients = new Set(), seenCases = new Set();
     const rads = new Set(cases.filter((k) => k.radicado).map((k) => radDigits(k.radicado)));
-    const out = { rows: records.length, clientsNew: 0, clientsExisting: 0, casesNew: 0, casesExisting: 0 };
+    const out = { rows: records.length, clientsNew: 0, clientsExisting: 0, casesNew: 0, casesExisting: 0, changes: [] };
     for (const rec of records) {
       const c = rec.client;
       const name = c.full_name || [c.first_names, c.last_names].filter(Boolean).join(" ");
       const key = docKey(c.id_number) || norm(name);
-      const exists = (docKey(c.id_number) && byDoc.has(docKey(c.id_number))) || (name && byName.has(norm(name)));
+      const found = (docKey(c.id_number) && byDoc.get(docKey(c.id_number))) || (name && byName.get(norm(name)));
+      const exists = !!found;
       if (!seenClients.has(key)) {
         seenClients.add(key);
-        if (exists) out.clientsExisting++; else out.clientsNew++;
+        if (exists) {
+          out.clientsExisting++;
+          for (const d of clientDiff(found, normClient(c), opts.updateMode)) out.changes.push({ row: rec.rowNumber, name: found.full_name, ...d });
+        } else out.clientsNew++;
       }
       if (opts.withCases) {
         const rad = radDigits(rec.case.radicado);
@@ -410,5 +433,5 @@
     return out;
   }
 
-  window.JuanmaImport = { TARGETS, targetsFor, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, norm, parsePesos, parseDate, titleCase };
+  window.JuanmaImport = { TARGETS, targetsFor, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, clientDiff, normClient, norm, parsePesos, parseDate, titleCase };
 })();

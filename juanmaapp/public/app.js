@@ -3040,6 +3040,7 @@ $("#import-file").addEventListener("change", (e) => guarded(async () => {
 }));
 async function loadImportFile(file) {
   $("#import-result").hidden = true;
+  $("input[name=import-update][value=fill]").checked = true; // each new file starts on «solo lo vacío»
   imp.sheets = await IMP.readFile(file);
   const sel = $("#import-sheet");
   sel.innerHTML = imp.sheets.map((s, i) => `<option value="${i}">${escapeHtml(s.name)} (${s.rows.length} filas)</option>`).join("");
@@ -3155,6 +3156,29 @@ function resolveIdPlace(rec) {
   return warn;
 }
 
+const updateMode = () => $("input[name=import-update]:checked")?.value || "fill";
+const FIELD_LABEL = { full_name: "Nombre", id_type: "Tipo de documento", email: "Correo", phone: "Teléfono", address: "Dirección", city: "Ciudad",
+  department: "Departamento", notes: "Notas", id_department: "Depto. expedición", id_city: "Ciudad expedición", person_type: "Tipo de persona", gender: "Género" };
+let changesToken = 0;
+// Before / after for the clients that already exist (dry run, nothing is written).
+async function renderImportChanges() {
+  const box = $("#import-changes");
+  const token = ++changesToken;
+  const clientsData = importMode() === "clients" || importMode() === "cases";
+  $("#import-update-opts").hidden = !clientsData;
+  if (!clientsData) { box.hidden = true; return; }
+  const plan = await IMP.plan(importRecords(), api, { withCases: false, updateMode: updateMode() });
+  if (token !== changesToken) return;
+  const rows = plan.changes;
+  box.hidden = false;
+  const upd = rows.filter((c) => c.kind === "update").length;
+  box.innerHTML = `<p><strong>${plan.clientsExisting}</strong> cliente(s) del archivo ya existen: se completarán <strong>${rows.filter((c) => c.kind === "fill").length}</strong> dato(s) vacío(s)${updateMode() === "update" ? ` y se actualizarán <strong>${upd}</strong> dato(s) que difieren` : ""}. ${rows.length ? "" : "No hay cambios."}</p>
+    ${rows.length ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Fila</th><th>Cliente</th><th>Dato</th><th>Antes</th><th>Después</th></tr></thead><tbody>${rows.slice(0, 40).map((c) =>
+      `<tr><td>${c.row}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(FIELD_LABEL[c.field] || c.field)}</td><td>${escapeHtml(c.before || "(vacío)")}</td><td>${escapeHtml(c.after)}</td></tr>`).join("")}</tbody></table></div>
+      ${rows.length > 40 ? `<p class="hint">… y ${rows.length - 40} cambio(s) más.</p>` : ""}` : ""}`;
+}
+$$("input[name=import-update]").forEach((r) => r.addEventListener("change", () => guarded(renderImportChanges)));
+
 function importRecords() {
   return imp.body.map((row, i) => ({ ...IMP.buildRecord(row, imp.headers, imp.mapping), rowNumber: i + 2 }))
     .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length)
@@ -3189,11 +3213,20 @@ function renderImportPreview() {
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
   btn.textContent = noName ? "Asigne la columna del nombre del cliente" : `Importar ${recs.length} filas`;
+  renderImportChanges().catch(() => {});
 }
 
 $("#import-run").addEventListener("click", () => guarded(async () => {
   saveImportMapping(imp.kind, imp.headers, imp.mapping);
   const records = importRecords();
+  if (updateMode() === "update") {
+    const plan = await IMP.plan(records, api, { withCases: false, updateMode: "update" });
+    const n = plan.changes.filter((c) => c.kind === "update").length;
+    if (n) {
+      if (!(await ask({ title: "Actualizar clientes existentes", message: `Se cambiarán ${n} dato(s) que ya estaban guardados. Antes se descarga un Excel con los clientes tal como están hoy, para poder volver atrás. Nada se borra.`, okLabel: "Descargar copia y actualizar" }))) return;
+      await downloadImportKind("clientes", "data", `clientes-antes-de-actualizar-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+  }
   const casesMode = importMode() === "cases";
   const btn = $("#import-run");
   const bar = $("#import-progress");
@@ -3207,6 +3240,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       defaultCategory: $("#import-default-cat").value,
       defaultType: $("#import-default-type").value,
       canPay: can("payments.manage"),
+      updateMode: updateMode(),
       onProgress: (done, total) => (bar.value = done / total),
     });
     const res = $("#import-result");
@@ -3215,7 +3249,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       <p class="${sum.errors.length ? "" : "ok"}"><strong>Importación terminada.</strong></p>
       <ul>
         <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
-        <li>Clientes existentes completados: <strong>${sum.clientsCompleted}</strong></li>
+        <li>Clientes existentes completados o actualizados: <strong>${sum.clientsCompleted}</strong>${sum.clientsUpdated ? ` (con datos cambiados: ${sum.clientsUpdated})` : ""}</li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
         ${sum.charges ? `<li>Honorarios registrados en Pagos: <strong>${sum.charges}</strong></li>` : ""}
@@ -3282,7 +3316,7 @@ function renderImportKinds() {
     </div>`).join("");
 }
 
-async function downloadImportKind(key, what) {
+async function downloadImportKind(key, what, filename) {
   const k = IMPORT_KINDS[key];
   const header = k.cols.map(([label]) => ({ value: label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
   const data = what === "data" ? await k.rows() : [];
@@ -3290,7 +3324,7 @@ async function downloadImportKind(key, what) {
   const widths = k.cols.map(([label]) => ({ width: Math.max(16, label.length + 2) }));
   const blob = await window.writeXlsxFile([header, ...body], { columns: widths, sheet: k.title }).toBlob();
   const day = new Date().toISOString().slice(0, 10);
-  await saveFile(what === "data" ? `${key}-${day}.xlsx` : `plantilla-${key}.xlsx`, blob);
+  await saveFile(filename || (what === "data" ? `${key}-${day}.xlsx` : `plantilla-${key}.xlsx`), blob);
   if (what === "data") toast(`${data.length} ${k.title.toLowerCase()} en el archivo.`);
 }
 
@@ -3382,6 +3416,52 @@ $("#courts-map-run").addEventListener("click", () => guarded(async () => {
   await runCourtImport(rows);
 }));
 
+// Cases whose saved court name matches a directory court get linked to it (version 2.84): the case then carries the
+// court's e-mail, department, city and area. Same tolerant match as the case form (accents, capitals, «Primero» = «001»,
+// the case's city or circuit). Only cases with a court name and no link are considered; nothing is overwritten.
+const clientLabel = (k) => `${k.client_name}${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}`;
+async function planCourtLinks() {
+  const cases = (await api("GET", "/cases")).filter((k) => k.court_name && !k.court_id);
+  const links = [], none = [], several = [];
+  const byDep = new Map();
+  for (const k of cases) {
+    const dep = k.department || "";
+    if (!byDep.has(dep)) byDep.set(dep, dep ? await api("GET", `/courts?${new URLSearchParams({ department: dep, limit: "2000" })}`) : []);
+    const words = courtKey(k.court_name).split(" ");
+    const pool = byDep.get(dep).filter((c) => !k.city || courtKey(c.city) === courtKey(k.city) || courtKey(c.circuit) === courtKey(k.city));
+    const hits = pool.filter((c) => { const hay = courtKey(c.name).split(" "); return words.every((w) => hay.includes(w)); });
+    if (hits.length === 1) links.push({ k, court: hits[0] });
+    else (hits.length ? several : none).push({ k, why: dep ? (hits.length ? `${hits.length} despachos posibles` : "sin coincidencia en el directorio") : "el expediente no tiene departamento" });
+  }
+  return { links, none, several, total: cases.length };
+}
+
+async function showCourtLinks() {
+  courtCache.clear();
+  const plan = await planCourtLinks();
+  const res = $("#import-result");
+  if (!plan.total) return;
+  const list = (rows) => rows.slice(0, 12).map(({ k, why }) => `<li>${escapeHtml(clientLabel(k))} · ${escapeHtml(k.court_name)} (${escapeHtml(why)})</li>`).join("");
+  res.insertAdjacentHTML("beforeend", `<div id="court-links"><h4>Expedientes con despacho escrito</h4>
+    <p><strong>${plan.links.length}</strong> expediente(s) se pueden enlazar con el despacho del directorio (traen su correo, departamento, ciudad y área);
+    <strong>${plan.several.length}</strong> tienen varios despachos posibles y <strong>${plan.none.length}</strong> no tienen coincidencia.</p>
+    ${plan.links.length ? `<div class="toolbar"><button type="button" class="primary" id="court-links-run">Enlazar ${plan.links.length} expediente(s)</button></div>` : ""}
+    ${plan.none.length + plan.several.length ? `<details><summary>Ver los que no se enlazan</summary><ul>${list([...plan.several, ...plan.none])}${plan.none.length + plan.several.length > 12 ? "<li>…</li>" : ""}</ul></details>` : ""}</div>`);
+  $("#court-links-run")?.addEventListener("click", () => guarded(async () => {
+    const btn = $("#court-links-run");
+    btn.disabled = true;
+    let done = 0;
+    const failed = [];
+    for (const { k, court } of plan.links) {
+      try { await api("PUT", `/cases/${k.id}`, { court_id: court.id }); done++; } catch (e) { failed.push(`${clientLabel(k)}: ${e.message}`); }
+    }
+    $("#court-links").insertAdjacentHTML("beforeend", `<p class="ok"><strong>${done}</strong> expediente(s) enlazado(s).${failed.length ? ` No se pudo enlazar ${failed.length}: ${escapeHtml(failed.slice(0, 3).join("; "))}` : ""}</p>`);
+    btn.remove();
+    await loadCases();
+    toast(`${done} expediente(s) enlazado(s) con su despacho.`);
+  }));
+}
+
 // Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.82).
 async function runCourtImport(rows) {
   const out = await importCourtRows(rows);
@@ -3395,6 +3475,7 @@ async function runCourtImport(rows) {
     <button type="button" id="courts-skipped-xlsx">Descargar las omitidas (Excel con el motivo)</button>` : ""}
     <button type="button" class="primary" data-go-view="despachos">Ver los despachos cargados</button></div>
     ${skipped.length ? '<p class="hint">Corrija el departamento o el nombre en el Excel de omitidas y súbalo de nuevo en «Despachos»: los ya cargados no se duplican.</p>' : ""}`);
+  await showCourtLinks().catch(() => {});
   $("#courts-retry")?.addEventListener("click", () => guarded(() => runCourtImport(skipped.map((e) => e.data).filter(Boolean))));
   $("#courts-skipped-xlsx")?.addEventListener("click", () => guarded(async () => {
     const cols = [["Departamento", "department"], ["Ciudad", "city"], ["Nombre", "name"], ["Corporación o Área", "area"], ["Email", "email"],

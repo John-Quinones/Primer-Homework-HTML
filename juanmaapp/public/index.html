@@ -797,6 +797,12 @@
           <h3><span class="step-no">4</span> Vista previa e importación</h3>
           <div class="table-scroll"><table class="data-table" id="import-preview"></table></div>
           <div id="import-place-warnings" class="errors" hidden></div>
+          <fieldset id="import-update-opts" class="radio-row">
+            <legend>Clientes que ya existen</legend>
+            <label class="inline"><input type="radio" name="import-update" value="fill" checked /> Completar solo lo vacío (recomendado)</label>
+            <label class="inline"><input type="radio" name="import-update" value="update" /> Completar y también actualizar los datos que difieren</label>
+          </fieldset>
+          <div id="import-changes" hidden></div>
           <p class="hint">Si el cliente ya existe (mismo número de documento o mismo nombre), no se duplica: solo se completan los datos que tenga vacíos. Un expediente igual (mismo cliente, subproceso y asunto) no se vuelve a crear.</p>
           <button id="import-run" class="primary">Importar</button>
           <progress id="import-progress" value="0" max="1" hidden></progress>
