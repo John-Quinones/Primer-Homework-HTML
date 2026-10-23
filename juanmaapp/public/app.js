@@ -175,7 +175,7 @@ function applyPermissions() {
   showMyAvatar();
   $("#courts-import-btn").hidden = !can("catalog.manage");
   // Creating process types and sub-processes from the case form or an import is for Gerencia only.
-  $$("[data-new-cat], [data-new-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
+  $$("[data-new-cat], [data-new-type], [data-del-cat], [data-del-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
   const createCat = $("#import-create-catalog");
   createCat.disabled = !can("catalog.manage");
   if (createCat.disabled) createCat.checked = false;
@@ -2070,6 +2070,31 @@ async function newCatalogEntry(kind) {
     toast(kind === "cat" ? `Tipo de proceso «${made.name}» creado.` : `Subproceso «${made.name}» creado.`);
   } catch (err) { toast(err.message, true); }
 }
+// Gerencia deletes the chosen type or sub-process; the server refuses while any case uses it.
+async function deleteCatalogEntry(kind) {
+  const catId = Number(caseForm.elements.category_id.value);
+  const cat = categoryOf(catId);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const item = kind === "cat" ? cat : type;
+  if (!item) return toast("Elija primero cuál eliminar.", true);
+  const kids = kind === "cat" ? cat.types.length : cat.types.filter((t) => t.parent_id === item.id).length;
+  const ok = await confirmAsk(kind === "cat" ? "Eliminar tipo de proceso" : "Eliminar subproceso",
+    `¿Eliminar «${item.name}» del catálogo?` + (kids ? ` También se eliminarán ${kids} subproceso${kids === 1 ? "" : "s"} y, en el tipo, sus campos propios.` : "") +
+    " Solo se elimina si ningún expediente lo usa; la acción queda en la bitácora.");
+  if (!ok) return;
+  try {
+    await api("DELETE", kind === "cat" ? `/categories/${item.id}` : `/types/${item.id}`);
+    await loadCatalog();
+    caseForm.elements.category_id.innerHTML = state.catalog.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    const keep = kind === "cat" ? state.catalog[0]?.id : catId;
+    caseForm.elements.category_id.value = keep;
+    fillTypeSelect(keep);
+    renderParties();
+    toast(`«${item.name}» eliminado.`);
+  } catch (err) { toast(err.message, true); }
+}
+$("[data-del-cat]").addEventListener("click", () => deleteCatalogEntry("cat"));
+$("[data-del-type]").addEventListener("click", () => deleteCatalogEntry("type"));
 $("[data-new-cat]").addEventListener("click", () => newCatalogEntry("cat"));
 $("[data-new-type]").addEventListener("click", () => newCatalogEntry("type"));
 caseForm.elements.process_type_id.addEventListener("change", () => fillRoleSelect());
