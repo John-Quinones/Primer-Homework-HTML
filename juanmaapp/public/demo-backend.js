@@ -1059,7 +1059,8 @@
     ["DELETE", /^\/categories\/(\d+)$/, (m) => {
       need("catalog.manage");
       const typeIds = s.types.filter((t) => t.category_id === +m[1]).map((t) => t.id);
-      s.cases.some((k) => typeIds.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      const n = s.cases.filter((k) => typeIds.includes(k.process_type_id)).length;
+      n && fail(`No se puede eliminar el tipo de proceso: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`);
       s.categories = s.categories.filter((c) => c.id !== +m[1]);
       s.types = s.types.filter((t) => t.category_id !== +m[1]);
       s.fields = s.fields.filter((f) => f.category_id !== +m[1]);
@@ -1090,7 +1091,8 @@
     ["DELETE", /^\/types\/(\d+)$/, (m) => {
       need("catalog.manage");
       const ids = [+m[1], ...s.types.filter((t) => t.parent_id === +m[1]).map((t) => t.id)];
-      s.cases.some((k) => ids.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      const n = s.cases.filter((k) => ids.includes(k.process_type_id)).length;
+      n && fail(`No se puede eliminar el subproceso: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`);
       s.types = s.types.filter((t) => !ids.includes(t.id));
       return null;
     }],
