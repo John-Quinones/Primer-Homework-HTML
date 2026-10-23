@@ -162,7 +162,7 @@ export function openedAt(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)) ? `${d} 00:00:00` : null;
 }
 
-/** Parties of a case: our clients are linked to their client record (given, or found by document number).
+/** Parties of a case: registered clients are linked to their client record (given, or found by document number when ours; v2.2.35: a registered client can also be the other party, so the link is kept even when not ours).
  * lib.visible(clientId) tells whether the user sees that client; lib.byDocument(digits) returns the id of a
  * visible client with that document, or null. Returns the list without the case's main client. */
 export function linkParties(list, mainClientId, lib) {
@@ -172,7 +172,6 @@ export function linkParties(list, mainClientId, lib) {
   for (const p of parties) {
     if (p.client_id && !lib.visible(p.client_id)) p.client_id = null;
     if (p.ours && !p.client_id && digits(p.id_number).length >= 5) p.client_id = lib.byDocument(digits(p.id_number)) ?? null;
-    if (!p.ours) p.client_id = null;
   }
   return parties.filter((p) => p.client_id !== mainClientId);
 }

@@ -2438,6 +2438,35 @@ partyBox.addEventListener("input", (e) => {
     if (c) { p.id_number = c.id_number || ""; p.ours = true; $("[data-p=id_number]", row).value = p.id_number; $("[data-p=ours]", row).checked = true; }
   }
 });
+// v2.2.35: pick a registered client as a party (no typing); «+ Agregar a mano» keeps the typed option.
+const pickFlat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const pickText = (c) => pickFlat([c.full_name, c.id_number, c.id_number?.replace(/\D/g, ""), clientFolderText(c)].filter(Boolean).join(" "));
+function clientFolderText(c) { return (state.cases || []).filter((k) => k.client_id === c.id).map((k) => caseFolder(k)).filter(Boolean).join(" "); }
+partyBox.addEventListener("input", (e) => {
+  const inp = e.target.closest("[data-party-pick]");
+  if (!inp) return;
+  const side = inp.dataset.partyPick, list = $(`[data-pick-list="${side}"]`, partyBox), q = pickFlat(inp.value);
+  const mainId = Number(caseForm.elements.client_id.value);
+  const found = q ? clientsByFolder(activeClients(state.clients)).filter((c) => c.id !== mainId && pickText(c).includes(q)).slice(0, 8) : [];
+  list.hidden = !q;
+  list.innerHTML = found.length ? found.map((c) => `<li><button type="button" data-pick-client="${c.id}" data-pick-side="${side}"><strong>${escapeHtml(c.full_name)}</strong> <span class="muted">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</span></button></li>`).join("")
+    : `<li class="muted">Ningún cliente registrado coincide. Use «+ Agregar a mano».</li>`;
+});
+partyBox.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pick-client]");
+  if (!b) return;
+  const c = state.clients.find((x) => x.id === Number(b.dataset.pickClient));
+  if (!c) return;
+  const side = b.dataset.pickSide, cat = categoryOf(caseForm.elements.category_id.value);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const role = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
+  if (partyRows.some((p) => p.client_id === c.id)) { toast(`${c.full_name} ya está en las partes.`, true); return; }
+  partyRows.push({ side, role, name: c.full_name, id_type: c.id_type || "", id_number: c.id_number || "", ours: true, client_id: c.id });
+  for (const el of $$("[data-party-pick]", partyBox)) el.value = "";
+  for (const el of $$("[data-pick-list]", partyBox)) el.hidden = true;
+  renderParties();
+  toast(`${c.full_name} agregado. Desmarque «Nuestro cliente» si es la contraparte.`);
+});
 for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => { renderParties(); renderRoleChips(); });
 
 async function openCaseDialog(k = null, clientId = null) {
@@ -2479,6 +2508,7 @@ async function openCaseDialog(k = null, clientId = null) {
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
   partyRows = (k?.parties || []).map((p) => ({ ...p }));
+  for (const el of $$("[data-pick-list]", partyBox)) el.hidden = true;
   $("#party-clients").innerHTML = clientsByFolder(activeClients(state.clients)).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
   renderParties();
 }
@@ -2495,7 +2525,7 @@ wireDialog($("#case-dialog"), async (form) => {
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
-    parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
+    parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_type, id_number, ours, client_id }) => ({ side, role: role || "", name, id_type: id_type || "", id_number, ours, client_id })),
   };
   const savedCase = d.id ? await api("PUT", `/cases/${d.id}`, body) : await api("POST", "/cases", body);
   if (savedCase?.id) form.elements.id.value = savedCase.id; // reopening with Atrás edits this case, never creates a second one
