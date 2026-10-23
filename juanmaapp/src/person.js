@@ -178,7 +178,7 @@ const words = (s) => fold(s).split(/[^a-z0-9ñ]+/).filter(Boolean);
  * True when a client matches the search. Accents, upper/lower case and word
  * order do not matter ("lopez eduardo" finds "Eduardo Alfredo Urueña López");
  * documents compare digits only ("14.296.116" finds 14296116).
- * by: "" (everything) | "first" | "last" | "doc" | "city".
+ * by: "" (everything) | "first" | "last" | "doc" | "city" | "idplace" (place of issue of the ID card).
  */
 export function clientMatches(c, q, by = "") {
   const text = String(q ?? "").trim();
@@ -186,7 +186,7 @@ export function clientMatches(c, q, by = "") {
   const digits = text.replace(/\D/g, "");
   const docHit = digits.length >= 3 && String(c.id_number ?? "").replace(/\D/g, "").includes(digits);
   if (by === "doc") return docHit;
-  const fields = { first: [c.first_names], last: [c.last_names], city: [c.city, c.department] }[by]
+  const fields = { first: [c.first_names], last: [c.last_names], city: [c.city, c.department], idplace: [c.id_city, c.id_department] }[by]
     || [c.full_name, c.first_names, c.last_names, c.legal_rep, c.city, c.email, c.phone];
   const hay = words(fields.filter(Boolean).join(" ")).join(" ");
   const ok = words(text).every((w) => hay.split(" ").some((h) => h.startsWith(w)) || (w.length >= 4 && hay.includes(w)));

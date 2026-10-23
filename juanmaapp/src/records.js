@@ -8,7 +8,7 @@ import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
-import { clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
+import { clientArchive, clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
 import { AREAS, canonicalDepartment, canonicalCity, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
 
@@ -131,6 +131,18 @@ export function recordsRouter(db) {
     const id = toInt(req.params.id, "id");
     const v = clientValues(req, req.body ?? {}, getClient(req, id));
     db.prepare(`UPDATE clients SET ${CLIENT_FIELDS.map((f) => `${f} = :${f}`).join(", ")} WHERE id = :id`).run({ ...v, id });
+    return getClient(req, id);
+  }));
+
+  // Archive state (version 2.87): '' = activo, or one of the two archive states. Touches nothing else: cases, charges and documents stay.
+  r.put("/clients/:id/archive", h((req) => {
+    checkPerm(req, "clients.write");
+    const id = toInt(req.params.id, "id");
+    const before = getClient(req, id).archive_status;
+    const status = clientArchive(req.body?.status, fail400);
+    // Only the administrator (Gerencia) sends a client to «Archivo definitivo» or takes one out of it.
+    if ((status === "Archivo definitivo" || before === "Archivo definitivo") && status !== before && req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia maneja el archivo definitivo de clientes.");
+    db.prepare("UPDATE clients SET archive_status = ? WHERE id = ?").run(status, id);
     return getClient(req, id);
   }));
 

@@ -24,6 +24,7 @@
       match: ["departamento de expedicion", "departamento expedicion", "depto expedicion", "departamento de expedicion de la cedula", "departamento expedicion cedula"] },
     { key: "client.id_city", label: "Cliente · Ciudad de expedición de la cédula",
       match: ["ciudad de expedicion", "ciudad expedicion", "lugar de expedicion", "lugar expedicion", "ciudad de expedicion de la cedula", "ciudad expedicion cedula", "expedida en", "expedicion"] },
+    { key: "client.archive_status", label: "Cliente · Estado (activo, archivo provisional o definitivo)", match: ["estado del cliente", "estado cliente", "archivo del cliente"] },
     { key: "client.notes", label: "Cliente · Notas", join: "\n", match: ["notas", "observaciones", "comentarios"] },
     { key: "case.category", label: "Expediente · Tipo de proceso", match: ["tipo proceso", "tipo de proceso", "area", "especialidad", "categoria", "materia"] },
     { key: "case.type", label: "Expediente · Subproceso", match: ["subproceso", "clase proceso", "clase de proceso", "accion", "tipo accion", "medio de control", "proceso"] },
@@ -216,6 +217,14 @@
   // (accents, capitals, spacing and phone punctuation do not count as a difference). The document number is the
   // match key and is never rewritten.
   const sameValue = (k, a, b) => (k === "phone" ? radDigits(a) === radDigits(b) : norm(a) === norm(b));
+  /** The file's client state: "Archivo provisional" | "Archivo definitivo" | "" (activo) | undefined (blank or not understood: leave as is). */
+  function archiveState(v) {
+    const t = norm(v);
+    if (!t) return undefined;
+    if (t.includes("provisional")) return "Archivo provisional";
+    if (t.includes("definitiv")) return "Archivo definitivo";
+    return /^(activo|activa|vigente)/.test(t) ? "" : undefined;
+  }
   function normClient(raw) {
     const c = { ...raw };
     if (c.person_type) c.person_type = /jur/i.test(norm(c.person_type)) ? "juridica" : "natural";
@@ -303,10 +312,14 @@
       try {
         // ----- client: match by document number, else by exact name -----
         const c = normClient(rec.client);
+        const wanted = archiveState(c.archive_status); // version 2.94: «Estado del cliente» column, applied after the client is saved
+        delete c.archive_status;
         let client = (docKey(c.id_number) && byDoc.get(docKey(c.id_number))) || (c.full_name && byName.get(norm(c.full_name)));
+        let created = false;
         if (!client) {
           if (!c.full_name) throw new Error("Sin nombre de cliente.");
           client = await api("POST", "/clients", c);
+          created = true;
           summary.clientsCreated++;
         } else {
           // Default: only fill blanks. With opts.updateMode === "update" the values that differ are rewritten too (the screen asked, with before/after).
@@ -316,6 +329,11 @@
             summary.clientsCompleted++;
             if (diff.some((d) => d.kind === "update")) summary.clientsUpdated++;
           }
+        }
+        // New clients take the state of the file; existing ones change it only when the screen asked to update what differs.
+        if (wanted !== undefined && wanted !== (client.archive_status || "") && (created || opts.updateMode === "update")) {
+          client = await api("PUT", `/clients/${client.id}/archive`, { status: wanted });
+          summary.clientsArchived = (summary.clientsArchived || 0) + 1;
         }
         if (docKey(client.id_number)) byDoc.set(docKey(client.id_number), client);
         byName.set(norm(client.full_name), client);

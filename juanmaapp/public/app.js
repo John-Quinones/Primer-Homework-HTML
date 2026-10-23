@@ -653,31 +653,42 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- Clientes ----------
-// Version 2.71: archived cases (and the clients whose cases are all archived) stay out of Clientes unless the
-// «Archivados» filter asks for them. Nothing is stored: the client's state comes from its cases.
+// Version 2.87: a client is Activo or sent to «Archivo provisional» / «Archivo definitivo» (clients.archive_status,
+// "" = activo). The views are exclusive: the list shows only the clients of the state chosen in #client-archive.
+// Archiving never touches the client's cases, charges or documents.
+const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo"];
 const clientArchiveFilter = () => $("#client-archive")?.value || "";
-const archivedOnly = (k) => k.status === "Archivo provisional" || k.status === "Archivo definitivo";
-const caseShownInClients = (k) => { const f = clientArchiveFilter(); return f === "todos" || (f ? k.status === f : !archivedOnly(k)); };
 function renderClientList() {
   const ul = $("#client-list");
   const byClient = new Map();
   for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
   const f = clientArchiveFilter();
-  // A client with no cases shows only without a filter; with cases it shows when any of them matches the filter.
-  const shown = state.clients.filter((c) => { const ks = byClient.get(c.id) || []; return f === "todos" || (!ks.length ? !f : ks.some(caseShownInClients)); });
-  const hiddenClients = state.clients.length - shown.length;
+  const shown = state.clients.filter((c) => (c.archive_status || "") === f);
+  const others = CLIENT_ARCHIVE.map((st) => [st, state.clients.filter((c) => c.archive_status === st).length]);
   const note = $("#client-archive-note");
-  if (note) note.textContent = !f && hiddenClients ? `${hiddenClients} cliente(s) con todos sus expedientes archivados, ocultos` : "";
+  if (note) note.textContent = f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
   if (!shown.length) {
-    ul.innerHTML = '<li class="empty">No hay clientes. Cree el primero con “+ Nuevo cliente”.</li>';
+    ul.innerHTML = `<li class="empty">${f ? `No hay clientes en ${f.toLowerCase()}.` : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
     return;
   }
   ul.innerHTML = shown.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
       <strong>${escapeHtml(c.full_name)}</strong>
-      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).filter(caseShownInClients).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
+      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
+
+// Buttons to send a client to archive or back to activos (needs clients.write); «definitivo» asks first.
+const archiveButtons = (c) => {
+  if (!can("clients.write")) return "";
+  const btn = (to, label) => `<button data-action="archive-client" data-id="${c.id}" data-to="${to}">${label}</button>`;
+  const final = isGerencia(); // «Archivo definitivo» (to or from) is only for the administrator (user's rule, 2.94)
+  if (c.archive_status === "Archivo definitivo") return final ? btn("", "Devolver a activos") + btn("Archivo provisional", "Pasar a archivo provisional") : "";
+  return c.archive_status
+    ? btn("", "Devolver a activos") + (final ? btn("Archivo definitivo", "Pasar a archivo definitivo") : "")
+    : btn("Archivo provisional", "Archivo provisional") + (final ? btn("Archivo definitivo", "Archivo definitivo") : "");
+};
+const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
 
 async function renderClientDetail() {
   const box = $("#client-detail");
@@ -686,16 +697,17 @@ async function renderClientDetail() {
     box.innerHTML = '<p class="empty">Seleccione un cliente o cree uno nuevo.</p>';
     return;
   }
-  const cases = (await api("GET", `/cases?clientId=${c.id}`)).filter(caseShownInClients);
+  const cases = (await api("GET", `/cases?clientId=${c.id}`));
   const row = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
   box.innerHTML = `
     <div class="detail-head">
-      <h3>${escapeHtml(c.full_name)}</h3>
+      <h3>${escapeHtml(c.full_name)} ${archiveBadge(c)}</h3>
       <div class="toolbar">
         <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
+        ${archiveButtons(c)}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
     </div>
@@ -725,7 +737,7 @@ async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
   const [c, allCases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
-  const cases = allCases.filter(caseShownInClients);
+  const cases = allCases;
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -736,6 +748,7 @@ async function renderClienteFicha(id) {
       <h2>${escapeHtml(c.full_name)}</h2>
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
+        ${archiveButtons(c)}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
@@ -743,6 +756,7 @@ async function renderClienteFicha(id) {
       </div>
     </div>
     <div class="ficha-chips">
+      ${archiveBadge(c)}
       <span class="chip-stat">Expedientes <strong>${cases.length}</strong></span>
       <span class="chip-stat">Activos <strong>${active}</strong></span>
       ${pay ? `<span class="chip-stat">Honorarios <strong>${cop(pay.billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(pay.received)}</strong></span>
@@ -1247,6 +1261,8 @@ async function renderClientes() {
   await renderClientDetail();
 }
 
+// Inicio's «Clientes con Casos de Éxito!» links open Clientes already on that archive view.
+document.addEventListener("click", (e) => { const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView; });
 $("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
@@ -1288,7 +1304,7 @@ async function openClientMenu(anchor, clientId) {
   placeClientMenu(pop, anchor);
   const [c, allCases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
   if (clientMenu !== pop) return;
-  const cases = allCases.filter(caseShownInClients);
+  const cases = allCases;
   const doc = [c.person_type === "juridica" ? "NIT" : c.id_type, c.id_number].filter(Boolean).join(" ");
   pop.innerHTML = `
     <div class="cm-head"><strong>${escapeHtml(c.full_name)}</strong><button type="button" class="cm-close" aria-label="Cerrar">✕</button></div>
@@ -1721,6 +1737,11 @@ function openClientDialog(c) {
   } : {});
   setPersonType(type);
   clientForm.elements.affiliated.checked = !!c?.affiliated;
+  // Version 2.94: state of the client. «Archivo definitivo» (to or from) is only for Gerencia.
+  const st = clientForm.elements.archive_status;
+  st.value = c?.archive_status || "";
+  st.querySelector('[value="Archivo definitivo"]').disabled = !isGerencia();
+  st.disabled = !isGerencia() && c?.archive_status === "Archivo definitivo";
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
   showFormPhoto(c?.photo || "", c || {});
 }
@@ -1729,7 +1750,16 @@ wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   data.affiliated = form.elements.affiliated.checked;
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
+  const wantedState = form.elements.archive_status.value, before = id ? state.clients.find((x) => x.id === Number(id))?.archive_status || "" : "";
+  if (id && wantedState && wantedState !== before) {
+    const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
+    if (open && !(await ask({ title: `¿Enviar a ${wantedState.toLowerCase()}?`, message: `Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes. No se borra nada.`, okLabel: "Archivar" }))) throw new Error("No se guardó: confirme el archivo del cliente o déjelo en activo.");
+  }
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
+  if (wantedState !== (saved.archive_status || "")) {
+    try { await api("PUT", `/clients/${saved.id}/archive`, { status: wantedState }); await loadClients(); }
+    catch (err) { toast(`El cliente quedó guardado, pero el estado no: ${err.message}`, true); }
+  }
   if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
   pendingPhoto = undefined;
   state.selectedClientId = saved.id;
@@ -1973,6 +2003,8 @@ $("#case-rows").addEventListener("change", (e) => guarded(async () => {
 
 const caseForm = $("#case-dialog form");
 // Client pickers are search boxes: any letter or word of the name or the document filters the list.
+// Version 2.94: client searchers outside Clientes list only activos (an archived client stays when it is already chosen).
+const activeClients = (list, keepId = null) => list.filter((c) => !c.archive_status || c.id === keepId);
 const clientOption = (c) => `<option value="${c.id}" data-sub="${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}">${escapeHtml(c.full_name)}</option>`;
 window.JuanmaCombo.searchSelect(caseForm.elements.client_id);
 
@@ -2295,7 +2327,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = state.clients.map(clientOption).join("");
+  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id).map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -2312,7 +2344,9 @@ async function openCaseDialog(k = null, clientId = null) {
   linkCourtByName(k).catch(() => {});
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();
-  caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
+  const firstActive = activeClients(state.clients)[0];
+  if (!k && !firstActive) { toast("No hay clientes activos. Cree uno o devuelva uno a activos.", true); location.hash = "#clientes"; return; }
+  caseForm.elements.client_id.value = k?.client_id ?? (activeClients(state.clients, clientId).some((c) => c.id === clientId) ? clientId : firstActive.id);
   caseForm.elements.client_id.disabled = !!k;
   caseForm.elements.office_id.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   const clientOffice = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value))?.office_id;
@@ -2325,7 +2359,7 @@ async function openCaseDialog(k = null, clientId = null) {
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
   partyRows = (k?.parties || []).map((p) => ({ ...p }));
-  $("#party-clients").innerHTML = state.clients.map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
+  $("#party-clients").innerHTML = activeClients(state.clients).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
   renderParties();
 }
 
@@ -2773,6 +2807,20 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
+    "archive-client": async () => {
+      const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
+      const to = btn.dataset.to || "";
+      const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
+      const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
+      const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
+        : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede devolverlo a activos cuando quiera.`;
+      if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Enviar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: to ? "Archivar" : "Devolver" }))) return; }
+      await api("PUT", `/clients/${id}/archive`, { status: to });
+      toast(to ? `Cliente enviado a ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
+      await loadClients();
+      if (location.hash === "#clientes") state.selectedClientId = null; // it left this list
+      await refreshView();
+    },
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
@@ -3283,6 +3331,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       <p class="${sum.errors.length ? "" : "ok"}"><strong>Importación terminada.</strong></p>
       <ul>
         <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
+        ${sum.clientsArchived ? `<li>Clientes con estado de archivo cambiado: <strong>${sum.clientsArchived}</strong></li>` : ""}
         <li>Clientes existentes completados o actualizados: <strong>${sum.clientsCompleted}</strong>${sum.clientsUpdated ? ` (con datos cambiados: ${sum.clientsUpdated})` : ""}</li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
@@ -3309,7 +3358,7 @@ const IMPORT_KINDS = {
     title: "Clientes", mode: "clients",
     cols: [["Nombre completo", (c) => c.full_name], ["Tipo de documento", (c) => c.id_type], ["Número de documento", (c) => c.id_number],
       ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city],
-      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Notas", (c) => c.notes]],
+      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Estado del cliente", (c) => c.archive_status || "Activo"], ["Notas", (c) => c.notes]],
     rows: async () => api("GET", "/clients"),
   },
   expedientes: {
@@ -3342,6 +3391,10 @@ function renderImportKinds() {
     <div class="import-card" data-kind="${key}">
       <h4>${k.title}</h4>
       <p class="hint">${escapeHtml(IMPORT_KIND_HINT[key])}</p>
+      ${key === "clientes" ? `<div class="toolbar import-filters">
+        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+        <label>Cédula expedida en <input id="import-clients-idplace" type="search" placeholder="Ciudad o departamento" /></label>
+      </div>` : ""}
       <div class="toolbar">
         <button type="button" data-imp-dl="template">Plantilla vacía</button>
         <button type="button" data-imp-dl="data">Descargar datos actuales</button>
@@ -3353,7 +3406,11 @@ function renderImportKinds() {
 async function downloadImportKind(key, what, filename) {
   const k = IMPORT_KINDS[key];
   const header = k.cols.map(([label]) => ({ value: label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
-  const data = what === "data" ? await k.rows() : [];
+  let data = what === "data" ? await k.rows() : [];
+  if (what === "data" && key === "clientes") { // filters of the clients card: state and place where the ID card was issued
+    const st = $("#import-clients-state")?.value || "", place = $("#import-clients-idplace")?.value || "";
+    data = data.filter((c) => (!st || (st === "activo" ? !c.archive_status : c.archive_status === st)) && (!place.trim() || window.JuanmaPerson.clientMatches(c, place, "idplace")));
+  }
   const body = data.map((r) => k.cols.map(([, get]) => ({ value: String(get(r) ?? ""), type: String })));
   const widths = k.cols.map(([label]) => ({ width: Math.max(16, label.length + 2) }));
   const blob = await window.writeXlsxFile([header, ...body], { columns: widths, sheet: k.title }).toBlob();
@@ -3562,7 +3619,9 @@ async function renderInicio() {
   ]);
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
-  $("#kpi-clients").textContent = clients.length;
+  $("#kpi-clients").textContent = clients.filter((c) => !c.archive_status).length; // version 2.87: only activos
+  const nProv = clients.filter((c) => c.archive_status === "Archivo provisional").length, nDef = clients.filter((c) => c.archive_status === "Archivo definitivo").length;
+  $("#kpi-success").textContent = nProv + nDef; $("#kpi-success-prov").textContent = nProv; $("#kpi-success-def").textContent = nDef;
   $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
   $("#kpi-total").textContent = `de ${cases.length} en total`;
   $("#kpi-due").textContent = tasks.filter((t) => t.due_at <= in7).length;
@@ -6349,7 +6408,7 @@ async function renderPagos() {
   const [sum, clients] = await Promise.all([api("GET", "/payments/summary"), api("GET", "/clients")]);
   payClients = clients;
   const sel = $("#pay-client");
-  sel.innerHTML = '<option value="">Todos los clientes</option>' + clients.map(clientOption).join("");
+  sel.innerHTML = '<option value="">Todos los clientes</option>' + activeClients(clients).map(clientOption).join("");
   sel.value = clientId;
   $("#pay-balance").textContent = cop(sum.totals.balance);
   $("#pay-overdue").textContent = cop(sum.totals.overdue);
@@ -6440,7 +6499,7 @@ window.JuanmaCombo.searchSelect(chargeForm.elements.client_id);
 async function fillClientSelect(select, selected) {
   if (!payClients.length) payClients = await api("GET", "/clients");
   if (!payClients.length) throw new Error("Primero cree un cliente.");
-  select.innerHTML = payClients.map(clientOption).join("");
+  select.innerHTML = activeClients(payClients, Number(selected)).map(clientOption).join("");
   // defaultSelected: openDialog resets the form, and the client chosen in Pagos must survive it.
   const opt = selected && [...select.options].find((o) => o.value === String(selected));
   if (opt) { opt.defaultSelected = true; select.value = opt.value; }

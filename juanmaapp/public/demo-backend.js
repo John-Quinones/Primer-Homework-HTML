@@ -190,7 +190,7 @@
   const officeName = (id) => s.offices.find((o) => o.id === id)?.name || "";
   const clientOut = (c, withPhoto) => {
     const { foto, ...out } = clone(c), photo = s.blobs[`photo-${c.id}`] || "";
-    return { ...out, office_name: officeName(c.office_id), has_photo: !!photo, ...(withPhoto ? { photo } : {}) };
+    return { ...out, archive_status: c.archive_status || "", office_name: officeName(c.office_id), has_photo: !!photo, ...(withPhoto ? { photo } : {}) };
   };
   const permsOf = (role) => {
     const p = [...(s.matrix[role] || [])];
@@ -235,7 +235,7 @@
   };
   // ----- Audit log (change 50), same entries as the server's audit_log -----
   const AUDIT_MAX = 5000; // the link's database keeps the latest entries
-  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/fields$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
+  const AUDIT_SNAP = [[/^\/cases\/(\d+)$/, "cases"], [/^\/cases\/(\d+)\/folder$/, "cases"], [/^\/cases\/(\d+)\/fields$/, "cases"], [/^\/cases\/(\d+)\/radicado$/, "cases"], [/^\/cases\/(\d+)\/number$/, "cases"], [/^\/clients\/(\d+)$/, "clients"], [/^\/clients\/(\d+)\/photo$/, "clients"], [/^\/clients\/(\d+)\/archive$/, "clients"], [/^\/tasks\/(\d+)$/, "tasks"],
     [/^\/payments\/charges\/(\d+)/, "charges"], [/^\/payments\/receipts\/(\d+)/, "receipts"], [/^\/admin\/users\/(\d+)/, "users"], [/^\/esign\/(\d+)/, "signs"]];
   const auditSnap = (path) => {
     const hit = AUDIT_SNAP.find(([re]) => re.test(path));
@@ -992,6 +992,15 @@
       const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
       Object.assign(c, clientValues(b, c));
       c.office_id = officeFor(b.office_id, c.office_id);
+      return clientOut(c, true);
+    }],
+    // Archive state (version 2.87): "" = activo; nothing else changes.
+    ["PUT", /^\/clients\/(\d+)\/archive$/, (m, b) => {
+      need("clients.write");
+      const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
+      const status = RR.clientArchive(b.status, fail);
+      if ((status === "Archivo definitivo" || c.archive_status === "Archivo definitivo") && status !== (c.archive_status || "") && me().role !== "Gerencia") fail("Solo Gerencia maneja el archivo definitivo de clientes.", 403);
+      c.archive_status = status;
       return clientOut(c, true);
     }],
     // Optional photo (version 2.22), kept as a blob so the client buckets stay small; "" removes it.
