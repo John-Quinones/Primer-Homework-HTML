@@ -7000,31 +7000,53 @@ function monyCard(c) {
 }
 // Mony's face turns toward where the person looks (version 2.2.10): a gentle 3D tilt that follows the pointer.
 // A camera head-tracker can feed the same function (monyLook) later; nothing is recorded or sent anywhere.
-const monyFace = () => document.querySelector(".mony-id img");
-function monyLook(x, y) { // x, y in -1 … 1 (left/up negative)
-  const img = monyFace();
-  if (!img) return;
-  img.style.transform = `perspective(300px) rotateY(${(x * 24).toFixed(1)}deg) rotateX(${(-y * 18).toFixed(1)}deg) translate(${(x * 3).toFixed(1)}px, ${(y * 2).toFixed(1)}px)`;
+const monyFaces = () => [...document.querySelectorAll(".mony-id img, #mony-zoom img")].filter((i) => i.getClientRects().length);
+function monyTilt(img, x, y) { // x, y in -1 … 1 (left/up negative)
+  if (img.closest("#mony-zoom.full")) { // full screen: the picture slides toward the pointer (flat, so it never leaves the screen)
+    img.style.transform = `scale(1.06) translate(${(-x * 2.2).toFixed(2)}%, ${(-y * 2.2).toFixed(2)}%)`;
+    return;
+  }
+  img.style.transform = `perspective(900px) rotateY(${(x * 22).toFixed(1)}deg) rotateX(${(-y * 16).toFixed(1)}deg) translate(${(x * 6).toFixed(1)}px, ${(y * 4).toFixed(1)}px)`;
 }
 const monyReduce = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 document.addEventListener("pointermove", (e) => {
   if (monyReduce?.matches || $("#view-mony").hidden) return;
-  const img = monyFace();
-  if (!img) return;
-  const r = img.getBoundingClientRect();
-  const dx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
-  const dy = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
-  monyLook(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
+  for (const img of monyFaces()) {
+    const r = img.getBoundingClientRect();
+    const dx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
+    const dy = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
+    monyTilt(img, Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
+  }
 });
 
-// Click on Mony's face: it opens larger (version 2.2.11). Esc, the button or a click outside close it.
-function monyZoom() { const d = $("#mony-zoom"); if (!d.open) d.showModal(); }
+// Mony's face (version 2.2.12): one click opens it about 3 times larger, a double click fills the screen;
+// in every size it keeps following the pointer. Esc, «Cerrar» or a click outside closes it.
+const MONY_IMG = { mid: "mony-avatar.webp", full: "mony-avatar-full.webp" };
+let monyClickTimer = null;
+function monyZoom(mode) {
+  const d = $("#mony-zoom"), img = d.querySelector("img");
+  d.classList.toggle("full", mode === "full");
+  img.src = MONY_IMG[mode];
+  img.style.transform = "";
+  if (!d.open) d.showModal();
+  if (mode === "full") document.documentElement.requestFullscreen?.().catch(() => {});
+  else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+}
 document.addEventListener("click", (e) => {
-  if (e.target.closest(".mony-id img")) return monyZoom();
   const d = $("#mony-zoom");
-  if (d.open && (e.target === d || e.target.closest("#mony-zoom-close"))) d.close();
+  if (e.target.closest(".mony-id img")) { clearTimeout(monyClickTimer); monyClickTimer = setTimeout(() => monyZoom("mid"), 250); return; }
+  if (d.open && (e.target === d || e.target.closest("#mony-zoom-close"))) { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); d.close(); }
 });
-document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img")) { e.preventDefault(); monyZoom(); } });
+document.addEventListener("dblclick", (e) => {
+  const d = $("#mony-zoom");
+  if (e.target.closest(".mony-id img")) { clearTimeout(monyClickTimer); monyZoom("full"); }
+  else if (d.open && e.target.closest("#mony-zoom img")) monyZoom(d.classList.contains("full") ? "mid" : "full");
+});
+document.addEventListener("fullscreenchange", () => { // leaving the browser's full screen with Esc returns to the large picture
+  const d = $("#mony-zoom");
+  if (!document.fullscreenElement && d.open && d.classList.contains("full")) monyZoom("mid");
+});
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img")) { e.preventDefault(); monyZoom("mid"); } });
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;
