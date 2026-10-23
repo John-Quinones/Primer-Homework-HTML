@@ -71,7 +71,7 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
   const INTRO_MS = 3200, FORMED_MS = 2700;
   const faces = [];
   let gl = null, glc = null, prog = null, U = {}, ready = false, failed = false, raf = 0;
-  let vbuf = null, pprog = null, PU = {}, pbuf = null, pcount = 0, introAt = null, introWanted = false, introDone = null;
+  let vbuf = null, pprog = null, PU = {}, pbuf = null, pcount = 0;
   const S = { yaw: 0, pitch: 0, tilt: 0, gx: 0, gy: 0, blink: 0, mouth: 0, smile: 0.35, brow: 0, breath: 0 };
   const T = { yaw: 0, pitch: 0, gx: 0, gy: 0, smile: 0.35, brow: 0 };
   let mode = "idle"; // idle | thinking | listening | speaking
@@ -165,7 +165,7 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
     for (const a of ["title", "tabindex", "role"]) if (img.hasAttribute(a)) cv.setAttribute(a, img.getAttribute(a));
     cv.setAttribute("aria-label", img.alt || "Mony");
     img.dataset.face = "1"; img.after(cv); img.hidden = true;
-    faces.push({ cv, img, ctx: cv.getContext("2d") });
+    faces.push({ cv, img, ctx: cv.getContext("2d"), was: false, introAt: null, introMs: 3200, formed: true });
     wake();
   }
   function unmountAll() { for (const f of faces) { f.img.hidden = false; f.cv.remove(); } faces.length = 0; }
@@ -240,14 +240,14 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
     gl.uniform1f(U.uBlink, S.blink); gl.uniform1f(U.uGx, S.gx); gl.uniform1f(U.uGy, S.gy); gl.uniform1f(U.uMouth, S.mouth);
     gl.uniform1f(U.uSmile, S.smile); gl.uniform1f(U.uBrow, S.brow);
     gl.clearColor(0.02, 0.06, 0.15, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-    const it = introAt === null ? -1 : performance.now() - introAt, intro = it >= 0 && it < INTRO_MS && pcount > 0;
+    const it = f.introAt === null ? -1 : (performance.now() - f.introAt) * (INTRO_MS / f.introMs), intro = it >= 0 && it < INTRO_MS && pcount > 0;
     const sm = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(U.uA, intro ? sm(1800, 3000, it) : 1);
     gl.drawElements(gl.TRIANGLES, COLS * ROWS * 6, gl.UNSIGNED_SHORT, 0);
     if (intro) drawPoints(it, v, glc.width);
-    if (introAt !== null && it >= FORMED_MS && introDone) { const cb = introDone; introDone = null; cb(); }
-    if (introAt !== null && it >= INTRO_MS) introAt = null;
+    if (f.introAt !== null && it >= FORMED_MS && !f.formed) { f.formed = true; f.cv.dispatchEvent(new CustomEvent("mony-formed", { bubbles: true })); }
+    if (f.introAt !== null && it >= INTRO_MS) f.introAt = null;
     f.ctx.drawImage(glc, 0, 0);
   }
 
@@ -256,13 +256,25 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
     if (failed || !ready) return;
     const f = active();
     if (!f) return; // nothing on screen: stop until something shows up again (wake)
-    if (introWanted && f.cv.closest(".mony-id")) { introWanted = false; introAt = performance.now(); }
+    scan();
     const dt = Math.min(60, lastT ? t - lastT : 16); lastT = t;
     think(t, dt);
     draw(f);
     raf = requestAnimationFrame(frame);
   }
-  function wake() { if (!raf && ready && !failed) { lastT = 0; raf = requestAnimationFrame(frame); } }
+  /** Every time a face shows up again (the Mony screen is entered, the chat opens, the floating button appears) the points gather into it anew. */
+  function startIntro(f) {
+    f.introAt = performance.now(); f.introMs = f.cv.closest(".mony-id") ? 3200 : 2200; f.formed = false;
+    f.cv.dispatchEvent(new CustomEvent("mony-intro-start", { bubbles: true }));
+  }
+  function scan() {
+    for (const f of faces) {
+      const v = visible(f);
+      if (v && !f.was && !f.cv.closest("#mony-zoom") && !reduce?.matches && pcount > 0) startIntro(f);
+      f.was = v;
+    }
+  }
+  function wake() { if (ready && !failed) { scan(); if (!raf) { lastT = 0; raf = requestAnimationFrame(frame); } } }
 
   document.addEventListener("pointermove", (e) => { pointer = { x: e.clientX, y: e.clientY }; pointerAt = performance.now(); wake(); });
   document.addEventListener("visibilitychange", wake);
@@ -276,12 +288,6 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
     setMode(m) { mode = m; if (m === "idle") { T.brow = 0; T.smile = 0.35; } wake(); },
     /** a spoken word: the mouth opens a little wider */
     pulse() { level = 1; },
-    /** Play the opening (points assemble into the face); `onFormed` runs when the face is complete. Without WebGL or with reduced motion it runs at once. */
-    intro(onFormed) {
-      if (failed || reduce?.matches || !pcount && ready) { onFormed?.(); return; }
-      introWanted = true; introDone = onFormed || null; wake();
-      setTimeout(() => { if (introDone) { const cb = introDone; introDone = null; cb(); } }, 7000);
-    },
     /** test hooks */
     _state: S,
   };
