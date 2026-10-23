@@ -12,6 +12,7 @@ import { jurisprudenceRouter } from "./jurisprudence-routes.js";
 import { sessionMiddleware, authRouter, adminRouter, requireAuth, requirePerm, scopeOf } from "./auth.js";
 import { reportsRouter } from "./reports.js";
 import { courtsRouter } from "./courts.js";
+import { bandaInicioRouter } from "./banda-inicio.js";
 import { authoritiesRouter } from "./authorities.js";
 import { agendaRouter } from "./agenda-routes.js";
 import { monitorRouter } from "./monitor-routes.js";
@@ -123,6 +124,7 @@ export function createApp(db) {
   app.use("/api/jurisprudencia", requirePerm("jurisprudence.use"), jurisprudenceRouter(db));
   app.use("/api/reports", requirePerm("reports.view"), reportsRouter(db));
   app.use("/api/courts", courtsRouter(db));
+  app.use("/api/inicio", bandaInicioRouter()); // version 2.2.7: weather and news band
   app.use("/api/authorities", authoritiesRouter(db));
   app.use("/api", agendaRouter(db));
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));

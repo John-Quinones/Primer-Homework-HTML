@@ -539,6 +539,10 @@
       return { user: userOut(u) };
     }],
     ["POST", /^\/auth\/logout$/, () => { try { auditAdd({ action: "Salió", summary: "Cerró sesión" }); } catch {} setCurrent(null); return null; }],
+    // Version 2.2.7: the test link cannot reach the weather or news sources; the App on the server does.
+    ["GET", /^\/inicio\/banda$/, () => ({ clima: null, noticias: null, fuentes: [
+      { name: "Rama Judicial", home: "https://www.ramajudicial.gov.co/web/ventanilla/historico-de-noticias" }, { name: "Corte Suprema", home: "https://cortesuprema.gov.co/" },
+      { name: "Consejo de Estado", home: "https://www.consejodeestado.gov.co/" }, { name: "Ámbito Jurídico", home: "https://www.ambitojuridico.com/" }] })],
     ["GET", /^\/audit(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       const mine = !q.caseId && q.recent && !me().permissions.includes("audit.view");

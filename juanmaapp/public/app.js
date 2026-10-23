@@ -3660,6 +3660,7 @@ $("#import-kind-cards").addEventListener("change", (e) => {
 const OPEN_STATUSES = new Set(["Activo"]);
 
 async function renderInicio() {
+  renderBanda(); loadBanda(); // version 2.2.7: weather, radio and news band; never blocks Inicio
   const now = bogotaNow();
   const in7 = new Date(Date.now() - 5 * 3600 * 1000 + 7 * 86400000).toISOString().slice(0, 16).replace("T", " ");
   const in14 = new Date(Date.now() - 5 * 3600 * 1000 + 14 * 86400000).toISOString().slice(0, 16).replace("T", " ");
@@ -3717,6 +3718,56 @@ async function renderInicio() {
     $("#dash-moves-more").hidden = !can("audit.view");
   }
 }
+
+// ---------- Banda de Inicio: clima, emisoras y noticias (version 2.2.7) ----------
+// Free sources read by the server (GET /inicio/banda); Inicio never waits for them. Radio links open in a new tab.
+const BANDA_EMISORAS = [
+  ["Caracol Radio", "https://caracol.com.co/"], ["RCN Radio", "https://www.rcnradio.com/"], ["Blu Radio", "https://www.bluradio.com/"],
+  ["La W", "https://www.wradio.com.co/"], ["Ondas de Ibagué", "https://www.ondasdeibague.com/"],
+];
+let bandaData = null, bandaTab = "clima";
+try { bandaTab = localStorage.getItem("juanma-banda-tab") || "clima"; } catch {}
+const BANDA_ICON = {
+  sun: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  cloud: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4 4 0 010-8 5.5 5.5 0 0110.5 1.5A3.3 3.3 0 0117 18z"/></svg>',
+  rain: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15a4 4 0 010-8 5.5 5.5 0 0110.5 1.5A3.3 3.3 0 0117 15zM8 18l-1 3M12 18l-1 3M16 18l-1 3"/></svg>',
+};
+const bandaLink = (href, inner, cls = "") => `<a class="button ${cls}" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+function renderBanda() {
+  const body = $("#banda-body");
+  if (!body) return;
+  const tabs = ["clima", "emisoras", "noticias"];
+  $$("[data-banda]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.banda === bandaTab)));
+  $$("#banda-dots i").forEach((d, i) => d.classList.toggle("on", tabs[i] === bandaTab));
+  const D = bandaData;
+  if (bandaTab === "emisoras") {
+    body.innerHTML = `<div class="banda-chips">${BANDA_EMISORAS.map(([n, u]) => bandaLink(u, `${escapeHtml(n)} ↗`)).join("")}</div><p class="banda-note">Se abren en una pestaña nueva.</p>`;
+  } else if (!D) {
+    body.innerHTML = `<p class="banda-msg">${bandaData === false ? "No se pudo consultar. Se intentará de nuevo al volver a Inicio." : "Cargando…"}</p>`;
+  } else if (bandaTab === "clima") {
+    const c = D.clima;
+    body.innerHTML = c ? `<div class="banda-clima"><div class="banda-now"><span class="banda-place">${escapeHtml(c.city)} · ahora</span><span class="banda-temp">${c.temp}°</span></div>
+      <div class="banda-det">${BANDA_ICON[c.kind] || ""}<span>${escapeHtml(c.text)}</span><span>Lluvia ${c.rain}% · Humedad ${c.humidity}%</span><span>Viento ${c.wind} km/h</span></div>
+      <div class="banda-days">${c.days.map((d) => `<div><b>${escapeHtml(new Date(d.date + "T12:00:00").toLocaleDateString("es-CO", { weekday: "short" }).replace(".", ""))}</b>${BANDA_ICON[d.kind] || ""}<span>${d.max}° / ${d.min}°</span></div>`).join("")}</div></div>`
+      : `<p class="banda-msg">El clima no está disponible ahora (el servidor no alcanzó la fuente gratuita). Se reintenta solo.</p>`;
+  } else {
+    const n = D.noticias;
+    const src = `<div class="banda-chips">${(D.fuentes || []).map((f) => bandaLink(f.home, `${escapeHtml(f.name)} ↗`, "small")).join("")}</div>`;
+    body.innerHTML = n?.items?.length ? `<ul class="banda-news">${n.items.map((x) => `<li><span>${escapeHtml(x.source)}${x.at ? " · " + escapeHtml(CMETA.utcToBogota(x.at).slice(0, 10)) : ""}</span>${bandaLink(x.link, escapeHtml(x.title), "link")}</li>`).join("")}</ul>${src}`
+      : `<p class="banda-msg">Las noticias no están disponibles ahora. Puedes abrir cada fuente:</p>${src}`;
+  }
+}
+async function loadBanda() {
+  try { bandaData = await api("GET", "/inicio/banda"); } catch { bandaData = false; }
+  renderBanda();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-banda]");
+  if (!b) return;
+  bandaTab = b.dataset.banda;
+  try { localStorage.setItem("juanma-banda-tab", bandaTab); } catch {}
+  renderBanda();
+});
 
 // ---------- Jurisprudencia ----------
 const CSJ_SALAS = ["Sala Plena", "Sala de Casación Civil, Agraria y Rural", "Sala de Casación Laboral", "Sala de Casación Penal", "Sala de Instrucción", "Sala de Primera Instancia"];
