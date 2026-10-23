@@ -5,6 +5,7 @@ import { str } from "./http.js";
 import { can } from "./auth.js";
 import { courtCircuit, filterCourts } from "./case-meta.js";
 import { judgeByRadicado } from "./ramajudicial.js";
+import { properName } from "./person.js";
 import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityCode, inferArea } from "./places.js";
 
 
@@ -79,7 +80,7 @@ export function courtsRouter(db) {
     const find = db.prepare("SELECT id FROM courts WHERE name = ? AND city = ?");
     const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, circuit, area, email, phone, address, judge)
       VALUES (:code, :name, :department, :city, :city_code, :circuit, :area, :email, :phone, :address, :judge)`);
-    const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city_code = :city_code, circuit = :circuit, area = :area,
+    const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city = :city, city_code = :city_code, circuit = :circuit, area = :area,
       email = CASE WHEN :email != '' THEN :email ELSE email END, phone = CASE WHEN :phone != '' THEN :phone ELSE phone END,
       address = CASE WHEN :address != '' THEN :address ELSE address END, judge = CASE WHEN :judge != '' THEN :judge ELSE judge END, updated_at = datetime('now') WHERE id = :id`);
     db.exec("BEGIN");
@@ -98,9 +99,10 @@ export function courtsRouter(db) {
           area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address),
           judge: str(row.judge).replace(/\s+/g, " "),
         };
-        const hit = find.get(name, city);
+        // A court loaded before with the city as the file wrote it («Cartagena») is found and its city updated, not duplicated.
+        const hit = find.get(name, city) || find.get(name, properName(str(row.city)));
         if (hit) {
-          const { name: _n, city: _c, ...rest } = v;
+          const { name: _n, ...rest } = v;
           upd.run({ ...rest, id: hit.id });
           out.updated++;
         } else {

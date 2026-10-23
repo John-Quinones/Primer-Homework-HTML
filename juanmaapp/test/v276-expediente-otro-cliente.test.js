@@ -1,4 +1,4 @@
-// Version 2.75: «Nuevo expediente» opened after «Editar expediente» saved over the edited case (of another client).
+// Version 2.76: «Nuevo expediente» opened after «Editar expediente» saved over the edited case (of another client).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

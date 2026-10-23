@@ -1320,7 +1320,7 @@ function openDialog(dialog, title, values = {}) {
   $("[data-title]", dialog).textContent = title;
   $(".form-error", dialog).hidden = true;
   // reset() keeps what a script wrote into a hidden field (the record id of the last edit), so clear them:
-  // otherwise "Nuevo" after "Editar" saves over the record that was edited before (v2.75).
+  // otherwise "Nuevo" after "Editar" saves over the record that was edited before (v2.76).
   for (const el of form.querySelectorAll("input[type=hidden]")) el.value = "";
   for (const [k, v] of Object.entries(values)) if (form.elements[k] && v != null) form.elements[k].value = v;
   dialog.showModal();
@@ -5784,7 +5784,7 @@ document.addEventListener("click", async (e) => {
 const COURT_COLS = {
   department: ["departamento", "depto", "distrito"], city: ["ciudad", "municipio", "ciudad municipio", "sede"],
   name: ["despacho", "nombre despacho", "nombre del despacho", "juzgado", "dependencia", "nombre"],
-  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
+  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho", "corporacion o area", "corporacion", "corporacion area"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
   code: ["codigo", "codigo despacho", "cod despacho"], judge: ["juez", "nombre juez", "nombre del juez", "titular", "funcionario", "nombre funcionario", "nombre del funcionario", "magistrado", "ponente"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
 };
 $("#courts-file").addEventListener("change", (e) => guarded(async () => {
