@@ -7021,6 +7021,10 @@ document.addEventListener("pointermove", (e) => {
   }
 });
 
+// Living face (version 2.2.15): every picture of Mony becomes a canvas that blinks, looks at the pointer, turns its head and
+// moves its mouth when she speaks (public/mony-face.js). Without WebGL the plain picture stays.
+$$(".mony-id img, #mony-zoom img, .mony-fab img").forEach((i) => window.MonyFace?.mount(i));
+
 // Mony's face (version 2.2.12): one click opens it about 3 times larger, a double click fills the screen;
 // in every size it keeps following the pointer. Esc, «Cerrar» or a click outside closes it.
 const MONY_IMG = { mid: "mony-avatar.webp", full: "mony-avatar-full.webp" };
@@ -7036,19 +7040,19 @@ function monyZoom(mode) {
 }
 document.addEventListener("click", (e) => {
   const d = $("#mony-zoom");
-  if (e.target.closest(".mony-id img")) { clearTimeout(monyClickTimer); monyClickTimer = setTimeout(() => monyZoom("mid"), 250); return; }
+  if (e.target.closest(".mony-id img, .mony-id .mony-cv")) { clearTimeout(monyClickTimer); monyClickTimer = setTimeout(() => monyZoom("mid"), 250); return; }
   if (d.open && (e.target === d || e.target.closest("#mony-zoom-close"))) { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); d.close(); }
 });
 document.addEventListener("dblclick", (e) => {
   const d = $("#mony-zoom");
-  if (e.target.closest(".mony-id img")) { clearTimeout(monyClickTimer); monyZoom("full"); }
-  else if (d.open && e.target.closest("#mony-zoom img")) monyZoom(d.classList.contains("full") ? "mid" : "full");
+  if (e.target.closest(".mony-id img, .mony-id .mony-cv")) { clearTimeout(monyClickTimer); monyZoom("full"); }
+  else if (d.open && e.target.closest("#mony-zoom img, #mony-zoom .mony-cv")) monyZoom(d.classList.contains("full") ? "mid" : "full");
 });
 document.addEventListener("fullscreenchange", () => { // leaving the browser's full screen with Esc returns to the large picture
   const d = $("#mony-zoom");
   if (!document.fullscreenElement && d.open && d.classList.contains("full")) monyZoom("mid");
 });
-document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img")) { e.preventDefault(); monyZoom("mid"); } });
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img, .mony-id .mony-cv")) { e.preventDefault(); monyZoom("mid"); } });
 // Floating Mony (version 2.2.13): a round button with her face, bottom right on every screen, that opens her chat over
 // the screen. The chat itself (#mony-body) is the same one as in the «Mony» screen: it moves to the panel and back.
 function monyFabSync(name = route().name) {
@@ -7093,7 +7097,8 @@ function monyPickVoice() {
   return pref(/^es[-_]CO/i) || pref(/^es[-_](MX|US|419|AR)/i) || es[0] || null;
 }
 function monyClean(text) { return String(text).replace(/[*_`#>|]/g, " ").replace(/\s+/g, " ").trim(); }
-function monyStopVoice() { if (monyTTS) speechSynthesis.cancel(); $$(".mony-speak").forEach((b) => b.classList.remove("on")); }
+function monyMode(m) { window.MonyFace?.setMode(m); }
+function monyStopVoice() { if (monyTTS) speechSynthesis.cancel(); $$(".mony-speak").forEach((b) => b.classList.remove("on")); monyMode("idle"); }
 function monySpeak(text, btn = null) {
   if (!monyTTS) return toast("Este navegador no tiene voz para leer en voz alta.", true);
   monyStopVoice();
@@ -7104,10 +7109,12 @@ function monySpeak(text, btn = null) {
     u.lang = voice?.lang || "es-CO";
     if (voice) u.voice = voice;
     u.rate = 1;
-    if (i === chunks.length - 1) u.onend = u.onerror = () => btn?.classList.remove("on");
+    u.onboundary = () => window.MonyFace?.pulse();
+    if (i === chunks.length - 1) u.onend = u.onerror = () => { btn?.classList.remove("on"); monyMode("idle"); };
     speechSynthesis.speak(u);
   });
   btn?.classList.add("on");
+  monyMode("speaking");
 }
 /** The «Escuchar» button under each of Mony's answers. */
 function monyActions(bubble) {
@@ -7154,8 +7161,8 @@ async function monyDictate() {
       "no-speech": "No se escuchó nada. Intente de nuevo.", "audio-capture": "No se encontró un micrófono.", "network": "No hay conexión con el servicio de dictado." }[e.error];
     if (why) toast(why, true);
   };
-  rec.onend = () => { monyRec = null; monyMicUi(false); input.focus(); };
-  monyMicUi(true);
+  rec.onend = () => { monyRec = null; monyMicUi(false); monyMode("idle"); input.focus(); };
+  monyMicUi(true); monyMode("listening");
   try { rec.start(); } catch { monyRec = null; monyMicUi(false); }
 }
 if (MonyRec) { $("#mony-mic").hidden = false; $("#mony-mic").addEventListener("click", () => guarded(monyDictate)); }
@@ -7191,11 +7198,12 @@ $("#mony-form").addEventListener("submit", (e) => {
     const tags = document.createElement("div"); tags.className = "mony-tags";
     const cards = document.createElement("div"); cards.className = "mony-cards";
     bubble.before(tags); bubble.after(cards);
+    monyMode("thinking");
     const tagOf = new Map();
     let answer = "", drafted = null;
     try {
       for await (const ev of httpBackend.generate({ messages: monyMsgs.slice(-MONY_MAX) }, "/api/mony/chat")) {
-        if (ev.type === "text") { answer += ev.text; bubble.classList.remove("mony-typing"); bubble.textContent = answer; bubble.scrollIntoView({ block: "end" }); }
+        if (ev.type === "text") { if (!answer) monyMode("idle"); answer += ev.text; bubble.classList.remove("mony-typing"); bubble.textContent = answer; bubble.scrollIntoView({ block: "end" }); }
         else if (ev.type === "tool") {
           let t = tagOf.get(ev.name);
           if (!t) { t = document.createElement("span"); tagOf.set(ev.name, t); tags.append(t); }
@@ -7216,7 +7224,7 @@ $("#mony-form").addEventListener("submit", (e) => {
       monyMsgs.pop(); monySave(); input.value = text;
       bubble.classList.remove("mony-typing"); bubble.classList.add("mony-error");
       bubble.textContent = err.message;
-    } finally { monyBusy = false; $("#mony-send").disabled = false; input.focus(); }
+    } finally { if (!monyVoiceOn || !answer) monyMode("idle"); monyBusy = false; $("#mony-send").disabled = false; input.focus(); }
   });
 });
 
