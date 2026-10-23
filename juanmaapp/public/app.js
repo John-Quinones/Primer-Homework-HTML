@@ -194,6 +194,7 @@ async function loadSessionData() {
 
 function showAuth(status = {}) {
   me = null;
+  monyPanel(false); $("#mony-log").replaceChildren(); monyMsgs = []; // the next person who signs in never sees this chat
   $("#app-root").hidden = true;
   $("#auth-screen").hidden = false;
   // PASSWORD_LOGIN=off on the server: only the Microsoft 365 button (its MFA applies to everyone).
@@ -595,6 +596,7 @@ function showView() {
   let { name, id } = route();
   if (VIEW_PERMS[name] && !can(VIEW_PERMS[name])) name = "inicio";
   for (const v of [...VIEWS, ...Object.keys(FICHAS)]) $(`#view-${v}`).hidden = v !== name;
+  monyFabSync(name);
   const nav = FICHAS[name] || (name === "radicados" ? "consulta" : name);
   $$(".sidenav a").forEach((a) => a.classList.toggle("active", a.dataset.view === nav));
   if (FICHAS[name]) {
@@ -7000,7 +7002,7 @@ function monyCard(c) {
 }
 // Mony's face turns toward where the person looks (version 2.2.10): a gentle 3D tilt that follows the pointer.
 // A camera head-tracker can feed the same function (monyLook) later; nothing is recorded or sent anywhere.
-const monyFaces = () => [...document.querySelectorAll(".mony-id img, #mony-zoom img")].filter((i) => i.getClientRects().length);
+const monyFaces = () => [...document.querySelectorAll(".mony-id img, #mony-zoom img, .mony-fab img")].filter((i) => i.getClientRects().length);
 function monyTilt(img, x, y) { // x, y in -1 … 1 (left/up negative)
   if (img.closest("#mony-zoom.full")) { // full screen: the picture slides toward the pointer (flat, so it never leaves the screen)
     img.style.transform = `scale(1.06) translate(${(-x * 2.2).toFixed(2)}%, ${(-y * 2.2).toFixed(2)}%)`;
@@ -7010,7 +7012,7 @@ function monyTilt(img, x, y) { // x, y in -1 … 1 (left/up negative)
 }
 const monyReduce = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 document.addEventListener("pointermove", (e) => {
-  if (monyReduce?.matches || $("#view-mony").hidden) return;
+  if (monyReduce?.matches) return;
   for (const img of monyFaces()) {
     const r = img.getBoundingClientRect();
     const dx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
@@ -7047,6 +7049,28 @@ document.addEventListener("fullscreenchange", () => { // leaving the browser's f
   if (!document.fullscreenElement && d.open && d.classList.contains("full")) monyZoom("mid");
 });
 document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img")) { e.preventDefault(); monyZoom("mid"); } });
+// Floating Mony (version 2.2.13): a round button with her face, bottom right on every screen, that opens her chat over
+// the screen. The chat itself (#mony-body) is the same one as in the «Mony» screen: it moves to the panel and back.
+function monyFabSync(name = route().name) {
+  const fab = $("#mony-fab"), panel = $("#mony-panel");
+  const allowed = !!me && can("drafts.generate");
+  const onMonyScreen = name === "mony";
+  if (onMonyScreen) monyPanel(false); // the screen already shows the chat
+  fab.hidden = !allowed || onMonyScreen || !panel.hidden;
+}
+function monyPanel(open) {
+  const fab = $("#mony-fab"), panel = $("#mony-panel"), body = $("#mony-body");
+  if (open === !panel.hidden) return;
+  panel.hidden = !open;
+  if (open) { $("#mony-panel-body").append(body); renderMony(); $("#mony-input").focus(); }
+  else { $("#view-mony").append(body); }
+  fab.hidden = open || !me || !can("drafts.generate") || route().name === "mony";
+}
+$("#mony-fab").addEventListener("click", () => monyPanel(true));
+$("#mony-panel-close").addEventListener("click", () => { monyPanel(false); $("#mony-fab").focus(); });
+$("#mony-panel-clear").addEventListener("click", () => $("#mony-clear").click());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#mony-panel").hidden && !document.querySelector("dialog[open]")) monyPanel(false); });
+
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;

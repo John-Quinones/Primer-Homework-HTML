@@ -17,3 +17,5 @@
 - v2.2.11: clic en el rostro lo amplía (dialog #mony-zoom); avatar reescalado a 560 px en WebP (fuente original 339×204; pedir a John una imagen mayor para más nitidez). Seguimiento de cabeza: por ahora puntero; cámara después (decisión de John 23/10/2026, local y opcional).
 
 - v2.2.12: avatar nuevo (imagen de alta resolución de John, 2752×1536; círculo 720 px `mony-avatar.webp` + completa 1600 px `mony-avatar-full.webp`). Tamaños: chat 168 px (3× el original de 56), clic = ~504 px, doble clic = pantalla completa (requestFullscreen + diálogo a 100vw/100vh); sigue al puntero en los tres (3D en chat/grande, deslizamiento plano en pantalla completa).
+
+- v2.2.13: botón flotante `#mony-fab` (abajo a la derecha, todas las pantallas, requiere `drafts.generate`) + panel `#mony-panel`. El chat `#mony-body` se mueve entre la pantalla #mony y el panel (misma lógica e historial); `monyFabSync`/`monyPanel` en app.js. Al cerrar sesión se vacía el chat en pantalla.
