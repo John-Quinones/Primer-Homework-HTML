@@ -7059,6 +7059,7 @@ function monyFabSync(name = route().name) {
   fab.hidden = !allowed || onMonyScreen || !panel.hidden;
 }
 function monyPanel(open) {
+  if (!open) monyStopVoice();
   const fab = $("#mony-fab"), panel = $("#mony-panel"), body = $("#mony-body");
   if (open === !panel.hidden) return;
   panel.hidden = !open;
@@ -7070,6 +7071,94 @@ $("#mony-fab").addEventListener("click", () => monyPanel(true));
 $("#mony-panel-close").addEventListener("click", () => { monyPanel(false); $("#mony-fab").focus(); });
 $("#mony-panel-clear").addEventListener("click", () => $("#mony-clear").click());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#mony-panel").hidden && !document.querySelector("dialog[open]")) monyPanel(false); });
+
+// Voice (version 2.2.14): Mony reads her answers aloud with the browser's own Spanish voices (free, nothing leaves the
+// device) and the person can dictate by microphone (Chrome and Edge send the audio to Google or Microsoft to transcribe it,
+// so the first use asks for consent). A natural-sounding paid voice is planned for later.
+const MONY_VOICE_KEY = "mony-voice";
+let monyVoiceOn = false;
+try { monyVoiceOn = localStorage.getItem(MONY_VOICE_KEY) === "1"; } catch {}
+const monyTTS = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+function monyVoiceUi() {
+  $$(".mony-voice").forEach((b) => {
+    b.hidden = !monyTTS;
+    b.setAttribute("aria-pressed", String(monyVoiceOn));
+    b.textContent = monyVoiceOn ? "🔊 Voz activada" : "🔇 Voz desactivada";
+  });
+}
+function monyPickVoice() {
+  const voices = speechSynthesis.getVoices();
+  const es = voices.filter((v) => /^es/i.test(v.lang));
+  const pref = (re) => es.find((v) => re.test(v.lang));
+  return pref(/^es[-_]CO/i) || pref(/^es[-_](MX|US|419|AR)/i) || es[0] || null;
+}
+function monyClean(text) { return String(text).replace(/[*_`#>|]/g, " ").replace(/\s+/g, " ").trim(); }
+function monyStopVoice() { if (monyTTS) speechSynthesis.cancel(); $$(".mony-speak").forEach((b) => b.classList.remove("on")); }
+function monySpeak(text, btn = null) {
+  if (!monyTTS) return toast("Este navegador no tiene voz para leer en voz alta.", true);
+  monyStopVoice();
+  const chunks = monyClean(text).match(/[^.!?;\n]+[.!?;]?/g) || []; // short pieces: long utterances get cut off in some browsers
+  const voice = monyPickVoice();
+  chunks.forEach((c, i) => {
+    const u = new SpeechSynthesisUtterance(c.trim());
+    u.lang = voice?.lang || "es-CO";
+    if (voice) u.voice = voice;
+    u.rate = 1;
+    if (i === chunks.length - 1) u.onend = u.onerror = () => btn?.classList.remove("on");
+    speechSynthesis.speak(u);
+  });
+  btn?.classList.add("on");
+}
+/** The «Escuchar» button under each of Mony's answers. */
+function monyActions(bubble) {
+  if (!monyTTS || !bubble || bubble.nextElementSibling?.classList.contains("mony-actions")) return;
+  const row = document.createElement("div");
+  row.className = "mony-actions";
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "mony-speak"; b.textContent = "🔊 Escuchar"; b.title = "Leer esta respuesta en voz alta";
+  b.addEventListener("click", () => (b.classList.contains("on") ? monyStopVoice() : monySpeak(bubble.textContent, b)));
+  row.append(b);
+  bubble.after(row);
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".mony-voice");
+  if (!t) return;
+  monyVoiceOn = !monyVoiceOn;
+  try { localStorage.setItem(MONY_VOICE_KEY, monyVoiceOn ? "1" : "0"); } catch {}
+  monyVoiceUi();
+  if (monyVoiceOn) monySpeak("Voz de Mony activada."); else monyStopVoice();
+});
+if (monyTTS) speechSynthesis.addEventListener?.("voiceschanged", () => {}); // some browsers load the voices late; monyPickVoice reads them each time
+
+// Dictation: the microphone fills the message box; the person reads it and presses Enviar.
+const MonyRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let monyRec = null;
+function monyMicUi(on) { const m = $("#mony-mic"); m.classList.toggle("on", on); m.setAttribute("aria-pressed", String(on)); }
+async function monyDictate() {
+  if (monyRec) { monyRec.stop(); return; }
+  const key = `mony-mic-ok-${me?.id ?? "x"}`;
+  let ok = false;
+  try { ok = localStorage.getItem(key) === "1"; } catch {}
+  if (!ok) {
+    if (!await ask({ title: "Hablarle a Mony", message: "Para escribir lo que usted dice, su navegador (Chrome o Edge) envía el audio a Google o a Microsoft para transcribirlo. Tecjurídicos no guarda el audio. El texto solo llega a Mony cuando usted pulsa Enviar. ¿Desea usar el micrófono?", okLabel: "Usar el micrófono" })) return;
+    try { localStorage.setItem(key, "1"); } catch {}
+  }
+  monyStopVoice();
+  const input = $("#mony-input"), base = input.value ? input.value.trimEnd() + " " : "";
+  const rec = new MonyRec();
+  monyRec = rec;
+  rec.lang = "es-CO"; rec.interimResults = true; rec.continuous = false;
+  rec.onresult = (e) => { input.value = (base + [...e.results].map((r) => r[0].transcript).join(" ")).slice(0, 4000); };
+  rec.onerror = (e) => {
+    const why = { "not-allowed": "Permita el micrófono en el navegador para hablarle a Mony.", "service-not-allowed": "Permita el micrófono en el navegador para hablarle a Mony.",
+      "no-speech": "No se escuchó nada. Intente de nuevo.", "audio-capture": "No se encontró un micrófono.", "network": "No hay conexión con el servicio de dictado." }[e.error];
+    if (why) toast(why, true);
+  };
+  rec.onend = () => { monyRec = null; monyMicUi(false); input.focus(); };
+  monyMicUi(true);
+  try { rec.start(); } catch { monyRec = null; monyMicUi(false); }
+}
+if (MonyRec) { $("#mony-mic").hidden = false; $("#mony-mic").addEventListener("click", () => guarded(monyDictate)); }
 
 function renderMony() {
   if (WEB) {
@@ -7083,8 +7172,9 @@ function renderMony() {
   monyLoad();
   const log = $("#mony-log");
   log.replaceChildren();
-  if (!monyMsgs.length) monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo consultar un proceso en la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?");
-  for (const m of monyMsgs) monyBubble(m.role, m.content);
+  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo consultar un proceso en la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
+  for (const m of monyMsgs) { const b = monyBubble(m.role, m.content); if (m.role === "assistant") monyActions(b); }
+  monyVoiceUi();
 }
 $("#mony-clear").addEventListener("click", () => { if (monyBusy) return; monyMsgs = []; monySave(); renderMony(); });
 $("#mony-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#mony-form").requestSubmit(); } });
@@ -7093,7 +7183,7 @@ $("#mony-form").addEventListener("submit", (e) => {
   const input = $("#mony-input"), text = input.value.trim();
   if (!text || monyBusy) return;
   guarded(async () => {
-    monyBusy = true; $("#mony-send").disabled = true; input.value = "";
+    monyBusy = true; $("#mony-send").disabled = true; input.value = ""; monyStopVoice();
     monyMsgs.push({ role: "user", content: text });
     monyBubble("user", text);
     const bubble = monyBubble("assistant", "Mony está escribiendo…");
@@ -7121,7 +7211,7 @@ $("#mony-form").addEventListener("submit", (e) => {
         else if (ev.type === "done" && ev.truncated) bubble.textContent = answer + "\n\n(La respuesta quedó incompleta; pida a Mony que continúe.)";
       }
       if (drafted && answer) cards.append(monyCard({ type: "descarga", title: drafted.title, text: answer }));
-      if (answer) { monyMsgs.push({ role: "assistant", content: answer }); monySave(); } else { monyMsgs.pop(); monySave(); bubble.textContent = "Mony no devolvió respuesta. Intente de nuevo."; }
+      if (answer) { monyMsgs.push({ role: "assistant", content: answer }); monySave(); monyActions(bubble); if (monyVoiceOn) monySpeak(answer); } else { monyMsgs.pop(); monySave(); bubble.textContent = "Mony no devolvió respuesta. Intente de nuevo."; }
     } catch (err) {
       monyMsgs.pop(); monySave(); input.value = text;
       bubble.classList.remove("mony-typing"); bubble.classList.add("mony-error");
