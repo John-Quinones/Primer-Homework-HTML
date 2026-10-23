@@ -412,7 +412,7 @@
     const message = str(opts.message).slice(0, 500);
     const n = CM.taskNotice(o, { to: u.name, by: me().name, message, link });
     s.notes.push({ id: nextId(), user_id: u.id, kind: "asignada", title: `${me().name} le notificó: ${CM.TASK_KIND_LABEL[t.kind]} · ${t.title}`,
-      body: `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${o.client_name}${message ? " · " + message : ""}`, link: `#expediente-${t.case_id}`, key: null, created_at: stamp(), read_at: null });
+      body: `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${o.client_name}${message ? " · " + message : ""}`, link: `#expediente-${t.case_id}`, key: `notice:${t.id}:${Date.now()}`, created_at: stamp(), read_at: null });
     const off = "El enlace de pruebas no envía correos ni WhatsApp: eso lo hace el servidor (Azure). Puede enviarlo desde su propio correo o WhatsApp.";
     const results = [{ channel: "app", ok: true, detail: "Aviso en la campana de la App" }];
     if (opts.email) results.push({ channel: "email", ok: false, detail: off });
@@ -916,7 +916,11 @@
     }],
     ["GET", /^\/notifications$/, () => {
       reminders();
-      const mine = s.notes.filter((n) => n.user_id === me().id).sort((a, b) => b.id - a.id);
+      const now = Date.now();
+      const mine = s.notes.filter((n) => n.user_id === me().id).sort((a, b) => b.id - a.id).filter((n) => {
+        const t = s.tasks.find((x) => x.id === CM.noteTaskId(n));
+        return CM.bellShows(n, t || null, now, t ? bogotaMs(t.due_at) : 0);
+      });
       return { items: clone(mine.slice(0, 50)), unread: mine.filter((n) => !n.read_at).length };
     }],
     ["POST", /^\/notifications\/read$/, (m, b) => {

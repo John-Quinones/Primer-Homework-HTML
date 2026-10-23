@@ -198,6 +198,26 @@ export function taskNotice(t, { to = "", by = "", message = "", link = "" } = {}
 // ----- Case tasks: kinds and follow-up (change 47) -----
 export const TASK_KINDS = ["tarea", "audiencia", "termino", "recurso", "requerimiento", "peticion", "oficio"];
 export const TASK_KIND_LABEL = { tarea: "Tarea", audiencia: "Audiencia", termino: "Término", recurso: "Recurso", requerimiento: "Requerimiento", peticion: "Petición", oficio: "Oficio" };
+/** Task a bell notice is about, from its key ("task:ID:…", "assign:ID:…", "notice:ID:…"); null for the rest. */
+export function noteTaskId(n) {
+  const m = /^(?:task|assign|notice):(\d+):/.exec(n?.key || "");
+  return m ? Number(m[1]) : null;
+}
+/**
+ * Version 2.97: does a bell notice still show? Nothing is deleted, the bell just stops listing it.
+ * A notice about a task disappears once the task is resolved (Cumplida / No cumplida) or deleted; the
+ * reminders of an agenda item (any reminder, and everything about a hearing) disappear when its date
+ * arrives; read «actuaciones nuevas» notices stop showing. `task` is the task row, or null.
+ */
+export function bellShows(n, task, nowMs, dueMs) {
+  if (n.kind === "actuacion" && n.read_at) return false;
+  const id = noteTaskId(n);
+  if (id === null) return true;
+  if (!task || task.status !== "pendiente") return false;
+  const reached = nowMs >= dueMs;
+  if (task.kind === "audiencia") return !reached;
+  return !(reached && /^task:\d+:\d+$/.test(n.key));
+}
 /** Kinds whose answer is tracked: delivered on a date, answered (or not) by the deadline. */
 export const RESPONSE_KINDS = ["oficio", "peticion", "requerimiento"];
 /** Stored UTC "YYYY-MM-DD HH:MM[:SS]" → Colombia time "YYYY-MM-DD HH:MM" (UTC-5, no daylight saving). */
