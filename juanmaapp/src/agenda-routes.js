@@ -23,8 +23,10 @@ export function agendaRouter(db) {
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id
     JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users_shown u ON u.id = t.assigned_user_id
     LEFT JOIN users_shown ku ON ku.id = k.assigned_user_id LEFT JOIN users_shown cb ON cb.id = t.created_by LEFT JOIN users_shown ud ON ud.id = t.done_by`;
+  // Version 2.75: a task assigned to me is always mine to see and close, even if its case sits in an office I cannot open.
+  const taskCond = (req) => `(${officeCond(req)} OR t.assigned_user_id = ${Number(req.user.id)})`;
   const out = (t) => ({ ...t, remind_days: JSON.parse(t.remind_days) });
-  const visible = (req, id) => db.prepare(`${SELECT} WHERE t.id = ? AND ${officeCond(req)}`).get(id);
+  const visible = (req, id) => db.prepare(`${SELECT} WHERE t.id = ? AND ${taskCond(req)}`).get(id);
   const caseVisible = (req, caseId) => db.prepare(`SELECT k.* FROM cases k WHERE k.id = ? AND ${officeCond(req)}`).get(caseId);
   const err = (res, status, error) => res.status(status).json({ error });
 
@@ -78,8 +80,11 @@ export function agendaRouter(db) {
   // The person a task is assigned to hears about it in the bell, with a link to the case.
   function tellAssignee(req, t, before) {
     if (!t?.assigned_user_id || t.assigned_user_id === before || t.assigned_user_id === req.user.id || t.status !== "pendiente") return;
+    // Without access to the case's office the bell sends them to the Agenda, where the task is.
+    const u = loadUser(db, t.assigned_user_id);
+    const canOpen = u && (u.permissions.includes("scope.all") || u.offices.some((o) => o.id === t.office_id));
     notify(db, t.assigned_user_id, "asignada", `${req.user.name} le asignó: ${TASK_KIND_LABEL[t.kind]} · ${t.title}`,
-      `Plazo ${t.due_at} · ${t.client_name}`, `#expediente-${t.case_id}`, `assign:${t.id}:${t.assigned_user_id}`);
+      `Plazo ${t.due_at} · ${t.client_name}`, canOpen ? `#expediente-${t.case_id}` : "#agenda", `assign:${t.id}:${t.assigned_user_id}`);
   }
 
   // Version 2.26: «Notificar al asignado». The person in charge (the task's, else the case's) gets the
@@ -112,7 +117,7 @@ export function agendaRouter(db) {
   const noticeOpts = (b) => (b && typeof b === "object" ? { email: b.email !== false, whatsapp: !!b.whatsapp, message: b.message } : null);
 
   r.get("/tasks", (req, res) => {
-    const where = [officeCond(req)], params = [];
+    const where = [taskCond(req)], params = [];
     if (req.query.caseId) { where.push("t.case_id = ?"); params.push(Number(req.query.caseId)); }
     // Mine: assigned to me; else the case is mine; else nobody is responsible and I created it.
     if (req.query.mine === "1") {
@@ -152,9 +157,12 @@ export function agendaRouter(db) {
   });
 
   r.put("/tasks/:id", async (req, res) => {
-    if (!can(req, "cases.write")) return err(res, 403, "Su rol no tiene permiso para esta acción.");
     const cur = visible(req, Number(req.params.id));
     if (!cur) return err(res, 404, "La tarea no existe.");
+    // The assignee may always say whether it was fulfilled; the rest needs the role and the case's office.
+    const full = can(req, "cases.write") && !!caseVisible(req, cur.case_id);
+    const onlyClosing = Object.keys(req.body ?? {}).every((x) => ["status", "done_notes"].includes(x));
+    if (!full && !(cur.assigned_user_id === req.user.id && onlyClosing)) return err(res, 403, "Su rol no tiene permiso para esta acción.");
     const v = values(req, req.body ?? {}, out(cur), cur.office_id);
     if (typeof v === "string") return err(res, 400, v);
     db.prepare(`UPDATE tasks SET kind = ?, title = ?, notes = ?, due_at = ?, location = ?, assigned_user_id = ?, remind_days = ?, status = ?,
