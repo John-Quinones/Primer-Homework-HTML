@@ -1211,3 +1211,9 @@ dialog:not([open]) { pointer-events: none; }
 .ad-litem-box { align-self: end; }
 .muted-line { display: block; margin: 4px 0; font-weight: 600; } .muted-line strong { display: inline; }
 .role-chips { gap: 18px; }
+
+/* Importar: three file cards */
+#import-kind-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.import-card { padding: 12px; border-radius: 12px; background: var(--surface, #fff); box-shadow: 4px 4px 10px rgba(0,0,0,.08), -4px -4px 10px rgba(255,255,255,.7); }
+.import-card h4 { margin: 0 0 6px; }
+.import-card .toolbar { flex-wrap: wrap; gap: 6px; }
