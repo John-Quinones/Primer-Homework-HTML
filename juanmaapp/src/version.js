@@ -15,7 +15,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const VERSION_2_CHANGE = 64;
 // Change number (commit count) of version 2.2.1. If a rebase shifts the count, set this to the
 // count of the 2.2.1 commit's position again: 2.2.N = change - V2_2_1_CHANGE + 1.
-export const V2_2_1_CHANGE = 170;
+export const V2_2_1_CHANGE = 171;
 
 // Version name shown to people: 63 and earlier keep their number; then 2, 2.1 … 2.104; then 2.2.1, 2.2.2, …
 export function versionName(change) {

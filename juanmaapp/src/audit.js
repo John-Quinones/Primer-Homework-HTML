@@ -3,7 +3,7 @@
 // Sign-ins, sign-outs and password events are logged explicitly by auth.js / microsoft.js.
 // Entries are never edited or deleted from the app.
 import express from "express";
-import { auditTarget, auditVerb, auditDiff, AUDIT_FIELDS, deviceOf } from "./case-meta.js";
+import { auditTarget, auditVerb, auditDiff, auditDeleted, deviceOf } from "./case-meta.js";
 import { scopeOf, hiddenUnlocked, ASSISTANT } from "./auth.js";
 
 export const AUDIT_SCHEMA = `CREATE TABLE IF NOT EXISTS audit_log (
@@ -72,10 +72,6 @@ const nameOf = (x) => x && (x.full_name || x.title || x.name || x.concept || x.s
 // Hiding users is logged by auth.js itself, without the hidden user's name.
 const SKIP = [/^\/notifications/, /^\/auth\//, /^\/admin\/hidden-users\//, /^\/admin\/users\/\d+\/hidden$/, /^\/monitor\/report\/preview/, /^\/payments\/reminders\/preview/];
 
-// What a deleted record held, so the log keeps it (client and case deletions, version 2.2.34).
-const deletedFields = (row) => Object.keys(AUDIT_FIELDS).filter((k) => k in row && row[k] !== "" && row[k] != null)
-  .map((k) => ({ field: k, label: AUDIT_FIELDS[k], before: String(typeof row[k] === "object" ? JSON.stringify(row[k]) : row[k]).slice(0, 300), after: "(eliminado)" }));
-
 /** Middleware after requireAuth: logs every successful (or denied) change. */
 export function auditMiddleware(db) {
   return (req, res, next) => {
@@ -104,7 +100,7 @@ export function auditMiddleware(db) {
       audit(db, req, {
         action: verb, module: t.module, entity: t.entity, record_id: record, case_id: caseId, ok,
         summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto", archive: "archivo del cliente", radicado: "radicado", number: "número de expediente" }[extra]})` : ""}`,
-        changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : ok && req.method === "DELETE" && before ? deletedFields(before) : [],
+        changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : ok && req.method === "DELETE" && before ? auditDeleted(before) : [],
       });
     });
     next();

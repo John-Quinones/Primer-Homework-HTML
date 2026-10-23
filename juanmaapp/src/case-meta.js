@@ -388,6 +388,9 @@ export const AUDIT_FIELDS = {
   entity: "Entidad", treatment: "Tratamiento", court_address: "Dirección del despacho",
   name: "Nombre", role: "Rol", active: "Activo", professional_card: "Tarjeta profesional", legal_name: "Nombre completo para firmas", id_number: "Cédula", custom_permissions: "Permisos propios",
 };
+/** What a deleted row held, for the log (version 2.2.34): [{ field, label, before, after: "(eliminado)" }]. */
+export const auditDeleted = (row) => Object.keys(AUDIT_FIELDS).filter((k) => row && k in row && row[k] !== "" && row[k] != null)
+  .map((k) => ({ field: k, label: AUDIT_FIELDS[k], before: String(typeof row[k] === "object" ? JSON.stringify(row[k]) : row[k]).slice(0, 300), after: "(eliminado)" }));
 /** Field-by-field differences between two rows: [{ field, label, before, after }]. */
 export function auditDiff(before, after) {
   if (!before || !after) return [];

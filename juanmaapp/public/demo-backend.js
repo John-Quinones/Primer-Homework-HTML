@@ -263,7 +263,7 @@
     const name = auditName(after) || auditName(snap?.before) || auditName(created) || "";
     const verb = ok ? CM.auditVerb(method, path) : "Intentó (sin permiso)";
     auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
-      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : [] });
+      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : ok && method === "DELETE" ? CM.auditDeleted(snap?.before) : [] });
   }
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
   const onlyGerencia = () => { if (me().role !== "Gerencia") fail("Solo Gerencia puede ocultar usuarios: su rol no tiene permiso para esta acción."); };
