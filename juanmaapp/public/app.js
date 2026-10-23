@@ -7102,14 +7102,34 @@ function monyVoiceUi() {
     b.setAttribute("aria-pressed", String(monyVoiceOn));
     b.textContent = monyVoiceOn ? "🔊 Voz activada" : "🔇 Voz desactivada";
   });
+  monyVoicePickUi();
 }
+const MONY_VOICE_NAME = "mony-voice-name";
+// Mony is a woman and, if possible, speaks with a Colombian voice (Edge brings «Salome» es-CO; Chrome/Android and Apple bring their own).
+// A browser cannot give a regional accent such as the paisa one: a paid natural voice would be needed for that.
+const MONY_FEMALE = /salom|paulina|sabina|helena|elena|marisol|monica|m[oó]nica|paloma|female|mujer|laura|lucia|luc[ií]a|google espa[nñ]ol/i;
 function monyPickVoice() {
-  const voices = speechSynthesis.getVoices();
-  const es = voices.filter((v) => /^es/i.test(v.lang));
-  const pref = (re) => es.find((v) => re.test(v.lang));
-  return pref(/^es[-_]CO/i) || pref(/^es[-_](MX|US|419|AR)/i) || es[0] || null;
+  const es = speechSynthesis.getVoices().filter((v) => /^es/i.test(v.lang));
+  let saved = null;
+  try { saved = localStorage.getItem(MONY_VOICE_NAME); } catch {}
+  const chosen = saved && es.find((v) => v.name === saved);
+  if (chosen) return chosen;
+  const co = es.filter((v) => /^es[-_]CO/i.test(v.lang));
+  const other = es.filter((v) => /^es[-_](MX|US|419|AR)/i.test(v.lang));
+  const fem = (list) => list.find((v) => MONY_FEMALE.test(v.name));
+  return fem(co) || co[0] || fem(other) || other[0] || fem(es) || es[0] || null;
 }
-function monyClean(text) { return String(text).replace(/[*_`#>|]/g, " ").replace(/\s+/g, " ").trim(); }
+function monyVoicePickUi() {
+  const sel = $("#mony-voice-pick");
+  if (!sel || !monyTTS) return;
+  const es = speechSynthesis.getVoices().filter((v) => /^es/i.test(v.lang)).sort((a, b) => Number(/^es[-_]CO/i.test(b.lang)) - Number(/^es[-_]CO/i.test(a.lang)) || a.name.localeCompare(b.name));
+  sel.hidden = es.length < 2;
+  const cur = monyPickVoice();
+  sel.replaceChildren(...es.map((v) => { const o = document.createElement("option"); o.value = v.name; o.textContent = `${v.name.replace(/^(Microsoft|Google) /, "").replace(/ ?\(es-[A-Za-z]+\)/, "")} (${v.lang})`; o.selected = v === cur; return o; }));
+}
+/** Spanish ears hear the English «Mony» as «Many»: spell it the way it is said, «Móni». */
+function monySayable(text) { return text.replace(/\bMony\b/gi, "Móni"); }
+function monyClean(text) { return monySayable(String(text).replace(/[*_`#>|]/g, " ").replace(/\s+/g, " ").trim()); }
 function monyMode(m) { window.MonyFace?.setMode(m); }
 function monyStopVoice() { if (monyTTS) speechSynthesis.cancel(); $$(".mony-speak").forEach((b) => b.classList.remove("on")); monyMode("idle"); }
 function monySpeak(text, btn = null) {
@@ -7121,7 +7141,7 @@ function monySpeak(text, btn = null) {
     const u = new SpeechSynthesisUtterance(c.trim());
     u.lang = voice?.lang || "es-CO";
     if (voice) u.voice = voice;
-    u.rate = 1;
+    u.rate = 1.02; u.pitch = 1.06;
     u.onboundary = () => window.MonyFace?.pulse();
     if (i === chunks.length - 1) u.onend = u.onerror = () => { btn?.classList.remove("on"); monyMode("idle"); };
     speechSynthesis.speak(u);
@@ -7148,7 +7168,10 @@ document.addEventListener("click", (e) => {
   monyVoiceUi();
   if (monyVoiceOn) monySpeak("Voz de Mony activada."); else monyStopVoice();
 });
-if (monyTTS) speechSynthesis.addEventListener?.("voiceschanged", () => {}); // some browsers load the voices late; monyPickVoice reads them each time
+if (monyTTS) { // some browsers load the voices late; monyPickVoice reads them each time
+  speechSynthesis.addEventListener?.("voiceschanged", monyVoicePickUi);
+  $("#mony-voice-pick")?.addEventListener("change", (e) => { try { localStorage.setItem(MONY_VOICE_NAME, e.target.value); } catch {} monySpeak("Hola, soy Móni, su asistente jurídica."); });
+}
 
 // Dictation: the microphone fills the message box; the person reads it and presses Enviar.
 const MonyRec = window.SpeechRecognition || window.webkitSpeechRecognition;

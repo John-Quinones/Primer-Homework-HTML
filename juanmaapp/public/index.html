@@ -690,7 +690,7 @@
       <!-- ============ MONY (asistente jurídico) ============ -->
       <section id="view-mony" class="view" hidden>
         <div class="view-head"><h2>Mony, asistente jurídico</h2><button type="button" class="mini" id="mony-clear">Nueva conversación</button></div>
-        <div class="mony-id"><img src="mony-avatar.webp" alt="Mony: clic para ampliar, doble clic para pantalla completa" title="Clic: ampliar · Doble clic: pantalla completa" width="168" height="168" tabindex="0" role="button" /><div><b>MONY</b><small>● En línea · solo lectura</small></div><button type="button" class="mony-voice" aria-pressed="false" title="Mony lee sus respuestas en voz alta"></button></div>
+        <div class="mony-id"><img src="mony-avatar.webp" alt="Mony: clic para ampliar, doble clic para pantalla completa" title="Clic: ampliar · Doble clic: pantalla completa" width="168" height="168" tabindex="0" role="button" /><div><b>MONY</b><small>● En línea · solo lectura</small></div><div class="mony-voice-box"><button type="button" class="mony-voice" aria-pressed="false" title="Mony lee sus respuestas en voz alta"></button><select id="mony-voice-pick" class="mony-voice-pick" aria-label="Voz de Mony" title="Elegir la voz de Mony (las voces dependen de su equipo y navegador)" hidden></select></div></div>
         <p class="hint">Mony consulta procesos en la Rama Judicial, calcula términos con el calendario judicial y prepara borradores con las plantillas de la firma. Solo lee: no guarda ni cambia nada. Sus respuestas son un insumo de apoyo y requieren la revisión final del abogado a cargo. Cada pregunta gasta créditos de Anthropic (Configuración → Consumo de IA).</p>
         <div id="mony-body">
         <div id="mony-server" class="panel server-note" hidden></div>
