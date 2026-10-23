@@ -1319,6 +1319,9 @@ function openDialog(dialog, title, values = {}) {
   form.reset();
   $("[data-title]", dialog).textContent = title;
   $(".form-error", dialog).hidden = true;
+  // reset() keeps what a script wrote into a hidden field (the record id of the last edit), so clear them:
+  // otherwise "Nuevo" after "Editar" saves over the record that was edited before (v2.75).
+  for (const el of form.querySelectorAll("input[type=hidden]")) el.value = "";
   for (const [k, v] of Object.entries(values)) if (form.elements[k] && v != null) form.elements[k].value = v;
   dialog.showModal();
 }
