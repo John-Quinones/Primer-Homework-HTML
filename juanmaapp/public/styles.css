@@ -1390,3 +1390,31 @@ dialog:not([open]) { pointer-events: none; }
   .mony-card { max-width: 100%; }
   .mony-wa-text { font-size: 16px; }
 }
+
+/* ---------- Versión móvil (2.2.28): versión visible y Mony ajustado a pantallas pequeñas; escritorio no cambia ---------- */
+.top-version { display: none; }
+.top-version b { font-weight: 600; letter-spacing: .04em; }
+@media (max-width: 760px) {
+  .brand .tagline:not(.top-version) { display: none; }
+  .brand .top-version:not([hidden]) { display: block; }
+  .nav-version { display: none; }
+  .brand { min-width: 0; }
+  .brand h1 { font-size: 1.1rem; letter-spacing: .05em; overflow-wrap: anywhere; }
+}
+@media (max-width: 560px) {
+  .mony-id { flex-wrap: wrap; gap: 8px 14px; padding: 12px; }
+  .mony-id > div:not(.mony-voice-box) { flex: 1 1 0; min-width: 0; }
+  .mony-id b { font-size: 1.2rem; }
+  .mony-id small { overflow-wrap: anywhere; }
+  .mony-voice-box { margin-left: 0; width: 100%; align-items: stretch; }
+  .mony-voice-box .mony-voice { width: 100%; }
+  .mony-voice-pick { max-width: none; width: 100%; }
+  .mony-panel header .mony-panel-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+  .mony-panel header .mony-voice { flex: 3 1 0; }
+  .mony-panel header #mony-panel-close { flex: 0 0 52px; }
+  .mony-panel header div { flex: 1 1 calc(100% - 64px); }
+  .mony-panel .mony-voice { padding: 6px 8px; }
+  .mony-form { gap: 6px; }
+  .mony-form textarea { min-width: 0; }
+  .mony-fab { right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+}

@@ -321,6 +321,12 @@ async function boot() {
     el.querySelector("[data-version-number]").textContent = v.name || "";
     el.querySelector("[data-version-short]").textContent = v.date ? v.date.slice(2).split("-").reverse().join(".") : "";
   });
+  // Version in the top bar, shown instead of the tagline on phones (the side menu scrolls sideways there).
+  $$("[data-version-top]").forEach((el) => {
+    el.hidden = !v.name;
+    el.title = v.sha ? `Versión ${v.sha}` : "";
+    el.querySelector("[data-version-number]").textContent = v.name || "";
+  });
   // Version seal on the sign-in screen (change 62).
   $$("[data-version-seal]").forEach((el) => {
     el.hidden = !v.name;
