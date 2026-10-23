@@ -17,6 +17,7 @@ function load() {
   const modules = (text) => { const q = qrcode(0, "M"); q.addData(String(text)); q.make(); const n = q.getModuleCount(); return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => q.isDark(r, c))); };
   const window = { jspdf: { jsPDF }, PDFLib, JuanmaQr: { modules } };
   new Function("window", readFileSync(path.join(root, "public/logo-wm.js"), "utf8"))(window);
+  for (const f of ["membrete-assets.js", "membrete.js"]) new Function("window", readFileSync(path.join(root, "public", f), "utf8"))(window);
   new Function("window", readFileSync(path.join(root, "public/pdf-tools.js"), "utf8"))(window);
   tools = window.JuanmaPdf;
   return tools;

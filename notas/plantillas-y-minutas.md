@@ -30,3 +30,12 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Medios de pago fijos con logo: Bancolombia ahorros 869 00000 527, Nequi 314 415 6914, Llave Bre-B 314 415 6914. Los logos los subió John (el contenedor no alcanza las páginas de los bancos); recortados a su contenido, en `contrato-honorarios`.
 - Los datos del apoderado (John Fredy Quiñones Montaña, cédula, T. P.) quedan fijos en el Word.
 - Cómo se armó: guion python-docx que reemplaza texto entre runs conservando el formato del primero; se prueba llenándolo con `public/docx.js` en Node (docxtemplater de `juanmaapp/node_modules`) y se ve en imagen con LibreOffice (sin Century Gothic: la letra de la imagen es parecida).
+
+## Membrete, pie, numeración y marca de agua (v2.2.3, 23/10/2026)
+- Pedido de John: todos los documentos que la App genere en PDF o Word usan su «Plantilla Membrete_Pie_Encab_Pagina»; el reporte del correo certificado lleva la marca de agua con el logo de Tecjuridicos.
+- La plantilla adjunta NO trae marca de agua (solo logo, QR, pie, borde y número de página en un encabezado que no se usa); la marca es el logo de Tecjuridicos al 16 % (Word) / 11 % (PDF), centrado detrás del texto.
+- PDF: `public/membrete.js` (`newPdf`, `pdfBox`, `finishPdf`); lo usan `markdownToPdf`, `signatureCertificate`, `mailProof`, reportes, recibo simple y estado de cuenta. Los PDF originales que se suben a Firmas no se modifican (cambiaría su huella); solo se estampan.
+- Word: `public/membrete-base.docx` (cuerpo `<!--BODY-->`, estilos Ttulo1-3) lo usa `markdownToDocx`; `public/recibo-base.docx` lleva el mismo encabezado y pie. Ambos y `public/membrete-assets.js` salen de `python3 scripts/build-membrete.py <plantilla.docx>`.
+- Las plantillas Word cargadas por Gerencia en Documentos conservan su propio membrete (no se sobrescriben).
+- El pie del recibo ya no dice ojani0722@hotmail.com: ahora gerencia@tecjuridicos.com (el de la plantilla nueva).
+- La letra de los PDF es la estándar de jsPDF (no hay Century Gothic para PDF); los Word usan Century Gothic.
