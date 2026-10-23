@@ -400,6 +400,7 @@ export function recordsRouter(db) {
     const id = toInt(req.params.id, "id");
     const cur = getCase(req, id);
     const b = req.body ?? {};
+    if (b.client_id && Number(b.client_id) !== cur.client_id) fail400("Un expediente no cambia de cliente: cierre la ventana y vuelva a abrirla.");
     const typeId = b.process_type_id ? toInt(b.process_type_id, "El subproceso") : cur.process_type_id;
     const values = cleanFieldValues(typeId, b.field_values ?? cur.field_values);
     const officeId = officeFor(req, b.office_id, cur.office_id);

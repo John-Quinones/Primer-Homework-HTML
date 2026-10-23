@@ -1196,6 +1196,7 @@
     ["PUT", /^\/cases\/(\d+)$/, (m, b) => {
       need("cases.write");
       const k = visibleCase(+m[1]);
+      if (b.client_id && +b.client_id !== k.client_id) fail("Un expediente no cambia de cliente: cierre la ventana y vuelva a abrirla.");
       const typeId = +b.process_type_id || k.process_type_id;
       const officeId = officeFor(b.office_id, k.office_id);
       Object.assign(k, {
