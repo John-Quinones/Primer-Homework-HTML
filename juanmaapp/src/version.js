@@ -1,7 +1,9 @@
 // Which version of the project is running. `change` = number of commits that
 // touched juanmaapp/, counted from the start of the project. Up to change 63
 // the version was that number ("Cambio N"); change 64 is version 2 and every
-// later change adds one to the minor number (2.1, 2.2, …). CI writes
+// later change adds one to the minor number (2.1, 2.2, … 2.104). From change
+// 171 (user's rule, 23/10/2026) the name is 2.2.N: 2.2.1, 2.2.2, … a plain
+// counter, never a decimal number. CI writes
 // public/version.json before publishing; locally it is read from git.
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -11,11 +13,15 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const VERSION_2_CHANGE = 64;
+// Change number (commit count) of version 2.2.1. If a rebase shifts the count, set this to the
+// count of the 2.2.1 commit's position again: 2.2.N = change - V2_2_1_CHANGE + 1.
+export const V2_2_1_CHANGE = 171;
 
-// Version name shown to people: 63 and earlier keep their number; then 2, 2.1, 2.2, …
+// Version name shown to people: 63 and earlier keep their number; then 2, 2.1 … 2.104; then 2.2.1, 2.2.2, …
 export function versionName(change) {
   if (!change) return "";
   if (change < VERSION_2_CHANGE) return String(change);
+  if (change >= V2_2_1_CHANGE) return `2.2.${change - V2_2_1_CHANGE + 1}`;
   return change === VERSION_2_CHANGE ? "2" : `2.${change - VERSION_2_CHANGE}`;
 }
 
@@ -51,7 +57,7 @@ export function readNews(count = 3) {
     return readFileSync(path.join(root, "CAMBIOS.md"), "utf8").split("\n")
       .map((line) => {
         if (/^##\s+Versi[oó]n 2\b/.test(line)) legacy = false;
-        const m = line.match(/^\|\s*(\d+(?:\.\d+)?)\s*\|\s*([\d/]+)\s*\|\s*(.+?)\s*\|\s*$/);
+        const m = line.match(/^\|\s*(\d+(?:\.\d+){0,2})\s*\|\s*([\d/]+)\s*\|\s*(.+?)\s*\|\s*$/);
         return m && [m[1], m[2], m[3], legacy];
       })
       .filter(Boolean)

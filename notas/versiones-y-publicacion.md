@@ -1,9 +1,12 @@
 # Versiones y publicación
 
 ## Número de versión
-- Desde el Cambio 63 la App es la versión 2; cada commit que toca `juanmaapp/` suma uno: 2.1, 2.2, 2.3…
+- **Desde el 23/10/2026 (pedido de John) la numeración es 2.2.N**: 2.2.1, 2.2.2, 2.2.3… Cada commit que toca `juanmaapp/` suma uno al último número. Fórmula: N = conteo de commits − `V2_2_1_CHANGE` (171) + 1, en `src/version.js`. Antes: 2.1 … hasta la 2.106 que mostraba la cabeza (conteo 170; la 2.104 y 2.105 de los mensajes no se renumeraron).
+- Cómo asignarlo en un hilo nuevo: fetch `--depth=1000`, rebase sobre la rama, ver el último número en la tabla de `CAMBIOS.md` y usar el siguiente (2.2.N+1) en el mensaje «Versión 2.2.N: …» y en la fila de la tabla. Si dos hilos chocan, el que se une después renumera.
+- Comparar versiones siempre como texto igual/distinto (la ventana de novedades usa igualdad); nunca como decimales (2.2.10 > 2.2.9, 2.103 ≠ 2.2.1).
+- Desde el Cambio 63 la App es la versión 2; hasta la 2.104 cada commit sumaba uno: 2.1, 2.2, 2.3…
 - El número sale del conteo de commits (`src/version.js`). Con un clon superficial sale mal: antes de construir, `git fetch --depth=1000 origin claude/nomosai-engine-prompt-v6sj6k`.
-- Mensaje de commit «Versión 2.N: …» y una fila en la tabla «Versión 2 en adelante» de `juanmaapp/CAMBIOS.md`.
+- Mensaje de commit «Versión 2.2.N: …» y una fila en la tabla «Versión 2 en adelante» de `juanmaapp/CAMBIOS.md`.
 - El número tras el punto es un contador: 2.29 viene después de 2.9.
 - Varios hilos suben cambios a la misma rama: hacer rebase antes de numerar y antes de publicar.
 
