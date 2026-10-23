@@ -7017,6 +7017,14 @@ document.addEventListener("pointermove", (e) => {
   monyLook(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
 });
 
+// Click on Mony's face: it opens larger (version 2.2.11). Esc, the button or a click outside close it.
+function monyZoom() { const d = $("#mony-zoom"); if (!d.open) d.showModal(); }
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".mony-id img")) return monyZoom();
+  const d = $("#mony-zoom");
+  if (d.open && (e.target === d || e.target.closest("#mony-zoom-close"))) d.close();
+});
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.(".mony-id img")) { e.preventDefault(); monyZoom(); } });
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;

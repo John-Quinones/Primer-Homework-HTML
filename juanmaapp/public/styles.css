@@ -1305,3 +1305,9 @@ dialog:not([open]) { pointer-events: none; }
 .mony-id small { color: #6ee7b7; }
 .mony-id img { transition: transform .12s ease-out; will-change: transform; }
 @media (prefers-reduced-motion: reduce) { .mony-id img { transition: none; } }
+.mony-id img { cursor: zoom-in; }
+.mony-zoom { border: 1px solid #22d3ee66; border-radius: 22px; background: #0F172A; color: #e2e8f0; padding: 20px; text-align: center; max-width: min(92vw, 560px); box-shadow: 0 0 40px #22d3ee33; }
+.mony-zoom::backdrop { background: #020617cc; }
+.mony-zoom img { width: min(80vw, 440px); height: auto; aspect-ratio: 1; border-radius: 50%; filter: drop-shadow(0 0 18px #22d3ee88); }
+.mony-zoom p { margin: 10px 0 12px; letter-spacing: .08em; }
+.mony-zoom .page-nav { background: transparent; box-shadow: none; border: 0; }
