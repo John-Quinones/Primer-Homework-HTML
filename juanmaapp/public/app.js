@@ -7076,7 +7076,7 @@ function monyFabSync(name = route().name) {
   fab.hidden = !allowed || onMonyScreen || !panel.hidden;
 }
 function monyPanel(open) {
-  if (!open) monyStopVoice();
+  if (!open) { monyStopVoice(); monyDictateStop(monyRec); }
   const fab = $("#mony-fab"), panel = $("#mony-panel"), body = $("#mony-body");
   if (open === !panel.hidden) return;
   panel.hidden = !open;
@@ -7092,6 +7092,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#mon
 // Voice (version 2.2.14): Mony reads her answers aloud with the browser's own Spanish voices (free, nothing leaves the
 // device) and the person can dictate by microphone (Chrome and Edge send the audio to Google or Microsoft to transcribe it,
 // so the first use asks for consent). A natural-sounding paid voice is planned for later.
+let monyRec = null; // the running dictation (see monyDictate)
 const MONY_VOICE_KEY = "mony-voice";
 let monyVoiceOn = false;
 try { monyVoiceOn = localStorage.getItem(MONY_VOICE_KEY) === "1"; } catch {}
@@ -7175,10 +7176,60 @@ if (monyTTS) { // some browsers load the voices late; monyPickVoice reads them e
 
 // Dictation: the microphone fills the message box; the person reads it and presses Enviar.
 const MonyRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-let monyRec = null;
-function monyMicUi(on) { const m = $("#mony-mic"); m.classList.toggle("on", on); m.setAttribute("aria-pressed", String(on)); }
+let monyPlaceholder = null;
+function monyMicUi(on) {
+  const m = $("#mony-mic"), box = $("#mony-input");
+  m.classList.toggle("on", on); m.setAttribute("aria-pressed", String(on));
+  if (on) { monyPlaceholder ??= box.placeholder; box.placeholder = "🎤 Escuchando… hable ahora (pulse el micrófono para terminar)"; }
+  else if (monyPlaceholder !== null) { box.placeholder = monyPlaceholder; monyPlaceholder = null; }
+}
+const MONY_REC_MSG = { "not-allowed": "Permita el micrófono en el navegador (candado de la barra de direcciones) para hablarle a Mony.", "service-not-allowed": "El celular no permite el dictado: actívelo en Ajustes (Google o dictado de Siri) y permita el micrófono para este sitio.",
+  "no-speech": "No se escuchó nada. Acerque el celular y pulse el micrófono de nuevo.", "audio-capture": "No se encontró un micrófono (o otra aplicación lo está usando).", "network": "No hay conexión con el servicio de dictado.",
+  "language-not-supported": "Este equipo no tiene dictado en español de Colombia." };
+// Dictation (versions 2.2.14, 2.2.19, 2.2.20). Browsers end a recognition at the first pause and phones sometimes never send
+// «end», so: it listens again after each phrase until the person presses the microphone again (or ~90 s), pressing it again always
+// stops (even if the browser went silent), and a watchdog warns if the microphone never starts.
+function monyDictateStop(st, msg = null) {
+  if (!st || st.stopped) return;
+  st.stopped = true; clearTimeout(st.wd);
+  try { st.rec?.abort(); } catch {}
+  if (monyRec === st) monyRec = null;
+  monyMicUi(false); monyMode("idle");
+  if (msg) toast(msg, true);
+  if (window.matchMedia?.("(pointer: fine)").matches) $("#mony-input").focus(); // on a phone, focusing would pop the keyboard over the text
+}
+function monyRecRun(st) {
+  const input = $("#mony-input"), rec = new MonyRec();
+  st.rec = rec; st.started = false;
+  let got = false, errored = null;
+  rec.lang = "es-CO"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  st.wd = setTimeout(() => { if (!st.started) monyDictateStop(st, "El micrófono no respondió. Pulse el botón de nuevo."); }, 6000);
+  rec.onstart = () => { st.started = true; clearTimeout(st.wd); };
+  // Phones (Chrome for Android, Safari) hand over every partial phrase as its own result, each one repeating the one before:
+  // joining them all writes «hola hola cómo hola cómo está». The last result always holds the whole phrase.
+  rec.onresult = (e) => {
+    const said = e.results[e.results.length - 1]?.[0]?.transcript?.trim();
+    if (!said || st.stopped) return;
+    got = st.heard = true;
+    input.value = (st.base + said).slice(0, 4000);
+  };
+  rec.onerror = (e) => { errored = e.error; };
+  rec.onend = () => {
+    if (st.stopped || monyRec !== st) return;
+    clearTimeout(st.wd);
+    if (errored && errored !== "no-speech" && errored !== "aborted") return monyDictateStop(st, MONY_REC_MSG[errored] || "No se pudo usar el micrófono. Intente de nuevo.");
+    if (Date.now() - st.t0 < 90000 && (got || (!errored && st.quiet < 1))) { // keep listening for the next phrase
+      st.quiet = got ? 0 : st.quiet + 1;
+      st.base = input.value.trimEnd() ? input.value.trimEnd() + " " : "";
+      setTimeout(() => { if (!st.stopped && monyRec === st) { try { monyRecRun(st); } catch { monyDictateStop(st, "No se pudo abrir el micrófono. Pulse el botón de nuevo."); } } }, 250);
+      return;
+    }
+    monyDictateStop(st, st.heard ? null : MONY_REC_MSG["no-speech"]);
+  };
+  rec.start();
+}
 async function monyDictate() {
-  if (monyRec) { monyRec.stop(); return; }
+  if (monyRec) { monyDictateStop(monyRec); return; } // a second press always stops, even if the browser never said «end»
   const key = `mony-mic-ok-${me?.id ?? "x"}`;
   let ok = false;
   try { ok = localStorage.getItem(key) === "1"; } catch {}
@@ -7187,36 +7238,13 @@ async function monyDictate() {
     try { localStorage.setItem(key, "1"); } catch {}
   }
   monyStopVoice();
-  const input = $("#mony-input"), base = input.value ? input.value.trimEnd() + " " : "";
-  const rec = new MonyRec();
-  monyRec = rec;
-  let heard = false, failed = false;
-  rec.lang = "es-CO"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-  // Phones (Chrome for Android, Safari) hand over every partial phrase as its own result, each one repeating the one before:
-  // joining them all writes «hola hola cómo hola cómo está». The last result always holds the whole phrase.
-  rec.onresult = (e) => {
-    const last = e.results[e.results.length - 1];
-    const said = last?.[0]?.transcript?.trim();
-    if (!said) return;
-    heard = true;
-    input.value = (base + said).slice(0, 4000);
-  };
-  rec.onerror = (e) => {
-    failed = true;
-    const why = { "not-allowed": "Permita el micrófono en el navegador (candado de la barra de direcciones) para hablarle a Mony.", "service-not-allowed": "El celular no permite el dictado: actívelo en Ajustes (Google o dictado de Siri) y permita el micrófono para este sitio.",
-      "no-speech": "No se escuchó nada. Acerque el celular y pulse el micrófono de nuevo.", "audio-capture": "No se encontró un micrófono.", "network": "No hay conexión con el servicio de dictado.",
-      "language-not-supported": "Este equipo no tiene dictado en español de Colombia." }[e.error];
-    if (why) toast(why, true);
-    else if (e.error !== "aborted") toast("No se pudo usar el micrófono. Intente de nuevo.", true);
-  };
-  rec.onend = () => {
-    monyRec = null; monyMicUi(false); monyMode("idle");
-    if (!heard && !failed) toast("No se escuchó nada. Acerque el celular y pulse el micrófono de nuevo.", true);
-    if (window.matchMedia?.("(pointer: fine)").matches) input.focus(); // on a phone, focusing would pop the keyboard over the text
-  };
+  const input = $("#mony-input");
+  const st = { rec: null, base: input.value.trimEnd() ? input.value.trimEnd() + " " : "", heard: false, stopped: false, quiet: 0, started: false, t0: Date.now(), wd: 0 };
+  monyRec = st;
   monyMicUi(true); monyMode("listening");
-  try { rec.start(); } catch { monyRec = null; monyMicUi(false); monyMode("idle"); toast("No se pudo abrir el micrófono. Pulse el botón de nuevo.", true); }
+  try { monyRecRun(st); } catch { monyDictateStop(st, "No se pudo abrir el micrófono. Pulse el botón de nuevo."); }
 }
+document.addEventListener("visibilitychange", () => { if (document.hidden) monyDictateStop(monyRec); }); // a phone stops listening in the background
 if (MonyRec) { $("#mony-mic").hidden = false; $("#mony-mic").addEventListener("click", () => guarded(monyDictate)); }
 
 // Opening (versions 2.2.16 and 2.2.19): every time Mony is entered (the screen, the floating chat) points gather into her face
@@ -7256,7 +7284,7 @@ $("#mony-form").addEventListener("submit", (e) => {
   const input = $("#mony-input"), text = input.value.trim();
   if (!text || monyBusy) return;
   guarded(async () => {
-    monyBusy = true; $("#mony-send").disabled = true; input.value = ""; monyStopVoice();
+    monyBusy = true; $("#mony-send").disabled = true; input.value = ""; monyDictateStop(monyRec); monyStopVoice();
     monyMsgs.push({ role: "user", content: text });
     monyBubble("user", text);
     const bubble = monyBubble("assistant", "Mony está escribiendo…");
