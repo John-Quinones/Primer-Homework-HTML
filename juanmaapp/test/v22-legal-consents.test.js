@@ -86,7 +86,7 @@ test("deleting the client keeps the evidence with the name and document", async 
   const c = (await admin.call("POST", "/clients", { person_type: "natural", first_names: "Luis", last_names: "Pardo", id_number: "77" })).body;
   await admin.call("POST", `/clients/${c.id}/consent-link`, { channel: "copy" });
   await admin.call("POST", `/clients/${c.id}/consents`, { answers: { datos: true }, typed_name: "Luis Pardo", signature_png: SIG });
-  assert.equal((await admin.call("DELETE", `/clients/${c.id}`)).status, 204);
+  assert.equal((await admin.call("DELETE", `/clients/${c.id}`, { confirm: c.full_name })).status, 204);
   const kept = srv.db.prepare("SELECT * FROM consent_records WHERE client_name = 'Luis Pardo'").all();
   assert.equal(kept.length, 1);
   assert.equal(kept[0].client_id, null);

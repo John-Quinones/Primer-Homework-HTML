@@ -60,10 +60,10 @@ export function makeBackup(db, { dir = backupDir(db), trigger = "auto", now = Da
 }
 
 /** Copy of the database taken right before a receipt is deleted (version 2.58). No copy, no deletion; in-memory databases (tests) have none to make. */
-export function backupBeforeReceiptDelete(db) {
+export function backupBeforeReceiptDelete(db, trigger = "antes-de-borrar-recibo") {
   const file = dbFiles.get(db);
   if (!file || file === ":memory:") return null;
-  const out = makeBackup(db, { trigger: "antes-de-borrar-recibo" });
+  const out = makeBackup(db, { trigger });
   if (!out.ok) throw new HttpError(409, `No se borró: no se pudo hacer la copia de respaldo previa (${out.error}).`);
   return out;
 }

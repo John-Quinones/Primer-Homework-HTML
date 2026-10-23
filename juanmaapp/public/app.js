@@ -592,6 +592,20 @@ function ask({ title, message = "", input = null, okLabel = "Aceptar", cancelLab
   });
 }
 const confirmAsk = (title, message, okLabel = "Eliminar") => ask({ title, message, okLabel, danger: true });
+// Version 2.2.34: deleting a client or a case (Gerencia only). The server says what blocks it (cases, charges, receipts);
+// otherwise the user types the name / folder number, a copy of the database is made, and the deletion is logged.
+async function confirmDeletion(collection, id, noun, which) {
+  const plan = await api("GET", `/${collection}/${id}/deletion`);
+  if (plan.blockers.length) {
+    await ask({ title: `No se puede eliminar el ${noun}`, message: `${which}\n${plan.blockers.join(" ")}`.trim(), okLabel: "Entendido" });
+    return false;
+  }
+  const typed = await ask({ title: `¿Eliminar ${noun}?`, input: "", okLabel: "Eliminar", danger: true,
+    message: `Se eliminará el ${noun} ${which} con todos sus datos. Antes se hace una copia de respaldo y queda en la bitácora. Esta acción no se puede deshacer desde la App.\nPara confirmar escriba exactamente: ${plan.expected}` });
+  if (!typed) return false;
+  await api("DELETE", `/${collection}/${id}`, { confirm: typed });
+  return true;
+}
 
 // Save a generated file: the viewer's download capability when the page runs
 // inside claude.ai, a normal browser download otherwise.
@@ -2937,10 +2951,9 @@ document.addEventListener("click", (e) => {
     "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
-      if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
-      await api("DELETE", `/clients/${id}`);
+      if (!(await confirmDeletion("clients", id, "cliente", c ? `“${c.full_name}”` : ""))) return;
       state.selectedClientId = null;
-      toast("Cliente eliminado.");
+      toast("Cliente eliminado. Quedó la copia de respaldo y el registro en la bitácora.");
       location.hash === "#clientes" ? await renderClientes() : (location.hash = "#clientes");
     },
     "new-case": () => openCaseDialog(null, btn.dataset.client ? Number(btn.dataset.client) : state.selectedClientId),
@@ -2948,9 +2961,8 @@ document.addEventListener("click", (e) => {
     "delete-case": async () => {
       const k = state.cases.find((x) => x.id === id);
       const which = k ? [caseFolder(k) && `carpeta ${caseFolder(k)}`, k.client_name, k.type_name].filter(Boolean).join(" · ") : "";
-      if (!(await confirmAsk("¿Eliminar expediente?", `Se eliminará el expediente${which ? ` (${which})` : ""} con sus datos. Esta acción no se puede deshacer.`))) return;
-      await api("DELETE", `/cases/${id}`);
-      toast("Expediente eliminado.");
+      if (!(await confirmDeletion("cases", id, "expediente", which && `(${which})`))) return;
+      toast("Expediente eliminado. Quedó la copia de respaldo y el registro en la bitácora.");
       if (route().name === "expediente") { history.back(); return; }
       await refreshView();
     },

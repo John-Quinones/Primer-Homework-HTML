@@ -33,6 +33,6 @@ test("only Gerencia deletes process types and sub-processes; one in use is refus
   assert.equal((await admin.call("GET", `/cases/${k.body.id}`)).status, 200);
 
   assert.equal((await admin.call("DELETE", `/types/${t2.id}`)).status, 204);
-  await admin.call("DELETE", `/cases/${k.body.id}`);
+  await admin.call("DELETE", `/cases/${k.body.id}`, { confirm: "ELIMINAR" });
   assert.equal((await admin.call("DELETE", `/categories/${cat.id}`)).status, 204);
 });

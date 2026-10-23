@@ -8,7 +8,7 @@ import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
 import { personFields, clientMatches, properAddress, properPhone } from "./person.js";
-import { clientArchive, clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
+import { deletionPlan, checkDeletion, clientArchive, clientValues as cleanClient, photoProblem, caseLocation as locate, fieldValues, openedAt, linkParties, mayEditCaseIds, radicadoChange, defaultResponsible } from "./record-rules.js";
 import { AREAS, canonicalDepartment, canonicalCity, placeFromRadicado } from "./places.js";
 import { formatRadicado } from "./portals.js";
 
@@ -162,10 +162,18 @@ export function recordsRouter(db) {
     return getClient(req, id);
   }));
 
+  // Version 2.2.34: deleting needs Gerencia, the typed name, no cases/charges/receipts, and a copy of the database first.
+  const clientPlan = (req, id) => {
+    const c = getClient(req, id);
+    const n = (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE client_id = ?`).get(id).n;
+    return deletionPlan("client", { name: c.full_name, counts: { cases: n("cases"), charges: n("charges"), receipts: n("receipts") } });
+  };
+  r.get("/clients/:id/deletion", h((req) => { checkPerm(req, "clients.delete"); return clientPlan(req, toInt(req.params.id, "id")); }));
   r.delete("/clients/:id", h((req, res) => {
     checkPerm(req, "clients.delete");
     const id = toInt(req.params.id, "id");
-    getClient(req, id);
+    checkDeletion(clientPlan(req, id), req.body?.confirm, (m) => { throw new HttpError(409, m); }, (m) => { throw new HttpError(400, m); });
+    backupBeforeReceiptDelete(db, "antes-de-borrar-cliente");
     db.prepare("DELETE FROM clients WHERE id = ?").run(id);
     res.status(204).end();
   }));
@@ -574,11 +582,20 @@ export function recordsRouter(db) {
     res.status(204).end();
   }));
 
+  const casePlan = (req, id) => {
+    const k = getCase(req, id);
+    const folder = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = ?").all(k.category_id)
+      .filter((f) => isFolderLabel(f.label)).map((f) => String(k.field_values?.[f.id] ?? "").trim()).find(Boolean) || "";
+    const n = (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE case_id = ?`).get(id).n;
+    const receipts = n("receipts") + db.prepare("SELECT COUNT(*) AS n FROM case_documents WHERE case_id = ? AND kind = 'recibo' AND receipt_id IS NULL").get(id).n;
+    return deletionPlan("case", { folder, radicado: k.radicado, counts: { charges: n("charges"), receipts } });
+  };
+  r.get("/cases/:id/deletion", h((req) => { checkPerm(req, "cases.delete"); return casePlan(req, toInt(req.params.id, "id")); }));
   r.delete("/cases/:id", h((req, res) => {
     checkPerm(req, "cases.delete");
     const id = toInt(req.params.id, "id");
-    getCase(req, id);
-    if (db.prepare("SELECT 1 FROM case_documents WHERE case_id = ? AND kind = 'recibo'").get(id)) throw new HttpError(409, "El expediente tiene recibos guardados: un recibo no se pierde con el expediente. Elimine primero cada recibo (con copia de respaldo).");
+    checkDeletion(casePlan(req, id), req.body?.confirm, (m) => { throw new HttpError(409, m); }, (m) => { throw new HttpError(400, m); });
+    backupBeforeReceiptDelete(db, "antes-de-borrar-expediente");
     db.prepare("DELETE FROM cases WHERE id = ?").run(id);
     res.status(204).end();
   }));
