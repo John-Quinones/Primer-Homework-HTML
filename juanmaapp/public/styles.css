@@ -1300,32 +1300,32 @@ dialog:not([open]) { pointer-events: none; }
 .mony-form textarea { flex: 1; resize: vertical; }
 @media (max-width: 560px) { .mony-msg, .mony-cards { max-width: 94%; } }
 .mony-id { display: flex; align-items: center; gap: 18px; padding: 12px 18px; margin-bottom: 8px; border-radius: 14px; background: #0F172A; border: 1px solid #243352; color: #e2e8f0; }
-.mony-id img { width: 168px; height: 168px; border-radius: 50%; filter: drop-shadow(0 0 10px #22d3ee88); }
+.mony-id img, .mony-id .mony-cv { width: 168px; height: 168px; border-radius: 50%; filter: drop-shadow(0 0 10px #22d3ee88); }
 .mony-id b { display: block; letter-spacing: .1em; }
 .mony-id small { color: #6ee7b7; }
 .mony-id img { transition: transform .12s ease-out; will-change: transform; }
 @media (prefers-reduced-motion: reduce) { .mony-id img { transition: none; } }
-.mony-id img { cursor: zoom-in; }
+.mony-id img, .mony-id .mony-cv { cursor: zoom-in; }
 .mony-zoom { border: 1px solid #22d3ee66; border-radius: 22px; background: #0F172A; color: #e2e8f0; padding: 20px; text-align: center; max-width: min(92vw, 560px); box-shadow: 0 0 40px #22d3ee33; }
 .mony-zoom::backdrop { background: #020617cc; }
-.mony-zoom img { width: min(80vw, 440px); height: auto; aspect-ratio: 1; border-radius: 50%; filter: drop-shadow(0 0 18px #22d3ee88); }
+.mony-zoom img, .mony-zoom .mony-cv { width: min(80vw, 440px); height: auto; aspect-ratio: 1; border-radius: 50%; filter: drop-shadow(0 0 18px #22d3ee88); }
 .mony-zoom p { margin: 10px 0 12px; letter-spacing: .08em; }
 .mony-zoom .page-nav { background: transparent; box-shadow: none; border: 0; }
 .mony-id b { font-size: 1.4rem; }
 .mony-zoom { max-width: min(96vw, 620px); }
-.mony-zoom img { width: min(86vw, 504px); transition: transform .12s ease-out; will-change: transform; }
+.mony-zoom img, .mony-zoom .mony-cv { width: min(86vw, 504px); transition: transform .12s ease-out; will-change: transform; }
 .mony-zoom.full { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #020617; overflow: hidden; }
-.mony-zoom.full img { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; object-fit: contain; filter: none; }
+.mony-zoom.full img, .mony-zoom.full .mony-cv { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; object-fit: contain; filter: none; }
 .mony-zoom.full p, .mony-zoom.full .page-nav { display: none; }
 .mony-zoom.full #mony-zoom-close { position: fixed; top: 14px; right: 14px; z-index: 2; }
-@media (max-width: 560px) { .mony-id img { width: 120px; height: 120px; } }
+@media (max-width: 560px) { .mony-id img, .mony-id .mony-cv { width: 120px; height: 120px; } }
 @media (prefers-reduced-motion: reduce) { .mony-zoom img { transition: none; } }
 
 /* Mony flotante (versión 2.2.13) */
 .mony-fab { position: fixed; right: 22px; bottom: 84px; z-index: 40; width: 68px; height: 68px; padding: 0; border: 0; border-radius: 50%; background: #0F172A; cursor: pointer;
   box-shadow: 0 6px 20px #0008, 0 0 0 3px #22d3ee, 0 0 22px #22d3ee88; transition: transform .15s ease; }
 .mony-fab:hover, .mony-fab:focus-visible { transform: scale(1.08); }
-.mony-fab img { width: 100%; height: 100%; border-radius: 50%; display: block; transition: transform .12s ease-out; pointer-events: none; }
+.mony-fab img, .mony-fab .mony-cv { width: 100%; height: 100%; border-radius: 50%; display: block; transition: transform .12s ease-out; pointer-events: none; }
 .mony-fab i { position: absolute; right: 2px; bottom: 2px; width: 15px; height: 15px; border-radius: 50%; background: #34d399; border: 2px solid #0F172A; }
 .mony-fab::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid #22d3ee; opacity: 0; animation: mony-ring 2.8s ease-out infinite; pointer-events: none; }
 @keyframes mony-ring { 0% { transform: scale(.9); opacity: .7; } 100% { transform: scale(1.35); opacity: 0; } }
@@ -1362,3 +1362,7 @@ dialog:not([open]) { pointer-events: none; }
 .mony-mic { border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 12px; padding: 0 12px; font-size: 1.1rem; cursor: pointer; min-height: 40px; }
 .mony-mic.on { background: #ef4444; border-color: #ef4444; animation: mony-pulse 1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .mony-speak.on, .mony-mic.on { animation: none; } }
+
+.mony-cv { display: block; }
+.mony-zoom .mony-cv { margin: 0 auto; }
+.mony-zoom.full .mony-cv { margin: 0; object-fit: contain; }
