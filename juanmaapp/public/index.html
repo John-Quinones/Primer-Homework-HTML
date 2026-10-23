@@ -182,6 +182,14 @@
       </div>
     </nav>
 
+    <!-- Mony flotante (versión 2.2.13): botón redondo en todas las pantallas que abre su chat -->
+    <button type="button" id="mony-fab" class="mony-fab" aria-label="Abrir el chat con Mony, asistente jurídico" title="Mony, asistente jurídico" hidden><img src="mony-avatar.webp" alt="" width="64" height="64" /><i aria-hidden="true"></i></button>
+    <section id="mony-panel" class="mony-panel" role="dialog" aria-label="Chat con Mony" hidden>
+      <header><img src="mony-avatar.webp" alt="" width="44" height="44" /><div><b>MONY</b><small>● En línea · solo lectura</small></div>
+        <button type="button" class="mony-panel-btn" id="mony-panel-clear" title="Nueva conversación">Nueva</button>
+        <button type="button" class="mony-panel-btn" id="mony-panel-close" aria-label="Cerrar el chat de Mony">✕</button></header>
+      <div id="mony-panel-body"></div>
+    </section>
     <main>
       <!-- ============ INICIO ============ -->
       <section id="view-inicio" class="view" hidden>
@@ -683,6 +691,7 @@
         <div class="view-head"><h2>Mony, asistente jurídico</h2><button type="button" class="mini" id="mony-clear">Nueva conversación</button></div>
         <div class="mony-id"><img src="mony-avatar.webp" alt="Mony: clic para ampliar, doble clic para pantalla completa" title="Clic: ampliar · Doble clic: pantalla completa" width="168" height="168" tabindex="0" role="button" /><div><b>MONY</b><small>● En línea · solo lectura</small></div></div>
         <p class="hint">Mony consulta procesos en la Rama Judicial, calcula términos con el calendario judicial y prepara borradores con las plantillas de la firma. Solo lee: no guarda ni cambia nada. Sus respuestas son un insumo de apoyo y requieren la revisión final del abogado a cargo. Cada pregunta gasta créditos de Anthropic (Configuración → Consumo de IA).</p>
+        <div id="mony-body">
         <div id="mony-server" class="panel server-note" hidden></div>
         <div id="mony-box">
           <div id="mony-log" class="mony-log" role="log" aria-live="polite"></div>
@@ -690,6 +699,7 @@
             <textarea id="mony-input" rows="2" maxlength="4000" placeholder="Ej. ¿Cuándo vence un término de 10 días hábiles notificado el 2026-10-20?" required></textarea>
             <button type="submit" id="mony-send">Enviar</button>
           </form>
+        </div>
         </div>
       </section>
 
