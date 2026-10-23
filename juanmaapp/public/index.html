@@ -191,7 +191,8 @@
           </div>
           <div class="kpis">
             <a class="kpi" href="#expedientes"><svg class="ico k1" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span class="kpi-value" id="kpi-open">–</span><span class="kpi-label">Procesos activos</span><span class="kpi-sub" id="kpi-total"></span></a>
-            <a class="kpi" href="#clientes"><svg class="ico k2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/></svg><span class="kpi-value" id="kpi-clients">–</span><span class="kpi-label">Clientes</span></a>
+            <a class="kpi" href="#clientes"><svg class="ico k2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/></svg><span class="kpi-value" id="kpi-clients">–</span><span class="kpi-label">Clientes activos</span></a>
+            <div class="kpi" id="kpi-success-tile"><svg class="ico k2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><span class="kpi-value" id="kpi-success">–</span><span class="kpi-label">Clientes con Casos de Éxito!</span><span class="kpi-label"><a href="#clientes" data-archive-view="Archivo provisional">Provisional <b id="kpi-success-prov">0</b></a> · <a href="#clientes" data-archive-view="Archivo definitivo">Definitivo <b id="kpi-success-def">0</b></a></span></div>
             <a class="kpi" href="#agenda"><svg class="ico k3" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg><span class="kpi-value" id="kpi-due">–</span><span class="kpi-label">Vencen en 7 días</span></a>
             <a class="kpi" href="#agenda"><svg class="ico k4" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M4 7h16"/><path d="M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg><span class="kpi-value" id="kpi-hearings">–</span><span class="kpi-label">Audiencias en 14 días</span></a>
             <a class="kpi" href="#consulta" id="kpi-news-tile"><svg class="ico k5" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="kpi-value" id="kpi-news">–</span><span class="kpi-label">Actuaciones nuevas (7 días)</span></a>
@@ -223,7 +224,7 @@
               <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
             </select>
             <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
-            <select id="client-archive" aria-label="Archivados"><option value="">Sin archivados</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option><option value="todos">Todos (con archivados)</option></select>
+            <select id="client-archive" aria-label="Estado del cliente"><option value="">Clientes activos</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option></select>
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
         </div>

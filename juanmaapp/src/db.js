@@ -662,6 +662,12 @@ function migrate(db) {
     const copy = makeBackup(db, { trigger: "antes-v2.61" });
     if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar afiliado y curador ad-litem: ${copy.error}`);
   }
+  // Version 2.87: a copy of the database before the client's archive state is added (only a column; every client stays activo).
+  if (!cols("clients").has("archive_status") && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.87" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar el archivo de clientes: ${copy.error}`);
+  }
+  add("clients", "archive_status", "TEXT NOT NULL DEFAULT ''"); // version 2.87: '' = activo, 'Archivo provisional', 'Archivo definitivo'
   add("clients", "affiliated", "INTEGER NOT NULL DEFAULT 0"); // version 2.61: 0 for every existing client
   add("cases", "ad_litem", "INTEGER NOT NULL DEFAULT 0"); // version 2.61: the firm acts as curador ad-litem; 0 for every existing case
   for (const c of db.prepare("SELECT id, full_name, id_type FROM clients WHERE first_names = '' AND last_names = '' AND person_type = 'natural'").all()) {

@@ -653,31 +653,36 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- Clientes ----------
-// Version 2.71: archived cases (and the clients whose cases are all archived) stay out of Clientes unless the
-// «Archivados» filter asks for them. Nothing is stored: the client's state comes from its cases.
+// Version 2.87: a client is Activo or sent to «Archivo provisional» / «Archivo definitivo» (clients.archive_status,
+// "" = activo). The views are exclusive: the list shows only the clients of the state chosen in #client-archive.
+// Archiving never touches the client's cases, charges or documents.
+const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo"];
 const clientArchiveFilter = () => $("#client-archive")?.value || "";
-const archivedOnly = (k) => k.status === "Archivo provisional" || k.status === "Archivo definitivo";
-const caseShownInClients = (k) => { const f = clientArchiveFilter(); return f === "todos" || (f ? k.status === f : !archivedOnly(k)); };
 function renderClientList() {
   const ul = $("#client-list");
   const byClient = new Map();
   for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
   const f = clientArchiveFilter();
-  // A client with no cases shows only without a filter; with cases it shows when any of them matches the filter.
-  const shown = state.clients.filter((c) => { const ks = byClient.get(c.id) || []; return f === "todos" || (!ks.length ? !f : ks.some(caseShownInClients)); });
-  const hiddenClients = state.clients.length - shown.length;
+  const shown = state.clients.filter((c) => (c.archive_status || "") === f);
+  const others = CLIENT_ARCHIVE.map((st) => [st, state.clients.filter((c) => c.archive_status === st).length]);
   const note = $("#client-archive-note");
-  if (note) note.textContent = !f && hiddenClients ? `${hiddenClients} cliente(s) con todos sus expedientes archivados, ocultos` : "";
+  if (note) note.textContent = f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
   if (!shown.length) {
-    ul.innerHTML = '<li class="empty">No hay clientes. Cree el primero con “+ Nuevo cliente”.</li>';
+    ul.innerHTML = `<li class="empty">${f ? `No hay clientes en ${f.toLowerCase()}.` : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
     return;
   }
   ul.innerHTML = shown.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
       <strong>${escapeHtml(c.full_name)}</strong>
-      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).filter(caseShownInClients).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
+      <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
+
+// Buttons to send a client to archive or back to activos (needs clients.write); «definitivo» asks first.
+const archiveButtons = (c) => !can("clients.write") ? "" : (c.archive_status
+  ? `<button data-action="archive-client" data-id="${c.id}" data-to="">Devolver a activos</button>${c.archive_status === "Archivo provisional" ? `<button data-action="archive-client" data-id="${c.id}" data-to="Archivo definitivo">Pasar a archivo definitivo</button>` : `<button data-action="archive-client" data-id="${c.id}" data-to="Archivo provisional">Pasar a archivo provisional</button>`}`
+  : `<button data-action="archive-client" data-id="${c.id}" data-to="Archivo provisional">Archivo provisional</button><button data-action="archive-client" data-id="${c.id}" data-to="Archivo definitivo">Archivo definitivo</button>`);
+const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
 
 async function renderClientDetail() {
   const box = $("#client-detail");
@@ -686,16 +691,17 @@ async function renderClientDetail() {
     box.innerHTML = '<p class="empty">Seleccione un cliente o cree uno nuevo.</p>';
     return;
   }
-  const cases = (await api("GET", `/cases?clientId=${c.id}`)).filter(caseShownInClients);
+  const cases = (await api("GET", `/cases?clientId=${c.id}`));
   const row = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
   box.innerHTML = `
     <div class="detail-head">
-      <h3>${escapeHtml(c.full_name)}</h3>
+      <h3>${escapeHtml(c.full_name)} ${archiveBadge(c)}</h3>
       <div class="toolbar">
         <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
+        ${archiveButtons(c)}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
     </div>
@@ -725,7 +731,7 @@ async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
   const [c, allCases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
-  const cases = allCases.filter(caseShownInClients);
+  const cases = allCases;
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -736,6 +742,7 @@ async function renderClienteFicha(id) {
       <h2>${escapeHtml(c.full_name)}</h2>
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
+        ${archiveButtons(c)}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
@@ -743,6 +750,7 @@ async function renderClienteFicha(id) {
       </div>
     </div>
     <div class="ficha-chips">
+      ${archiveBadge(c)}
       <span class="chip-stat">Expedientes <strong>${cases.length}</strong></span>
       <span class="chip-stat">Activos <strong>${active}</strong></span>
       ${pay ? `<span class="chip-stat">Honorarios <strong>${cop(pay.billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(pay.received)}</strong></span>
@@ -1247,6 +1255,8 @@ async function renderClientes() {
   await renderClientDetail();
 }
 
+// Inicio's «Clientes con Casos de Éxito!» links open Clientes already on that archive view.
+document.addEventListener("click", (e) => { const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView; });
 $("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
@@ -1288,7 +1298,7 @@ async function openClientMenu(anchor, clientId) {
   placeClientMenu(pop, anchor);
   const [c, allCases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
   if (clientMenu !== pop) return;
-  const cases = allCases.filter(caseShownInClients);
+  const cases = allCases;
   const doc = [c.person_type === "juridica" ? "NIT" : c.id_type, c.id_number].filter(Boolean).join(" ");
   pop.innerHTML = `
     <div class="cm-head"><strong>${escapeHtml(c.full_name)}</strong><button type="button" class="cm-close" aria-label="Cerrar">✕</button></div>
@@ -2773,6 +2783,20 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
+    "archive-client": async () => {
+      const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
+      const to = btn.dataset.to || "";
+      const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
+      const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
+      const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
+        : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede devolverlo a activos cuando quiera.`;
+      if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Enviar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: to ? "Archivar" : "Devolver" }))) return; }
+      await api("PUT", `/clients/${id}/archive`, { status: to });
+      toast(to ? `Cliente enviado a ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
+      await loadClients();
+      if (location.hash === "#clientes") state.selectedClientId = null; // it left this list
+      await refreshView();
+    },
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
@@ -3562,7 +3586,9 @@ async function renderInicio() {
   ]);
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
-  $("#kpi-clients").textContent = clients.length;
+  $("#kpi-clients").textContent = clients.filter((c) => !c.archive_status).length; // version 2.87: only activos
+  const nProv = clients.filter((c) => c.archive_status === "Archivo provisional").length, nDef = clients.filter((c) => c.archive_status === "Archivo definitivo").length;
+  $("#kpi-success").textContent = nProv + nDef; $("#kpi-success-prov").textContent = nProv; $("#kpi-success-def").textContent = nDef;
   $("#kpi-open").textContent = cases.filter((k) => OPEN_STATUSES.has(k.status)).length;
   $("#kpi-total").textContent = `de ${cases.length} en total`;
   $("#kpi-due").textContent = tasks.filter((t) => t.due_at <= in7).length;
