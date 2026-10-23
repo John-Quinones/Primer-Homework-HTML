@@ -159,8 +159,9 @@ const VIEW_PERMS = {
 
 // Only Gerencia deletes (change 24); every delete button carries data-action="delete-…" or data-jact="delete-…".
 const isGerencia = () => me?.role === "Gerencia";
-// Gerencia-only permissions (src/auth.js GERENCIA_ONLY): deleting, creating process types, sub-processes and fields, and managing templates.
-const GERENCIA_PERMS = ["clients.delete", "cases.delete", "catalog.manage", "templates.manage"];
+// Gerencia-only permissions (src/auth.js GERENCIA_ONLY): deleting, creating process types, sub-processes and fields.
+// Managing templates (templates.manage) is Gerencia's and the Director Jurídico's (version 2.2.32).
+const GERENCIA_PERMS = ["clients.delete", "cases.delete", "catalog.manage"];
 
 // What each shortcut of the side menu does (shown under its name, and as a tooltip).
 const NAV_DESC = {

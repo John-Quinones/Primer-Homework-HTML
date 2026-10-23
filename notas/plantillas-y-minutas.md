@@ -10,7 +10,8 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - En procesos penales se omite la línea «Proceso … Radicación No. …» (`{{#expediente.proceso_linea}}`).
 
 ## Quién hace qué
-- Crear o cambiar plantillas, tipos de proceso, campos y funciones es SOLO de Gerencia (el administrador).
+- Crear tipos de proceso, campos y funciones es SOLO de Gerencia (el administrador).
+- Plantillas de documentos (v2.2.32, John 23/10/2026): el Director Jurídico también sube, descarga, reemplaza y crea plantillas (permiso `templates.manage`; Gerencia lo conserva siempre). Eliminar una plantilla sigue siendo solo de Gerencia (todo borrado). Servidor: `DEFAULT_MATRIX` + `grantTemplatesToDirector` (`src/db.js`, una vez, con copia previa; solo agrega la fila, no quita nada); enlace: `migrate` en `public/demo-backend.js` (`info.templatesDirector`). Gerencia puede quitárselo en Usuarios › Roles y no se vuelve a dar.
 - Las plantillas nuevas se entregan como .docx para que John (Gerencia) las cargue en Documentos. No se siembran en la base.
 - No convertir las plantillas Word a otro formato: pierden el formato.
 
