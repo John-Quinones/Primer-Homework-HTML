@@ -6998,6 +6998,25 @@ function monyCard(c) {
   }
   return d;
 }
+// Mony's face turns toward where the person looks (version 2.2.10): a gentle 3D tilt that follows the pointer.
+// A camera head-tracker can feed the same function (monyLook) later; nothing is recorded or sent anywhere.
+const monyFace = () => document.querySelector(".mony-id img");
+function monyLook(x, y) { // x, y in -1 … 1 (left/up negative)
+  const img = monyFace();
+  if (!img) return;
+  img.style.transform = `perspective(300px) rotateY(${(x * 24).toFixed(1)}deg) rotateX(${(-y * 18).toFixed(1)}deg) translate(${(x * 3).toFixed(1)}px, ${(y * 2).toFixed(1)}px)`;
+}
+const monyReduce = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+document.addEventListener("pointermove", (e) => {
+  if (monyReduce?.matches || $("#view-mony").hidden) return;
+  const img = monyFace();
+  if (!img) return;
+  const r = img.getBoundingClientRect();
+  const dx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
+  const dy = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
+  monyLook(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
+});
+
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;

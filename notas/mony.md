@@ -11,3 +11,5 @@
 - Pendiente (no hecho): tools que escriban (crear tarea, guardar borrador) con botón de confirmación; subir PDF de providencia; historial en el servidor (hoy por usuario en el navegador).
 
 - v2.2.9: etiquetas de estado por herramienta (running/ok/error) y tarjetas de acción (`cardFor` en mony.js: término con cuenta regresiva, abrir expediente, descargar borrador .txt). Las tarjetas no ejecutan nada por sí solas. Paleta del chat: #0F172A + cian.
+
+- v2.2.10: avatar de Mony = `public/mony-avatar.png` (rostro de partículas luminosas; imagen elegida por John, 23/10/2026). Regla de John: NO cambiar los colores de la App; solo el agente Mony usa la paleta #0F172A + cian.
