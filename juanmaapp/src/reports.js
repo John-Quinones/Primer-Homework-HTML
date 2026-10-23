@@ -55,7 +55,7 @@ export function reportsRouter(db) {
     let columns, rows;
 
     if (type === "clientesestado") {
-      // Version 2.2.21: clients by their own state (clients.archive_status; '' = Activo). Folders of all their cases come as
+      // Version 2.2.22: clients by their own state (clients.archive_status; '' = Activo). Folders of all their cases come as
       // text; the page orders by the lowest one (folderListing logic) and writes them sorted.
       if (sc !== null) {
         const ph = sc.map(() => "?").join(",") || "NULL";
@@ -81,7 +81,7 @@ export function reportsRouter(db) {
         FROM clients c LEFT JOIN offices o ON o.id = c.office_id ${W()} ORDER BY c.id`).all(...params)
         .map(({ id, ...row }) => ({ ...row, folder: (byClient.get(id) || []).join(", ") }));
     } else if (type === "carpetas") {
-      // Version 2.2.21: one row per case with its "No. Carpeta" (the page sorts them numerically and applies the range).
+      // Version 2.2.22: one row per case with its "No. Carpeta" (the page sorts them numerically and applies the range).
       inOffices("k.office_id");
       statusFilter("k.status");
       if (q.assignedUserId) { where.push("k.assigned_user_id = ?"); params.push(Number(q.assignedUserId)); }

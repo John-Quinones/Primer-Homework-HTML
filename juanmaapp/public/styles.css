@@ -1245,6 +1245,7 @@ dialog:not([open]) { pointer-events: none; }
 .client-bar { flex: 1 1 100%; }
 .client-bar .sp { flex: 1; }
 #client-archive { min-width: 14rem; }
+#client-order { min-width: 12rem; }
 
 /* ---------- Inicio: banda de clima, emisoras y noticias (version 2.2.7) ---------- */
 .banda { margin: 0 0 16px; padding: 12px; border-radius: 16px; background: var(--command-tile); border: 1px solid rgba(255, 255, 255, .12); }
