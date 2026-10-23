@@ -52,7 +52,7 @@ export function normalizeRadicado(r) {
 
 export const AREAS = [
   "Civil", "Laboral", "Penal", "Familia", "Administrativo", "Promiscuo", "Ejecución de Penas",
-  "Pequeñas Causas y Competencia Múltiple", "Restitución de Tierras", "Penal para Adolescentes", "Constitucional", "Otro", "Otros",
+  "Pequeñas Causas y Competencia Múltiple", "Restitución de Tierras", "Penal para Adolescentes", "Constitucional", "Comercial", "Agrario", "Tributario", "Disciplinario", "Ambiental", "Otro", "Otros",
 ];
 
 // Order matters: the most specific wording wins.
@@ -62,6 +62,11 @@ const AREA_RULES = [
   [/restitucion de tierras/, "Restitución de Tierras"],
   [/adolescente/, "Penal para Adolescentes"],
   [/administrativ|contencioso/, "Administrativo"],
+  [/comercial|mercantil|sociedades/, "Comercial"],
+  [/agrari/, "Agrario"],
+  [/tributari|fiscal|impuestos/, "Tributario"],
+  [/disciplinari/, "Disciplinario"],
+  [/ambiental/, "Ambiental"],
   [/laboral/, "Laboral"],
   [/familia/, "Familia"],
   [/promiscuo/, "Promiscuo"],
