@@ -26,3 +26,5 @@ Para no releer todo el código cada vez (regla de John, 19/10/2026). Leer esta n
 
 - v2.98 (pedido de John 23/10/2026): cuarto estado «Pendiente Pago Sentencia» (`PPS` en `src/case-meta.js`, `statusFrom`/`normStatus`; el cliente lo guarda en `archive_status`, `CLIENT_ARCHIVE_STATES`). Sin columna nueva ni migración. Es solo del cliente/expediente: no cuenta como activo ni como «Casos de Éxito»; `activeClients()` lo oculta de los buscadores de otros módulos. Inicio: `#kpi-pps-tile` (`data-case-status` abre Expedientes con ese estado). Importar: `archiveState` e `IMP.archiveState`, aviso `#import-state-warnings`.
 - v2.101 (elección de John 23/10/2026, propuesta «C»): el estado del cliente se cambia con `clientStateSelect(c)` (`[data-client-state]`, `changeClientState`) en `public/app.js`; reemplaza los botones `archive-client` de la 2.94. Mismas reglas: definitivo solo Gerencia, aviso si hay expedientes activos.
+
+- Orden (v2.2.17): clientes se listan por la carpeta más baja de sus expedientes (`clientsByFolder`); ver notas/expedientes.md.

@@ -83,6 +83,18 @@ const caseFolder = (k) => {
   }
   return "";
 };
+// Version 2.2.17: every list of cases and clients is shown in NUMERIC folder order (1, 2, 3 … 10, 11), never alphabetical.
+// Cases without a folder go last (by id); a client takes the lowest folder of its cases, clients without cases go last (by name).
+// Display order only: nothing is saved or changed.
+const folderNum = (k) => { const n = parseInt(String(caseFolder(k)).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : Infinity; };
+const cmpFolder = (a, b) => { const x = folderNum(a), y = folderNum(b); return x === y ? a.id - b.id : x < y ? -1 : 1; };
+const casesByFolder = (list) => [...list].sort(cmpFolder);
+const clientsByFolder = (list, cases = state.cases) => {
+  const low = new Map();
+  for (const k of cases) low.set(k.client_id, Math.min(low.get(k.client_id) ?? Infinity, folderNum(k)));
+  const n = (c) => low.get(c.id) ?? Infinity;
+  return [...list].sort((a, b) => (n(a) === n(b) ? 0 : n(a) < n(b) ? -1 : 1) || String(a.full_name).localeCompare(String(b.full_name), "es"));
+};
 /** «Asignar carpeta» / «Editar carpeta» (version 2.18), for whoever can edit cases. */
 const folderButton = (k, cls = "mini") => can("cases.write")
   ? `<button type="button" class="${cls}" data-action="edit-folder" data-id="${k.id}" data-folder="${escapeHtml(caseFolder(k))}">${caseFolder(k) ? "Editar carpeta" : "Asignar carpeta"}</button>` : "";
@@ -666,7 +678,7 @@ function renderClientList() {
   const byClient = new Map();
   for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
   const f = clientArchiveFilter();
-  const shown = state.clients.filter((c) => (c.archive_status || "") === f);
+  const shown = clientsByFolder(state.clients.filter((c) => (c.archive_status || "") === f));
   const others = CLIENT_ARCHIVE.map((st) => [st, state.clients.filter((c) => c.archive_status === st).length]);
   const note = $("#client-archive-note");
   if (note) note.textContent = f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
@@ -759,7 +771,7 @@ async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
   box.innerHTML = '<p class="muted">Cargando…</p>';
   const [c, allCases, consents] = await Promise.all([api("GET", `/clients/${id}`), api("GET", `/cases?clientId=${id}`), api("GET", `/clients/${id}/consents`).catch(() => null), loadCatalog()]);
-  const cases = allCases;
+  const cases = casesByFolder(allCases);
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
@@ -801,7 +813,7 @@ async function renderClienteFicha(id) {
       ${cases.length ? `<section id="sec-carpetas" class="panel ficha-wide">
         <h3 class="panel-title">Números de carpeta <span class="count">${cases.filter((k) => caseFolder(k)).length} de ${cases.length}</span></h3>
         <p class="hint">Cada expediente tiene su número de carpeta. Asígnelo o corríjalo aquí: la App avisa si el número ya está en otro expediente y sugiere el siguiente libre.</p>
-        <table class="data-table compact folder-table"><thead><tr><th>Carpeta</th><th>Expediente</th><th>Estado</th><th></th></tr></thead><tbody>${[...cases].sort((a, b) => a.id - b.id).map((k) => `<tr>
+        <table class="data-table compact folder-table"><thead><tr><th>Carpeta</th><th>Expediente</th><th>Estado</th><th></th></tr></thead><tbody>${cases.map((k) => `<tr>
           <td>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span>` : '<span class="muted">Sin asignar</span>'}</td>
           <td><strong>${escapeHtml(k.type_name)}</strong>${k.title ? `<br><span class="muted">${escapeHtml(k.title)}</span>` : ""}${k.radicado ? `<br><span class="muted">${escapeHtml(formatRadicado(k.radicado))}</span>` : ""}</td>
           <td>${escapeHtml(k.status)}</td><td class="folder-act">${folderButton(k, caseFolder(k) ? "mini" : "mini primary")}</td></tr>`).join("")}</tbody></table>
@@ -1357,7 +1369,7 @@ async function openClientMenu(anchor, clientId) {
   placeClientMenu(pop, anchor);
   const [c, allCases] = await Promise.all([api("GET", `/clients/${clientId}`), api("GET", `/cases?clientId=${clientId}`)]);
   if (clientMenu !== pop) return;
-  const cases = allCases;
+  const cases = casesByFolder(allCases);
   const doc = [c.person_type === "juridica" ? "NIT" : c.id_type, c.id_number].filter(Boolean).join(" ");
   pop.innerHTML = `
     <div class="cm-head"><strong>${escapeHtml(c.full_name)}</strong><button type="button" class="cm-close" aria-label="Cerrar">✕</button></div>
@@ -1878,7 +1890,7 @@ function renderCaseRows() {
   const matches = (k) => !q || [caseFolder(k), k.case_number, k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const court = $("#case-court").value, status = $("#case-status").value, adLitem = $("#case-adlitem").checked;
-  const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
+  const rows = casesByFolder(casesByPlace()).filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
     && (!mine || k.assigned_user_id === me.id) && (status === "todos" || (status ? k.status === status : !ARCHIVED_STATUSES.has(k.status))) && (!adLitem || k.ad_litem)
     && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) || (!k.court_id && directoryCourt(k)?.id === Number(court.slice(3))) : k.court_name === court.slice(2)))
     && matches(k));
@@ -1929,7 +1941,6 @@ function renderRadRows() {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const q = flat($("#rad-search").value.trim()), qDigits = q.replace(/\D/g, "");
   const show = $("#rad-filter").value, officeId = Number($("#rad-office").value) || null;
-  const folderNum = (k) => { const n = parseInt(caseFolder(k).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : Infinity; };
   const rows = state.cases.filter((k) => (!officeId || k.office_id === officeId)
     && (show !== "missing" || !k.radicado) && (show !== "done" || k.radicado)
     && (!q || [caseFolder(k), k.client_name, k.title, k.type_name, k.court_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
@@ -2384,7 +2395,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id ?? clientId).map(clientOption).join("");
+  caseForm.elements.client_id.innerHTML = clientsByFolder(activeClients(state.clients, k?.client_id ?? clientId)).map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -2416,7 +2427,7 @@ async function openCaseDialog(k = null, clientId = null) {
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
   partyRows = (k?.parties || []).map((p) => ({ ...p }));
-  $("#party-clients").innerHTML = activeClients(state.clients).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
+  $("#party-clients").innerHTML = clientsByFolder(activeClients(state.clients)).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
   renderParties();
 }
 
@@ -3672,6 +3683,7 @@ async function renderInicio() {
     api("GET", `/tasks?status=pendiente&to=${encodeURIComponent(in14)}`),
     can("processes.consult") ? api("GET", "/monitor/cases") : Promise.resolve(null),
   ]);
+  state.catalog = catalog; // «No. Carpeta» is read from it to order the cards by folder
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
   $("#kpi-pps-clients").textContent = clients.filter((c) => c.archive_status === "Pendiente Pago Sentencia").length; // version 2.2.5
@@ -3701,7 +3713,7 @@ async function renderInicio() {
       <span class="hbar-value">${c.n}</span>
     </div>`).join("") || '<p class="empty">Sin expedientes todavía.</p>';
 
-  $("#recent-cases").innerHTML = cases.slice(0, 6).map((k) => `
+  $("#recent-cases").innerHTML = casesByFolder(cases.slice(0, 6)).map((k) => `
     <li>
       <span class="pill">${escapeHtml(k.category_name)}</span>
       <div><strong>${escapeHtml(k.client_name)}</strong><span>${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</span></div>
@@ -6521,8 +6533,9 @@ async function renderPagos() {
   const clientId = $("#pay-client").value;
   const [sum, clients] = await Promise.all([api("GET", "/payments/summary"), api("GET", "/clients")]);
   payClients = clients;
+  if (!state.cases.length) await Promise.all([loadCatalog(), loadCases()]).catch(() => {}); // folder order of the client list
   const sel = $("#pay-client");
-  sel.innerHTML = '<option value="">Todos los clientes</option>' + activeClients(clients).map(clientOption).join("");
+  sel.innerHTML = '<option value="">Todos los clientes</option>' + clientsByFolder(activeClients(clients)).map(clientOption).join("");
   sel.value = clientId;
   $("#pay-balance").textContent = cop(sum.totals.balance);
   $("#pay-overdue").textContent = cop(sum.totals.overdue);
@@ -6613,7 +6626,7 @@ window.JuanmaCombo.searchSelect(chargeForm.elements.client_id);
 async function fillClientSelect(select, selected) {
   if (!payClients.length) payClients = await api("GET", "/clients");
   if (!payClients.length) throw new Error("Primero cree un cliente.");
-  select.innerHTML = activeClients(payClients, Number(selected)).map(clientOption).join("");
+  select.innerHTML = clientsByFolder(activeClients(payClients, Number(selected))).map(clientOption).join("");
   // defaultSelected: openDialog resets the form, and the client chosen in Pagos must survive it.
   const opt = selected && [...select.options].find((o) => o.value === String(selected));
   if (opt) { opt.defaultSelected = true; select.value = opt.value; }
