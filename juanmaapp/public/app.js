@@ -7052,6 +7052,9 @@ function monyCard(c) {
   } else if (c.type === "proceso") {
     d.append(head(c.title || "Proceso", `Radicado ${c.radicado}`));
     if (c.caseId) { const a = document.createElement("a"); a.className = "mini"; a.href = `#expediente-${c.caseId}`; a.textContent = "Abrir expediente"; d.append(a); }
+  } else if (c.type === "expediente") {
+    d.append(head(c.title, c.pending === null ? "Expediente encontrado" : c.pending ? `${c.pending} pendiente(s)` : "Sin tareas pendientes"));
+    const a = document.createElement("a"); a.className = "mini"; a.href = `#expediente-${c.caseId}`; a.textContent = "Abrir expediente"; d.append(a);
   } else if (c.type === "borrador") {
     d.append(head(c.title, "Plantilla de la firma cargada"));
   } else if (c.type === "descarga") {
@@ -7325,7 +7328,7 @@ function renderMony() {
   monyLoad();
   const log = $("#mony-log");
   log.replaceChildren();
-  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo consultar un proceso en la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
+  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo buscar los expedientes de un cliente o por número de carpeta, rendir el informe de un proceso con sus pendientes, consultar la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
   for (const m of monyMsgs) { const b = monyBubble(m.role, m.content); if (m.role === "assistant") monyActions(b); }
   monyVoiceUi();
 }
@@ -7356,6 +7359,8 @@ $("#mony-form").addEventListener("submit", (e) => {
           t.className = `mony-tag mony-tag-${ev.status}`;
           const what = { consultar_estado_proceso: ["Conectando a la Rama Judicial…", "Rama Judicial consultada", "Rama Judicial no respondió"],
             calcular_terminos_legales: ["Calculando términos…", "Términos calculados", "No se pudo calcular el término"],
+            buscar_expedientes: ["Buscando expedientes…", "Expedientes consultados", "No se pudo buscar"],
+            informe_expediente: ["Armando el informe…", "Informe del expediente listo", "No se pudo armar el informe"],
             redactar_plantilla_memorial: ["Cargando plantilla…", "Plantilla cargada", "No se pudo cargar la plantilla"] }[ev.name] || [ev.name, ev.name, ev.name];
           t.textContent = (ev.status === "ok" ? "✓ " : ev.status === "error" ? "✕ " : "") + what[{ running: 0, ok: 1, error: 2 }[ev.status]];
           if (ev.card) { cards.append(monyCard(ev.card)); if (ev.card.type === "borrador") drafted = ev.card; }
