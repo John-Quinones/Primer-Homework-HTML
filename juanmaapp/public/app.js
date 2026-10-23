@@ -678,17 +678,35 @@ function renderClientList() {
     </button></li>`).join("");
 }
 
-// Buttons to send a client to archive or back to activos (needs clients.write); «definitivo» asks first.
-const archiveButtons = (c) => {
-  if (!can("clients.write")) return "";
-  const btn = (to, label) => `<button data-action="archive-client" data-id="${c.id}" data-to="${to}">${label}</button>`;
-  const final = isGerencia(); // «Archivo definitivo» (to or from) is only for the administrator (user's rule, 2.94)
-  const cur = c.archive_status || "";
-  if (cur === "Archivo definitivo" && !final) return "";
-  return (cur ? btn("", "Devolver a activos") : "") + CLIENT_ARCHIVE.filter((st) => st !== cur && (final || st !== "Archivo definitivo"))
-    .map((st) => btn(st, cur ? `Pasar a ${st.toLowerCase()}` : st)).join("");
-};
-const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
+// Version 2.99 (user's choice «C»): one «Estado» selector instead of a button per state (needs clients.write).
+// «Archivo definitivo» (to or from) is only for the administrator (2.94 rule); moving a client with active cases asks first.
+const CLIENT_STATES = ["", ...CLIENT_ARCHIVE];
+function clientStateSelect(c) {
+  const cur = c.archive_status || "", gerencia = isGerencia();
+  const locked = !can("clients.write") || (cur === "Archivo definitivo" && !gerencia);
+  return `<label class="state-sel">Estado <select data-client-state="${c.id}" ${locked ? "disabled" : ""}>${CLIENT_STATES.map((st) =>
+    `<option value="${st}" ${st === cur ? "selected" : ""} ${st === "Archivo definitivo" && !gerencia && cur !== st ? "disabled" : ""}>${st || "Activo"}</option>`).join("")}</select></label>`;
+}
+async function changeClientState(id, to) {
+  const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
+  const open = to ? (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length : 0;
+  const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
+  const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
+    : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede cambiarlo cuando quiera.`;
+  if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Pasar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: "Cambiar estado" }))) return false; }
+  await api("PUT", `/clients/${id}/archive`, { status: to });
+  toast(to ? `Cliente en ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
+  await loadClients();
+  if (location.hash === "#clientes" && (clientArchiveFilter() || "") !== to) state.selectedClientId = null; // it left this list
+  await refreshView();
+  return true;
+}
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest?.("[data-client-state]");
+  if (!sel) return;
+  const prev = state.clients.find((x) => x.id === Number(sel.dataset.clientState))?.archive_status || "";
+  guarded(async () => { if (!(await changeClientState(Number(sel.dataset.clientState), sel.value))) sel.value = prev; });
+});
 
 async function renderClientDetail() {
   const box = $("#client-detail");
@@ -701,13 +719,14 @@ async function renderClientDetail() {
   const row = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
   box.innerHTML = `
     <div class="detail-head">
-      <h3>${escapeHtml(c.full_name)} ${archiveBadge(c)}</h3>
-      <div class="toolbar">
+      <h3>${escapeHtml(c.full_name)}</h3>
+      ${clientStateSelect(c)}
+      <div class="toolbar client-bar">
         <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
+        <span class="sp"></span>
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
-        ${archiveButtons(c)}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
     </div>
@@ -746,9 +765,9 @@ async function renderClienteFicha(id) {
     <nav class="crumbs"><a href="#clientes">← Clientes</a></nav>
     <div class="view-head">
       <h2>${escapeHtml(c.full_name)}</h2>
+      ${clientStateSelect(c)}
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
-        ${archiveButtons(c)}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
@@ -756,7 +775,6 @@ async function renderClienteFicha(id) {
       </div>
     </div>
     <div class="ficha-chips">
-      ${archiveBadge(c)}
       <span class="chip-stat">Expedientes <strong>${cases.length}</strong></span>
       <span class="chip-stat">Activos <strong>${active}</strong></span>
       ${pay ? `<span class="chip-stat">Honorarios <strong>${cop(pay.billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(pay.received)}</strong></span>
@@ -2831,20 +2849,6 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
-    "archive-client": async () => {
-      const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
-      const to = btn.dataset.to || "";
-      const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
-      const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
-      const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
-        : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede devolverlo a activos cuando quiera.`;
-      if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Enviar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: to ? "Archivar" : "Devolver" }))) return; }
-      await api("PUT", `/clients/${id}/archive`, { status: to });
-      toast(to ? `Cliente enviado a ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
-      await loadClients();
-      if (location.hash === "#clientes") state.selectedClientId = null; // it left this list
-      await refreshView();
-    },
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;

@@ -1233,3 +1233,11 @@ dialog:not([open]) { pointer-events: none; }
 .ico-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .ico-btn.danger { color: var(--error, #b3261e); }
 @media (max-width: 560px) { .case-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); } #case-rows .row-actions { min-width: 0; } }
+
+/* Version 2.99: client state selector and bar (user's choice «C»). */
+.state-sel { display: inline-flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted, #5d6b85); }
+.state-sel select { width: auto; min-width: 12rem; font-weight: 600; }
+.detail-head { flex-wrap: wrap; }
+.client-bar { flex: 1 1 100%; }
+.client-bar .sp { flex: 1; }
+#client-archive { min-width: 14rem; }
