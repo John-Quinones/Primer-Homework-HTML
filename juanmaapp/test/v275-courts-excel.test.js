@@ -41,3 +41,18 @@ test("«Cartagena» in the file is the municipality «Cartagena de Indias»; a c
   const list = (await admin.call("GET", `/courts?${new URLSearchParams({ department: "Bolívar", city: "Cartagena de Indias", area: "Civil" })}`)).body;
   assert.ok(list.some((x) => x.name === one.name));
 });
+
+test("every area of law is configured: the area column is read from «Corporación o Área» or from the court's name", async () => {
+  const mk = (name, area) => ({ name: `${name} de Cartagena`, department: "Bolívar", city: "Cartagena", area });
+  await admin.call("POST", "/courts/import", { rows: [
+    mk("Juzgado 001 Comercial", "Comercial"), mk("Juzgado 001 Agrario", ""), mk("Tribunal Administrativo", "Contencioso Administrativo"),
+    mk("Juzgado 004 Laboral", "Laboral"), mk("Juzgado de Ejecución de Penas", ""), mk("Sala Disciplinaria", ""),
+  ] });
+  const by = async (n) => (await admin.call("GET", `/courts?q=${encodeURIComponent(n)}`)).body[0].area;
+  assert.equal(await by("001 Comercial"), "Comercial");
+  assert.equal(await by("001 Agrario"), "Agrario");
+  assert.equal(await by("Tribunal Administrativo"), "Administrativo");
+  assert.equal(await by("004 Laboral"), "Laboral");
+  assert.equal(await by("Ejecución de Penas"), "Ejecución de Penas");
+  assert.equal(await by("Disciplinaria"), "Disciplinario");
+});
