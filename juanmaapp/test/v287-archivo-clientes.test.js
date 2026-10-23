@@ -124,3 +124,8 @@ test("version 2.96: «Pendiente Pago Sentencia» is a fourth status for cases an
   assert.equal(archiveState("Activo"), "");
   assert.equal(archiveState("quién sabe"), undefined);
 });
+
+test("version 2.97: a case waiting for its sentence payment stays among the monitored statuses", async () => {
+  const { LIVE_STATUSES } = await import("../src/case-meta.js");
+  assert.ok(LIVE_STATUSES.includes("Pendiente Pago Sentencia"));
+});

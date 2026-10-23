@@ -4,7 +4,7 @@
 export const PPS = "Pendiente Pago Sentencia"; // version 2.96: the sentence is won and waits for its payment
 export const STATUSES = ["Activo", "Archivo provisional", "Archivo definitivo", PPS];
 // Statuses that still move: monitored and counted as "en curso".
-export const LIVE_STATUSES = ["Activo", "Archivo provisional"];
+export const LIVE_STATUSES = ["Activo", "Archivo provisional", PPS]; // version 2.97: a sentence waiting for its payment is still monitored
 
 const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
