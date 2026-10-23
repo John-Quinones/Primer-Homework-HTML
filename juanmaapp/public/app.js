@@ -6971,6 +6971,33 @@ function monyBubble(role, text) {
   d.scrollIntoView({ block: "end" });
   return d;
 }
+// Action cards (version 2.2.8): each one only shows or opens something; the person decides to click.
+function monyCard(c) {
+  const d = document.createElement("div");
+  d.className = `mony-card mony-card-${c.type}`;
+  const head = (t, sub) => { const b = document.createElement("div"); const s1 = document.createElement("b"); s1.textContent = t; const s2 = document.createElement("small"); s2.textContent = sub; b.append(s1, s2); return b; };
+  if (c.type === "termino") {
+    const n = document.createElement("div"); n.className = "mony-count";
+    n.textContent = c.daysLeft >= 0 ? String(c.daysLeft) : "!";
+    const u = document.createElement("small"); u.textContent = c.daysLeft === 0 ? "hoy" : c.daysLeft < 0 ? "vencido" : c.daysLeft === 1 ? "día" : "días"; n.append(u);
+    d.classList.toggle("mony-urgent", c.daysLeft <= 1);
+    d.append(n, head(c.title, `Vence ${c.weekday} ${c.date}`));
+  } else if (c.type === "proceso") {
+    d.append(head(c.title || "Proceso", `Radicado ${c.radicado}`));
+    if (c.caseId) { const a = document.createElement("a"); a.className = "mini"; a.href = `#expediente-${c.caseId}`; a.textContent = "Abrir expediente"; d.append(a); }
+  } else if (c.type === "borrador") {
+    d.append(head(c.title, "Plantilla de la firma cargada"));
+  } else if (c.type === "descarga") {
+    d.append(head("Borrador de Mony", c.title));
+    const a = document.createElement("button"); a.type = "button"; a.className = "mini"; a.textContent = "Descargar (.txt)";
+    a.addEventListener("click", () => {
+      const url = URL.createObjectURL(new Blob([c.text], { type: "text/plain;charset=utf-8" }));
+      const l = document.createElement("a"); l.href = url; l.download = "borrador-mony.txt"; l.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+    });
+    d.append(a);
+  }
+  return d;
+}
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;
@@ -6998,14 +7025,29 @@ $("#mony-form").addEventListener("submit", (e) => {
     monyBubble("user", text);
     const bubble = monyBubble("assistant", "Mony está escribiendo…");
     bubble.classList.add("mony-typing");
-    let answer = "";
+    const tags = document.createElement("div"); tags.className = "mony-tags";
+    const cards = document.createElement("div"); cards.className = "mony-cards";
+    bubble.before(tags); bubble.after(cards);
+    const tagOf = new Map();
+    let answer = "", drafted = null;
     try {
       for await (const ev of httpBackend.generate({ messages: monyMsgs.slice(-MONY_MAX) }, "/api/mony/chat")) {
         if (ev.type === "text") { answer += ev.text; bubble.classList.remove("mony-typing"); bubble.textContent = answer; bubble.scrollIntoView({ block: "end" }); }
-        else if (ev.type === "tool" && ev.status === "running" && !answer) bubble.textContent = `Mony está consultando (${ev.name.replace(/_/g, " ")})…`;
+        else if (ev.type === "tool") {
+          let t = tagOf.get(ev.name);
+          if (!t) { t = document.createElement("span"); tagOf.set(ev.name, t); tags.append(t); }
+          t.className = `mony-tag mony-tag-${ev.status}`;
+          const what = { consultar_estado_proceso: ["Conectando a la Rama Judicial…", "Rama Judicial consultada", "Rama Judicial no respondió"],
+            calcular_terminos_legales: ["Calculando términos…", "Términos calculados", "No se pudo calcular el término"],
+            redactar_plantilla_memorial: ["Cargando plantilla…", "Plantilla cargada", "No se pudo cargar la plantilla"] }[ev.name] || [ev.name, ev.name, ev.name];
+          t.textContent = (ev.status === "ok" ? "✓ " : ev.status === "error" ? "✕ " : "") + what[{ running: 0, ok: 1, error: 2 }[ev.status]];
+          if (ev.card) { cards.append(monyCard(ev.card)); if (ev.card.type === "borrador") drafted = ev.card; }
+          if (!answer && ev.status === "running") bubble.textContent = "Mony está trabajando…";
+        }
         else if (ev.type === "error") throw new Error(ev.error);
         else if (ev.type === "done" && ev.truncated) bubble.textContent = answer + "\n\n(La respuesta quedó incompleta; pida a Mony que continúe.)";
       }
+      if (drafted && answer) cards.append(monyCard({ type: "descarga", title: drafted.title, text: answer }));
       if (answer) { monyMsgs.push({ role: "assistant", content: answer }); monySave(); } else { monyMsgs.pop(); monySave(); bubble.textContent = "Mony no devolvió respuesta. Intente de nuevo."; }
     } catch (err) {
       monyMsgs.pop(); monySave(); input.value = text;

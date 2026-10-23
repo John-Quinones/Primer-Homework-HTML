@@ -9,3 +9,5 @@
 - Calendario judicial (`terms.js`): no cuentan sábados, domingos, festivos (Ley 51/1983, Emiliani, Semana Santa) ni vacancia 20 dic–10 ene (se puede desactivar, p. ej. tutela). El conteo empieza el día siguiente a la fecha dada. El abogado confirma siempre contra el calendario del despacho.
 - El enlace de pruebas no llama APIs externas: la vista muestra un botón a la App de Azure (como Jurisprudencia).
 - Pendiente (no hecho): tools que escriban (crear tarea, guardar borrador) con botón de confirmación; subir PDF de providencia; historial en el servidor (hoy por usuario en el navegador).
+
+- v2.2.9: etiquetas de estado por herramienta (running/ok/error) y tarjetas de acción (`cardFor` en mony.js: término con cuenta regresiva, abrir expediente, descargar borrador .txt). Las tarjetas no ejecutan nada por sí solas. Paleta del chat: #0F172A + cian.
