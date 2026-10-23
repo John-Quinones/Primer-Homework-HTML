@@ -208,6 +208,17 @@ Mony puede mostrar los eventos de Google Calendar y avisar si una audiencia nuev
 
 Si un enlace se filtra, en Google se restablece la dirección secreta y se pega la nueva.
 
+## 10. Google Calendar con crear y mover eventos (OAuth)
+
+Con esto Mony puede proponer crear, mover o eliminar eventos en Google Calendar; solo se ejecutan cuando usted pulsa **Confirmar**. Solo lo usa Gerencia.
+
+1. Entre a console.cloud.google.com con egrpanama@gmail.com → **Nuevo proyecto** (nombre: TecjuridicosApp).
+2. **APIs y servicios → Biblioteca** → busque **Google Calendar API** → **Habilitar**.
+3. **APIs y servicios → Pantalla de consentimiento de OAuth** → tipo **Externo** → nombre de la app TecjuridicosApp, su correo de soporte. En **Usuarios de prueba** agregue egrpanama@gmail.com y tecjuridicos01@gmail.com. Para que la conexión no caduque a los 7 días, pulse **Publicar la app** (pasar a producción); Google mostrará un aviso de "app no verificada" que usted puede aceptar con **Avanzado → Continuar**.
+4. **Credenciales → Crear credenciales → ID de cliente de OAuth** → tipo **Aplicación web**. En **URI de redireccionamiento autorizados** ponga exactamente: `https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net/api/gcal/callback`. Copie el **ID de cliente** y el **Secreto**.
+5. En Azure → **Variables de entorno** agregue: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GCAL_TOKEN_KEY` (una frase larga y aleatoria, de 32 o más caracteres; cifra las llaves guardadas; no la cambie después). **Aplicar** y **Confirmar**.
+6. En la App: **Configuración → Google Calendar → Conectar Google**, elija la cuenta y acepte. Repita con la segunda cuenta. «Desconectar» borra la llave guardada.
+
 ## Datos y copias de seguridad
 
 - La base de datos queda en `/home/data/juanmaapp.db`, en el almacenamiento permanente de la app. No se borra al reiniciar ni al publicar versiones nuevas.

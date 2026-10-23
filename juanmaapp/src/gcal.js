@@ -2,6 +2,8 @@
 // (Google Calendar → Settings → "Secret address in iCal format") so it can list the events and warn about overlaps.
 // The addresses are secrets and live only in the server's environment: GCAL_ICAL_URLS="Name|https://calendar.google.com/…/basic.ics, …".
 // Only https://calendar.google.com addresses are fetched. Nothing is ever written to Google.
+import { oauthEvents, accounts as oauthAccounts, oauthReady } from "./gcal-oauth.js";
+
 const TTL_MS = 5 * 60 * 1000;
 const TIMEOUT_MS = 8000;
 let fetchImpl = (url, opts) => fetch(url, opts);
@@ -131,12 +133,19 @@ async function load(feed) {
   return events;
 }
 
-/** Events of every configured calendar between two Bogotá wall-clock strings; { configured, events, errors }. Never throws. */
-export async function googleEvents(fromLocal, toLocal) {
+/**
+ * Events of every Google calendar the server can read — connected accounts (OAuth, with ids so they can be changed)
+ * plus secret iCal addresses (read only) — between two Bogotá wall-clock strings; { configured, events, errors }. Never throws.
+ */
+export async function googleEvents(fromLocal, toLocal, db = null) {
   const fs = feeds();
-  const result = { configured: fs.length > 0, events: [], errors: [] };
+  const linked = db && oauthReady() ? oauthAccounts(db) : [];
+  const result = { configured: fs.length > 0 || linked.length > 0, accounts: linked, events: [], errors: [] };
+  if (linked.length) { const o = await oauthEvents(db, fromLocal, toLocal); result.events.push(...o.events); result.errors.push(...o.errors); }
+  // an iCal address of a calendar that is also connected would list every event twice
+  const seen = new Set(result.events.map((e) => `${e.titulo}|${e.inicio}`));
   await Promise.all(fs.map(async (f) => {
-    try { result.events.push(...eventsBetween(await load(f), fromLocal, toLocal, f.name)); }
+    try { result.events.push(...eventsBetween(await load(f), fromLocal, toLocal, f.name).filter((e) => !seen.has(`${e.titulo}|${e.inicio}`))); }
     catch (err) { result.errors.push(`${f.name}: ${String(err.message || "sin respuesta").slice(0, 100)}`); }
   }));
   result.events.sort((a, b) => a.inicio - b.inicio);

@@ -627,6 +627,10 @@ function migrate(db) {
   // Version 2.35 (user's rule): the 21-digit case number + "00" becomes the radicado, once.
   // Like «Cargar radicados», a new radicado turns the consultation on and fills an empty place.
   db.exec("CREATE TABLE IF NOT EXISTS app_flags (key TEXT PRIMARY KEY)"); // same table as seedTemplates
+  // Version 2.2.29: Google accounts connected by Gerencia (refresh token encrypted by src/gcal-oauth.js). A new, empty table: no data is touched.
+  db.exec(`CREATE TABLE IF NOT EXISTS gcal_accounts (
+    id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, refresh_enc TEXT NOT NULL, calendar_id TEXT NOT NULL DEFAULT 'primary',
+    connected_at TEXT NOT NULL DEFAULT (datetime('now')), created_by INTEGER)`);
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'radicado-from-number'").get()) {
     const all = db.prepare("SELECT id, radicado, case_number, department, city FROM cases").all();
     const byId = new Map(all.map((k) => [k.id, k]));
