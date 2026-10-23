@@ -128,7 +128,7 @@ export function nextFolder(values) {
 // ----- Task history (version 2.18): what each person did on each task, and when -----
 export const TASK_LOG_LABEL = {
   creada: "Creó", editada: "Editó", reasignada: "Reasignó", reprogramada: "Cambió el plazo", hecha: "Marcó como hecha",
-  cancelada: "Canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
+  cancelada: "Marcó como no cumplida o canceló", reabierta: "Reabrió", entregada: "Registró la entrega", respondida: "Registró la respuesta", eliminada: "Eliminó",
   notificada: "Notificó al asignado",
 };
 const TASK_EDIT_FIELDS = { kind: "tipo", title: "título", notes: "notas", location: "lugar", remind_days: "avisos", done_notes: "cumplimiento",
@@ -152,7 +152,7 @@ export function taskLogEvents(before, after, nameOf = () => "") {
     detail: `${before.assigned_user_id ? `De ${who(before.assigned_user_id)}` : "Del responsable del expediente"} ${after.assigned_user_id ? `a ${who(after.assigned_user_id)}` : "al responsable del expediente"}` });
   if (after.delivered_at && !same("delivered_at")) out.push({ action: "entregada", detail: `Entregada el ${after.delivered_at}` });
   if (after.response_at && !same("response_at")) out.push({ action: "respondida", detail: [`Respuesta del ${after.response_at}`, after.response_notes].filter(Boolean).join(" · ") });
-  if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" ? after.done_notes || "" : "" });
+  if (before.status !== after.status) out.push({ action: after.status === "pendiente" ? "reabierta" : after.status, detail: after.status === "hecha" || after.status === "cancelada" ? after.done_notes || "" : "" });
   return out;
 }
 
@@ -191,7 +191,7 @@ export const utcToBogota = (utc) => (utc ? new Date(Date.parse(String(utc).repla
  */
 export function taskFollowUp(t, now) {
   const answered = RESPONSE_KINDS.includes(t.kind);
-  if (t.status === "cancelada") return { key: "cancelada", label: "Cancelada", tone: "muted" };
+  if (t.status === "cancelada") return { key: "cancelada", label: "No cumplida", tone: "bad" };
   if (t.status === "hecha") {
     const when = (answered && t.response_at) || utcToBogota(t.done_at);
     const late = when && t.due_at && when.slice(0, 16) > t.due_at && !(when.length === 10 && when <= t.due_at.slice(0, 10));

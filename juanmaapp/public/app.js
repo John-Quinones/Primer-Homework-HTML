@@ -175,7 +175,7 @@ function applyPermissions() {
   showMyAvatar();
   $("#courts-import-btn").hidden = !can("catalog.manage");
   // Creating process types and sub-processes from the case form or an import is for Gerencia only.
-  $$("[data-new-cat], [data-new-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
+  $$("[data-new-cat], [data-new-type], [data-del-cat], [data-del-type]").forEach((b) => (b.hidden = !can("catalog.manage")));
   const createCat = $("#import-create-catalog");
   createCat.disabled = !can("catalog.manage");
   if (createCat.disabled) createCat.checked = false;
@@ -1120,11 +1120,13 @@ function followSummary(list) {
 function taskTable(list, answers) {
   const canWrite = can("cases.write");
   const rows = list.map((t) => {
-    const actions = canWrite ? `${t.status === "pendiente" && !answers ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button>` : ""}
+    const closing = t.status === "pendiente" && !answers && (canWrite || t.assigned_user_id === me.id)
+      ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button><button class="mini" data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : "";
+    const actions = canWrite ? `${closing}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
       ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
-    const done = t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing;
+    const done = t.status === "cancelada" ? `No cumplida${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
         <td><strong>${escapeHtml(t.title)}</strong>${t.notes ? `<br><span class="muted">${escapeHtml(t.notes)}</span>` : ""}<br><span class="muted">${escapeHtml(whoOf(t))}</span></td>
@@ -2076,6 +2078,31 @@ async function newCatalogEntry(kind) {
     toast(kind === "cat" ? `Tipo de proceso «${made.name}» creado.` : `Subproceso «${made.name}» creado.`);
   } catch (err) { toast(err.message, true); }
 }
+// Gerencia deletes the chosen type or sub-process; the server refuses while any case uses it.
+async function deleteCatalogEntry(kind) {
+  const catId = Number(caseForm.elements.category_id.value);
+  const cat = categoryOf(catId);
+  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
+  const item = kind === "cat" ? cat : type;
+  if (!item) return toast("Elija primero cuál eliminar.", true);
+  const kids = kind === "cat" ? cat.types.length : cat.types.filter((t) => t.parent_id === item.id).length;
+  const ok = await confirmAsk(kind === "cat" ? "Eliminar tipo de proceso" : "Eliminar subproceso",
+    `¿Eliminar «${item.name}» del catálogo?` + (kids ? ` También se eliminarán ${kids} subproceso${kids === 1 ? "" : "s"} y, en el tipo, sus campos propios.` : "") +
+    " Solo se elimina si ningún expediente lo usa; la acción queda en la bitácora.");
+  if (!ok) return;
+  try {
+    await api("DELETE", kind === "cat" ? `/categories/${item.id}` : `/types/${item.id}`);
+    await loadCatalog();
+    caseForm.elements.category_id.innerHTML = state.catalog.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    const keep = kind === "cat" ? state.catalog[0]?.id : catId;
+    caseForm.elements.category_id.value = keep;
+    fillTypeSelect(keep);
+    renderParties();
+    toast(`«${item.name}» eliminado.`);
+  } catch (err) { toast(err.message, true); }
+}
+$("[data-del-cat]").addEventListener("click", () => deleteCatalogEntry("cat"));
+$("[data-del-type]").addEventListener("click", () => deleteCatalogEntry("type"));
 $("[data-new-cat]").addEventListener("click", () => newCatalogEntry("cat"));
 $("[data-new-type]").addEventListener("click", () => newCatalogEntry("type"));
 caseForm.elements.process_type_id.addEventListener("change", () => fillRoleSelect());
@@ -2650,6 +2677,13 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "task-done": async () => { await api("PUT", `/tasks/${id}`, { status: "hecha" }); toast("Marcada como cumplida."); await refreshView(); },
+    "task-notdone": async () => {
+      const why = await ask({ title: "Tarea no cumplida", message: "Escriba por qué no se cumplió. Queda en el historial de tareas.", input: "", okLabel: "Marcar como no cumplida" });
+      if (!why) return;
+      await api("PUT", `/tasks/${id}`, { status: "cancelada", done_notes: why });
+      toast("Marcada como no cumplida.");
+      await refreshView();
+    },
     "act-remind": () => {
       const a = ACTS_CACHE[Number(btn.dataset.act)];
       return openTaskDialog(null, Number(btn.dataset.case), "termino", { title: `Actuación: ${a.actuacion || ""}`.slice(0, 140), notes: `${String(a.fecha || "").slice(0, 10)} · ${a.anotacion || ""}`.trim() });
@@ -3049,7 +3083,7 @@ async function loadImportFile(file) {
 }
 $("#import-sheet").addEventListener("change", (e) => loadSheet(Number(e.target.value)));
 
-// Column mapping per tab, remembered in this browser by column name (version 2.83).
+// Column mapping per tab, remembered in this browser by column name (version 2.85).
 const mapKey = (kind) => `jm-import-map-${kind}`;
 function savedImportMapping(kind) {
   try { return JSON.parse(localStorage.getItem(mapKey(kind)) || "{}"); } catch { return {}; }
@@ -3130,7 +3164,7 @@ $("#import-map").addEventListener("change", (e) => {
   renderImportPreview();
 });
 
-// Place of issue of the ID card (version 2.81): matched against DIVIPOLA ignoring accents and capitals
+// Place of issue of the ID card (version 2.83): matched against DIVIPOLA ignoring accents and capitals
 // ("CARTAGENA" → "Cartagena de Indias"). What is not recognized is left out and reported, never blocks the row.
 let importDivipola = null;
 function resolveIdPlace(rec) {
@@ -3351,7 +3385,7 @@ async function uploadImportKind(key, file) {
   $("#import-step4").scrollIntoView({ behavior: "smooth" });
 }
 
-// ---------- Despachos: the user assigns the file's columns (version 2.83) ----------
+// ---------- Despachos: the user assigns the file's columns (version 2.85) ----------
 const COURT_FIELDS = [["name", "Nombre del despacho"], ["department", "Departamento"], ["city", "Ciudad"], ["area", "Corporación o Área"],
   ["circuit", "Circuito"], ["email", "Correo (Email)"], ["code", "Código"], ["judge", "Juez o titular"], ["phone", "Teléfono"], ["address", "Dirección"]];
 const courtMap = { headers: [], body: [], mapping: [] };
@@ -3416,7 +3450,7 @@ $("#courts-map-run").addEventListener("click", () => guarded(async () => {
   await runCourtImport(rows);
 }));
 
-// Cases whose saved court name matches a directory court get linked to it (version 2.84): the case then carries the
+// Cases whose saved court name matches a directory court get linked to it (version 2.86): the case then carries the
 // court's e-mail, department, city and area. Same tolerant match as the case form (accents, capitals, «Primero» = «001»,
 // the case's city or circuit). Only cases with a court name and no link are considered; nothing is overwritten.
 const clientLabel = (k) => `${k.client_name}${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}`;
@@ -3462,7 +3496,7 @@ async function showCourtLinks() {
   }));
 }
 
-// Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.82).
+// Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.84).
 async function runCourtImport(rows) {
   const out = await importCourtRows(rows);
   const byRow = new Map(rows.map((r) => [r.rowNumber, r]));
@@ -5656,9 +5690,10 @@ async function renderAgenda() {
             ${t.term_days ? `<span class="muted">Término: ${escapeHtml(termText(t))}</span>` : ""}
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
-          <span class="toolbar"><button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>
+          <span class="toolbar">${can("scope.all") || myOfficeIds().includes(t.office_id) ? `<button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>` : ""}
+          ${!can("cases.write") && t.status === "pendiente" && t.assigned_user_id === me.id && !CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : ""}
           ${can("cases.write") ? `
-            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button>`) : ""}
+            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>`) : ""}
             ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
             <button data-action="edit-task" data-id="${t.id}">Editar</button>
             <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>

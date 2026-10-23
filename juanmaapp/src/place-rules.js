@@ -19,7 +19,7 @@ export function makePlaces(divipola, properName) {
     if (n.startsWith("san andres") || n.startsWith("archipielago")) return depByCode.get("88") || "";
     if (n.startsWith("valle")) return "Valle del Cauca";
     if (n === "guajira") return "La Guajira";
-    // v2.82: abbreviations and messy cells from the official file ("N. De Santander", "Norte Santander", "N de S").
+    // v2.84: abbreviations and messy cells from the official file ("N. De Santander", "Norte Santander", "N de S").
     if (/^(n|nte|norte)( de)?( s| sder| santander)$/.test(n)) return divipola.departamentos.find((d) => bare(d.name) === "norte de santander")?.name || "";
     // A cell with more text around the name ("906 Y 1098) - Cundinamarca - Mosquera"): the longest department named in it.
     const words = ` ${n.replace(/[^a-z0-9ñ]+/g, " ").trim()} `;

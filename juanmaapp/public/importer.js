@@ -48,7 +48,7 @@
   ];
 
 
-  // Fields offered per upload tab (version 2.83): Clientes only client fields; Expedientes the case's own,
+  // Fields offered per upload tab (version 2.85): Clientes only client fields; Expedientes the case's own,
   // plus the client's name / document only to find the client the case belongs to.
   const CASE_CLIENT_LINK = ["client.full_name", "client.first_names", "client.last_names", "client.id_number"];
   function targetsFor(kind) {
@@ -212,7 +212,7 @@
   const ID_TYPES = { "cedula de ciudadania": "CC", cedula: "CC", cc: "CC", nit: "NIT", "cedula de extranjeria": "CE", ce: "CE", pasaporte: "PA", pa: "PA", "tarjeta de identidad": "TI", ti: "TI" };
   const docKey = (s) => String(s || "").replace(/[^0-9a-zA-Z]/g, "").toUpperCase();
 
-  // Existing client vs the file's values (version 2.84). «fill» = the client's value is empty; «update» = it differs
+  // Existing client vs the file's values (version 2.86). «fill» = the client's value is empty; «update» = it differs
   // (accents, capitals, spacing and phone punctuation do not count as a difference). The document number is the
   // match key and is never rewritten.
   const sameValue = (k, a, b) => (k === "phone" ? radDigits(a) === radDigits(b) : norm(a) === norm(b));
