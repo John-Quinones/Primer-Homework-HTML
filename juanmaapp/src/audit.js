@@ -48,6 +48,8 @@ const SNAP = [
   [/^\/cases\/(\d+)\/number$/, "SELECT * FROM cases WHERE id = ?"],
   [/^\/clients\/(\d+)$/, "SELECT * FROM clients WHERE id = ?"],
   [/^\/clients\/(\d+)\/photo$/, "SELECT id, full_name, CASE WHEN EXISTS (SELECT 1 FROM client_photos WHERE client_id = clients.id) THEN 'Sí' ELSE 'No' END AS foto FROM clients WHERE id = ?"],
+  [/^\/categories\/(\d+)$/, "SELECT id, name FROM process_categories WHERE id = ?"],
+  [/^\/types\/(\d+)$/, "SELECT id, name FROM process_types WHERE id = ?"],
   [/^\/tasks\/(\d+)$/, "SELECT * FROM tasks WHERE id = ?"],
   [/^\/payments\/charges\/(\d+)/, "SELECT * FROM charges WHERE id = ?"],
   [/^\/payments\/receipts\/(\d+)/, "SELECT * FROM receipts WHERE id = ?"],

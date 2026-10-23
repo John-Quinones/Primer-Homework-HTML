@@ -1061,8 +1061,8 @@
       <input type="hidden" name="id" />
       <label>Cliente * <select name="client_id" required></select></label>
       <div class="grid2">
-        <label>Tipo de proceso * <span class="select-add"><select name="category_id" required></select><button type="button" class="mini" data-new-cat title="Crear un tipo de proceso nuevo (solo Gerencia)">+ Nuevo</button></span></label>
-        <label>Subproceso * <span class="select-add"><select name="process_type_id" required></select><button type="button" class="mini" data-new-type title="Crear un subproceso nuevo (solo Gerencia)">+ Nuevo</button></span></label>
+        <label>Tipo de proceso * <span class="select-add"><select name="category_id" required></select><button type="button" class="mini" data-new-cat title="Crear un tipo de proceso nuevo (solo Gerencia)">+ Nuevo</button><button type="button" class="mini danger" data-del-cat title="Eliminar el tipo de proceso elegido (solo Gerencia)" aria-label="Eliminar tipo de proceso">Eliminar</button></span></label>
+        <label>Subproceso * <span class="select-add"><select name="process_type_id" required></select><button type="button" class="mini" data-new-type title="Crear un subproceso nuevo (solo Gerencia)">+ Nuevo</button><button type="button" class="mini danger" data-del-type title="Eliminar el subproceso elegido (solo Gerencia)" aria-label="Eliminar subproceso">Eliminar</button></span></label>
       </div>
       <div class="grid2">
         <label>Asunto <input name="title" placeholder="Ej. Cobro de prestaciones sociales" /></label>

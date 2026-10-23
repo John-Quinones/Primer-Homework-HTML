@@ -868,7 +868,7 @@
       const t = s.tasks.find((x) => x.id === +m[1]);
       const kase = t && s.cases.find((x) => x.id === t.case_id);
       (t && kase && (inScope(kase.office_id) || t.assigned_user_id === me().id)) || fail("La tarea no existe.");
-      // Version 2.81, same as the server: the assignee may always say whether it was fulfilled.
+      // Version 2.82, same as the server: the assignee may always say whether it was fulfilled.
       const full = me().permissions.includes("cases.write") && inScope(kase.office_id);
       if (!full && !(t.assigned_user_id === me().id && Object.keys(b).every((x) => ["status", "done_notes"].includes(x)))) fail("Su rol no tiene permiso para esta acción.");
       const prev = clone(t), before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
@@ -1063,7 +1063,8 @@
     ["DELETE", /^\/categories\/(\d+)$/, (m) => {
       need("catalog.manage");
       const typeIds = s.types.filter((t) => t.category_id === +m[1]).map((t) => t.id);
-      s.cases.some((k) => typeIds.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      const n = s.cases.filter((k) => typeIds.includes(k.process_type_id)).length;
+      n && fail(`No se puede eliminar el tipo de proceso: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`);
       s.categories = s.categories.filter((c) => c.id !== +m[1]);
       s.types = s.types.filter((t) => t.category_id !== +m[1]);
       s.fields = s.fields.filter((f) => f.category_id !== +m[1]);
@@ -1094,7 +1095,8 @@
     ["DELETE", /^\/types\/(\d+)$/, (m) => {
       need("catalog.manage");
       const ids = [+m[1], ...s.types.filter((t) => t.parent_id === +m[1]).map((t) => t.id)];
-      s.cases.some((k) => ids.includes(k.process_type_id)) && fail("No se puede eliminar: tiene expedientes asociados.");
+      const n = s.cases.filter((k) => ids.includes(k.process_type_id)).length;
+      n && fail(`No se puede eliminar el subproceso: lo usan ${n} expediente${n === 1 ? "" : "s"}. Cambie primero el tipo de esos expedientes.`);
       s.types = s.types.filter((t) => !ids.includes(t.id));
       return null;
     }],
