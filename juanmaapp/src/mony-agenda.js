@@ -4,6 +4,7 @@
 import { scopeOf } from "./auth.js";
 import { TASK_KINDS, taskFollowUp } from "./case-meta.js";
 import { findCases } from "./mony-cases.js";
+import { googleEvents } from "./gcal.js";
 
 const fold = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const LOCAL = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
@@ -32,8 +33,14 @@ function taskRows(db, user, where = "1 = 1", params = []) {
 const line = (t, now) => ({ tarea_id: t.id, tipo: t.kind, titulo: t.title, cuando: t.due_at, dia: weekday(t.due_at), lugar: t.location || undefined,
   estado: t.status, seguimiento: taskFollowUp(t, now).label, cliente: t.client_name, caso_id: t.case_id, funcionario: t.who_name || null });
 
+/** Google Calendar belongs to the firm's management: only Gerencia sees those events (they are the owner's own calendars). */
+async function google(user, fromLocal, toLocal) {
+  if (user.role !== "Gerencia") return { visible: false, configured: false, events: [], errors: [] };
+  return { visible: true, ...(await googleEvents(fromLocal, toLocal)) };
+}
+
 /** consultar_agenda: events between two dates (default: today and the next 14 days). */
-export function agendaList(db, user, input = {}, now = Date.now()) {
+export async function agendaList(db, user, input = {}, now = Date.now()) {
   const today = bogotaNow(now);
   const from = normLocal(input.desde) ? normLocal(input.desde).slice(0, 10) + " 00:00" : today.slice(0, 10) + " 00:00";
   const to = input.hasta ? normLocal(input.hasta).slice(0, 10) + " 23:59" : fromMs(ms(from) + 14 * 86400000).slice(0, 10) + " 23:59";
@@ -45,8 +52,11 @@ export function agendaList(db, user, input = {}, now = Date.now()) {
   const who = fold(input.funcionario);
   if (who === "yo" || who === "mi") rows = rows.filter((t) => t.who === user.id);
   else if (who) rows = rows.filter((t) => fold(t.who_name).includes(who));
+  const g = await google(user, from, to);
   return { desde: from, hasta: to, total: rows.length, eventos: rows.slice(0, 40).map((t) => line(t, today)),
-    nota: rows.length > 40 ? `Se muestran 40 de ${rows.length}.` : rows.length ? undefined : "No hay eventos en la agenda de la App en ese rango. (Google Calendar aún no está conectado.)" };
+    google_calendar: g.visible ? { eventos: g.events.slice(0, 40).map(({ calendario, titulo, cuando, hasta, lugar }) => ({ calendario, titulo, cuando, hasta, lugar })), errores: g.errors.length ? g.errors : undefined } : undefined,
+    nota: [rows.length > 40 ? `Se muestran 40 de ${rows.length}.` : rows.length || g.events.length ? "" : "No hay eventos en ese rango.",
+      g.visible && !g.configured ? "Google Calendar aún no está conectado (falta GCAL_ICAL_URLS en el servidor)." : ""].filter(Boolean).join(" ") || undefined };
 }
 
 const resolveStaff = (db, name) => {
@@ -58,7 +68,7 @@ const resolveStaff = (db, name) => {
 };
 
 /** proponer_cambio_agenda: validates a create / change / postpone / cancel / delete and lists overlapping events. */
-export function proposeAgenda(db, user, input = {}, now = Date.now()) {
+export async function proposeAgenda(db, user, input = {}, now = Date.now()) {
   const today = bogotaNow(now);
   const action = ["crear", "modificar", "posponer", "cancelar", "eliminar"].includes(input.accion) ? input.accion : "";
   if (!action) throw new Error("La acción debe ser crear, modificar, posponer, cancelar o eliminar.");
@@ -110,6 +120,13 @@ export function proposeAgenda(db, user, input = {}, now = Date.now()) {
     conflicts = taskRows(db, user, `t.status = 'pendiente' AND t.due_at >= ? AND t.due_at <= ? AND ${owner ? "COALESCE(t.assigned_user_id, k.assigned_user_id) = ?" : "t.case_id = ?"} AND t.id != ?`,
       [lo, hi, owner ?? caseId, cur?.id ?? 0]).map((t) => line(t, today));
   }
+  // Google Calendar (read only, Gerencia): any event within the same hour also counts as an overlap.
+  let googleConflicts = [];
+  if (when && (action === "crear" || action === "modificar" || action === "posponer")) {
+    const g = await google(user, fromMs(ms(when) - 86400000), fromMs(ms(when) + 86400000));
+    const a = ms(when), b = a + SPAN_MIN * 60000;
+    googleConflicts = g.events.filter((e) => e.inicio < b && e.fin > a).map(({ calendario, titulo, cuando, hasta }) => ({ calendario: `Google · ${calendario}`, titulo, cuando, hasta }));
+  }
   const kindLabel = payload.kind || cur?.kind || "evento";
   const resumen = {
     crear: `Crear ${kindLabel}: «${payload.title}» el ${weekday(when)} ${when}${payload.location ? " · " + payload.location : ""}`,
@@ -119,6 +136,6 @@ export function proposeAgenda(db, user, input = {}, now = Date.now()) {
     eliminar: `ELIMINAR «${cur?.title}» (${cur?.due_at}) — solo Gerencia puede borrar; si no, usa cancelar`,
   }[action];
   return { accion: action, tarea_id: cur?.id ?? null, caso_id: caseId, resumen, antes: cur ? line(cur, today) : null, cambios: payload,
-    cruces_en_agenda: conflicts, hay_cruce: conflicts.length > 0,
+    cruces_en_agenda: conflicts, cruces_en_google: googleConflicts, hay_cruce: conflicts.length + googleConflicts.length > 0,
     estado: "PROPUESTA: no se ha guardado nada. La persona debe pulsar «Confirmar» en la tarjeta. Si hay_cruce es true, avísalo con claridad y ofrece otra hora." };
 }

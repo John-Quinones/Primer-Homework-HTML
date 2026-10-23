@@ -153,7 +153,7 @@ const VIEW_PERMS = {
   pagos: "payments.manage",
   consulta: "processes.consult",
   radicados: "cases.write",
-  borradores: "drafts.generate", mony: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
+  borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
   importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage", bitacora: "audit.view",
 };
 
@@ -7030,6 +7030,7 @@ function monyLoad() {
   try { monyMsgs = JSON.parse(localStorage.getItem(monyKey()) || "[]").filter((m) => m && typeof m.content === "string"); } catch { monyMsgs = []; }
 }
 function monySave() { try { localStorage.setItem(monyKey(), JSON.stringify(monyMsgs.slice(-MONY_MAX))); } catch {} }
+const monyScrollEnd = () => { const l = $("#mony-log"); l.scrollTop = l.scrollHeight; };
 function monyBubble(role, text) {
   const d = document.createElement("div");
   d.className = `mony-msg mony-${role}`;
@@ -7178,19 +7179,30 @@ document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key ==
 // the screen. The chat itself (#mony-body) is the same one as in the «Mony» screen: it moves to the panel and back.
 function monyFabSync(name = route().name) {
   const fab = $("#mony-fab"), panel = $("#mony-panel");
-  const allowed = !!me && can("drafts.generate");
+  const allowed = !!me; // Mony is for every signed-in user (version 2.2.27); each tool still checks the role
   const onMonyScreen = name === "mony";
   if (onMonyScreen) monyPanel(false); // the screen already shows the chat
   fab.hidden = !allowed || onMonyScreen || !panel.hidden;
 }
+// Version 2.2.27: on a phone the keyboard shrinks the visual viewport but not the layout one, so the chat is sized to what
+// is really visible (otherwise the box and the «Enviar» button stay hidden behind the keyboard).
+function monyFit() {
+  const panel = $("#mony-panel"), vv = window.visualViewport;
+  if (!vv || panel.hidden || !window.matchMedia("(max-width: 560px)").matches) { panel.style.top = panel.style.height = panel.style.bottom = ""; return; }
+  panel.style.top = `${Math.round(vv.offsetTop + 8)}px`;
+  panel.style.height = `${Math.max(240, Math.round(vv.height - 20))}px`;
+  panel.style.bottom = "auto";
+}
+window.visualViewport?.addEventListener("resize", monyFit);
+window.visualViewport?.addEventListener("scroll", monyFit);
 function monyPanel(open) {
   if (!open) { monyStopVoice(); monyDictateStop(monyRec); }
   const fab = $("#mony-fab"), panel = $("#mony-panel"), body = $("#mony-body");
   if (open === !panel.hidden) return;
   panel.hidden = !open;
-  if (open) { $("#mony-panel-body").append(body); renderMony(); $("#mony-input").focus(); }
+  if (open) { $("#mony-panel-body").append(body); renderMony(); if (!window.matchMedia?.("(pointer: coarse)").matches) $("#mony-input").focus(); monyFit(); } // on a phone the keyboard would cover the chat (version 2.2.27)
   else { $("#view-mony").append(body); }
-  fab.hidden = open || !me || !can("drafts.generate") || route().name === "mony";
+  fab.hidden = open || !me || route().name === "mony";
 }
 // Version 2.2.26: the round button opens the chat and, as the avatar of the «Mony» screen does, enlarges her face
 // (same sizes: a click here or on the chat's face enlarges it, a double click fills the screen; «Cerrar» goes back to the chat).
@@ -7383,7 +7395,7 @@ function renderMony() {
   monyLoad();
   const log = $("#mony-log");
   log.replaceChildren();
-  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo agendar, mover o cancelar audiencias (con su confirmación y avisando cruces), redactar WhatsApp y correos para que usted los apruebe y envíe, buscar los expedientes de un cliente o por número de carpeta, rendir el informe de un proceso con sus pendientes, consultar la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
+  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo buscar expedientes y rendir su informe, consultar la Rama Judicial, calcular términos, manejar la agenda y redactar borradores de WhatsApp y correo para que usted los apruebe y envíe. ¿En qué le ayudo?"));
   for (const m of monyMsgs) { const b = monyBubble(m.role, m.content); if (m.role === "assistant") monyActions(b); }
   monyVoiceUi();
 }
@@ -7422,10 +7434,11 @@ $("#mony-form").addEventListener("submit", (e) => {
             informe_expediente: ["Armando el informe…", "Informe del expediente listo", "No se pudo armar el informe"],
             redactar_plantilla_memorial: ["Cargando plantilla…", "Plantilla cargada", "No se pudo cargar la plantilla"] }[ev.name] || [ev.name, ev.name, ev.name];
           t.textContent = (ev.status === "ok" ? "✓ " : ev.status === "error" ? "✕ " : "") + what[{ running: 0, ok: 1, error: 2 }[ev.status]];
-          if (ev.card) { cards.append(monyCard(ev.card)); if (ev.card.type === "borrador") drafted = ev.card; }
+          if (ev.card) { cards.append(monyCard(ev.card)); if (ev.card.type === "borrador") drafted = ev.card; cards.scrollIntoView({ block: "end" }); }
           if (!answer && ev.status === "running") bubble.textContent = "Mony está trabajando…";
         }
         else if (ev.type === "error") throw new Error(ev.error);
+        else if (ev.type === "done" && (monyScrollEnd(), false)) { /* the cards sit under the answer: show them */ }
         else if (ev.type === "done" && ev.truncated) bubble.textContent = answer + "\n\n(La respuesta quedó incompleta; pida a Mony que continúe.)";
       }
       if (drafted && answer) cards.append(monyCard({ type: "descarga", title: drafted.title, text: answer }));
