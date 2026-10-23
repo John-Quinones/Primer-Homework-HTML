@@ -249,6 +249,7 @@
               <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
             </select>
             <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
+            <select id="client-order" data-folder-order aria-label="Orden por número de carpeta"><option value="asc">Carpeta ↑ ascendente</option><option value="desc">Carpeta ↓ descendente</option></select>
             <select id="client-archive" aria-label="Estado del cliente"><option value="">Clientes activos</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option><option value="Pendiente Pago Sentencia">Pendiente Pago Sentencia</option></select>
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
@@ -295,6 +296,7 @@
             <label>Área <select id="case-area"><option value="">Todas</option></select></label>
             <label class="span2">Despacho judicial <select id="case-court"><option value="">Todos los despachos</option></select></label>
             <label>Estado <select id="case-status"><option value="">Activos</option><option>Archivo provisional</option><option>Archivo definitivo</option><option>Pendiente Pago Sentencia</option><option value="todos">Todos los estados</option></select></label>
+            <label>Orden <select id="case-order" data-folder-order><option value="asc">Carpeta ↑ ascendente</option><option value="desc">Carpeta ↓ descendente</option></select></label>
             <p class="muted" id="case-count"></p>
           </div>
         </div>

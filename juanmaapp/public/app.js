@@ -87,14 +87,26 @@ const caseFolder = (k) => {
 // Cases without a folder go last (by id); a client takes the lowest folder of its cases, clients without cases go last (by name).
 // Display order only: nothing is saved or changed.
 const folderNum = (k) => { const n = parseInt(String(caseFolder(k)).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : Infinity; };
-const cmpFolder = (a, b) => { const x = folderNum(a), y = folderNum(b); return x === y ? a.id - b.id : x < y ? -1 : 1; };
-const casesByFolder = (list) => [...list].sort(cmpFolder);
+// Version 2.2.21: the user picks ascending or descending (Clientes and Expedientes share the choice, kept in this browser);
+// without a folder always goes last, in either direction.
+const folderDir = () => { try { return localStorage.getItem("jm-folder-order") === "desc" ? -1 : 1; } catch { return 1; } };
+const cmpNum = (x, y, dir) => (x === y ? 0 : x === Infinity ? 1 : y === Infinity ? -1 : (x < y ? -1 : 1) * dir);
+const cmpFolder = (a, b, dir = folderDir()) => cmpNum(folderNum(a), folderNum(b), dir) || a.id - b.id;
+const casesByFolder = (list) => { const dir = folderDir(); return [...list].sort((a, b) => cmpFolder(a, b, dir)); };
 const clientsByFolder = (list, cases = state.cases) => {
   const low = new Map();
   for (const k of cases) low.set(k.client_id, Math.min(low.get(k.client_id) ?? Infinity, folderNum(k)));
-  const n = (c) => low.get(c.id) ?? Infinity;
-  return [...list].sort((a, b) => (n(a) === n(b) ? 0 : n(a) < n(b) ? -1 : 1) || String(a.full_name).localeCompare(String(b.full_name), "es"));
+  const n = (c) => low.get(c.id) ?? Infinity, dir = folderDir();
+  return [...list].sort((a, b) => cmpNum(n(a), n(b), dir) || String(a.full_name).localeCompare(String(b.full_name), "es"));
 };
+$$("[data-folder-order]").forEach((sel) => {
+  try { sel.value = localStorage.getItem("jm-folder-order") === "desc" ? "desc" : "asc"; } catch { /* storage blocked: keep ascending */ }
+  sel.addEventListener("change", () => {
+    try { localStorage.setItem("jm-folder-order", sel.value); } catch { /* not remembered */ }
+    $$("[data-folder-order]").forEach((o) => { o.value = sel.value; });
+    if (sel.id === "client-order") renderClientList(); else renderCaseRows();
+  });
+});
 /** «Asignar carpeta» / «Editar carpeta» (version 2.18), for whoever can edit cases. */
 const folderButton = (k, cls = "mini") => can("cases.write")
   ? `<button type="button" class="${cls}" data-action="edit-folder" data-id="${k.id}" data-folder="${escapeHtml(caseFolder(k))}">${caseFolder(k) ? "Editar carpeta" : "Asignar carpeta"}</button>` : "";
