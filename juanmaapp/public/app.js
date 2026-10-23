@@ -522,6 +522,9 @@ async function refreshBell() {
       <span><strong>${escapeHtml(x.title)}</strong><small>${escapeHtml(x.body)} · ${escapeHtml(x.created_at.slice(0, 16))} UTC</small></span>
     </a></li>`).join("") || '<li class="empty">Sin notificaciones.</li>';
 }
+// A click outside the notifications box, or Esc, closes it (the bell itself still toggles it).
+document.addEventListener("pointerdown", (e) => { const b = $(".bell"); if (b?.open && !b.contains(e.target)) b.open = false; });
+document.addEventListener("keydown", (e) => { const b = $(".bell"); if (e.key === "Escape" && b?.open) { b.open = false; b.querySelector("summary").focus(); } });
 $("#bell-list").addEventListener("click", (e) => {
   const a = e.target.closest("[data-note]");
   if (!a) return;
