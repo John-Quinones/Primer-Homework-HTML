@@ -3,6 +3,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 import { runTool, cardFor, TOOLS } from "../src/mony.js";
+import { setFetch } from "../src/ramajudicial.js";
 
 let srv, admin, db, caseA, caseB, user;
 before(async () => {
@@ -49,4 +50,19 @@ test("nothing is written", async () => {
   const before = db.prepare("SELECT COUNT(*) n FROM cases").get().n;
   await runTool("informe_expediente", { caso_id: caseB }, { db, user: user });
   assert.equal(db.prepare("SELECT COUNT(*) n FROM cases").get().n, before);
+});
+
+setFetch(async () => { throw new Error("sin red"); }); // the Rama Judicial never answers in tests
+test("consultar_estado_proceso works by folder or client without a radicado (saved data, no error)", async () => {
+  const ctx = { db, user };
+  const f = await runTool("consultar_estado_proceso", { carpeta: "39" }, ctx);
+  assert.equal(f.caso_id, caseA);
+  assert.match(f.aviso, /datos guardados/);
+  assert.equal(f.tareas_pendientes.length, 2);
+  const c = await runTool("consultar_estado_proceso", { cliente: "Marta Rojas" }, ctx);
+  assert.match(c.aviso, /datos guardados/);
+  const many = await runTool("consultar_estado_proceso", { cliente: "Prada" }, ctx);
+  assert.equal(many.total, 2);
+  assert.equal(cardFor("consultar_estado_proceso", { carpeta: "39" }, f).type, "expediente");
+  await assert.rejects(runTool("consultar_estado_proceso", {}, ctx), /carpeta/);
 });
