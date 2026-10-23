@@ -86,7 +86,8 @@ const caseFolder = (k) => {
 // Version 2.2.17: every list of cases and clients is shown in NUMERIC folder order (1, 2, 3 … 10, 11), never alphabetical.
 // Cases without a folder go last (by id); a client takes the lowest folder of its cases, clients without cases go last (by name).
 // Display order only: nothing is saved or changed.
-const folderNum = (k) => { const n = parseInt(String(caseFolder(k)).replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : Infinity; };
+const folderNumOf = (text) => { const n = parseInt(String(text ?? "").replace(/\D/g, ""), 10); return Number.isFinite(n) ? n : Infinity; };
+const folderNum = (k) => folderNumOf(caseFolder(k));
 // Version 2.2.21: the user picks ascending or descending (Clientes and Expedientes share the choice, kept in this browser);
 // without a folder always goes last, in either direction.
 const folderDir = () => { try { return localStorage.getItem("jm-folder-order") === "desc" ? -1 : 1; } catch { return 1; } };
@@ -4190,7 +4191,7 @@ document.addEventListener("click", (e) => {
 
 // ---------- Reportes ----------
 const REPORT_TYPES = {
-  expedientes: "Expedientes", clientes: "Clientes", oficinas: "Resumen por oficina",
+  expedientes: "Expedientes", carpetas: "Listado por número de carpeta", clientes: "Clientes", clientesestado: "Listado de clientes por estado", oficinas: "Resumen por oficina",
   responsables: "Carga por responsable", procesos: "Expedientes por tipo de proceso", jurisprudencia: "Sentencias guardadas",
   cartera: "Cartera por cliente", recibos: "Recibos de caja",
 };
@@ -4217,7 +4218,8 @@ async function renderReportes() {
 
 function toggleReportFilters() {
   const t = $("#report-type").value;
-  $$("[data-rf]").forEach((el) => (el.hidden = el.dataset.rf !== t));
+  $$("[data-rf]").forEach((el) => (el.hidden = !el.dataset.rf.split(" ").includes(t)));
+  $$("[data-rf-not]").forEach((el) => (el.hidden = el.dataset.rfNot.split(" ").includes(t)));
 }
 $("#report-type").addEventListener("change", () => { toggleReportFilters(); guarded(runReport); });
 
@@ -4225,23 +4227,61 @@ async function runReport() {
   const f = $("#report-form");
   const params = new URLSearchParams();
   for (const [k, v] of new FormData(f).entries()) if (v && k !== "type") {
-    if (["categoryId", "status", "assignedUserId"].includes(k) && f.type.value !== "expedientes") continue;
+    if (["categoryId"].includes(k) && f.type.value !== "expedientes") continue;
+    if (["status", "assignedUserId"].includes(k) && !["expedientes", "carpetas"].includes(f.type.value)) continue;
+    if (k === "clientState" && f.type.value !== "clientesestado") continue;
+    if (k.startsWith("folder")) continue; // range and order are applied here (folderListing), not sent
+    if (["from", "to"].includes(k) && ["carpetas", "clientesestado"].includes(f.type.value)) continue;
     params.set(k, v);
   }
   lastReport = await api("GET", `/reports/${f.type.value}?${params}`);
+  if (f.type.value === "carpetas") folderListing(lastReport, f);
+  if (f.type.value === "clientesestado") clientListing(lastReport, f);
   lastReport.filters = describeFilters(f);
   const t = $("#report-table");
   t.innerHTML = `<thead><tr>${lastReport.columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("")}</tr></thead>
     <tbody>${lastReport.rows.map((r) => `<tr>${lastReport.columns.map((c) => `<td>${escapeHtml(r[c.key] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody>`;
-  $("#report-info").textContent = `${lastReport.rows.length} fila(s)`;
+  $("#report-info").textContent = lastReport.type === "clientesestado" ? `Total: ${lastReport.rows.length} cliente(s)` : `${lastReport.rows.length} fila(s)`;
   $("#report-xlsx").disabled = $("#report-pdf").disabled = false;
+}
+
+// Version 2.2.21: "Listado por número de carpeta". Rows come with their folder text; here they are put in NUMERIC order
+// (same rule as the lists: 1, 2 … 10, 11; no folder last, marked), cut to the optional range and flipped if descending.
+function folderListing(rep, f) {
+  const from = f.folderFrom.value === "" ? null : folderNumOf(f.folderFrom.value), to = f.folderTo.value === "" ? null : folderNumOf(f.folderTo.value);
+  const withNum = rep.rows.map((r, i) => ({ r, n: folderNumOf(r.folder), i }));
+  const kept = withNum.filter(({ n }) => n === Infinity ? from === null && to === null : (from === null || n >= from) && (to === null || n <= to));
+  const desc = f.folderOrder.value === "desc";
+  kept.sort((a, b) => (a.n === b.n ? a.i - b.i : a.n === Infinity ? 1 : b.n === Infinity ? -1 : (a.n < b.n ? -1 : 1) * (desc ? -1 : 1)));
+  rep.rows = kept.map(({ r }) => (r.folder ? r : { ...r, folder: "Sin carpeta" }));
+}
+
+// Version 2.2.22: clients ordered by their LOWEST folder number (numeric, same rule as folderListing); no folder last, by name.
+function clientListing(rep, f) {
+  const nums = (r) => String(r.folder).split(",").map(folderNumOf).filter((n) => n !== Infinity).sort((a, b) => a - b);
+  const low = (r) => nums(r)[0] ?? Infinity;
+  const desc = f.folderOrder.value === "desc";
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name), "es");
+  const sorted = [...rep.rows].sort((a, b) => { const x = low(a), y = low(b); return x === y ? byName(a, b) : x === Infinity ? 1 : y === Infinity ? -1 : (x < y ? -1 : 1) * (desc ? -1 : 1); });
+  rep.rows = sorted.map((r) => ({ ...r, folder: r.folder ? String(r.folder).split(",").map((x) => x.trim()).sort((a, b) => folderNumOf(a) - folderNumOf(b)).join(", ") : "Sin carpeta" }));
+  rep.total = rep.rows.length;
 }
 
 function describeFilters(f) {
   const parts = [];
   const opt = (sel) => sel.selectedOptions[0]?.textContent;
   parts.push(f.officeId.value ? `Oficina: ${opt(f.officeId)}` : (can("scope.all") ? "Todas las oficinas" : `Oficinas: ${me.offices.map((o) => o.name).join(", ")}`));
-  if (f.from.value || f.to.value) parts.push(`Fechas: ${f.from.value || "…"} a ${f.to.value || "…"}`);
+  if (!["carpetas", "clientesestado"].includes(f.type.value) && (f.from.value || f.to.value)) parts.push(`Fechas: ${f.from.value || "…"} a ${f.to.value || "…"}`);
+  if (f.type.value === "clientesestado") {
+    parts.push(`Estado: ${opt(f.clientState)}`);
+    parts.push(f.folderOrder.value === "desc" ? "Orden: carpeta de la mayor a la menor" : "Orden: carpeta de la menor a la mayor");
+  }
+  if (f.type.value === "carpetas") {
+    if (f.folderFrom.value || f.folderTo.value) parts.push(`Carpetas: ${f.folderFrom.value || "…"} a ${f.folderTo.value || "…"}`);
+    parts.push(f.folderOrder.value === "desc" ? "Orden: de la mayor a la menor" : "Orden: de la menor a la mayor");
+    if (f.status.value) parts.push(`Estado: ${opt(f.status)}`);
+    if (f.assignedUserId.value) parts.push(`Responsable: ${opt(f.assignedUserId)}`);
+  }
   if (f.type.value === "expedientes") {
     if (f.categoryId.value) parts.push(`Tipo: ${opt(f.categoryId)}`);
     if (f.status.value) parts.push(`Estado: ${opt(f.status)}`);

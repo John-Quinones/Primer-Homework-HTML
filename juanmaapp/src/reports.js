@@ -5,13 +5,16 @@ import { typePath } from "./sql.js";
 import { formatRadicado } from "./portals.js";
 import { scopeOf } from "./auth.js";
 import { paymentsReport } from "./payments.js";
+import { isFolderLabel } from "./case-meta.js";
 
 const OPEN = ["Activo"];
 const ARCHIVED = "('Archivo provisional', 'Archivo definitivo')";
 
 export const REPORTS = {
   expedientes: "Expedientes",
+  carpetas: "Listado por número de carpeta",
   clientes: "Clientes",
+  clientesestado: "Listado de clientes por estado",
   oficinas: "Resumen por oficina",
   responsables: "Carga por responsable",
   procesos: "Expedientes por tipo de proceso",
@@ -51,7 +54,53 @@ export function reportsRouter(db) {
     };
     let columns, rows;
 
-    if (type === "expedientes") {
+    if (type === "clientesestado") {
+      // Version 2.2.22: clients by their own state (clients.archive_status; '' = Activo). Folders of all their cases come as
+      // text; the page orders by the lowest one (folderListing logic) and writes them sorted.
+      if (sc !== null) {
+        const ph = sc.map(() => "?").join(",") || "NULL";
+        where.push(`(c.office_id IN (${ph}) OR c.id IN (SELECT client_id FROM cases WHERE office_id IN (${ph})))`);
+        params.push(...sc, ...sc);
+      }
+      if (q.officeId) { where.push("c.office_id = ?"); params.push(Number(q.officeId)); }
+      if (q.clientState === "activos") where.push("c.archive_status = ''");
+      else if (["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"].includes(q.clientState)) { where.push("c.archive_status = ?"); params.push(q.clientState); }
+      const folderIds = db.prepare("SELECT id, label FROM custom_fields").all().filter((f) => isFolderLabel(f.label)).map((f) => String(f.id));
+      const byClient = new Map();
+      for (const k of db.prepare("SELECT client_id, field_values FROM cases ORDER BY id").all()) {
+        const v = JSON.parse(k.field_values || "{}");
+        const folder = folderIds.map((i) => String(v[i] ?? "").trim()).find(Boolean);
+        if (folder) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), folder]);
+      }
+      columns = [["folder", "No. Carpeta"], ["name", "Nombre"], ["doc", "Documento"], ["phone", "Teléfono"], ["email", "Correo"],
+        ["city", "Ciudad"], ["state", "Estado"], ["cases", "Expedientes"], ["office", "Oficina"]];
+      rows = db.prepare(`
+        SELECT c.id, o.name AS office, c.full_name AS name, trim(c.id_type || ' ' || c.id_number) AS doc, c.phone, c.email, c.city,
+               CASE c.archive_status WHEN '' THEN 'Activo' ELSE c.archive_status END AS state,
+               (SELECT COUNT(*) FROM cases WHERE client_id = c.id) AS cases
+        FROM clients c LEFT JOIN offices o ON o.id = c.office_id ${W()} ORDER BY c.id`).all(...params)
+        .map(({ id, ...row }) => ({ ...row, folder: (byClient.get(id) || []).join(", ") }));
+    } else if (type === "carpetas") {
+      // Version 2.2.22: one row per case with its "No. Carpeta" (the page sorts them numerically and applies the range).
+      inOffices("k.office_id");
+      statusFilter("k.status");
+      if (q.assignedUserId) { where.push("k.assigned_user_id = ?"); params.push(Number(q.assignedUserId)); }
+      const folderIds = db.prepare("SELECT id, label FROM custom_fields").all().filter((f) => isFolderLabel(f.label)).map((f) => String(f.id));
+      columns = [["folder", "No. Carpeta"], ["client", "Cliente"], ["doc", "Documento"], ["category", "Tipo de proceso"], ["type", "Subproceso"],
+        ["radicado", "Número de expediente"], ["court", "Despacho"], ["status", "Estado"], ["assigned", "Responsable"], ["office", "Oficina"]];
+      rows = db.prepare(`
+        SELECT k.id, k.field_values, o.name AS office, c.full_name AS client, trim(c.id_type || ' ' || c.id_number) AS doc,
+               g.name AS category, ${typePath("t")} AS type, k.radicado, k.case_number, k.court_name AS court, k.status,
+               COALESCE(u.name, '') AS assigned
+        FROM cases k JOIN clients c ON c.id = k.client_id
+        JOIN process_types t ON t.id = k.process_type_id JOIN process_categories g ON g.id = t.category_id
+        LEFT JOIN offices o ON o.id = k.office_id LEFT JOIN users_shown u ON u.id = k.assigned_user_id
+        ${W()} ORDER BY k.id`).all(...params).map(({ field_values, case_number, ...row }) => {
+        const v = JSON.parse(field_values || "{}");
+        const folder = folderIds.map((i) => String(v[i] ?? "").trim()).find(Boolean) || "";
+        return { ...row, folder, radicado: row.radicado || case_number || "" };
+      });
+    } else if (type === "expedientes") {
       inOffices("k.office_id");
       dateRange("k.created_at");
       statusFilter("k.status");
@@ -136,7 +185,7 @@ export function reportsRouter(db) {
     res.json({
       type, title: REPORTS[type],
       columns: columns.map(([key, label]) => ({ key, label })),
-      rows: rows.map((row) => ("radicado" in row ? { ...row, radicado: formatRadicado(row.radicado) } : { ...row })),
+      rows: rows.map((row) => ("radicado" in row ? { ...row, radicado: /^\d{23}$/.test(String(row.radicado).replace(/\D/g, "")) ? formatRadicado(row.radicado) : row.radicado } : { ...row })),
       generatedAt: new Date().toISOString(),
       generatedBy: req.user.name,
     });
