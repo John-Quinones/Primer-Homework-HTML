@@ -1383,3 +1383,10 @@ dialog:not([open]) { pointer-events: none; }
 .mony-panel header img, .mony-panel header .mony-cv { cursor: zoom-in; }
 .mony-conflict { margin: 6px 0; padding: 6px 8px; border-radius: 8px; background: #7f1d1d55; border: 1px solid #f8717199; color: #fecaca; font-size: 13px; }
 .mony-wa-check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+/* Version 2.2.27: phones. 16 px inputs stop iOS from zooming the page when the chat box is focused; the voice button stays compact. */
+@media (max-width: 560px) {
+  #mony-input { font-size: 16px; }
+  .mony-panel .mony-voice { font-size: 12px; padding: 6px 10px; }
+  .mony-card { max-width: 100%; }
+  .mony-wa-text { font-size: 16px; }
+}

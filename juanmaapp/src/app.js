@@ -195,7 +195,7 @@ export function createApp(db) {
 
   // Mony, the legal assistant (version 2.2.8): chat with history, read-only tools, NDJSON stream
   // {type:"text"} deltas, {type:"tool"} progress, then one {type:"done"} or {type:"error"}.
-  app.post("/api/mony/chat", requirePerm("drafts.generate"), async (req, res) => {
+  app.post("/api/mony/chat", async (req, res) => {
     const body = req.body ?? {};
     res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");

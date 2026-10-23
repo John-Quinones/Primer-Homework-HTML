@@ -197,6 +197,17 @@ Viene configurado: cada correo enviado se sella con el servicio público de **Di
 
 Si la firma contrata **estampado cronológico** con una entidad acreditada ante ONAC (por ejemplo, Certicámara o GSE), en **Variables de entorno** agregue `TSA_URL` con la dirección que entregue el proveedor y, si lo pide, `TSA_USER` y `TSA_PASS`. Para apagarlo: `TSA_URL` = `off`.
 
+## Paso 9. Google Calendar para Mony (solo lectura)
+
+Mony puede mostrar los eventos de Google Calendar y avisar si una audiencia nueva se cruza con ellos. Solo los ve Gerencia, y Mony nunca escribe en Google.
+
+1. En Google Calendar (calendar.google.com, en el computador) abra **Configuración** → en la izquierda, el calendario → **Integrar el calendario**.
+2. Copie la **Dirección secreta en formato iCal** (empieza por `https://calendar.google.com/calendar/ical/…/private-…/basic.ics`). Es una clave: quien la tenga ve el calendario; no la comparta.
+3. Repita con el otro calendario (egrpanama@gmail.com y tecjuridicos01@gmail.com).
+4. En Azure → App Service → **Variables de entorno** → agregue `GCAL_ICAL_URLS` con los dos enlaces separados por coma, cada uno con un nombre: `Personal|https://calendar.google.com/…basic.ics,TEC|https://calendar.google.com/…basic.ics`. **Aplicar** y **Confirmar**.
+
+Si un enlace se filtra, en Google se restablece la dirección secreta y se pega la nueva.
+
 ## Datos y copias de seguridad
 
 - La base de datos queda en `/home/data/juanmaapp.db`, en el almacenamiento permanente de la app. No se borra al reiniciar ni al publicar versiones nuevas.
