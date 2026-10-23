@@ -66,3 +66,19 @@ test("consultar_estado_proceso works by folder or client without a radicado (sav
   assert.equal(cardFor("consultar_estado_proceso", { carpeta: "39" }, f).type, "expediente");
   await assert.rejects(runTool("consultar_estado_proceso", {}, ctx), /carpeta/);
 });
+
+test("preparar_whatsapp and preparar_correo only draft: client phone/e-mail, card, nothing sent", async () => {
+  const ctx = { db, user };
+  db.prepare("UPDATE clients SET phone = '3001234567', email = 'marta@example.com' WHERE full_name LIKE 'Marta%'").run();
+  const w = await runTool("preparar_whatsapp", { cliente: "Marta Rojas", mensaje: "Buenos días, le informamos que su proceso avanza." }, ctx);
+  assert.equal(w.telefono, "573001234567");
+  assert.match(w.estado, /no se ha enviado/);
+  assert.deepEqual(cardFor("preparar_whatsapp", {}, w), { type: "whatsapp", title: "Marta Rojas", phone: "573001234567", text: w.texto });
+  await assert.rejects(runTool("preparar_whatsapp", { cliente: "Luis Prada", mensaje: "Hola" }, ctx), /no tiene teléfono/);
+  await assert.rejects(runTool("preparar_whatsapp", { cliente: "Marta", mensaje: "" }, ctx), /texto/);
+  const m = await runTool("preparar_correo", { cliente: "Marta Rojas", asunto: "Estado del proceso", mensaje: "Cordial saludo…" }, ctx);
+  assert.equal(m.para, "marta@example.com");
+  assert.equal(cardFor("preparar_correo", {}, m).type, "correo");
+  await assert.rejects(runTool("preparar_correo", { cliente: "Luis Prada", asunto: "a", mensaje: "b" }, ctx), /no tiene correo/);
+  await assert.rejects(runTool("preparar_correo", { para: "mal", asunto: "a", mensaje: "b" }, ctx), /no es válida/);
+});

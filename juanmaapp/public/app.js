@@ -5722,14 +5722,14 @@ function followMailTo() {
 }
 mailRecipient.addEventListener("recipientchange", () => { putMailRecipient(); followMailTo(); });
 $("#mail-put-recipient").addEventListener("click", () => putMailRecipient(true));
-async function openMailDialog({ caseId = null, subject = "", files = [], to = "", entity = "", court = null } = {}) {
+async function openMailDialog({ caseId = null, subject = "", files = [], to = "", entity = "", court = null, body = "" } = {}) {
   const cases = await api("GET", "/cases");
   mailForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
     `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
   const k = cases.find((x) => x.id === caseId);
   openDialog($("#mail-dialog"), "Nuevo correo con trazabilidad", {
     case_id: caseId ?? "", subject: subject || (k ? `${k.type_name}${k.radicado ? " · Rad. " + formatRadicado(k.radicado) : ""}` : ""),
-    to: to || k?.court_email || "",
+    to: to || k?.court_email || "", body, // body: a draft from Mony stays as written (version 2.2.25)
   });
   const hint = $("#mail-court-hint");
   hint.hidden = !k?.court_email;
@@ -7052,6 +7052,26 @@ function monyCard(c) {
   } else if (c.type === "proceso") {
     d.append(head(c.title || "Proceso", `Radicado ${c.radicado}`));
     if (c.caseId) { const a = document.createElement("a"); a.className = "mini"; a.href = `#expediente-${c.caseId}`; a.textContent = "Abrir expediente"; d.append(a); }
+  } else if (c.type === "whatsapp") {
+    // Version 2.2.25: Mony only drafts; nothing leaves until the person presses the button.
+    d.classList.add("mony-wa");
+    const ta = document.createElement("textarea"); ta.className = "mony-wa-text"; ta.rows = 5; ta.value = c.text; ta.setAttribute("aria-label", "Texto del mensaje");
+    const row = document.createElement("div"); row.className = "mony-wa-row";
+    const open = document.createElement("button"); open.type = "button"; open.className = "mini primary"; open.textContent = "Abrir WhatsApp";
+    open.addEventListener("click", () => { window.open(waUrl(c.phone, ta.value), "_blank", "noopener"); toast("WhatsApp abierto: revise el texto y pulse enviar allí."); });
+    const copy = document.createElement("button"); copy.type = "button"; copy.className = "mini"; copy.textContent = "Copiar";
+    copy.addEventListener("click", () => { navigator.clipboard?.writeText(ta.value).then(() => toast("Mensaje copiado."), () => toast("No se pudo copiar.")); });
+    row.append(open, copy);
+    const box = document.createElement("div"); box.append(head("WhatsApp para " + c.title, "+" + c.phone + " · borrador, aún no enviado"), ta, row);
+    d.append(box);
+  } else if (c.type === "correo") {
+    d.classList.add("mony-wa");
+    const sub = document.createElement("small"); sub.textContent = `Para ${c.to} · borrador, aún no enviado`;
+    const pre = document.createElement("div"); pre.className = "mony-mail-body"; pre.textContent = `Asunto: ${c.subject}\n\n${c.body}`;
+    const open = document.createElement("button"); open.type = "button"; open.className = "mini primary"; open.textContent = "Revisar y enviar";
+    open.addEventListener("click", () => guarded(() => openMailDialog({ caseId: c.caseId, to: c.to, subject: c.subject, body: c.body })));
+    const box = document.createElement("div"); const b = document.createElement("b"); b.textContent = "Correo para " + c.title; box.append(b, sub, pre, open);
+    d.append(box);
   } else if (c.type === "expediente") {
     d.append(head(c.title, c.pending === null ? "Expediente encontrado" : c.pending ? `${c.pending} pendiente(s)` : "Sin tareas pendientes"));
     const a = document.createElement("a"); a.className = "mini"; a.href = `#expediente-${c.caseId}`; a.textContent = "Abrir expediente"; d.append(a);
@@ -7328,7 +7348,7 @@ function renderMony() {
   monyLoad();
   const log = $("#mony-log");
   log.replaceChildren();
-  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo buscar los expedientes de un cliente o por número de carpeta, rendir el informe de un proceso con sus pendientes, consultar la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
+  if (!monyMsgs.length) monyActions(monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo redactar WhatsApp y correos para que usted los apruebe y envíe, buscar los expedientes de un cliente o por número de carpeta, rendir el informe de un proceso con sus pendientes, consultar la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?"));
   for (const m of monyMsgs) { const b = monyBubble(m.role, m.content); if (m.role === "assistant") monyActions(b); }
   monyVoiceUi();
 }
@@ -7360,6 +7380,8 @@ $("#mony-form").addEventListener("submit", (e) => {
           const what = { consultar_estado_proceso: ["Conectando a la Rama Judicial…", "Rama Judicial consultada", "Rama Judicial no respondió"],
             calcular_terminos_legales: ["Calculando términos…", "Términos calculados", "No se pudo calcular el término"],
             buscar_expedientes: ["Buscando expedientes…", "Expedientes consultados", "No se pudo buscar"],
+            preparar_correo: ["Redactando el correo…", "Borrador de correo listo", "No se pudo preparar el correo"],
+            preparar_whatsapp: ["Preparando el mensaje…", "Borrador de WhatsApp listo", "No se pudo preparar el mensaje"],
             informe_expediente: ["Armando el informe…", "Informe del expediente listo", "No se pudo armar el informe"],
             redactar_plantilla_memorial: ["Cargando plantilla…", "Plantilla cargada", "No se pudo cargar la plantilla"] }[ev.name] || [ev.name, ev.name, ev.name];
           t.textContent = (ev.status === "ok" ? "✓ " : ev.status === "error" ? "✕ " : "") + what[{ running: 0, ok: 1, error: 2 }[ev.status]];
