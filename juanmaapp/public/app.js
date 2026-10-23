@@ -664,7 +664,7 @@ for (const view of $$("main .view")) {
 function syncPageNav() {
   const n = window.navigation;
   if (!n || typeof n.canGoBack !== "boolean") return;
-  $$('.page-nav [data-action="go-back"]').forEach((b) => (b.disabled = !n.canGoBack));
+  $$('.page-nav [data-action="go-back"]').forEach((b) => (b.disabled = !n.canGoBack && !dlgNav?.saved));
   const reopen = !!dlgNav && (dlgNav.forward.some((d) => !d.open) || !!dlgNav.reopenPop);
   $$('.page-nav [data-action="go-forward"]').forEach((b) => (b.disabled = !n.canGoForward && !reopen));
 }
@@ -1435,7 +1435,20 @@ function openDialog(dialog, title, values = {}) {
 // Atrás closes the window WITHOUT clearing what was typed and returns to the window it came from
 // (or to the screen); Adelante reopens it exactly as it was. A window opened right after another
 // one was saved (e.g. «Enviar a firma» → «Firma en persona») counts as its next step.
-var dlgNav = { forward: [], lastClosed: null, lastClosedAt: 0, navigating: false, reopenPop: null };
+var dlgNav = { forward: [], lastClosed: null, lastClosedAt: 0, navigating: false, reopenPop: null, saved: null };
+// Version 2.2.29: after saving a client or a case, «Atrás» on the screen that follows returns to that same form
+// (nothing typed is lost, and it now edits the saved record, so saving again never duplicates it) to correct it.
+// Any other window, or leaving the screen by another way, ends this.
+function backToSaved() {
+  const s = dlgNav.saved;
+  if (!s) return false;
+  if (!s.dlg.isConnected || s.dlg.open || location.hash !== s.to || $("dialog[open]")) { dlgNav.saved = null; return false; }
+  dlgNav.saved = null;
+  const t = $("[data-title]", s.dlg);
+  if (t) t.textContent = t.textContent.replace(/^Nuevo\b/, "Editar");
+  reopenDialog(s.dlg);
+  return true;
+}
 // Version 2.32: yes/no questions also carry the bar (Atrás = answer «Cancelar» and go back), but they are never
 // reopened with Adelante: the question they asked is already answered.
 const NO_REOPEN = new Set(["ask-dialog"]);
@@ -1448,6 +1461,7 @@ HTMLDialogElement.prototype.showModal = function () {
     const recent = Date.now() - dlgNav.lastClosedAt < 2500 ? dlgNav.lastClosed : null;
     this._navPrev = below || (recent !== this ? recent : null);
     dlgNav.forward = dlgNav.forward.filter((d) => d !== this); // opened anew: no stale "Adelante" to it
+    if (dlgNav.saved && dlgNav.saved.dlg !== this) dlgNav.saved = null;
   }
   const r = nativeShowModal.call(this);
   syncDlgNav();
@@ -1499,7 +1513,7 @@ document.addEventListener("click", (e) => {
   else dialogForward();
 });
 // Changing screens forgets windows closed with Atrás on the previous screen.
-window.addEventListener("hashchange", () => { dlgNav.forward = []; dlgNav.reopenPop = null; syncDlgNav(); });
+window.addEventListener("hashchange", () => { dlgNav.forward = []; dlgNav.reopenPop = null; if (dlgNav.saved && location.hash !== dlgNav.saved.to) dlgNav.saved = null; syncDlgNav(); });
 
 // ---------- Version 2.32: Atrás / Adelante in the pop-up lists ----------
 // The notifications list, the user menu and a client's menu (a sheet from the bottom on phones) end with the
@@ -1541,8 +1555,11 @@ function wireDialog(dialog, onSave) {
     if (e.submitter?.value === "cancel") return;
     e.preventDefault();
     try {
+      const from = location.hash;
       await onSave(form);
       dialog._savedAt = Date.now();
+      // Version 2.2.29: the screen that follows the save keeps «Atrás» pointing at this window (see backToSaved).
+      if (dialog.hasAttribute("data-back-to-saved")) dlgNav.saved = { dlg: dialog, to: location.hash, from };
       dialog.close();
     } catch (err) {
       const p = $(".form-error", dialog);
@@ -1847,6 +1864,7 @@ wireDialog($("#client-dialog"), async (form) => {
   if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
   pendingPhoto = undefined;
   state.selectedClientId = saved.id;
+  form.elements.id.value = saved.id; // the window now edits this client: reopening it with Atrás never creates a second one
   toast(id ? "Cliente actualizado." : "Cliente creado.");
   // The client's own screen opens (or refreshes) with the saved data.
   const target = `#cliente-${saved.id}`;
@@ -2464,8 +2482,8 @@ wireDialog($("#case-dialog"), async (form) => {
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_number, ours, client_id }) => ({ side, role: role || "", name, id_number, ours, client_id })),
   };
-  if (d.id) await api("PUT", `/cases/${d.id}`, body);
-  else await api("POST", "/cases", body);
+  const savedCase = d.id ? await api("PUT", `/cases/${d.id}`, body) : await api("POST", "/cases", body);
+  if (savedCase?.id) form.elements.id.value = savedCase.id; // reopening with Atrás edits this case, never creates a second one
   toast(d.id ? "Expediente actualizado." : "Expediente creado.");
   await refreshView();
 });
@@ -2741,7 +2759,7 @@ document.addEventListener("click", (e) => {
     "go": () => { location.hash = btn.dataset.to; },
     "goto-sec": () => goToSection(btn.dataset.sec),
     "go-sec": () => goToSection(btn.dataset.sec),
-    "go-back": () => history.back(),
+    "go-back": () => { if (!backToSaved()) history.back(); },
     "go-forward": () => (dlgNav.reopenPop ? reopenPopup() : dlgNav.forward.some((d) => !d.open) ? dialogForward() : history.forward()),
     "open-case": () => { location.hash = `#expediente-${id}`; },
     "new-task": () => openTaskDialog(null, btn.dataset.case ? Number(btn.dataset.case) : null, btn.dataset.kind),
