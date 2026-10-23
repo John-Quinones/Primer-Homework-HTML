@@ -365,5 +365,34 @@
     return summary;
   }
 
-  window.JuanmaImport = { TARGETS, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, norm, parsePesos, parseDate, titleCase };
+
+  // Dry run for the upload summary: counts what run() would create or skip, writes nothing.
+  async function plan(records, api, opts) {
+    const clients = await api("GET", "/clients");
+    const byDoc = new Set(clients.map((c) => docKey(c.id_number)).filter(Boolean));
+    const byName = new Set(clients.map((c) => norm(c.full_name)));
+    const cases = opts.withCases ? await api("GET", "/cases") : [];
+    const seenClients = new Set(), seenCases = new Set();
+    const rads = new Set(cases.filter((k) => k.radicado).map((k) => radDigits(k.radicado)));
+    const out = { rows: records.length, clientsNew: 0, clientsExisting: 0, casesNew: 0, casesExisting: 0 };
+    for (const rec of records) {
+      const c = rec.client;
+      const name = c.full_name || [c.first_names, c.last_names].filter(Boolean).join(" ");
+      const key = docKey(c.id_number) || norm(name);
+      const exists = (docKey(c.id_number) && byDoc.has(docKey(c.id_number))) || (name && byName.has(norm(name)));
+      if (!seenClients.has(key)) {
+        seenClients.add(key);
+        if (exists) out.clientsExisting++; else out.clientsNew++;
+      }
+      if (opts.withCases) {
+        const rad = radDigits(rec.case.radicado);
+        const dup = (rad.length === 23 && rads.has(rad)) || seenCases.has(`${key}|${norm(rec.case.type)}|${norm(rec.case.folder || rec.case.title)}`);
+        seenCases.add(`${key}|${norm(rec.case.type)}|${norm(rec.case.folder || rec.case.title)}`);
+        if (dup) out.casesExisting++; else out.casesNew++;
+      }
+    }
+    return out;
+  }
+
+  window.JuanmaImport = { TARGETS, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, norm, parsePesos, parseDate, titleCase };
 })();

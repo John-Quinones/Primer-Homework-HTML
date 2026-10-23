@@ -23,7 +23,7 @@ export function agendaRouter(db) {
     FROM tasks t JOIN cases k ON k.id = t.case_id JOIN clients c ON c.id = k.client_id
     JOIN process_types pt ON pt.id = k.process_type_id LEFT JOIN users_shown u ON u.id = t.assigned_user_id
     LEFT JOIN users_shown ku ON ku.id = k.assigned_user_id LEFT JOIN users_shown cb ON cb.id = t.created_by LEFT JOIN users_shown ud ON ud.id = t.done_by`;
-  // Version 2.75: a task assigned to me is always mine to see and close, even if its case sits in an office I cannot open.
+  // Version 2.81: a task assigned to me is always mine to see and close, even if its case sits in an office I cannot open.
   const taskCond = (req) => `(${officeCond(req)} OR t.assigned_user_id = ${Number(req.user.id)})`;
   const out = (t) => ({ ...t, remind_days: JSON.parse(t.remind_days) });
   const visible = (req, id) => db.prepare(`${SELECT} WHERE t.id = ? AND ${taskCond(req)}`).get(id);

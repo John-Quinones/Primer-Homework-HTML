@@ -18,6 +18,7 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
   padding: 12px 24px;
   border-bottom: 3px solid transparent;
   border-image: var(--brand-silver-gradient) 1;
+  position: relative; z-index: 50; /* the bell and user pop-ups open above the glass cards and sticky bars below */
 }
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand h1 { margin: 0; font-size: 1.3rem; letter-spacing: .08em; text-transform: uppercase; }
@@ -72,6 +73,7 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: min(360px, calc(100vw - 32px)); max-height: 70vh; overflow: auto;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
 }
+@media (max-width: 760px) { .bell { position: static; } .bell-pop { right: 16px; } } /* on phones the box hangs from the top bar, so it stays inside the screen */
 .bell-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
 .bell-head button { font-size: .75rem; padding: 4px 8px; }
 #bell-list { list-style: none; margin: 0; padding: 0; }
@@ -1211,3 +1213,9 @@ dialog:not([open]) { pointer-events: none; }
 .ad-litem-box { align-self: end; }
 .muted-line { display: block; margin: 4px 0; font-weight: 600; } .muted-line strong { display: inline; }
 .role-chips { gap: 18px; }
+
+/* Importar: three file cards */
+#import-kind-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.import-card { padding: 12px; border-radius: 12px; background: var(--surface, #fff); box-shadow: 4px 4px 10px rgba(0,0,0,.08), -4px -4px 10px rgba(255,255,255,.7); }
+.import-card h4 { margin: 0 0 6px; }
+.import-card .toolbar { flex-wrap: wrap; gap: 6px; }

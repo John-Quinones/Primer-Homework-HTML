@@ -755,6 +755,12 @@
       <section id="view-importar" class="view" hidden>
         <div class="view-head"><h2>Importar desde Excel</h2></div>
 
+        <div class="panel step" id="import-kinds">
+          <h3>Tres archivos de Excel: clientes, expedientes y despachos</h3>
+          <p class="hint">Para cada uno puede <strong>descargar el Excel con los datos que ya están en la App</strong> (o una plantilla vacía con las columnas), completarlo o corregirlo en su computador y <strong>volver a subirlo</strong>. Al subirlo se muestra un resumen antes de confirmar; lo que ya existe no se duplica ni se borra, solo se completan los datos vacíos. Se sube el archivo (no un enlace de OneDrive): descargue el Excel de OneDrive y súbalo aquí.</p>
+          <div class="grid3" id="import-kind-cards"></div>
+        </div>
+
         <div class="panel step">
           <h3><span class="step-no">1</span> Archivo</h3>
           <p class="hint">En Access: <strong>Datos externos → Exportar → Excel</strong> (formato .xlsx), o exporte a <strong>archivo de texto (.csv)</strong>. Una fila por cliente, o una fila por expediente con los datos del cliente en la misma fila. El archivo del servidor de la firma (AREA, FECHA DE CREACIÓN, TIPO DE PROCESO, ACTUACIONES, CIUDAD, ESTADO, RADICADO, No. CARPETA, DESPACHO JUDICIAL, HONORARIOS, PAGOS) se reconoce solo; debe traer también la columna con el nombre del cliente.</p>

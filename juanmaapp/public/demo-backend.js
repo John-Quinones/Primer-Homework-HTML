@@ -804,7 +804,7 @@
         if (!name || !department) { out.skipped.push({ row: row.rowNumber ?? i + 2, reason: "Sin nombre o departamento." }); return; }
         const city = canonCity(row.city, department);
         const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), judge: str(row.judge).replace(/\s+/g, " "), updated_at: stamp() };
-        const hit = s.courts.find((c) => c.name === name && c.city === city);
+        const hit = s.courts.find((c) => c.name === name && c.city === city) || s.courts.find((c) => c.name === name && c.city === window.JuanmaPerson.properName(str(row.city)));
         if (hit) { Object.assign(hit, { ...v, email: v.email || hit.email || "", phone: v.phone || hit.phone || "", address: v.address || hit.address || "", judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
       });
       return out;
@@ -868,7 +868,7 @@
       const t = s.tasks.find((x) => x.id === +m[1]);
       const kase = t && s.cases.find((x) => x.id === t.case_id);
       (t && kase && (inScope(kase.office_id) || t.assigned_user_id === me().id)) || fail("La tarea no existe.");
-      // Version 2.75, same as the server: the assignee may always say whether it was fulfilled.
+      // Version 2.81, same as the server: the assignee may always say whether it was fulfilled.
       const full = me().permissions.includes("cases.write") && inScope(kase.office_id);
       if (!full && !(t.assigned_user_id === me().id && Object.keys(b).every((x) => ["status", "done_notes"].includes(x)))) fail("Su rol no tiene permiso para esta acción.");
       const prev = clone(t), before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
@@ -1200,6 +1200,7 @@
     ["PUT", /^\/cases\/(\d+)$/, (m, b) => {
       need("cases.write");
       const k = visibleCase(+m[1]);
+      if (b.client_id && +b.client_id !== k.client_id) fail("Un expediente no cambia de cliente: cierre la ventana y vuelva a abrirla.");
       const typeId = +b.process_type_id || k.process_type_id;
       const officeId = officeFor(b.office_id, k.office_id);
       Object.assign(k, {

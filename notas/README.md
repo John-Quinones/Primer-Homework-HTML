@@ -12,6 +12,7 @@ Estas notas viven fuera de `juanmaapp/`, así que cambiarlas no sube la versión
 | [forma-de-trabajo.md](forma-de-trabajo.md) | Cómo quiere John que se le informe el trabajo |
 | [costos-ia.md](costos-ia.md) | Qué gasta créditos de la API y con qué modelo |
 | [clientes.md](clientes.md) | Dónde está el código de clientes, lugares (DANE) y sus campos |
+| [importar.md](importar.md) | Módulo de importar: tres Excel (clientes, expedientes, despachos) |
 | [pruebas-locales.md](pruebas-locales.md) | Trucos para probar la App en el contenedor |
 | [contacto-gerencia.md](contacto-gerencia.md) | Correo y WhatsApp de Gerencia y dónde se guardan |
 
