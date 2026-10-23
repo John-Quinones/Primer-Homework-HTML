@@ -11,17 +11,22 @@
   const methodText = (x) => (x.method === "presencial" ? "en persona, con testigo"
     : `enlace privado y código de un solo uso enviado por ${CHANNEL[x.otp_channel] || CHANNEL.email}${x.otp_to ? " a " + x.otp_to : x.email ? " a " + x.email : ""}`);
 
+  // Every PDF has the letterhead (public/membrete.js, version 2.2.4); without it (tests) a plain letter page.
+  const MB = () => window.JuanmaMembrete || {
+    newPdf: () => new window.jspdf.jsPDF({ unit: "pt", format: "letter" }), finishPdf: (d) => d,
+    pdfBox: (d) => ({ left: 64, right: d.internal.pageSize.getWidth() - 64, top: 64, bottom: d.internal.pageSize.getHeight() - 64, W: d.internal.pageSize.getWidth(), H: d.internal.pageSize.getHeight() }),
+  };
+
   function markdownToPdf(md, { returnDoc = false } = {}) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "letter" });
-    const margin = 64, width = doc.internal.pageSize.getWidth() - margin * 2, bottom = doc.internal.pageSize.getHeight() - margin;
-    let y = margin;
+    const doc = MB().newPdf(), box = MB().pdfBox(doc);
+    const margin = box.left, width = box.right - box.left, bottom = box.bottom;
+    let y = box.top;
     const write = (text, { size = 11, bold = false, gap = 6, indent = 0 } = {}) => {
       doc.setFont("times", bold ? "bold" : "normal");
       doc.setFontSize(size);
       let open = false; // a [FILL: …] that wraps to the next line stays highlighted (version 2.47)
       for (const line of doc.splitTextToSize(text, width - indent)) {
-        if (y > bottom) { doc.addPage(); y = margin; }
+        if (y > bottom) { doc.addPage(); y = box.top; }
         const spans = [];
         let from = open ? 0 : -1;
         for (let i = 0; i < line.length; i++) {
@@ -51,18 +56,18 @@
       else if (/^>\s?/.test(line)) write(clean(line.replace(/^>\s?/, "")), { indent: 14, gap: 4 });
       else write(clean(line));
     }
+    MB().finishPdf(doc);
     return returnDoc ? doc : doc.output("blob");
   }
 
   // Certificate: document identity + each signature's evidence + audit trail.
   function signatureCertificate(r) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "pt", format: "letter" });
-    const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 48;
-    let y = M;
+    const doc = MB().newPdf(), box = MB().pdfBox(doc);
+    const W = box.W, M = box.left, TOP = box.top, END = box.bottom;
+    let y = TOP;
     const line = (t, { size = 10, bold = false, color = [16, 16, 16], gap = 4 } = {}) => {
       doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
-      for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > H - M) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.35; }
+      for (const l of doc.splitTextToSize(String(t), box.right - M)) { if (y > END) { doc.addPage(); y = TOP; } doc.text(l, M, y); y += size * 1.35; }
       y += gap;
     };
     line("CERTIFICADO DE FIRMA ELECTRÓNICA", { size: 16, bold: true, color: [0, 43, 106] });
@@ -72,7 +77,7 @@
     line(`Huella del documento original (SHA-256): ${r.doc_hash}`, { size: 9 });
     line("La huella identifica el contenido exacto que se firmó: cualquier cambio en el documento produce una huella distinta. Para comprobar este PDF firmado, cárguelo en la página de verificación: la app calcula su huella y la compara con la que quedó registrada al completarse las firmas.", { size: 8, color: [90, 90, 90], gap: 10 });
     for (const x of r.signers) {
-      if (y > H - 190) { doc.addPage(); y = M; }
+      if (y > END - 120) { doc.addPage(); y = TOP; }
       line(`${x.name} · ${x.id_type} ${x.id_number}`.trim(), { size: 11, bold: true });
       if (x.status === "firmado") {
         line(`Firmó: ${co(x.signed_at)} · Verificación: ${methodText(x)}`);
@@ -86,12 +91,13 @@
       }
     }
     if (r.events?.length) {
-      if (y > H - 120) { doc.addPage(); y = M; }
+      if (y > END - 70) { doc.addPage(); y = TOP; }
       line("Registro de eventos (hora UTC)", { size: 12, bold: true, color: [0, 43, 106] });
       for (const e of r.events) line(`${e.at} · ${e.event.replace(/_/g, " ")}${e.detail ? " · " + e.detail : ""}${e.ip ? " · IP " + e.ip : ""}`, { size: 8, gap: 1 });
       y += 8;
     }
     line("Firma electrónica con verificación de identidad por código de un solo uso (correo, SMS o WhatsApp) o en persona con testigo, conforme a la Ley 527 de 1999 y el Decreto 2364 de 2012. Generado por TecjuridicosApp.", { size: 8, color: [90, 90, 90] });
+    MB().finishPdf(doc);
     return doc.output("blob");
   }
 
@@ -113,9 +119,9 @@
    * Where each of `n` signature stamps goes on a page (PDF points, origin bottom-left).
    * Corners line the stamps up from that corner; a chosen spot puts the first stamp
    * there and the rest to its right, then below, always inside the page and above
-   * the verification footer.
+   * the verification footer. `lift` raises the corner stamps of a document the App wrote itself: its letterhead footer is at the bottom (2.2.4).
    */
-  function stampBoxes(width, height, n, pos = "br", top = 0) {
+  function stampBoxes(width, height, n, pos = "br", top = 0, lift = 0) {
     const { w, h, gap, margin, footer } = STAMP, out = [];
     const spot = stampSpot(pos);
     if (spot) {
@@ -135,7 +141,7 @@
       const inRow = Math.min(perRow, n - row * perRow);
       const span = inRow * (w + gap) - gap;
       const x0 = pos.endsWith("l") ? margin : pos.endsWith("r") ? width - margin - span : (width - span) / 2;
-      const y = pos.startsWith("t") ? height - margin - top - h - row * (h + gap) : margin + 14 + row * (h + gap);
+      const y = pos.startsWith("t") ? height - margin - top - h - row * (h + gap) : margin + 14 + lift + row * (h + gap);
       out.push({ x: x0 + col * (w + gap), y, w, h });
     }
     return out;
@@ -179,7 +185,7 @@
     for (const { page, top } of targets) {
       const { width, height } = page.getSize();
       const boxW = STAMP.w, boxH = STAMP.h;
-      stampBoxes(width, height, signed.length, pos, top).forEach(({ x, y }, i) => {
+      stampBoxes(width, height, signed.length, pos, top, originalBytes ? 0 : 90).forEach(({ x, y }, i) => {
         const s = signed[i];
         page.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1, 1, 1), opacity: 0.94 });
         // Tecjuridicos logo faded behind the whole stamp (version 2.60).

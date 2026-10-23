@@ -145,6 +145,15 @@
   /** Build a .docx Blob from Markdown text (letter size, 2.5 cm margins, Times New Roman 12). */
   function markdownToDocx(md, title = "Documento") {
     const body = md.replace(/\r\n/g, "\n").split("\n").map((l) => (l.trim() ? paragraph(l.trimEnd()) : '<w:p/>')).join("");
+    // Version 2.2.4: every Word the App writes comes out of John's letterhead template (logo, QR, footer, border, watermark, page
+    // number; public/membrete-base.docx). The plain package below is only the fallback when the letterhead images are not loaded.
+    const letterhead = window.JuanmaMembreteAssets?.docx;
+    if (letterhead) {
+      const lz = new window.PizZip(b64ToBytes(letterhead));
+      lz.file("word/document.xml", lz.file("word/document.xml").asText().replace("<!--BODY-->", () => body.replace(/w:val="Heading(\d)"/g, 'w:val="Ttulo$1"')));
+      if (lz.file("docProps/core.xml")) lz.file("docProps/core.xml", lz.file("docProps/core.xml").asText().replace(/<dc:title>[\s\S]*?<\/dc:title>|<dc:title\/>/, () => `<dc:title>${xml(title)}</dc:title>`));
+      return lz.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    }
     const zip = new window.PizZip();
     zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`);

@@ -4192,31 +4192,26 @@ $("#report-xlsx").addEventListener("click", () => guarded(async () => {
 
 $("#report-pdf").addEventListener("click", () => guarded(async () => {
   const r = lastReport;
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: r.columns.length > 6 ? "landscape" : "portrait", unit: "pt", format: "letter" });
+  const doc = JuanmaMembrete.newPdf({ landscape: r.columns.length > 6 }), box = JuanmaMembrete.pdfBox(doc);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
   doc.setTextColor(0, 43, 106);
-  doc.text(`${r.title}`, 40, 46);
+  doc.text(`${r.title}`, box.left, box.top);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(80);
-  doc.text(`${r.filters}  ·  ${r.rows.length} fila(s)`, 40, 62);
-  doc.text(`Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy} · TecjuridicosApp`, 40, 74);
+  doc.text(doc.splitTextToSize(`${r.filters}  ·  ${r.rows.length} fila(s)`, box.right - box.left), box.left, box.top + 16);
+  doc.text(doc.splitTextToSize(`Generado el ${new Date(r.generatedAt).toLocaleString("es-CO")} por ${r.generatedBy} · TecjuridicosApp`, box.right - box.left), box.left, box.top + 28);
   doc.autoTable({
-    startY: 88,
+    startY: box.top + 42,
     head: [r.columns.map((c) => c.label)],
     body: r.rows.map((row) => r.columns.map((c) => String(row[c.key] ?? ""))),
     styles: { fontSize: 8, cellPadding: 4 },
     headStyles: { fillColor: [0, 43, 106], textColor: 255 },
     alternateRowStyles: { fillColor: [240, 243, 247] },
-    margin: { left: 40, right: 40 },
-    didDrawPage: (d) => {
-      doc.setFontSize(8);
-      doc.setTextColor(120);
-      doc.text(`Página ${d.pageNumber}`, doc.internal.pageSize.getWidth() - 80, doc.internal.pageSize.getHeight() - 20);
-    },
+    margin: { left: box.left, right: doc.internal.pageSize.getWidth() - box.right, top: box.top, bottom: doc.internal.pageSize.getHeight() - box.bottom },
   });
+  JuanmaMembrete.finishPdf(doc);
   await saveFile(reportFileName("pdf"), doc.output("blob"));
 }));
 
@@ -5667,13 +5662,12 @@ const coMs = (utc) => {
 };
 const proxyNote = (ua) => (/GoogleImageProxy|ggpht/i.test(ua || "") ? " · abierto a través del servicio de imágenes de Gmail (la IP es de Google)" : "");
 function mailProof(m) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const W = doc.internal.pageSize.getWidth(), M = 46;
-  let y = M;
+  const doc = JuanmaMembrete.newPdf(), box = JuanmaMembrete.pdfBox(doc);
+  const M = box.left;
+  let y = box.top;
   const line = (t, { size = 9.5, bold = false, color = [16, 16, 16], gap = 3, mono = false } = {}) => {
     doc.setFont(mono ? "courier" : "helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...color);
-    for (const l of doc.splitTextToSize(String(t), W - 2 * M)) { if (y > 748) { doc.addPage(); y = M; } doc.text(l, M, y); y += size * 1.32; }
+    for (const l of doc.splitTextToSize(String(t), box.right - M)) { if (y > box.bottom) { doc.addPage(); y = box.top; } doc.text(l, M, y); y += size * 1.32; }
     y += gap;
   };
   const head = (t) => { y += 6; line(t, { size: 11.5, bold: true, color: [0, 43, 106], gap: 4 }); };
@@ -5721,6 +5715,7 @@ function mailProof(m) {
   head("7. Valor probatorio y alcance");
   line("Mensaje de datos conforme a la Ley 527 de 1999 (arts. 10, 11, 20 y 21: admisibilidad, fuerza probatoria y acuse de recibo) y al art. 8 de la Ley 2213 de 2022 (notificación personal por mensaje de datos), cuya exequibilidad condicionó la Corte Constitucional en la sentencia C-420 de 2020 a que se acredite el acuse de recibo o se pueda constatar por otro medio el acceso del destinatario al mensaje. Los registros de apertura, descarga y acuse sirven para esa constatación; el juez los valora con las reglas de la sana crítica (CGP, arts. 176 y 247).", { size: 8 });
   line("Limitaciones: la apertura se detecta cuando el programa del destinatario carga imágenes; algunos servicios las cargan por un intermediario o las bloquean. «Aceptado por el servidor de correo» prueba la entrega al servidor de salida, no la lectura. Esta constancia la genera la firma con su propio sistema: no es un servicio de correo electrónico certificado prestado por una entidad acreditada ante ONAC.", { size: 8, color: [90, 90, 90] });
+  JuanmaMembrete.finishPdf(doc);
   return doc.output("blob");
 }
 
@@ -6731,18 +6726,16 @@ wireDialog($("#pay-settings-dialog"), async (form) => {
 const pesosEnLetras = (n) => L.pesosEnLetras(n);
 
 function pdfBase(title) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const W = doc.internal.pageSize.getWidth(), M = 48;
+  const doc = JuanmaMembrete.newPdf(), box = JuanmaMembrete.pdfBox(doc);
+  const W = box.right, M = box.left;
   const s = paySettings || {};
-  doc.setFillColor(0, 43, 106); doc.rect(0, 0, W, 6, "F");
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(0, 43, 106);
-  doc.text(s.firm_name || "TEC Jurídicos", M, 46);
+  doc.text(s.firm_name || "TEC Jurídicos", M, box.top);
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(90, 90, 90);
-  doc.text([s.firm_nit ? `NIT ${s.firm_nit}` : "", "Ibagué, Tolima"].filter(Boolean).join(" · "), M, 60);
+  doc.text([s.firm_nit ? `NIT ${s.firm_nit}` : "", "Ibagué, Tolima"].filter(Boolean).join(" · "), M, box.top + 14);
   doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(16, 16, 16);
-  doc.text(title, W - M, 46, { align: "right" });
-  return { doc, W, M };
+  doc.text(title, M, box.top + 34);
+  return { doc, W, M, top: box.top + 34, box };
 }
 
 // ----- Receipt in Word and PDF (version 2.58) -----
@@ -6836,16 +6829,17 @@ async function downloadReceipt(r, format) {
 }
 // The plain PDF the app made before the Word receipt; only used when the Word viewer is not available.
 async function simpleReceiptPdf(r) {
-  const { doc, W, M } = pdfBase(`RECIBO DE CAJA ${receiptNo(r.number)}`);
+  const { doc, M, top, box } = pdfBase(`RECIBO DE CAJA ${receiptNo(r.number)}`);
   doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-  doc.text(`Fecha de pago: ${r.paid_on}`, W - M, 62, { align: "right" });
+  doc.text(`Fecha de pago: ${r.paid_on}`, M, top + 16);
   const rows = [["Recibimos de", `${r.client_name}${r.client_doc ? " · " + r.client_doc : ""}`], ["La suma de", `${cop(r.amount)}`],
     ["En letras", pesosEnLetras(r.amount)], ["Por concepto de", r.concept], ["Medio de pago", r.method + (r.reference ? ` · Ref. ${r.reference}` : "")]];
-  doc.autoTable({ startY: 90, body: rows, theme: "grid", styles: { fontSize: 10.5, cellPadding: 7 },
-    columnStyles: { 0: { fontStyle: "bold", cellWidth: 130, fillColor: [238, 242, 247] } }, margin: { left: M, right: M } });
+  doc.autoTable({ startY: top + 28, body: rows, theme: "grid", styles: { fontSize: 10.5, cellPadding: 7 },
+    columnStyles: { 0: { fontStyle: "bold", cellWidth: 110, fillColor: [238, 242, 247] } }, margin: { left: M, right: box.W - box.right, top: box.top, bottom: box.H - box.bottom } });
   const y = doc.lastAutoTable.finalY + 70;
   doc.line(M, y, M + 220, y);
   doc.text([r.signer_name || r.created_by_name || me.name, r.signer_id ? `C.C. ${r.signer_id}` : ""].filter(Boolean), M, y + 14);
+  JuanmaMembrete.finishPdf(doc);
   return doc.output("blob");
 }
 
@@ -6853,22 +6847,24 @@ async function downloadStatement(clientId) {
   paySettings ||= await api("GET", "/payments/settings");
   const [charges, receipts] = await Promise.all([api("GET", `/payments/charges?clientId=${clientId}&state=`), api("GET", `/payments/receipts?clientId=${clientId}`)]);
   const cl = payClients.find((c) => c.id === clientId) || {};
-  const { doc, M } = pdfBase("ESTADO DE CUENTA");
+  const { doc, M, top, box } = pdfBase("ESTADO DE CUENTA");
+  const tm = { left: M, right: box.W - box.right, top: box.top, bottom: box.H - box.bottom };
   doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(16, 16, 16);
-  doc.text([`Cliente: ${cl.full_name || ""}${cl.id_number ? " · " + (cl.id_type || "") + " " + cl.id_number : ""}`, `Fecha de corte: ${localToday()}`], M, 92);
+  doc.text(doc.splitTextToSize(`Cliente: ${cl.full_name || ""}${cl.id_number ? " · " + (cl.id_type || "") + " " + cl.id_number : ""}`, box.right - M).concat(`Fecha de corte: ${localToday()}`), M, top + 18);
   const live = charges.filter((c) => c.state !== "anulado");
-  doc.autoTable({ startY: 120, head: [["Concepto", "Vence", "Valor", "Pagado", "Saldo", "Estado"]],
+  doc.autoTable({ startY: top + 52, head: [["Concepto", "Vence", "Valor", "Pagado", "Saldo", "Estado"]],
     body: live.map((c) => [c.concept + (c.plan_label ? ` · ${c.plan_label}` : ""), c.due_date, cop(c.amount), cop(c.paid), cop(c.balance), c.state_label + (c.days_overdue ? ` (${c.days_overdue} d)` : "")]),
     foot: [["Total", "", cop(live.reduce((a, c) => a + c.amount, 0)), cop(live.reduce((a, c) => a + c.paid, 0)), cop(live.reduce((a, c) => a + c.balance, 0)), ""]],
     styles: { fontSize: 9 }, headStyles: { fillColor: [0, 43, 106] }, footStyles: { fillColor: [238, 242, 247], textColor: 16 },
-    columnStyles: { 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } }, margin: { left: M, right: M } });
+    columnStyles: { 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } }, margin: tm });
   doc.autoTable({ startY: doc.lastAutoTable.finalY + 24, head: [["Recibo", "Fecha", "Concepto", "Medio", "Valor"]],
     body: receipts.filter((r) => !r.voided_at).map((r) => [receiptNo(r.number), r.paid_on, r.concept, r.method, cop(r.amount)]),
-    styles: { fontSize: 9 }, headStyles: { fillColor: [2, 124, 198] }, columnStyles: { 4: { halign: "right" } }, margin: { left: M, right: M } });
+    styles: { fontSize: 9 }, headStyles: { fillColor: [2, 124, 198] }, columnStyles: { 4: { halign: "right" } }, margin: tm });
   if (paySettings.pay_info) {
     const y = doc.lastAutoTable.finalY + 24;
-    doc.setFontSize(9.5); doc.text(["Datos para el pago:", ...doc.splitTextToSize(paySettings.pay_info, 500)], M, y);
+    doc.setFontSize(9.5); doc.text(["Datos para el pago:", ...doc.splitTextToSize(paySettings.pay_info, box.right - M)], M, y);
   }
+  JuanmaMembrete.finishPdf(doc);
   await saveFile(`Estado de cuenta ${safeName(cl.full_name || "cliente")}.pdf`, doc.output("blob"));
 }
 
