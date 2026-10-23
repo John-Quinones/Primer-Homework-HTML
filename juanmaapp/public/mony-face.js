@@ -45,12 +45,33 @@ void main() {
 }`;
   const FRAG = `
 precision mediump float;
-uniform sampler2D uImg; varying vec2 vUV; varying float vDim;
-void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, 1.0); }`;
+uniform sampler2D uImg; uniform float uA; varying vec2 vUV; varying float vDim;
+void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, uA); }`;
+  // The opening: thousands of points taken from the portrait itself drift in a swirl and lock into place.
+  const PVERT = `
+attribute vec2 aT; attribute vec2 aS; attribute vec4 aR; attribute vec3 aC;
+uniform vec4 uView; uniform float uTime, uPx;
+varying vec3 vC; varying float vE;
+void main() {
+  float e = clamp((uTime - aR.x) / aR.y, 0.0, 1.0); e = 1.0 - pow(1.0 - e, 3.0);
+  vec2 c = vec2(750.0, 400.0); float a = aR.z * (1.0 - e); vec2 o = mix(aS, aT - c, e);
+  vec2 p = c + vec2(cos(a) * o.x - sin(a) * o.y, sin(a) * o.x + cos(a) * o.y);
+  p += vec2(sin(uTime / 260.0 + aR.x * 9.0), cos(uTime / 310.0 + aR.y * 7.0)) * 7.0 * (1.0 - e);
+  vec2 n = (p - uView.xy) / uView.zw;
+  gl_Position = vec4(n.x * 2.0 - 1.0, 1.0 - n.y * 2.0, 0.0, 1.0);
+  gl_PointSize = max(2.0, aR.w * uPx * (0.7 + 0.6 * e)); vC = aC; vE = e;
+}`;
+  const PFRAG = `
+precision mediump float;
+uniform float uFade; varying vec3 vC; varying float vE;
+void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1.0) discard;
+  gl_FragColor = vec4(vC * (0.55 + 0.35 * vE), (1.0 - d) * 0.8 * uFade); }`;
 
   const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  const INTRO_MS = 3200, FORMED_MS = 2700;
   const faces = [];
   let gl = null, glc = null, prog = null, U = {}, ready = false, failed = false, raf = 0;
+  let vbuf = null, pprog = null, PU = {}, pbuf = null, pcount = 0, introAt = null, introWanted = false, introDone = null;
   const S = { yaw: 0, pitch: 0, tilt: 0, gx: 0, gy: 0, blink: 0, mouth: 0, smile: 0.35, brow: 0, breath: 0 };
   const T = { yaw: 0, pitch: 0, gx: 0, gy: 0, smile: 0.35, brow: 0 };
   let mode = "idle"; // idle | thinking | listening | speaking
@@ -66,11 +87,11 @@ void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, 1.0); }`;
       prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error("link");
       gl.useProgram(prog);
-      for (const n of ["uTex", "uView", "uYaw", "uPitch", "uTilt", "uBreath", "uBlink", "uGx", "uGy", "uMouth", "uSmile", "uBrow", "uImg"]) U[n] = gl.getUniformLocation(prog, n);
+      for (const n of ["uTex", "uView", "uYaw", "uPitch", "uTilt", "uBreath", "uBlink", "uGx", "uGy", "uMouth", "uSmile", "uBrow", "uImg", "uA"]) U[n] = gl.getUniformLocation(prog, n);
       const pts = [], idx = [];
       for (let j = 0; j <= ROWS; j++) for (let i = 0; i <= COLS; i++) pts.push((i / COLS) * TW, (j / ROWS) * TH);
       for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const a = j * (COLS + 1) + i, b = a + 1, c = a + COLS + 1, e = c + 1; idx.push(a, b, c, b, e, c); }
-      const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pts), gl.STATIC_DRAW);
+      vbuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pts), gl.STATIC_DRAW);
       const loc = gl.getAttribLocation(prog, "aP"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
       const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
       gl.uniform2f(U.uTex, TW, TH);
@@ -83,12 +104,51 @@ void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, 1.0); }`;
         for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, p, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.uniform1i(U.uImg, 0);
+        try { buildPoints(im); } catch { pcount = 0; }
         ready = true; wake();
       };
       im.src = IMG;
       glc.addEventListener("webglcontextlost", (e) => { e.preventDefault(); failed = true; unmountAll(); });
       return false;
     } catch { failed = true; return false; }
+  }
+
+  function buildPoints(im) {
+    const W = 800, H = 447, k = TW / W, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(im, 0, 0, W, H);
+    const px = x.getImageData(0, 0, W, H).data, MAX = 7000, out = [];
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const o = (j * W + i) * 4, r = px[o] / 255, g = px[o + 1] / 255, b = px[o + 2] / 255, l = 0.3 * r + 0.59 * g + 0.11 * b;
+      const sx = i * k, sy = j * k;
+      if (l < 0.42 || sx < 330 || sx > 1100 || sy > 770 || Math.random() > 0.3) continue;
+      const ang = Math.random() * Math.PI * 2, rad = 260 + Math.random() * 520;
+      out.push(sx + (Math.random() - 0.5) * 2, sy + (Math.random() - 0.5) * 2, Math.cos(ang) * rad, Math.sin(ang) * rad,
+        Math.random() * 1100, 900 + Math.random() * 600, (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 2.4), 2.2 + l * 3.5,
+        Math.min(1, r * 1.3 + 0.1), Math.min(1, g * 1.3 + 0.15), Math.min(1, b * 1.3 + 0.2));
+    }
+    const stride = 11; let n = out.length / stride;
+    if (n > MAX) { const keep = []; for (let q = 0; q < n; q++) if (Math.random() < MAX / n) keep.push(...out.slice(q * stride, q * stride + stride)); out.length = 0; out.push(...keep); n = out.length / stride; }
+    const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    pprog = gl.createProgram(); gl.attachShader(pprog, sh(gl.VERTEX_SHADER, PVERT)); gl.attachShader(pprog, sh(gl.FRAGMENT_SHADER, PFRAG)); gl.linkProgram(pprog);
+    if (!gl.getProgramParameter(pprog, gl.LINK_STATUS)) throw new Error("plink");
+    for (const nme of ["uView", "uTime", "uPx", "uFade"]) PU[nme] = gl.getUniformLocation(pprog, nme);
+    pbuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(out), gl.STATIC_DRAW);
+    pcount = n;
+  }
+  function drawPoints(t, v, cw) {
+    gl.useProgram(pprog); gl.bindBuffer(gl.ARRAY_BUFFER, pbuf);
+    const st = 44; let o = 0;
+    for (const [nme, size] of [["aT", 2], ["aS", 2], ["aR", 4], ["aC", 3]]) {
+      const l = gl.getAttribLocation(pprog, nme); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, gl.FLOAT, false, st, o); o += size * 4;
+    }
+    gl.uniform4f(PU.uView, v[0], v[1], v[2], v[3]); gl.uniform1f(PU.uTime, t); gl.uniform1f(PU.uPx, cw / v[2]);
+    const sm = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+    gl.uniform1f(PU.uFade, 1 - sm(2500, 3200, t));
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    gl.drawArrays(gl.POINTS, 0, pcount);
+    for (const nme of ["aT", "aS", "aR", "aC"]) gl.disableVertexAttribArray(gl.getAttribLocation(pprog, nme));
+    gl.useProgram(prog); gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+    const loc = gl.getAttribLocation(prog, "aP"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   }
 
   const visible = (f) => f.cv.getClientRects().length > 0;
@@ -180,7 +240,14 @@ void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, 1.0); }`;
     gl.uniform1f(U.uBlink, S.blink); gl.uniform1f(U.uGx, S.gx); gl.uniform1f(U.uGy, S.gy); gl.uniform1f(U.uMouth, S.mouth);
     gl.uniform1f(U.uSmile, S.smile); gl.uniform1f(U.uBrow, S.brow);
     gl.clearColor(0.02, 0.06, 0.15, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    const it = introAt === null ? -1 : performance.now() - introAt, intro = it >= 0 && it < INTRO_MS && pcount > 0;
+    const sm = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform1f(U.uA, intro ? sm(1800, 3000, it) : 1);
     gl.drawElements(gl.TRIANGLES, COLS * ROWS * 6, gl.UNSIGNED_SHORT, 0);
+    if (intro) drawPoints(it, v, glc.width);
+    if (introAt !== null && it >= FORMED_MS && introDone) { const cb = introDone; introDone = null; cb(); }
+    if (introAt !== null && it >= INTRO_MS) introAt = null;
     f.ctx.drawImage(glc, 0, 0);
   }
 
@@ -189,6 +256,7 @@ void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, 1.0); }`;
     if (failed || !ready) return;
     const f = active();
     if (!f) return; // nothing on screen: stop until something shows up again (wake)
+    if (introWanted && f.cv.closest(".mony-id")) { introWanted = false; introAt = performance.now(); }
     const dt = Math.min(60, lastT ? t - lastT : 16); lastT = t;
     think(t, dt);
     draw(f);
@@ -208,6 +276,12 @@ void main() { gl_FragColor = vec4(texture2D(uImg, vUV).rgb * vDim, 1.0); }`;
     setMode(m) { mode = m; if (m === "idle") { T.brow = 0; T.smile = 0.35; } wake(); },
     /** a spoken word: the mouth opens a little wider */
     pulse() { level = 1; },
+    /** Play the opening (points assemble into the face); `onFormed` runs when the face is complete. Without WebGL or with reduced motion it runs at once. */
+    intro(onFormed) {
+      if (failed || reduce?.matches || !pcount && ready) { onFormed?.(); return; }
+      introWanted = true; introDone = onFormed || null; wake();
+      setTimeout(() => { if (introDone) { const cb = introDone; introDone = null; cb(); } }, 7000);
+    },
     /** test hooks */
     _state: S,
   };
