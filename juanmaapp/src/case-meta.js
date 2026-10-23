@@ -72,12 +72,14 @@ const AREA_ALSO = {
   Familia: ["Promiscuo"], Laboral: ["Promiscuo"], Penal: ["Promiscuo"],
 };
 export const areaIncludes = (area) => (area ? [area, ...(AREA_ALSO[area] || [])] : []);
+// v2.75: «Otros» = every court that is neither Civil nor Penal (Familia, Laboral, Administrativo, promiscuos…).
+const hearsArea = (c, area) => (area === "Otros" ? !["Civil", "Penal"].includes(c.area) : areaIncludes(area).includes(c.area));
 
 /** True when a court is in the department, sits in the city or belongs to its circuit, and hears the area. */
 export function courtMatches(c, { department = "", city = "", area = "" } = {}) {
   if (department && plain(c.department) !== plain(department)) return false;
   if (city && plain(c.city) !== plain(city) && plain(c.circuit) !== plain(city)) return false;
-  if (area && !areaIncludes(area).includes(c.area)) return false;
+  if (area && !hearsArea(c, area)) return false;
   return true;
 }
 
@@ -89,7 +91,7 @@ export function courtMatches(c, { department = "", city = "", area = "" } = {}) 
 export function filterCourts(list, want = {}) {
   const exact = list.filter((c) => courtMatches(c, want)
     && (!want.city || plain(c.city) === plain(want.city))
-    && (!want.area || c.area === want.area));
+    && (!want.area || (want.area === "Otros" ? hearsArea(c, "Otros") : c.area === want.area)));
   return exact.length ? exact : list.filter((c) => courtMatches(c, want));
 }
 

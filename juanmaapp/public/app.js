@@ -5781,7 +5781,7 @@ document.addEventListener("click", async (e) => {
 const COURT_COLS = {
   department: ["departamento", "depto", "distrito"], city: ["ciudad", "municipio", "ciudad municipio", "sede"],
   name: ["despacho", "nombre despacho", "nombre del despacho", "juzgado", "dependencia", "nombre"],
-  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
+  area: ["especialidad", "area", "jurisdiccion", "especialidad despacho", "corporacion o area", "corporacion", "corporacion area"], circuit: ["circuito", "circuito judicial"], email: ["correo", "correo electronico", "email", "e mail", "correo institucional"],
   code: ["codigo", "codigo despacho", "cod despacho"], judge: ["juez", "nombre juez", "nombre del juez", "titular", "funcionario", "nombre funcionario", "nombre del funcionario", "magistrado", "ponente"], phone: ["telefono", "telefonos", "tel"], address: ["direccion"],
 };
 $("#courts-file").addEventListener("change", (e) => guarded(async () => {

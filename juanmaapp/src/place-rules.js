@@ -30,6 +30,9 @@ export function makePlaces(divipola, properName) {
     const hit = divipola.municipios.find((m) => (!dep || m.dep === dep) && bare(m.name) === n);
     if (hit) return hit.name;
     if (n.startsWith("bogota")) return "Bogotá, D.C.";
+    // v2.75: the directory says «Cartagena», DIVIPOLA says «Cartagena de Indias»: one municipality of the department that starts with «<name> de».
+    const longer = divipola.municipios.filter((m) => (!dep || m.dep === dep) && bare(m.name).startsWith(n + " de "));
+    if (longer.length === 1) return longer[0].name;
     return properName(name);
   }
 
@@ -49,7 +52,7 @@ export function normalizeRadicado(r) {
 
 export const AREAS = [
   "Civil", "Laboral", "Penal", "Familia", "Administrativo", "Promiscuo", "Ejecución de Penas",
-  "Pequeñas Causas y Competencia Múltiple", "Restitución de Tierras", "Penal para Adolescentes", "Constitucional", "Otro",
+  "Pequeñas Causas y Competencia Múltiple", "Restitución de Tierras", "Penal para Adolescentes", "Constitucional", "Otro", "Otros",
 ];
 
 // Order matters: the most specific wording wins.
