@@ -24,12 +24,12 @@
       match: ["departamento de expedicion", "departamento expedicion", "depto expedicion", "departamento de expedicion de la cedula", "departamento expedicion cedula"] },
     { key: "client.id_city", label: "Cliente · Ciudad de expedición de la cédula",
       match: ["ciudad de expedicion", "ciudad expedicion", "lugar de expedicion", "lugar expedicion", "ciudad de expedicion de la cedula", "ciudad expedicion cedula", "expedida en", "expedicion"] },
-    { key: "client.archive_status", label: "Cliente · Estado (activo, archivo provisional o definitivo)", match: ["estado del cliente", "estado cliente", "archivo del cliente"] },
+    { key: "client.archive_status", label: "Cliente · Estado (activo, archivo provisional, archivo definitivo o pendiente pago sentencia)", match: ["estado del cliente", "estado cliente", "archivo del cliente"] },
     { key: "client.notes", label: "Cliente · Notas", join: "\n", match: ["notas", "observaciones", "comentarios"] },
     { key: "case.category", label: "Expediente · Tipo de proceso", match: ["tipo proceso", "tipo de proceso", "area", "especialidad", "categoria", "materia"] },
     { key: "case.type", label: "Expediente · Subproceso", match: ["subproceso", "clase proceso", "clase de proceso", "accion", "tipo accion", "medio de control", "proceso"] },
     { key: "case.title", label: "Expediente · Asunto", match: ["asunto", "referencia", "descripcion", "objeto"] },
-    { key: "case.status", label: "Expediente · Estado (1 = Activo, 2 = Archivado)", match: ["estado", "estado proceso", "estado del proceso"] },
+    { key: "case.status", label: "Expediente · Estado (Activo, Archivo provisional, Archivo definitivo, Pendiente Pago Sentencia; o 1 = Activo, 2 = Definitivo, 3 = Provisional)", match: ["estado", "estado proceso", "estado del proceso"] },
     { key: "case.created_at", label: "Expediente · Fecha de creación", match: ["fecha de creacion", "fecha creacion", "fecha apertura", "fecha de apertura", "fecha inicio", "fecha de inicio"] },
     { key: "case.actuaciones", label: "Expediente · Actuaciones (historial)", join: "\n", match: ["actuaciones", "actuacion", "ultima actuacion", "ultimas actuaciones"] },
     { key: "case.city", label: "Expediente · Ciudad del proceso", match: ["ciudad proceso", "ciudad del proceso", "ciudad despacho", "ciudad del despacho"] },
@@ -231,6 +231,8 @@
     const w = archiveState(clientCol);
     return w === undefined && caseState === "Pendiente Pago Sentencia" ? caseState : w;
   }
+  // A client or case still in the default state (Activo) counts as «empty»: the file may set its state even when only blanks are filled (version 2.105).
+  const stateFillable = (cur) => !cur || cur === "Activo";
   function normClient(raw) {
     const c = { ...raw };
     if (c.person_type) c.person_type = /jur/i.test(norm(c.person_type)) ? "juridica" : "natural";
@@ -339,7 +341,7 @@
           }
         }
         // New clients take the state of the file; existing ones change it only when the screen asked to update what differs.
-        if (wanted !== undefined && wanted !== (client.archive_status || "") && (created || opts.updateMode === "update")) {
+        if (wanted !== undefined && wanted !== (client.archive_status || "") && (created || opts.updateMode === "update" || stateFillable(client.archive_status))) {
           client = await api("PUT", `/clients/${client.id}/archive`, { status: wanted });
           summary.clientsArchived = (summary.clientsArchived || 0) + 1;
         }
@@ -361,7 +363,7 @@
           if (keys.some((k) => caseKeys.has(k))) {
             summary.casesSkipped++;
             const old = keys.map((k) => caseKeys.get(k)).find(Boolean);
-            if (opts.updateMode === "update" && old && caseState && caseState !== old.status) {
+            if ((opts.updateMode === "update" || stateFillable(old?.status)) && old && caseState && caseState !== old.status) {
               const upd = await api("PUT", `/cases/${old.id}`, { status: caseState }); // only the state; nothing else of the case changes
               addKeys(upd);
               summary.casesUpdated = (summary.casesUpdated || 0) + 1;
@@ -456,7 +458,7 @@
           for (const d of clientDiff(found, normClient(c), opts.updateMode)) out.changes.push({ row: rec.rowNumber, name: found.full_name, ...d });
           const caseState = rec.case.status ? window.JuanmaCaseMeta?.statusFrom(rec.case.status) : undefined;
           const wanted = wantedClientState(c.archive_status, caseState);
-          if (opts.updateMode === "update" && wanted !== undefined && wanted !== (found.archive_status || ""))
+          if ((opts.updateMode === "update" || stateFillable(found.archive_status)) && wanted !== undefined && wanted !== (found.archive_status || ""))
             out.changes.push({ row: rec.rowNumber, name: found.full_name, field: "archive_status", before: found.archive_status || "Activo", after: wanted || "Activo", kind: "update" });
         } else out.clientsNew++;
       }
@@ -469,7 +471,7 @@
           const st = rec.case.status ? window.JuanmaCaseMeta?.statusFrom(rec.case.status) : undefined;
           const old = found && cases.find((k) => (rad.length === 23 && radDigits(k.radicado) === rad) ||
             (k.client_id === found.id && ((rec.case.folder && [...folderIds].some((f) => norm(k.field_values?.[f]) === norm(rec.case.folder))) || (!rec.case.folder && norm(k.title) === norm(rec.case.title)))));
-          if (opts.updateMode === "update" && old && st && st !== old.status)
+          if ((opts.updateMode === "update" || stateFillable(old?.status)) && old && st && st !== old.status)
             out.changes.push({ row: rec.rowNumber, name: found.full_name, field: "case_status", before: old.status, after: st, kind: "update" });
         } else out.casesNew++;
       }

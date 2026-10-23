@@ -3189,7 +3189,8 @@ function fitMapping(kind, headers, guess) {
   const ok = new Set(IMP.targetsFor(kind).map((t) => t.key));
   const saved = savedImportMapping(kind);
   return headers.map((h, i) => {
-    const want = IMP.norm(h) in saved ? saved[IMP.norm(h)] : guess[i];
+    let want = IMP.norm(h) in saved ? saved[IMP.norm(h)] : guess[i];
+    if (kind === "clientes" && want === "case.status") want = "client.archive_status"; // a plain «Estado» column in the clients upload is the client's state
     if (ok.has(want)) return want;
     const plain = IMP.guessTarget(h);
     return ok.has(plain) ? plain : "";
@@ -3349,9 +3350,9 @@ function renderImportPreview() {
 $("#import-run").addEventListener("click", () => guarded(async () => {
   saveImportMapping(imp.kind, imp.headers, imp.mapping);
   const records = importRecords();
-  if (updateMode() === "update") {
-    const plan = await IMP.plan(records, api, { withCases: importMode() === "cases", updateMode: "update" });
-    const n = plan.changes.filter((c) => c.kind === "update").length;
+  {
+    const plan = await IMP.plan(records, api, { withCases: importMode() === "cases", updateMode: updateMode() });
+    const n = plan.changes.filter((c) => c.kind === "update" || c.field === "archive_status" || c.field === "case_status").length; // states always get the copy first
     if (n) {
       if (!(await ask({ title: "Actualizar clientes existentes", message: `Se cambiarán ${n} dato(s) que ya estaban guardados. Antes se descarga un Excel con los clientes${plan.changes.some((c) => c.field === "case_status") ? " y los expedientes" : ""} tal como están hoy, para poder volver atrás. Nada se borra.`, okLabel: "Descargar copia y actualizar" }))) return;
       const day = new Date().toISOString().slice(0, 10);

@@ -95,7 +95,8 @@ test("import: the «Estado del cliente» column archives new clients, and existi
     return { sum, archives: calls.filter((c) => c.includes("/archive")) };
   };
   const fill = await run("fill");
-  assert.deepEqual(fill.archives, ['PUT /clients/2/archive {"status":"Archivo provisional"}']);
+  // version 2.105: an existing client still «Activo» takes the file's state even when only blanks are filled
+  assert.deepEqual(fill.archives, ['PUT /clients/2/archive {"status":"Archivo provisional"}', 'PUT /clients/1/archive {"status":"Archivo definitivo"}']);
   const upd = await run("update");
   assert.equal(upd.archives.length, 2);
   assert.ok(upd.archives.some((c) => c.includes("/clients/1/archive") && c.includes("Archivo definitivo")));
@@ -157,7 +158,9 @@ test("version 2.104: re-uploading the Excel updates «Pago de Sentencia» on exi
   assert.equal(p.calls.some((c) => c.startsWith("PUT")), false);
   const fill = make();
   await IMP.run(records, fill.api, { withCases: true, defaultCategory: "Laboral", defaultType: "Ordinario", updateMode: "fill" });
-  assert.equal(fill.calls.some((c) => c.startsWith("PUT")), false);
+  // «Activo» counts as empty: filling blanks may still set the state, and the preview says so
+  assert.equal(fill.calls.filter((c) => c.startsWith("PUT")).length, 2);
+  assert.ok(IMP.TARGETS.find((t) => t.key === "client.archive_status").label.includes("pendiente pago sentencia"));
   const upd = make();
   const sum = await IMP.run(records, upd.api, { withCases: true, defaultCategory: "Laboral", defaultType: "Ordinario", updateMode: "update" });
   assert.deepEqual(upd.calls.filter((c) => c.startsWith("PUT")), ['PUT /clients/1/archive {"status":"Pendiente Pago Sentencia"}', 'PUT /cases/7 {"status":"Pendiente Pago Sentencia"}']);
