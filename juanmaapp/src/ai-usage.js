@@ -18,6 +18,7 @@ const WEB_SEARCH_USD = 0.01; // $10 per 1,000 searches; web fetch costs only its
 
 export const KIND_LABELS = {
   nomosai: "NomosAI (borradores)",
+  mony: "Mony (asistente)",
   search: "Jurisprudencia: buscar",
   analyze: "Jurisprudencia: analizar",
   analyze_text: "Jurisprudencia: analizar texto pegado",

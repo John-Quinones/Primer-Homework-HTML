@@ -23,8 +23,8 @@ const httpBackend = {
     return data;
   },
   // Yields NDJSON events from /api/generate.
-  async *generate(payload) {
-    const res = await fetch("/api/generate", {
+  async *generate(payload, url = "/api/generate") {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-JuanMa": "1" },
       body: JSON.stringify(payload),
@@ -128,7 +128,7 @@ const VIEW_PERMS = {
   pagos: "payments.manage",
   consulta: "processes.consult",
   radicados: "cases.write",
-  borradores: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
+  borradores: "drafts.generate", mony: "drafts.generate", jurisprudencia: "jurisprudence.use", reportes: "reports.view",
   importar: "import.run", configuracion: "catalog.manage", usuarios: "users.manage", bitacora: "audit.view",
 };
 
@@ -150,6 +150,7 @@ const NAV_DESC = {
   pagos: "Cobros, recibos, cartera y recordatorios",
   correo: "Correo con constancia de entrega y lectura",
   jurisprudencia: "Sentencias de las altas cortes",
+  mony: "Asistente jurídico: procesos, términos y borradores",
   reportes: "Informes en Excel o PDF",
   importar: "Cargar clientes y procesos desde Excel",
   configuracion: "Tipos de proceso, campos y canales de envío",
@@ -580,7 +581,7 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "radicados", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "radicados", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "mony", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
@@ -6953,6 +6954,67 @@ document.addEventListener("click", (e) => {
   if (b && PAY_ACTIONS[b.dataset.action]) guarded(() => PAY_ACTIONS[b.dataset.action](b));
 });
 
+// Mony (version 2.2.8): chat with the legal assistant. The conversation is kept per user in this browser,
+// only as plain text; the server never trusts it for anything but the words. Answers stream in.
+const MONY_MAX = 20;
+const monyKey = () => `mony-chat-${me?.id ?? "x"}`;
+let monyMsgs = [], monyBusy = false;
+function monyLoad() {
+  try { monyMsgs = JSON.parse(localStorage.getItem(monyKey()) || "[]").filter((m) => m && typeof m.content === "string"); } catch { monyMsgs = []; }
+}
+function monySave() { try { localStorage.setItem(monyKey(), JSON.stringify(monyMsgs.slice(-MONY_MAX))); } catch {} }
+function monyBubble(role, text) {
+  const d = document.createElement("div");
+  d.className = `mony-msg mony-${role}`;
+  d.textContent = text; // plain text: nothing the model or a court writes is run as HTML
+  $("#mony-log").append(d);
+  d.scrollIntoView({ block: "end" });
+  return d;
+}
+function renderMony() {
+  if (WEB) {
+    $("#mony-box").hidden = true;
+    const el = $("#mony-server");
+    el.hidden = false;
+    el.innerHTML = `<p><strong>En este enlace de pruebas Mony no puede consultar.</strong> El asistente usa la clave de Anthropic y la Rama Judicial, que solo están en la App del servidor (Azure).</p>
+      ${SERVER_URL ? `<a class="button" href="${escapeHtml(SERVER_URL)}/#mony" target="_blank" rel="noopener noreferrer">Abrir Mony en la App del servidor ›</a>` : ""}`;
+    return;
+  }
+  monyLoad();
+  const log = $("#mony-log");
+  log.replaceChildren();
+  if (!monyMsgs.length) monyBubble("assistant", "Buenos días. Soy Mony, el asistente jurídico de Tecjurídicos. Puedo consultar un proceso en la Rama Judicial, calcular un término judicial y preparar un borrador con las plantillas de la firma. ¿En qué le ayudo?");
+  for (const m of monyMsgs) monyBubble(m.role, m.content);
+}
+$("#mony-clear").addEventListener("click", () => { if (monyBusy) return; monyMsgs = []; monySave(); renderMony(); });
+$("#mony-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#mony-form").requestSubmit(); } });
+$("#mony-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = $("#mony-input"), text = input.value.trim();
+  if (!text || monyBusy) return;
+  guarded(async () => {
+    monyBusy = true; $("#mony-send").disabled = true; input.value = "";
+    monyMsgs.push({ role: "user", content: text });
+    monyBubble("user", text);
+    const bubble = monyBubble("assistant", "Mony está escribiendo…");
+    bubble.classList.add("mony-typing");
+    let answer = "";
+    try {
+      for await (const ev of httpBackend.generate({ messages: monyMsgs.slice(-MONY_MAX) }, "/api/mony/chat")) {
+        if (ev.type === "text") { answer += ev.text; bubble.classList.remove("mony-typing"); bubble.textContent = answer; bubble.scrollIntoView({ block: "end" }); }
+        else if (ev.type === "tool" && ev.status === "running" && !answer) bubble.textContent = `Mony está consultando (${ev.name.replace(/_/g, " ")})…`;
+        else if (ev.type === "error") throw new Error(ev.error);
+        else if (ev.type === "done" && ev.truncated) bubble.textContent = answer + "\n\n(La respuesta quedó incompleta; pida a Mony que continúe.)";
+      }
+      if (answer) { monyMsgs.push({ role: "assistant", content: answer }); monySave(); } else { monyMsgs.pop(); monySave(); bubble.textContent = "Mony no devolvió respuesta. Intente de nuevo."; }
+    } catch (err) {
+      monyMsgs.pop(); monySave(); input.value = text;
+      bubble.classList.remove("mony-typing"); bubble.classList.add("mony-error");
+      bubble.textContent = err.message;
+    } finally { monyBusy = false; $("#mony-send").disabled = false; input.focus(); }
+  });
+});
+
 const RENDER = {
   pagos: renderPagos,
   firmas: renderFirmas,
@@ -6965,6 +7027,7 @@ const RENDER = {
   usuarios: renderUsuarios,
   inicio: renderInicio,
   jurisprudencia: renderJurisprudencia,
+  mony: renderMony,
   clientes: renderClientes,
   expedientes: renderExpedientes,
   borradores: renderBorradores,

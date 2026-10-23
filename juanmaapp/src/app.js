@@ -25,6 +25,7 @@ import { consentRouter, consentPublicRouter } from "./consents.js";
 import { pdfjsClassic } from "./pdfjs-classic.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 import { VERSION } from "./version.js";
+import { runMony, NAME as MONY_NAME } from "./mony.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -186,6 +187,30 @@ export function createApp(db) {
       else if (err instanceof Anthropic.APIError) message = `API error ${err.status}: ${err.message}`;
       // Our own validation messages are for the user; anything internal (database, libraries) stays in the log (audit A10-001).
       else if (err instanceof Error) message = err.expose || err.userMessage ? err.message : "No se pudo generar el documento. Intente de nuevo; si sigue, avise a Gerencia.";
+      console.error(err);
+      send({ type: "error", error: message });
+    }
+    res.end();
+  });
+
+  // Mony, the legal assistant (version 2.2.8): chat with history, read-only tools, NDJSON stream
+  // {type:"text"} deltas, {type:"tool"} progress, then one {type:"done"} or {type:"error"}.
+  app.post("/api/mony/chat", requirePerm("drafts.generate"), async (req, res) => {
+    const body = req.body ?? {};
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    const send = (obj) => res.write(JSON.stringify(obj) + "\n");
+    try {
+      const r = await runMony({ messages: body.messages, db, user: req.user, caseContext,
+        onText: (text) => send({ type: "text", text }), onTool: (t) => send({ type: "tool", ...t }) });
+      recordUsage(db, { kind: "mony", userId: req.user.id, model: r.model, usage: r.usage });
+      if (r.stopReason === "refusal") send({ type: "error", error: "Mony no puede atender esta solicitud." });
+      else send({ type: "done", stopReason: r.stopReason, rounds: r.rounds, truncated: r.stopReason === "max_tokens" || r.stopReason === "max_rounds", name: MONY_NAME });
+    } catch (err) {
+      let message = "No se pudo atender la consulta. Intente de nuevo; si sigue, avise a Gerencia.";
+      if (/authentication method/i.test(err.message || "") || err instanceof Anthropic.AuthenticationError) message = "El servidor no tiene configurada la clave de Anthropic (ANTHROPIC_API_KEY).";
+      else if (err instanceof Anthropic.RateLimitError) message = "Hay demasiadas consultas en este momento. Intente en un momento.";
+      else if (err.expose) message = err.message;
       console.error(err);
       send({ type: "error", error: message });
     }
