@@ -1274,3 +1274,14 @@ dialog:not([open]) { pointer-events: none; }
 .banda-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, .3); }
 .banda-dots i.on { background: #fff; }
 @media (max-width: 560px) { .banda-tabs button { padding-inline: 6px; font-size: .86rem; } .banda-days { min-width: 0; flex-basis: 100%; } }
+
+/* Mony, asistente jurídico (versión 2.2.8) */
+.mony-log { display: flex; flex-direction: column; gap: 10px; min-height: 260px; max-height: 58vh; overflow-y: auto; padding: 12px; border-radius: 14px; background: rgba(255, 255, 255, .5); }
+.mony-msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.mony-user { align-self: flex-end; background: #1f3864; color: #fff; }
+.mony-assistant { align-self: flex-start; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
+.mony-typing { opacity: .65; font-style: italic; }
+.mony-error { background: #fde8e6; color: #b3261e; }
+.mony-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
+.mony-form textarea { flex: 1; resize: vertical; }
+@media (max-width: 560px) { .mony-msg { max-width: 94%; } }
