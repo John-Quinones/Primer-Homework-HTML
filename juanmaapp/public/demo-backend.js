@@ -52,6 +52,11 @@
       for (const [role, perms] of Object.entries(AUTH.matrix)) if (perms.includes(p) && st.matrix[role] && !st.matrix[role].includes(p)) st.matrix[role].push(p);
       st.info.knownPerms.push(p);
     }
+    // Once: the Director Jurídico manages the Word templates (as on the server). Only adds the permission.
+    if (!st.info.templatesDirector) {
+      if (st.matrix["Director Jurídico"] && !st.matrix["Director Jurídico"].includes("templates.manage")) st.matrix["Director Jurídico"].push("templates.manage");
+      st.info.templatesDirector = true;
+    }
     for (const t of st.types) if (t.parent_id === undefined) t.parent_id = null;
     for (const k of st.cases) { k.status = CM.normStatus(k.status); k.client_role ??= ""; k.affiliated ??= false; }
     // Version 2.33: «Número de expediente». What the Excel import kept as "Radicado (como venía)" is
@@ -201,7 +206,7 @@
     const p = u.custom_permissions ? [...u.permissions] : permsOf(u.role);
     // Deleting is for Gerencia only (change 24).
     const only = AUTH.gerenciaOnly || [];
-    if (u.role === "Gerencia") { for (const x of ["users.manage", ...only]) if (!p.includes(x)) p.push(x); return p; }
+    if (u.role === "Gerencia") { for (const x of ["users.manage", "templates.manage", ...only]) if (!p.includes(x)) p.push(x); return p; }
     return p.filter((x) => !only.includes(x));
   };
   const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ").trim();

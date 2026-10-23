@@ -732,6 +732,20 @@ function migrate(db) {
   }
   fillDefaults(db);
   fillGenders(db);
+  grantTemplatesToDirector(db);
+}
+
+// Once: the Director Jurídico of databases that already exist gets «templates.manage» (upload, download,
+// replace and create Word templates). It only adds one permission row; nothing is removed or rewritten,
+// and Gerencia can untick it in Usuarios › Roles afterwards. A copy of the database is made first.
+function grantTemplatesToDirector(db) {
+  if (db.prepare("SELECT 1 FROM app_flags WHERE key = 'templates-director'").get()) return;
+  if (!db.prepare("SELECT 1 FROM role_permissions WHERE role = 'Director Jurídico' AND permission = 'templates.manage'").get()) {
+    const copy = makeBackup(db, { trigger: "antes-plantillas-director" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de dar plantillas al Director Jurídico: ${copy.error}`);
+    db.prepare("INSERT OR IGNORE INTO role_permissions (role, permission) VALUES ('Director Jurídico', 'templates.manage')").run();
+  }
+  db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('templates-director')").run();
 }
 
 // Version 2.54, once: the names the office answered (Miller, Dany, Yimmi, Hossman, Arley, Dunier: hombre;
