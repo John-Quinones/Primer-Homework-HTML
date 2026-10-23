@@ -3008,9 +3008,9 @@ $(".actions").addEventListener("click", async (e) => {
 
 // ---------- Importar ----------
 const IMP = window.JuanmaImport;
-const imp = { sheets: [], headers: [], body: [], mapping: [] };
+const imp = { sheets: [], headers: [], body: [], mapping: [], kind: null };
 
-const importMode = () => $("input[name=import-mode]:checked").value;
+const importMode = () => (imp.kind ? IMPORT_KINDS[imp.kind].mode : $("input[name=import-mode]:checked").value);
 
 async function renderImportar() {
   await loadCatalog();
@@ -3033,7 +3033,10 @@ $("#import-default-cat").addEventListener("change", fillDefaultTypes);
 
 $("#import-file").addEventListener("change", (e) => guarded(async () => {
   const file = e.target.files[0];
-  if (file) await loadImportFile(file);
+  if (file) {
+    imp.kind = null;
+    await loadImportFile(file);
+  }
 }));
 async function loadImportFile(file) {
   $("#import-result").hidden = true;
@@ -3045,11 +3048,37 @@ async function loadImportFile(file) {
 }
 $("#import-sheet").addEventListener("change", (e) => loadSheet(Number(e.target.value)));
 
+// Column mapping per tab, remembered in this browser by column name (version 2.83).
+const mapKey = (kind) => `jm-import-map-${kind}`;
+function savedImportMapping(kind) {
+  try { return JSON.parse(localStorage.getItem(mapKey(kind)) || "{}"); } catch { return {}; }
+}
+function saveImportMapping(kind, headers, mapping) {
+  if (!kind) return;
+  try {
+    const saved = savedImportMapping(kind);
+    headers.forEach((h, i) => { saved[IMP.norm(h)] = mapping[i] || ""; });
+    localStorage.setItem(mapKey(kind), JSON.stringify(saved));
+  } catch { /* private window: the mapping is simply not remembered */ }
+}
+// Guess first, then what the user chose last time for the same column name; anything this tab does not offer → none.
+function fitMapping(kind, headers, guess) {
+  const ok = new Set(IMP.targetsFor(kind).map((t) => t.key));
+  const saved = savedImportMapping(kind);
+  return headers.map((h, i) => {
+    const want = IMP.norm(h) in saved ? saved[IMP.norm(h)] : guess[i];
+    if (ok.has(want)) return want;
+    const plain = IMP.guessTarget(h);
+    return ok.has(plain) ? plain : "";
+  });
+}
+
 function loadSheet(i) {
   const { headers, body } = IMP.splitHeader(imp.sheets[i].rows);
   imp.headers = headers;
   imp.body = body;
   imp.mapping = IMP.guessAll(headers);
+  if (imp.kind) imp.mapping = fitMapping(imp.kind, headers, imp.mapping);
   const info = $("#import-file-info");
   info.hidden = false;
   if (!headers.length) {
@@ -3060,15 +3089,23 @@ function loadSheet(i) {
   info.textContent = `${body.length} filas de datos y ${headers.length} columnas.`;
   // A file with process columns is most likely one row per case.
   const hasCase = imp.mapping.some((m) => m.startsWith("case."));
-  $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
+  if (!imp.kind) $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
   ["#import-step2", "#import-step3", "#import-step4"].forEach((s) => ($(s).hidden = false));
+  // From a tab the type of file is already chosen: no «Solo clientes / Clientes y expedientes» question.
+  $("#import-step2 .radio-row").hidden = !!imp.kind;
+  $("#import-step2").hidden = imp.kind === "clientes";
+  $("#import-step3-title").innerHTML = imp.kind
+    ? `<span class="step-no">3</span> Columnas del Excel de ${IMPORT_KINDS[imp.kind].title}`
+    : '<span class="step-no">3</span> Columnas';
   renderMapping();
 }
 
 function renderMapping() {
   const casesMode = importMode() === "cases";
   $("#import-case-opts").hidden = !casesMode;
-  const targets = IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  const targets = imp.kind ? IMP.targetsFor(imp.kind) : IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  // A column whose guessed field this tab does not offer stays unassigned (never silently falls to the first option).
+  imp.mapping = imp.mapping.map((m) => (targets.some((t) => t.key === m) ? m : ""));
   $("#import-map").innerHTML = imp.headers.map((h, i) => {
     const sample = imp.body.find((r) => r[i])?.[i] ?? "";
     return `<tr>
@@ -3088,6 +3125,7 @@ $("#import-map").addEventListener("change", (e) => {
   const sel = e.target.closest("select[data-col]");
   if (!sel) return;
   imp.mapping[sel.dataset.col] = sel.value;
+  saveImportMapping(imp.kind, imp.headers, imp.mapping);
   renderImportPreview();
 });
 
@@ -3154,6 +3192,7 @@ function renderImportPreview() {
 }
 
 $("#import-run").addEventListener("click", () => guarded(async () => {
+  saveImportMapping(imp.kind, imp.headers, imp.mapping);
   const records = importRecords();
   const casesMode = importMode() === "cases";
   const btn = $("#import-run");
@@ -3259,15 +3298,15 @@ async function downloadImportKind(key, what) {
 async function uploadImportKind(key, file) {
   const k = IMPORT_KINDS[key];
   if (k.mode === "courts") {
-    const rows = await readCourtRows(file);
-    const sample = rows.slice(0, 5).map((r) => `${r.name} · ${r.city}`).join("\n");
-    if (!(await ask({ title: "Cargar despachos", message: `Se leyeron ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.\n\n${sample}${rows.length > 5 ? "\n…" : ""}`, okLabel: "Cargar" }))) return;
-    await runCourtImport(rows);
+    imp.kind = null;
+    ["#import-step2", "#import-step3", "#import-step4", "#import-result"].forEach((id) => ($(id).hidden = true));
+    await openCourtMapping(file);
     return;
   }
+  $("#courts-map-panel").hidden = true;
+  imp.kind = key;
   // Clients / cases go through the regular mapping, preview and confirmation below.
   await loadImportFile(file);
-  $(`input[name=import-mode][value=${k.mode}]`).checked = true;
   renderMapping();
   const recs = importRecords();
   const plan = await IMP.plan(recs, api, { withCases: k.mode === "cases" });
@@ -3277,6 +3316,71 @@ async function uploadImportKind(key, file) {
   res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. ${placeWarn ? ` El lugar de expedición no se reconoció en ${placeWarn} fila(s): se importan sin ese dato (ver el aviso debajo de la vista previa).` : ""} Revise la vista previa y pulse «Importar».</p>`;
   $("#import-step4").scrollIntoView({ behavior: "smooth" });
 }
+
+// ---------- Despachos: the user assigns the file's columns (version 2.83) ----------
+const COURT_FIELDS = [["name", "Nombre del despacho"], ["department", "Departamento"], ["city", "Ciudad"], ["area", "Corporación o Área"],
+  ["circuit", "Circuito"], ["email", "Correo (Email)"], ["code", "Código"], ["judge", "Juez o titular"], ["phone", "Teléfono"], ["address", "Dirección"]];
+const courtMap = { headers: [], body: [], mapping: [] };
+
+async function openCourtMapping(file) {
+  const sheets = await IMP.readFile(file);
+  // The sheet with the most data rows (the official file may carry a cover sheet).
+  const parsed = sheets.map((sh) => IMP.splitHeader(sh.rows)).sort((a, b) => b.body.length - a.body.length)[0];
+  if (!parsed?.headers.length) throw new Error("No se encontró una fila de encabezados en el archivo.");
+  courtMap.headers = parsed.headers;
+  courtMap.body = parsed.body;
+  const saved = savedImportMapping("despachos");
+  const taken = new Set();
+  courtMap.mapping = parsed.headers.map((h) => {
+    const n = IMP.norm(h);
+    let want = n in saved ? saved[n] : (COURT_FIELDS.map(([k]) => k).find((k) => COURT_COLS[k]?.includes(n)) || "");
+    if (want && taken.has(want)) want = ""; // one column per field
+    if (want) taken.add(want);
+    return want;
+  });
+  renderCourtMapping();
+  $("#courts-map-panel").hidden = false;
+  $("#courts-map-panel").scrollIntoView({ behavior: "smooth" });
+}
+
+function courtMapRows() {
+  const col = Object.fromEntries(COURT_FIELDS.map(([k]) => [k, courtMap.mapping.indexOf(k)]));
+  return courtMap.body.map((r, j) => ({ rowNumber: j + 2, ...Object.fromEntries(Object.entries(col).map(([k, i]) => [k, i < 0 ? "" : r[i]])) }))
+    .filter((r) => r.name || r.department);
+}
+
+function renderCourtMapping() {
+  $("#courts-map").innerHTML = courtMap.headers.map((h, i) => {
+    const sample = courtMap.body.find((r) => r[i])?.[i] ?? "";
+    return `<tr><td><strong>${escapeHtml(h)}</strong></td><td title="${escapeHtml(sample)}">${escapeHtml(sample)}</td>
+      <td><select data-ccol="${i}"><option value="">— No importar —</option>${COURT_FIELDS.map(([k, l]) =>
+        `<option value="${k}" ${courtMap.mapping[i] === k ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select></td></tr>`;
+  }).join("");
+  const rows = courtMapRows();
+  const used = COURT_FIELDS.filter(([k]) => courtMap.mapping.includes(k));
+  $("#courts-map-preview").innerHTML = `<thead><tr>${used.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${rows.slice(0, 5).map((r) =>
+    `<tr>${used.map(([k]) => `<td>${escapeHtml(r[k])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  const missing = ["name", "department"].filter((k) => !courtMap.mapping.includes(k));
+  const btn = $("#courts-map-run");
+  btn.disabled = !!missing.length || !rows.length;
+  btn.textContent = missing.length ? `Asigne la columna de ${missing.map((k) => COURT_FIELDS.find(([f]) => f === k)[1].toLowerCase()).join(" y ")}` : `Cargar ${rows.length.toLocaleString("es-CO")} despachos`;
+}
+
+$("#courts-map").addEventListener("change", (e) => {
+  const sel = e.target.closest("select[data-ccol]");
+  if (!sel) return;
+  const i = Number(sel.dataset.ccol);
+  if (sel.value) courtMap.mapping = courtMap.mapping.map((m, j) => (j !== i && m === sel.value ? "" : m)); // one column per field
+  courtMap.mapping[i] = sel.value;
+  saveImportMapping("despachos", courtMap.headers, courtMap.mapping);
+  renderCourtMapping();
+});
+$("#courts-map-run").addEventListener("click", () => guarded(async () => {
+  const rows = courtMapRows();
+  if (!(await ask({ title: "Cargar despachos", message: `Se cargarán ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.`, okLabel: "Cargar" }))) return;
+  saveImportMapping("despachos", courtMap.headers, courtMap.mapping);
+  await runCourtImport(rows);
+}));
 
 // Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.82).
 async function runCourtImport(rows) {
@@ -3303,6 +3407,7 @@ async function runCourtImport(rows) {
 }
 
 function showImportResult(items, errors = []) {
+  $("#courts-map-panel").hidden = true;
   const res = $("#import-result");
   res.hidden = false;
   res.innerHTML = `<p class="ok"><strong>Importación terminada.</strong></p><ul>${items}</ul>

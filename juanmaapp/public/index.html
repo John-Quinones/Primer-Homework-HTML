@@ -783,7 +783,7 @@
         </div>
 
         <div id="import-step3" class="panel step" hidden>
-          <h3><span class="step-no">3</span> Columnas</h3>
+          <h3 id="import-step3-title"><span class="step-no">3</span> Columnas</h3>
           <p class="hint">Revise a qué campo va cada columna. Si asigna varias columnas al mismo campo (por ejemplo Nombres y Apellidos), se unen en el orden del archivo.</p>
           <div class="table-scroll">
             <table class="data-table map-table">
@@ -800,6 +800,19 @@
           <p class="hint">Si el cliente ya existe (mismo número de documento o mismo nombre), no se duplica: solo se completan los datos que tenga vacíos. Un expediente igual (mismo cliente, subproceso y asunto) no se vuelve a crear.</p>
           <button id="import-run" class="primary">Importar</button>
           <progress id="import-progress" value="0" max="1" hidden></progress>
+        </div>
+
+        <div id="courts-map-panel" class="panel step" hidden>
+          <h3>Despachos: asigne las columnas</h3>
+          <p class="hint">Cada columna del Excel puede ir a un dato del despacho o quedar en «No importar». Se recuerda para la próxima carga. El nombre del despacho y el departamento son obligatorios.</p>
+          <div class="table-scroll">
+            <table class="data-table map-table">
+              <thead><tr><th>Columna del archivo</th><th>Ejemplo</th><th>Importar como</th></tr></thead>
+              <tbody id="courts-map"></tbody>
+            </table>
+          </div>
+          <div class="table-scroll"><table class="data-table" id="courts-map-preview"></table></div>
+          <button type="button" id="courts-map-run" class="primary">Cargar despachos</button>
         </div>
 
         <div id="import-result" class="panel" hidden></div>

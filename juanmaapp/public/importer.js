@@ -47,6 +47,16 @@
     { key: "", label: "— No importar —", match: [] },
   ];
 
+
+  // Fields offered per upload tab (version 2.83): Clientes only client fields; Expedientes the case's own,
+  // plus the client's name / document only to find the client the case belongs to.
+  const CASE_CLIENT_LINK = ["client.full_name", "client.first_names", "client.last_names", "client.id_number"];
+  function targetsFor(kind) {
+    if (kind === "clientes") return TARGETS.filter((t) => t.key === "" || t.key.startsWith("client."));
+    if (kind === "expedientes") return TARGETS.filter((t) => t.key === "" || CASE_CLIENT_LINK.includes(t.key) || /^(case|pay)\./.test(t.key));
+    return TARGETS;
+  }
+
   // Exact header match first; otherwise the longest known name whose words all
   // appear in the header ("Nombre del cliente" → nombre cliente, "Nombre
   // Abogado" → abogado). Internal keys such as IdCliente or Código stay unmapped.
@@ -400,5 +410,5 @@
     return out;
   }
 
-  window.JuanmaImport = { TARGETS, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, norm, parsePesos, parseDate, titleCase };
+  window.JuanmaImport = { TARGETS, targetsFor, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, norm, parsePesos, parseDate, titleCase };
 })();

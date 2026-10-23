@@ -31,3 +31,12 @@ test("plan counts new and existing clients and cases without writing", async () 
   assert.deepEqual(out, { rows: 3, clientsNew: 1, clientsExisting: 1, casesNew: 1, casesExisting: 2 });
   assert.ok(calls.every((c) => c.startsWith("GET ")));
 });
+
+test("each upload tab offers only its own fields", () => {
+  const { targetsFor } = window.JuanmaImport;
+  const keys = (k) => targetsFor(k).map((t) => t.key);
+  assert.ok(keys("clientes").every((k) => k === "" || k.startsWith("client.")));
+  assert.ok(!keys("expedientes").includes("client.email") && !keys("expedientes").includes("client.phone"));
+  assert.ok(["client.full_name", "client.id_number", "case.radicado", "case.custom", "pay.fees"].every((k) => keys("expedientes").includes(k)));
+  assert.ok(!keys("clientes").includes("case.radicado"));
+});
