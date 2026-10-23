@@ -656,7 +656,7 @@ document.addEventListener("keydown", (e) => {
 // Version 2.87: a client is Activo or sent to «Archivo provisional» / «Archivo definitivo» (clients.archive_status,
 // "" = activo). The views are exclusive: the list shows only the clients of the state chosen in #client-archive.
 // Archiving never touches the client's cases, charges or documents.
-const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo"];
+const CLIENT_ARCHIVE = ["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"];
 const clientArchiveFilter = () => $("#client-archive")?.value || "";
 function renderClientList() {
   const ul = $("#client-list");
@@ -678,17 +678,35 @@ function renderClientList() {
     </button></li>`).join("");
 }
 
-// Buttons to send a client to archive or back to activos (needs clients.write); «definitivo» asks first.
-const archiveButtons = (c) => {
-  if (!can("clients.write")) return "";
-  const btn = (to, label) => `<button data-action="archive-client" data-id="${c.id}" data-to="${to}">${label}</button>`;
-  const final = isGerencia(); // «Archivo definitivo» (to or from) is only for the administrator (user's rule, 2.94)
-  if (c.archive_status === "Archivo definitivo") return final ? btn("", "Devolver a activos") + btn("Archivo provisional", "Pasar a archivo provisional") : "";
-  return c.archive_status
-    ? btn("", "Devolver a activos") + (final ? btn("Archivo definitivo", "Pasar a archivo definitivo") : "")
-    : btn("Archivo provisional", "Archivo provisional") + (final ? btn("Archivo definitivo", "Archivo definitivo") : "");
-};
-const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
+// Version 2.99 (user's choice «C»): one «Estado» selector instead of a button per state (needs clients.write).
+// «Archivo definitivo» (to or from) is only for the administrator (2.94 rule); moving a client with active cases asks first.
+const CLIENT_STATES = ["", ...CLIENT_ARCHIVE];
+function clientStateSelect(c) {
+  const cur = c.archive_status || "", gerencia = isGerencia();
+  const locked = !can("clients.write") || (cur === "Archivo definitivo" && !gerencia);
+  return `<label class="state-sel">Estado <select data-client-state="${c.id}" ${locked ? "disabled" : ""}>${CLIENT_STATES.map((st) =>
+    `<option value="${st}" ${st === cur ? "selected" : ""} ${st === "Archivo definitivo" && !gerencia && cur !== st ? "disabled" : ""}>${st || "Activo"}</option>`).join("")}</select></label>`;
+}
+async function changeClientState(id, to) {
+  const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
+  const open = to ? (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length : 0;
+  const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
+  const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
+    : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede cambiarlo cuando quiera.`;
+  if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Pasar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: "Cambiar estado" }))) return false; }
+  await api("PUT", `/clients/${id}/archive`, { status: to });
+  toast(to ? `Cliente en ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
+  await loadClients();
+  if (location.hash === "#clientes" && (clientArchiveFilter() || "") !== to) state.selectedClientId = null; // it left this list
+  await refreshView();
+  return true;
+}
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest?.("[data-client-state]");
+  if (!sel) return;
+  const prev = state.clients.find((x) => x.id === Number(sel.dataset.clientState))?.archive_status || "";
+  guarded(async () => { if (!(await changeClientState(Number(sel.dataset.clientState), sel.value))) sel.value = prev; });
+});
 
 async function renderClientDetail() {
   const box = $("#client-detail");
@@ -701,13 +719,14 @@ async function renderClientDetail() {
   const row = (label, v) => (v ? `<div><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
   box.innerHTML = `
     <div class="detail-head">
-      <h3>${escapeHtml(c.full_name)} ${archiveBadge(c)}</h3>
-      <div class="toolbar">
+      <h3>${escapeHtml(c.full_name)}</h3>
+      ${clientStateSelect(c)}
+      <div class="toolbar client-bar">
         <button class="primary" data-action="go" data-to="#cliente-${c.id}">Ver cliente</button>
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos</button>` : ""}
+        <span class="sp"></span>
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar</button>` : ""}
-        ${archiveButtons(c)}
         ${can("clients.delete") ? `<button class="danger" data-action="delete-client" data-id="${c.id}">Eliminar</button>` : ""}
       </div>
     </div>
@@ -746,9 +765,9 @@ async function renderClienteFicha(id) {
     <nav class="crumbs"><a href="#clientes">← Clientes</a></nav>
     <div class="view-head">
       <h2>${escapeHtml(c.full_name)}</h2>
+      ${clientStateSelect(c)}
       <div class="toolbar">
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
-        ${archiveButtons(c)}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
         ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
@@ -756,7 +775,6 @@ async function renderClienteFicha(id) {
       </div>
     </div>
     <div class="ficha-chips">
-      ${archiveBadge(c)}
       <span class="chip-stat">Expedientes <strong>${cases.length}</strong></span>
       <span class="chip-stat">Activos <strong>${active}</strong></span>
       ${pay ? `<span class="chip-stat">Honorarios <strong>${cop(pay.billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(pay.received)}</strong></span>
@@ -953,6 +971,35 @@ const secId = (key, html) => html.replace('<section class="', `<section id="sec-
 const VER_CASE = [["", "Ver expediente"], ["tareas", "Ver tareas"], ["actuaciones", "Ver actuaciones"], ["pagos", "Ver pagos"], ["correos", "Ver correos"], ["historial", "Ver historial"]];
 const verCaseButtons = (k, keys = ["", "tareas", "actuaciones", "pagos", "correos"]) => VER_CASE.filter(([x]) => keys.includes(x))
   .map(([x, label]) => `<button class="mini ${x === "" ? "primary" : ""}" data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}">${label}</button>`).join("");
+// Version 2.98 (user's choice «C»): the case row's buttons are one bar of equal icon buttons with their name underneath.
+const ICON = {
+  case: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
+  pay: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  client: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-3.6 3.4-5.5 7-5.5s6.4 1.9 7 5.5"/>',
+  task: '<path d="M12 5v14M5 12h14"/>',
+  docs: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/>',
+  draft: '<path d="M4 20l4-1 11-11-3-3L5 16z"/>',
+  portals: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  del: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>',
+};
+const iconBtn = (icon, label, attrs, cls = "") => `<button type="button" class="ico-btn ${cls}" ${attrs} title="${label}">`
+  + `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[icon]}</svg><span>${label}</span></button>`;
+function caseActionBar(k) {
+  const go = (x) => `data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}"`;
+  return `<div class="case-bar">`
+    + iconBtn("case", "Expediente", go(""), "primary")
+    + iconBtn("pay", "Pagos", go("pagos")) + iconBtn("mail", "Correos", go("correos"))
+    + iconBtn("client", "Cliente", `data-action="go" data-to="#cliente-${k.client_id}"`)
+    + (can("cases.write") ? iconBtn("task", "Tarea", `data-action="new-task" data-case="${k.id}"`) : "")
+    + iconBtn("docs", "Documentos", `data-action="case-docs" data-id="${k.id}"`)
+    + (can("drafts.generate") ? iconBtn("draft", "Borrador", `data-action="draft-case" data-id="${k.id}"`) : "")
+    + iconBtn("portals", "Portales", `data-action="portals" data-id="${k.id}"`)
+    + (can("cases.write") ? iconBtn("edit", "Editar", `data-action="edit-case" data-id="${k.id}"`) : "")
+    + (can("cases.delete") ? iconBtn("del", "Eliminar", `data-action="delete-case" data-id="${k.id}" aria-label="Eliminar"`, "danger") : "")
+    + `</div>`;
+}
 /** Parties by side, our clients marked (main client included). */
 function partiesView(k) {
   const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
@@ -1262,7 +1309,10 @@ async function renderClientes() {
 }
 
 // Inicio's «Clientes con Casos de Éxito!» links open Clientes already on that archive view.
-document.addEventListener("click", (e) => { const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView; });
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-archive-view]"); if (a) $("#client-archive").value = a.dataset.archiveView;
+  const t = e.target.closest("[data-case-status]"); if (t) $("#case-status").value = t.dataset.caseStatus; // Inicio → Expedientes on that state
+});
 $("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
@@ -1814,7 +1864,7 @@ function casesByPlace() {
     && (!area || k.area === area || caseArea(k) === area || (!k.area && inPlace(k))));
 }
 // Version 2.70: the list hides archived cases unless «Estado» asks for them (Archivo provisional / Archivo definitivo / Todos).
-const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo"]);
+const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"]); // everything but Activo: the views are exclusive (v2.96 adds Pendiente Pago Sentencia)
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
@@ -1830,7 +1880,7 @@ function renderCaseRows() {
     && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) || (!k.court_id && directoryCourt(k)?.id === Number(court.slice(3))) : k.court_name === court.slice(2)))
     && matches(k));
   const hidden = status ? 0 : state.cases.filter((k) => ARCHIVED_STATUSES.has(k.status)).length;
-  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} archivado(s) oculto(s)` : ""}`;
+  $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} en otro estado, ocultos` : ""}`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
     <tr>
@@ -1843,15 +1893,7 @@ function renderCaseRows() {
       <td>${k.radicado
         ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
         : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
-      <td class="row-actions">
-        <span class="ver-group">${verCaseButtons(k, ["", "pagos", "correos"])}<button class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></span>
-        ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
-        ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
-        <button data-action="portals" data-id="${k.id}">Portales</button>
-        <button data-action="case-docs" data-id="${k.id}">Documentos</button>
-        ${can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
-        ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
-      </td>
+      <td class="row-actions">${caseActionBar(k)}</td>
     </tr>`).join("");
 }
 
@@ -2339,7 +2381,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id).map(clientOption).join("");
+  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id ?? clientId).map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -2819,20 +2861,6 @@ document.addEventListener("click", (e) => {
       await refreshView();
     },
     "edit-client": async () => openClientDialog(await api("GET", `/clients/${id}`)), // fresh copy, with the photo
-    "archive-client": async () => {
-      const c = state.clients.find((x) => x.id === id) || await api("GET", `/clients/${id}`);
-      const to = btn.dataset.to || "";
-      const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
-      const warn = open ? ` Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes.` : "";
-      const msg = !to ? `“${c.full_name}” volverá a la lista de clientes activos.`
-        : `“${c.full_name}” saldrá de la lista de activos y pasará a ${to.toLowerCase()}.${warn} No se borra nada y puede devolverlo a activos cuando quiera.`;
-      if (to === "Archivo definitivo" || open) { if (!(await ask({ title: to ? `¿Enviar a ${to.toLowerCase()}?` : "¿Devolver a activos?", message: msg, okLabel: to ? "Archivar" : "Devolver" }))) return; }
-      await api("PUT", `/clients/${id}/archive`, { status: to });
-      toast(to ? `Cliente enviado a ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
-      await loadClients();
-      if (location.hash === "#clientes") state.selectedClientId = null; // it left this list
-      await refreshView();
-    },
     "delete-client": async () => {
       const c = state.clients.find((x) => x.id === id);
       if (!(await confirmAsk("¿Eliminar cliente?", `Se eliminará el cliente ${c ? `“${c.full_name}”` : ""}. Esta acción no se puede deshacer.`))) return;
@@ -3303,6 +3331,14 @@ function renderImportPreview() {
   $("#import-place-warnings").innerHTML = warned.length
     ? `<strong>Lugar de expedición sin reconocer en ${warned.length} fila(s)</strong> (se importa la fila sin ese dato):<ul>${warned.slice(0, 8).map((r) =>
       `<li>Fila ${r.rowNumber}: ${escapeHtml(r.placeWarnings.join("; "))}</li>`).join("")}${warned.length > 8 ? `<li>… y ${warned.length - 8} más</li>` : ""}</ul>` : "";
+  // Version 2.96: a state the file writes but the App does not recognize is said here (the row is imported as it was: client active, case Activo).
+  const stateWarn = recs.flatMap((r) => [
+    r.client.archive_status && IMP.archiveState(r.client.archive_status) === undefined ? `Fila ${r.rowNumber}: estado del cliente «${r.client.archive_status}»` : "",
+    r.case.status && window.JuanmaCaseMeta.statusFrom(r.case.status) === null ? `Fila ${r.rowNumber}: estado del expediente «${r.case.status}»` : "",
+  ]).filter(Boolean);
+  const sw = $("#import-state-warnings");
+  sw.hidden = !stateWarn.length;
+  sw.innerHTML = stateWarn.length ? `<strong>Estado sin reconocer en ${stateWarn.length} caso(s)</strong>. Use Activo, Archivo provisional, Archivo definitivo o Pendiente Pago Sentencia; mientras tanto queda Activo:<ul>${stateWarn.slice(0, 8).map((w) => `<li>${escapeHtml(w)}</li>`).join("")}${stateWarn.length > 8 ? `<li>… y ${stateWarn.length - 8} más</li>` : ""}</ul>` : "";
   const noName = !imp.mapping.includes("client.full_name") && !imp.mapping.includes("client.first_names");
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
@@ -3404,7 +3440,7 @@ function renderImportKinds() {
       <h4>${k.title}</h4>
       <p class="hint">${escapeHtml(IMPORT_KIND_HINT[key])}</p>
       ${key === "clientes" ? `<div class="toolbar import-filters">
-        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option><option>Pendiente Pago Sentencia</option></select></label>
         <label>Cédula expedida en <input id="import-clients-idplace" type="search" placeholder="Ciudad o departamento" /></label>
       </div>` : ""}
       <div class="toolbar">
@@ -3631,6 +3667,7 @@ async function renderInicio() {
   ]);
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
+  $("#kpi-pps").textContent = cases.filter((k) => k.status === "Pendiente Pago Sentencia").length; // version 2.96
   $("#kpi-clients").textContent = clients.filter((c) => !c.archive_status).length; // version 2.87: only activos
   const nProv = clients.filter((c) => c.archive_status === "Archivo provisional").length, nDef = clients.filter((c) => c.archive_status === "Archivo definitivo").length;
   $("#kpi-success").textContent = nProv + nDef; $("#kpi-success-prov").textContent = nProv; $("#kpi-success-def").textContent = nDef;

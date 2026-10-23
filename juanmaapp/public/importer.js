@@ -217,10 +217,11 @@
   // (accents, capitals, spacing and phone punctuation do not count as a difference). The document number is the
   // match key and is never rewritten.
   const sameValue = (k, a, b) => (k === "phone" ? radDigits(a) === radDigits(b) : norm(a) === norm(b));
-  /** The file's client state: "Archivo provisional" | "Archivo definitivo" | "" (activo) | undefined (blank or not understood: leave as is). */
+  /** The file's client state: "Archivo provisional" | "Archivo definitivo" | "Pendiente Pago Sentencia" | "" (activo) | undefined (blank or not understood: leave as is). */
   function archiveState(v) {
     const t = norm(v);
     if (!t) return undefined;
+    if (/^pps$|pendiente.*(pago|sentencia)|pago.*sentencia|sentencia.*pago/.test(t)) return "Pendiente Pago Sentencia"; // version 2.96
     if (t.includes("provisional")) return "Archivo provisional";
     if (t.includes("definitiv")) return "Archivo definitivo";
     return /^(activo|activa|vigente)/.test(t) ? "" : undefined;
@@ -451,5 +452,5 @@
     return out;
   }
 
-  window.JuanmaImport = { TARGETS, targetsFor, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, clientDiff, normClient, norm, parsePesos, parseDate, titleCase };
+  window.JuanmaImport = { TARGETS, targetsFor, guessTarget, guessAll, readFile, splitHeader, buildRecord, run, plan, clientDiff, normClient, archiveState, norm, parsePesos, parseDate, titleCase };
 })();

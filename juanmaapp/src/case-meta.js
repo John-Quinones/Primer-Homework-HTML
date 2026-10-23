@@ -1,24 +1,30 @@
 // Case status and the client's procedural role. Shared by the server, the
 // importer and the page (served as /case-meta.js and inlined in the link).
 
-export const STATUSES = ["Activo", "Archivo provisional", "Archivo definitivo"];
+export const PPS = "Pendiente Pago Sentencia"; // version 2.96: the sentence is won and waits for its payment
+export const STATUSES = ["Activo", "Archivo provisional", "Archivo definitivo", PPS];
 // Statuses that still move: monitored and counted as "en curso".
-export const LIVE_STATUSES = ["Activo", "Archivo provisional"];
+export const LIVE_STATUSES = ["Activo", "Archivo provisional", PPS]; // version 2.97: a sentence waiting for its payment is still monitored
 
 const nrm = (x) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
-/** Map any older or imported status to one of the three. */
-export function normStatus(x) {
+/** The status a text names, or null when it is not recognized (blank = null too). */
+export function statusFrom(x) {
   const n = nrm(x);
-  if (!n) return "Activo";
+  if (!n) return null;
   // Codes from the firm's previous system: 1 = activo, 2 = archivo definitivo, 3 = archivo provisional.
   if (n === "1") return "Activo";
   if (n === "2") return "Archivo definitivo";
   if (n === "3") return "Archivo provisional";
+  if (/^pps$|pendiente.*(pago|sentencia)|pago.*sentencia|sentencia.*pago/.test(n)) return PPS;
   if (n.includes("provisional")) return "Archivo provisional";
   if (/definitiv|cerrad|terminad|archivad|finalizad|archivo/.test(n)) return "Archivo definitivo";
-  return "Activo";
+  if (/^(activo|activa|vigente|en curso|abierto)/.test(n)) return "Activo";
+  return null;
 }
+
+/** Map any older or imported status to one of the four (unknown or blank = Activo). */
+export const normStatus = (x) => statusFrom(x) ?? "Activo";
 
 export const PARTY_ROLES = {
   judicial: ["Demandante", "Demandado"],

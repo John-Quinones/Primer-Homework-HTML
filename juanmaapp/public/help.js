@@ -115,7 +115,7 @@
     assigned_user_id: "Funcionario (abogado o auxiliar) a cargo del expediente o de la tarea.",
     category_id: "Área del proceso: Laboral, Civil, Familia, Penal…",
     process_type_id: "Clase concreta de proceso dentro del tipo.",
-    status: "Activo mientras haya trámite; Archivo provisional si está suspendido; Archivo definitivo si terminó.",
+    status: "Activo mientras haya trámite; Archivo provisional si está suspendido; Archivo definitivo si terminó; Pendiente Pago Sentencia si ya hay sentencia y se espera el pago.",
     affiliated: "Marque Sí si el cliente pertenece a un convenio o afiliación de la firma.",
     id_type: "Cédula de ciudadanía para colombianos mayores de edad.",
     client_id: "Escriba las primeras letras para saltar al cliente.",
