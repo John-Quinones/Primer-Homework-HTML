@@ -1418,3 +1418,9 @@ dialog:not([open]) { pointer-events: none; }
   .mony-form textarea { min-width: 0; }
   .mony-fab { right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
+/* v2.2.35: buscador de clientes registrados dentro de las partes */
+.party-pick { margin-top: 6px; position: relative; }
+.party-pick input { width: 100%; }
+.party-pick-list { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); display: grid; gap: 2px; }
+.party-pick-list button { width: 100%; text-align: left; background: none; border: 0; padding: 6px 8px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
+.party-pick-list button:hover, .party-pick-list button:focus-visible { background: var(--surface-muted); }
