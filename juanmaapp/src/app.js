@@ -25,6 +25,7 @@ import { consentRouter, consentPublicRouter } from "./consents.js";
 import { pdfjsClassic } from "./pdfjs-classic.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 import { VERSION } from "./version.js";
+import { gcalRouter } from "./gcal-oauth.js";
 import { runMony, NAME as MONY_NAME } from "./mony.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -119,6 +120,7 @@ export function createApp(db) {
   app.use("/api", auditMiddleware(db)); // before requireAuth so refused deletes are logged too
   app.use("/api", requireAuth);
   app.use("/api/audit", auditRouter(db));
+  app.use("/api/gcal", gcalRouter(db)); // version 2.2.29: Google Calendar (OAuth), Gerencia only
   app.use("/api/admin", adminRouter(db));
   app.use("/api", recordsRouter(db));
   app.use("/api", consentRouter(db));

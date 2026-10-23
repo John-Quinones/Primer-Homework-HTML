@@ -563,6 +563,8 @@
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],
     ["GET", /^\/admin\/backups$/, () => ({ web: true, enabled: false, files: [], log: [] })],
     ["GET", /^\/admin\/ai-usage$/, () => ({ web: true })],
+    ["GET", /^\/gcal\/status$/, () => ({ web: true })],
+    ["GET", /^\/gcal\/status$/, () => ({ web: true })],
     ["GET", /^\/admin\/channels$/, () => ({ web: true, email: false, whatsapp: false, whatsapp_otp: false })],
     ["POST", /^\/admin\/test-tsa$/, () => fail("En el enlace de prueba no se piden sellos de tiempo: pruebe desde la app en Azure.")],
     ["POST", /^\/admin\/test-channel$/, () => fail("En el enlace de prueba no se envían mensajes: pruebe desde la app en Azure.")],

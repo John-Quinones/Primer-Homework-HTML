@@ -5,6 +5,7 @@ import { scopeOf } from "./auth.js";
 import { TASK_KINDS, taskFollowUp } from "./case-meta.js";
 import { findCases } from "./mony-cases.js";
 import { googleEvents } from "./gcal.js";
+import { accounts as gAccounts, oauthReady, getEvent } from "./gcal-oauth.js";
 
 const fold = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const LOCAL = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
@@ -34,9 +35,9 @@ const line = (t, now) => ({ tarea_id: t.id, tipo: t.kind, titulo: t.title, cuand
   estado: t.status, seguimiento: taskFollowUp(t, now).label, cliente: t.client_name, caso_id: t.case_id, funcionario: t.who_name || null });
 
 /** Google Calendar belongs to the firm's management: only Gerencia sees those events (they are the owner's own calendars). */
-async function google(user, fromLocal, toLocal) {
+async function google(db, user, fromLocal, toLocal) {
   if (user.role !== "Gerencia") return { visible: false, configured: false, events: [], errors: [] };
-  return { visible: true, ...(await googleEvents(fromLocal, toLocal)) };
+  return { visible: true, ...(await googleEvents(fromLocal, toLocal, db)) };
 }
 
 /** consultar_agenda: events between two dates (default: today and the next 14 days). */
@@ -52,11 +53,11 @@ export async function agendaList(db, user, input = {}, now = Date.now()) {
   const who = fold(input.funcionario);
   if (who === "yo" || who === "mi") rows = rows.filter((t) => t.who === user.id);
   else if (who) rows = rows.filter((t) => fold(t.who_name).includes(who));
-  const g = await google(user, from, to);
+  const g = await google(db, user, from, to);
   return { desde: from, hasta: to, total: rows.length, eventos: rows.slice(0, 40).map((t) => line(t, today)),
-    google_calendar: g.visible ? { eventos: g.events.slice(0, 40).map(({ calendario, titulo, cuando, hasta, lugar }) => ({ calendario, titulo, cuando, hasta, lugar })), errores: g.errors.length ? g.errors : undefined } : undefined,
+    google_calendar: g.visible ? { eventos: g.events.slice(0, 40).map(({ id, cuenta_id, calendario, titulo, cuando, hasta, lugar }) => ({ evento_id: id, cuenta_id, calendario, titulo, cuando, hasta, lugar })), errores: g.errors.length ? g.errors : undefined } : undefined,
     nota: [rows.length > 40 ? `Se muestran 40 de ${rows.length}.` : rows.length || g.events.length ? "" : "No hay eventos en ese rango.",
-      g.visible && !g.configured ? "Google Calendar aún no está conectado (falta GCAL_ICAL_URLS en el servidor)." : ""].filter(Boolean).join(" ") || undefined };
+      g.visible && !g.configured ? "Google Calendar aún no está conectado (Configuración → Google Calendar, o GCAL_ICAL_URLS)." : ""].filter(Boolean).join(" ") || undefined };
 }
 
 const resolveStaff = (db, name) => {
@@ -123,7 +124,7 @@ export async function proposeAgenda(db, user, input = {}, now = Date.now()) {
   // Google Calendar (read only, Gerencia): any event within the same hour also counts as an overlap.
   let googleConflicts = [];
   if (when && (action === "crear" || action === "modificar" || action === "posponer")) {
-    const g = await google(user, fromMs(ms(when) - 86400000), fromMs(ms(when) + 86400000));
+    const g = await google(db, user, fromMs(ms(when) - 86400000), fromMs(ms(when) + 86400000));
     const a = ms(when), b = a + SPAN_MIN * 60000;
     googleConflicts = g.events.filter((e) => e.inicio < b && e.fin > a).map(({ calendario, titulo, cuando, hasta }) => ({ calendario: `Google · ${calendario}`, titulo, cuando, hasta }));
   }
@@ -138,4 +139,56 @@ export async function proposeAgenda(db, user, input = {}, now = Date.now()) {
   return { accion: action, tarea_id: cur?.id ?? null, caso_id: caseId, resumen, antes: cur ? line(cur, today) : null, cambios: payload,
     cruces_en_agenda: conflicts, cruces_en_google: googleConflicts, hay_cruce: conflicts.length + googleConflicts.length > 0,
     estado: "PROPUESTA: no se ha guardado nada. La persona debe pulsar «Confirmar» en la tarjeta. Si hay_cruce es true, avísalo con claridad y ofrece otra hora." };
+}
+
+/**
+ * proponer_evento_google: proposes creating, moving or deleting an event in a connected Google calendar (Gerencia only).
+ * Nothing is saved here; the card's «Confirmar» calls /api/gcal/events. Overlaps are checked against Google and the App's agenda.
+ */
+export async function proposeGoogle(db, user, input = {}, now = Date.now()) {
+  if (user.role !== "Gerencia") throw new Error("Solo Gerencia maneja Google Calendar.");
+  if (!oauthReady() || !gAccounts(db).length) throw new Error("No hay cuentas de Google conectadas con permiso para escribir: se conectan en Configuración → Google Calendar.");
+  const action = ["crear", "mover", "eliminar"].includes(input.accion) ? input.accion : "";
+  if (!action) throw new Error("La acción debe ser crear, mover o eliminar.");
+  const accs = gAccounts(db);
+  let acc = null;
+  if (input.cuenta_id) acc = accs.find((a) => a.id === Number(input.cuenta_id));
+  else if (String(input.cuenta ?? "").trim()) { const m = accs.filter((a) => fold(a.email).includes(fold(input.cuenta))); if (m.length === 1) acc = m[0]; }
+  else if (accs.length === 1) acc = accs[0];
+  if (!acc) throw new Error(`Indica la cuenta de Google (${accs.map((a) => a.email).join(" o ")}).`);
+  let cur = null;
+  if (action !== "crear") {
+    if (!input.evento_id) throw new Error("Indica el evento_id (búscalo con consultar_agenda).");
+    cur = await getEvent(db, acc.id, String(input.evento_id));
+  }
+  const changes = {};
+  if (action === "crear") { changes.titulo = String(input.titulo ?? "").trim(); if (!changes.titulo) throw new Error("Falta el título."); }
+  else if (action === "mover" && String(input.titulo ?? "").trim()) changes.titulo = String(input.titulo).trim();
+  if (action !== "eliminar") {
+    const start = normLocal(input.inicio);
+    if (action === "crear" && !start) throw new Error("Falta el inicio (AAAA-MM-DD HH:MM, hora de Colombia).");
+    if (start) {
+      if (action === "crear" && start < bogotaNow(now)) throw new Error(`La fecha ${start} ya pasó.`);
+      changes.inicio = start;
+      changes.fin = normLocal(input.fin) || fromMs(ms(start) + (cur ? Math.max(15 * 60000, cur.fin - cur.inicio) : 3600000));
+    }
+    if (typeof input.lugar === "string") changes.lugar = input.lugar.slice(0, 300);
+    if (typeof input.descripcion === "string") changes.descripcion = input.descripcion.slice(0, 4000);
+    if (action === "mover" && !changes.inicio && !changes.titulo && changes.lugar === undefined && changes.descripcion === undefined) throw new Error("Indica qué cambiar: inicio/fin, título o lugar.");
+  }
+  const when = changes.inicio || cur?.cuando?.slice(0, 16) || "";
+  let conflicts = [];
+  if (changes.inicio) {
+    const a = ms(changes.inicio), b = ms(changes.fin);
+    const g = await google(db, user, fromMs(a - 86400000), fromMs(b + 86400000));
+    conflicts = g.events.filter((e) => e.id !== cur?.id && e.inicio < b && e.fin > a).map(({ calendario, titulo, cuando, hasta }) => ({ calendario: `Google · ${calendario}`, titulo, cuando, hasta }));
+    const mine = taskRows(db, user, "t.status = 'pendiente' AND t.due_at >= ? AND t.due_at < ? AND COALESCE(t.assigned_user_id, k.assigned_user_id) = ?", [fromMs(a - 59 * 60000), fromMs(b), user.id]);
+    conflicts.push(...mine.map((t) => ({ calendario: "App", titulo: t.title, cuando: t.due_at })));
+  }
+  const resumen = { crear: `Crear en Google (${acc.email}): «${changes.titulo}» ${weekday(changes.inicio)} ${changes.inicio} – ${changes.fin.slice(11)}`,
+    mover: `Cambiar en Google (${acc.email}) «${cur?.titulo}»${changes.inicio ? ` → ${weekday(changes.inicio)} ${changes.inicio} – ${changes.fin.slice(11)}` : ""}${changes.titulo ? ` · título «${changes.titulo}»` : ""}`,
+    eliminar: `ELIMINAR de Google (${acc.email}) «${cur?.titulo}» (${cur?.cuando})` }[action];
+  return { accion: action, cuenta_id: acc.id, evento_id: cur?.id ?? null, resumen, antes: cur ? { titulo: cur.titulo, cuando: cur.cuando, hasta: cur.hasta } : null, cambios: changes,
+    cruces: conflicts, hay_cruce: conflicts.length > 0, fecha_referencia: when,
+    estado: "PROPUESTA: no se ha guardado nada en Google. La persona debe pulsar «Confirmar» en la tarjeta. Si hay_cruce es true, avísalo y ofrece otra hora." };
 }

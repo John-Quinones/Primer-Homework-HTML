@@ -2528,6 +2528,22 @@ async function renderBackups() {
       <a class="mini" href="/api/admin/backups/${encodeURIComponent(f.file)}" download>Descargar</a></li>`).join("") : "<li class=\"muted\">Todavía no hay copias.</li>");
 }
 
+// Google Calendar (version 2.2.29): Gerencia connects its Google accounts so Mony can create, move and delete events (after the person confirms).
+async function renderGcal() {
+  const panel = $("#gcal-panel");
+  panel.hidden = !isGerencia();
+  if (panel.hidden) return;
+  const back = new URLSearchParams(location.search).get("gcal"); // the answer of Google's consent screen
+  if (back) { toast(back); history.replaceState(null, "", location.pathname + location.hash); }
+  const g = await api("GET", "/gcal/status").catch(() => null);
+  if (!g || g.web) { panel.hidden = true; return; }
+  $("[data-action=gcal-connect]").disabled = !g.ready;
+  $("#gcal-summary").innerHTML = g.ready
+    ? `Mony puede leer y, con su confirmación, crear, mover y eliminar eventos en las cuentas conectadas. Solo Gerencia ve y usa estos calendarios.`
+    : `Falta configurar en el servidor: <strong>${escapeHtml(g.missing.join(", "))}</strong>. Pasos en AZURE.md (paso 10). Dirección de retorno que debe registrar en Google: <code>${escapeHtml(g.redirect_uri)}</code>`;
+  $("#gcal-list").innerHTML = g.accounts.length ? g.accounts.map((a) => `<li><span class="badge ok">Conectada</span> <strong>${escapeHtml(a.email)}</strong>
+    <button type="button" class="mini" data-action="gcal-disconnect" data-id="${a.id}">Desconectar</button></li>`).join("") : '<li class="muted">Todavía no hay cuentas conectadas.</li>';
+}
 // What the AI cost this month (version 2.49): Gerencia only, estimated at list prices.
 async function renderAiUsage() {
   const panel = $("#ai-usage-panel");
@@ -2555,6 +2571,7 @@ async function renderConfiguracion() {
   renderChannels().catch(() => {});
   renderAiUsage().catch(() => {});
   renderBackups().catch(() => {});
+  renderGcal().catch(() => {});
   await loadCatalog();
   const open = new Set($$("#catalog details[open]").map((d) => d.dataset.cat));
   const arrows = (kind, id, first, last) => `<span class="order-btns">
@@ -2707,6 +2724,11 @@ document.addEventListener("click", (e) => {
     "test-email": async () => {
       const r = await api("POST", "/admin/test-channel", { channel: "email", to: $("#channel-test-to").value });
       $("#channel-test-result").textContent = r.ok ? `Correo de prueba enviado a ${r.detail}. Revise la bandeja (y el correo no deseado).` : `No se envió: ${r.detail}`;
+    },
+    "gcal-connect": async () => { const r = await api("GET", "/gcal/connect"); window.location.href = r.url; },
+    "gcal-disconnect": async () => {
+      if (!(await confirmAsk("Desconectar Google", "Mony dejará de ver y cambiar los eventos de esta cuenta. Los eventos que ya existen en Google no se tocan."))) return;
+      await api("DELETE", `/gcal/accounts/${btn.dataset.id}`); toast("Cuenta desconectada."); renderGcal().catch(() => {});
     },
     "backup-now": async () => {
       const r = await api("POST", "/admin/backups");
@@ -7122,6 +7144,28 @@ function monyCard(c) {
     row.append(ok, no);
     box.append(row);
     d.append(box);
+  } else if (c.type === "google") {
+    d.classList.add("mony-wa");
+    const box = document.createElement("div");
+    const b = document.createElement("b"); b.textContent = c.summary;
+    const sub = document.createElement("small"); sub.textContent = "Propuesta · aún no guardada en Google";
+    box.append(b, sub);
+    if (c.conflicts?.length) { const w = document.createElement("div"); w.className = "mony-conflict"; w.textContent = "⚠ Se cruza con: " + c.conflicts.map((x) => `${x.titulo} (${x.cuando})`).join("; "); box.append(w); }
+    const row = document.createElement("div"); row.className = "mony-wa-row";
+    const ok = document.createElement("button"); ok.type = "button"; ok.className = "mini primary";
+    ok.textContent = c.conflicts?.length ? "Confirmar de todos modos" : c.action === "eliminar" ? "Eliminar" : "Confirmar";
+    const no = document.createElement("button"); no.type = "button"; no.className = "mini"; no.textContent = "Cancelar";
+    no.addEventListener("click", () => d.remove());
+    ok.addEventListener("click", () => guarded(async () => {
+      ok.disabled = no.disabled = true;
+      try {
+        if (c.action === "crear") await api("POST", "/gcal/events", { account_id: c.accountId, ...c.changes });
+        else if (c.action === "mover") await api("PATCH", `/gcal/events/${encodeURIComponent(c.eventId)}`, { account_id: c.accountId, ...c.changes });
+        else await api("DELETE", `/gcal/events/${encodeURIComponent(c.eventId)}?account_id=${c.accountId}`);
+      } catch (e) { ok.disabled = no.disabled = false; throw e; }
+      sub.textContent = "✓ Guardado en Google Calendar"; row.remove(); toast("Google Calendar actualizado.");
+    }));
+    row.append(ok, no); box.append(row); d.append(box);
   } else if (c.type === "correo") {
     d.classList.add("mony-wa");
     const sub = document.createElement("small"); sub.textContent = `Para ${c.to} · borrador, aún no enviado`;
@@ -7451,6 +7495,7 @@ $("#mony-form").addEventListener("submit", (e) => {
           const what = { consultar_estado_proceso: ["Conectando a la Rama Judicial…", "Rama Judicial consultada", "Rama Judicial no respondió"],
             calcular_terminos_legales: ["Calculando términos…", "Términos calculados", "No se pudo calcular el término"],
             buscar_expedientes: ["Buscando expedientes…", "Expedientes consultados", "No se pudo buscar"],
+            proponer_evento_google: ["Preparando el evento de Google…", "Propuesta de Google Calendar lista", "No se pudo preparar el evento"],
             consultar_agenda: ["Revisando la agenda…", "Agenda consultada", "No se pudo leer la agenda"],
             proponer_cambio_agenda: ["Preparando el cambio de agenda…", "Propuesta de agenda lista", "No se pudo preparar el cambio"],
             preparar_correo: ["Redactando el correo…", "Borrador de correo listo", "No se pudo preparar el correo"],
