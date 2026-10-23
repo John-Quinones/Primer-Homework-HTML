@@ -998,7 +998,9 @@
     ["PUT", /^\/clients\/(\d+)\/archive$/, (m, b) => {
       need("clients.write");
       const c = s.clients.find((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
-      c.archive_status = RR.clientArchive(b.status, fail);
+      const status = RR.clientArchive(b.status, fail);
+      if ((status === "Archivo definitivo" || c.archive_status === "Archivo definitivo") && status !== (c.archive_status || "") && me().role !== "Gerencia") fail("Solo Gerencia maneja el archivo definitivo de clientes.", 403);
+      c.archive_status = status;
       return clientOut(c, true);
     }],
     // Optional photo (version 2.22), kept as a blob so the client buckets stay small; "" removes it.

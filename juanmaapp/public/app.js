@@ -679,9 +679,15 @@ function renderClientList() {
 }
 
 // Buttons to send a client to archive or back to activos (needs clients.write); «definitivo» asks first.
-const archiveButtons = (c) => !can("clients.write") ? "" : (c.archive_status
-  ? `<button data-action="archive-client" data-id="${c.id}" data-to="">Devolver a activos</button>${c.archive_status === "Archivo provisional" ? `<button data-action="archive-client" data-id="${c.id}" data-to="Archivo definitivo">Pasar a archivo definitivo</button>` : `<button data-action="archive-client" data-id="${c.id}" data-to="Archivo provisional">Pasar a archivo provisional</button>`}`
-  : `<button data-action="archive-client" data-id="${c.id}" data-to="Archivo provisional">Archivo provisional</button><button data-action="archive-client" data-id="${c.id}" data-to="Archivo definitivo">Archivo definitivo</button>`);
+const archiveButtons = (c) => {
+  if (!can("clients.write")) return "";
+  const btn = (to, label) => `<button data-action="archive-client" data-id="${c.id}" data-to="${to}">${label}</button>`;
+  const final = isGerencia(); // «Archivo definitivo» (to or from) is only for the administrator (user's rule, 2.94)
+  if (c.archive_status === "Archivo definitivo") return final ? btn("", "Devolver a activos") + btn("Archivo provisional", "Pasar a archivo provisional") : "";
+  return c.archive_status
+    ? btn("", "Devolver a activos") + (final ? btn("Archivo definitivo", "Pasar a archivo definitivo") : "")
+    : btn("Archivo provisional", "Archivo provisional") + (final ? btn("Archivo definitivo", "Archivo definitivo") : "");
+};
 const archiveBadge = (c) => (c.archive_status ? `<span class="chip-stat warn">${escapeHtml(c.archive_status)}</span>` : "");
 
 async function renderClientDetail() {
@@ -1731,6 +1737,11 @@ function openClientDialog(c) {
   } : {});
   setPersonType(type);
   clientForm.elements.affiliated.checked = !!c?.affiliated;
+  // Version 2.94: state of the client. «Archivo definitivo» (to or from) is only for Gerencia.
+  const st = clientForm.elements.archive_status;
+  st.value = c?.archive_status || "";
+  st.querySelector('[value="Archivo definitivo"]').disabled = !isGerencia();
+  st.disabled = !isGerencia() && c?.archive_status === "Archivo definitivo";
   sel.value = c?.office_id ?? myOffices()[0]?.id ?? "";
   showFormPhoto(c?.photo || "", c || {});
 }
@@ -1739,7 +1750,16 @@ wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   data.affiliated = form.elements.affiliated.checked;
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
+  const wantedState = form.elements.archive_status.value, before = id ? state.clients.find((x) => x.id === Number(id))?.archive_status || "" : "";
+  if (id && wantedState && wantedState !== before) {
+    const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
+    if (open && !(await ask({ title: `¿Enviar a ${wantedState.toLowerCase()}?`, message: `Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes. No se borra nada.`, okLabel: "Archivar" }))) throw new Error("No se guardó: confirme el archivo del cliente o déjelo en activo.");
+  }
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
+  if (wantedState !== (saved.archive_status || "")) {
+    try { await api("PUT", `/clients/${saved.id}/archive`, { status: wantedState }); await loadClients(); }
+    catch (err) { toast(`El cliente quedó guardado, pero el estado no: ${err.message}`, true); }
+  }
   if (pendingPhoto !== undefined) await saveClientPhoto(saved.id, pendingPhoto).catch((err) => toast(`El cliente quedó guardado, pero la foto no: ${err.message}`, true));
   pendingPhoto = undefined;
   state.selectedClientId = saved.id;
@@ -1983,6 +2003,8 @@ $("#case-rows").addEventListener("change", (e) => guarded(async () => {
 
 const caseForm = $("#case-dialog form");
 // Client pickers are search boxes: any letter or word of the name or the document filters the list.
+// Version 2.94: client searchers outside Clientes list only activos (an archived client stays when it is already chosen).
+const activeClients = (list, keepId = null) => list.filter((c) => !c.archive_status || c.id === keepId);
 const clientOption = (c) => `<option value="${c.id}" data-sub="${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}">${escapeHtml(c.full_name)}</option>`;
 window.JuanmaCombo.searchSelect(caseForm.elements.client_id);
 
@@ -2305,7 +2327,7 @@ async function openCaseDialog(k = null, clientId = null) {
     location.hash = "#clientes";
     return;
   }
-  caseForm.elements.client_id.innerHTML = state.clients.map(clientOption).join("");
+  caseForm.elements.client_id.innerHTML = activeClients(state.clients, k?.client_id).map(clientOption).join("");
   caseForm.elements.category_id.innerHTML = state.catalog
     .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
 
@@ -2322,7 +2344,9 @@ async function openCaseDialog(k = null, clientId = null) {
   linkCourtByName(k).catch(() => {});
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();
-  caseForm.elements.client_id.value = k?.client_id ?? clientId ?? state.clients[0].id;
+  const firstActive = activeClients(state.clients)[0];
+  if (!k && !firstActive) { toast("No hay clientes activos. Cree uno o devuelva uno a activos.", true); location.hash = "#clientes"; return; }
+  caseForm.elements.client_id.value = k?.client_id ?? (activeClients(state.clients, clientId).some((c) => c.id === clientId) ? clientId : firstActive.id);
   caseForm.elements.client_id.disabled = !!k;
   caseForm.elements.office_id.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   const clientOffice = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value))?.office_id;
@@ -2335,7 +2359,7 @@ async function openCaseDialog(k = null, clientId = null) {
   fillRoleSelect(k?.client_role || "");
   if (k) renderCustomFields(categoryOf(catId), k.field_values);
   partyRows = (k?.parties || []).map((p) => ({ ...p }));
-  $("#party-clients").innerHTML = state.clients.map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
+  $("#party-clients").innerHTML = activeClients(state.clients).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
   renderParties();
 }
 
@@ -3307,6 +3331,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       <p class="${sum.errors.length ? "" : "ok"}"><strong>Importación terminada.</strong></p>
       <ul>
         <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
+        ${sum.clientsArchived ? `<li>Clientes con estado de archivo cambiado: <strong>${sum.clientsArchived}</strong></li>` : ""}
         <li>Clientes existentes completados o actualizados: <strong>${sum.clientsCompleted}</strong>${sum.clientsUpdated ? ` (con datos cambiados: ${sum.clientsUpdated})` : ""}</li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
@@ -3333,7 +3358,7 @@ const IMPORT_KINDS = {
     title: "Clientes", mode: "clients",
     cols: [["Nombre completo", (c) => c.full_name], ["Tipo de documento", (c) => c.id_type], ["Número de documento", (c) => c.id_number],
       ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city],
-      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Notas", (c) => c.notes]],
+      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Estado del cliente", (c) => c.archive_status || "Activo"], ["Notas", (c) => c.notes]],
     rows: async () => api("GET", "/clients"),
   },
   expedientes: {
@@ -3366,6 +3391,10 @@ function renderImportKinds() {
     <div class="import-card" data-kind="${key}">
       <h4>${k.title}</h4>
       <p class="hint">${escapeHtml(IMPORT_KIND_HINT[key])}</p>
+      ${key === "clientes" ? `<div class="toolbar import-filters">
+        <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option></select></label>
+        <label>Cédula expedida en <input id="import-clients-idplace" type="search" placeholder="Ciudad o departamento" /></label>
+      </div>` : ""}
       <div class="toolbar">
         <button type="button" data-imp-dl="template">Plantilla vacía</button>
         <button type="button" data-imp-dl="data">Descargar datos actuales</button>
@@ -3377,7 +3406,11 @@ function renderImportKinds() {
 async function downloadImportKind(key, what, filename) {
   const k = IMPORT_KINDS[key];
   const header = k.cols.map(([label]) => ({ value: label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
-  const data = what === "data" ? await k.rows() : [];
+  let data = what === "data" ? await k.rows() : [];
+  if (what === "data" && key === "clientes") { // filters of the clients card: state and place where the ID card was issued
+    const st = $("#import-clients-state")?.value || "", place = $("#import-clients-idplace")?.value || "";
+    data = data.filter((c) => (!st || (st === "activo" ? !c.archive_status : c.archive_status === st)) && (!place.trim() || window.JuanmaPerson.clientMatches(c, place, "idplace")));
+  }
   const body = data.map((r) => k.cols.map(([, get]) => ({ value: String(get(r) ?? ""), type: String })));
   const widths = k.cols.map(([label]) => ({ width: Math.max(16, label.length + 2) }));
   const blob = await window.writeXlsxFile([header, ...body], { columns: widths, sheet: k.title }).toBlob();
@@ -6375,7 +6408,7 @@ async function renderPagos() {
   const [sum, clients] = await Promise.all([api("GET", "/payments/summary"), api("GET", "/clients")]);
   payClients = clients;
   const sel = $("#pay-client");
-  sel.innerHTML = '<option value="">Todos los clientes</option>' + clients.map(clientOption).join("");
+  sel.innerHTML = '<option value="">Todos los clientes</option>' + activeClients(clients).map(clientOption).join("");
   sel.value = clientId;
   $("#pay-balance").textContent = cop(sum.totals.balance);
   $("#pay-overdue").textContent = cop(sum.totals.overdue);
@@ -6466,7 +6499,7 @@ window.JuanmaCombo.searchSelect(chargeForm.elements.client_id);
 async function fillClientSelect(select, selected) {
   if (!payClients.length) payClients = await api("GET", "/clients");
   if (!payClients.length) throw new Error("Primero cree un cliente.");
-  select.innerHTML = payClients.map(clientOption).join("");
+  select.innerHTML = activeClients(payClients, Number(selected)).map(clientOption).join("");
   // defaultSelected: openDialog resets the form, and the client chosen in Pagos must survive it.
   const opt = selected && [...select.options].find((o) => o.value === String(selected));
   if (opt) { opt.defaultSelected = true; select.value = opt.value; }

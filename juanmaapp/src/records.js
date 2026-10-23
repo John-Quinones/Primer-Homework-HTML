@@ -138,8 +138,10 @@ export function recordsRouter(db) {
   r.put("/clients/:id/archive", h((req) => {
     checkPerm(req, "clients.write");
     const id = toInt(req.params.id, "id");
-    getClient(req, id);
+    const before = getClient(req, id).archive_status;
     const status = clientArchive(req.body?.status, fail400);
+    // Only the administrator (Gerencia) sends a client to «Archivo definitivo» or takes one out of it.
+    if ((status === "Archivo definitivo" || before === "Archivo definitivo") && status !== before && req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia maneja el archivo definitivo de clientes.");
     db.prepare("UPDATE clients SET archive_status = ? WHERE id = ?").run(status, id);
     return getClient(req, id);
   }));

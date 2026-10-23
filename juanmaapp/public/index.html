@@ -221,7 +221,7 @@
           <div class="toolbar">
             <select id="client-search-by" aria-label="Buscar por">
               <option value="">Buscar en todo</option><option value="first">Nombres</option><option value="last">Apellidos</option>
-              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
+              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option><option value="idplace">Cédula expedida en</option>
             </select>
             <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
             <select id="client-archive" aria-label="Estado del cliente"><option value="">Clientes activos</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option></select>
@@ -1004,6 +1004,7 @@
         <label>Dirección <input name="address" /></label>
         <label>Oficina <select name="office_id"></select></label>
       </div>
+      <label>Estado del cliente <select name="archive_status"><option value="">Activo</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option></select></label>
       <label class="inline toggle"><input type="checkbox" name="affiliated" /> Cliente afiliado</label>
       <label>Notas <textarea name="notes" rows="3"></textarea></label>
       <div class="photo-field" id="client-photo-field">

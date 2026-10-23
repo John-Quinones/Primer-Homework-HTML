@@ -47,3 +47,53 @@ test("archiving a client leaves its cases untouched", async () => {
   });
   assert.deepEqual(out, ["Activo", "Activo", 1]);
 });
+
+test("only Gerencia handles «Archivo definitivo» (server)", async () => {
+  const g = await srv.login("gerencia@firma.co", "clave-segura-1");
+  const office = (await g.call("GET", "/admin/offices")).body[0].id;
+  await g.call("POST", "/admin/users", { name: "Pedro Ruiz", email: "pedro@firma.co", role: "Abogado", office_ids: [office], password: "Temporal-2026-x" });
+  const p = await srv.login("pedro@firma.co", "Temporal-2026-x");
+  const c = (await g.call("POST", "/clients", { full_name: "Dora Definitiva", id_number: "8003", office_id: office })).body;
+  assert.equal((await p.call("PUT", `/clients/${c.id}/archive`, { status: "Archivo provisional" })).body.archive_status, "Archivo provisional");
+  assert.equal((await p.call("PUT", `/clients/${c.id}/archive`, { status: "Archivo definitivo" })).status, 403);
+  assert.equal((await g.call("PUT", `/clients/${c.id}/archive`, { status: "Archivo definitivo" })).body.archive_status, "Archivo definitivo");
+  assert.equal((await p.call("PUT", `/clients/${c.id}/archive`, { status: "" })).status, 403, "cannot take it out of definitivo either");
+  assert.equal((await g.call("PUT", `/clients/${c.id}/archive`, { status: "" })).body.archive_status, "");
+});
+
+test("search by the place where the ID card was issued", async () => {
+  const { clientMatches } = await import("../src/person.js");
+  const c = { full_name: "Eva Expedida", id_city: "Ibagué", id_department: "Tolima", city: "Bogotá", department: "Bogotá" };
+  assert.equal(clientMatches(c, "ibague", "idplace"), true);
+  assert.equal(clientMatches(c, "tolima", "idplace"), true);
+  assert.equal(clientMatches(c, "bogota", "idplace"), false);
+  assert.equal(clientMatches(c, "bogota", "city"), true);
+});
+
+test("import: the «Estado del cliente» column archives new clients, and existing ones only when updating", async () => {
+  const { createRequire } = await import("node:module");
+  globalThis.window = {};
+  createRequire(import.meta.url)("../public/importer.js");
+  const IMP = window.JuanmaImport;
+  const headers = ["Nombre completo", "Número de documento", "Estado del cliente"];
+  const mapping = IMP.guessAll(headers);
+  assert.deepEqual(mapping, ["client.full_name", "client.id_number", "client.archive_status"]);
+  const rec = (name, doc, st) => ({ ...IMP.buildRecord([name, doc, st], headers, mapping), rowNumber: 2 });
+  const run = async (updateMode) => {
+    const calls = [], stored = [{ id: 1, full_name: "Vieja Cliente", id_number: "111", archive_status: "" }];
+    const api = async (method, path, body) => {
+      calls.push(`${method} ${path} ${JSON.stringify(body)}`);
+      if (path === "/clients" && method === "GET") return stored;
+      if (path === "/clients" && method === "POST") return { id: 2, ...body, archive_status: "" };
+      if (path.endsWith("/archive")) return { id: +path.split("/")[2], archive_status: body.status, full_name: "x", id_number: "" };
+      return [];
+    };
+    const sum = await IMP.run([rec("Nueva Cliente", "222", "Archivo provisional"), rec("Vieja Cliente", "111", "Archivo definitivo"), rec("Otra Cliente", "333", "")], api, { withCases: false, updateMode });
+    return { sum, archives: calls.filter((c) => c.includes("/archive")) };
+  };
+  const fill = await run("fill");
+  assert.deepEqual(fill.archives, ['PUT /clients/2/archive {"status":"Archivo provisional"}']);
+  const upd = await run("update");
+  assert.equal(upd.archives.length, 2);
+  assert.ok(upd.archives.some((c) => c.includes("/clients/1/archive") && c.includes("Archivo definitivo")));
+});
