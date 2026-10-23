@@ -15,3 +15,5 @@
 - v2.2.10: avatar de Mony = `public/mony-avatar.webp` (rostro de partículas luminosas; imagen elegida por John, 23/10/2026). Regla de John: NO cambiar los colores de la App; solo el agente Mony usa la paleta #0F172A + cian.
 
 - v2.2.11: clic en el rostro lo amplía (dialog #mony-zoom); avatar reescalado a 560 px en WebP (fuente original 339×204; pedir a John una imagen mayor para más nitidez). Seguimiento de cabeza: por ahora puntero; cámara después (decisión de John 23/10/2026, local y opcional).
+
+- v2.2.12: avatar nuevo (imagen de alta resolución de John, 2752×1536; círculo 720 px `mony-avatar.webp` + completa 1600 px `mony-avatar-full.webp`). Tamaños: chat 168 px (3× el original de 56), clic = ~504 px, doble clic = pantalla completa (requestFullscreen + diálogo a 100vw/100vh); sigue al puntero en los tres (3D en chat/grande, deslizamiento plano en pantalla completa).
