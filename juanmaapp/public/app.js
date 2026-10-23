@@ -3445,7 +3445,6 @@ function renderImportKinds() {
       <p class="hint">${escapeHtml(IMPORT_KIND_HINT[key])}</p>
       ${key === "clientes" ? `<div class="toolbar import-filters">
         <label>Descargar <select id="import-clients-state"><option value="">Todos los clientes</option><option value="activo">Solo activos</option><option>Archivo provisional</option><option>Archivo definitivo</option><option>Pendiente Pago Sentencia</option></select></label>
-        <label>Cédula expedida en <input id="import-clients-idplace" type="search" placeholder="Ciudad o departamento" /></label>
       </div>` : ""}
       <div class="toolbar">
         <button type="button" data-imp-dl="template">Plantilla vacía</button>
@@ -3459,9 +3458,9 @@ async function downloadImportKind(key, what, filename) {
   const k = IMPORT_KINDS[key];
   const header = k.cols.map(([label]) => ({ value: label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
   let data = what === "data" ? await k.rows() : [];
-  if (what === "data" && key === "clientes") { // filters of the clients card: state and place where the ID card was issued
-    const st = $("#import-clients-state")?.value || "", place = $("#import-clients-idplace")?.value || "";
-    data = data.filter((c) => (!st || (st === "activo" ? !c.archive_status : c.archive_status === st)) && (!place.trim() || window.JuanmaPerson.clientMatches(c, place, "idplace")));
+  if (what === "data" && key === "clientes") { // filter of the clients card: state
+    const st = $("#import-clients-state")?.value || "";
+    data = data.filter((c) => !st || (st === "activo" ? !c.archive_status : c.archive_status === st));
   }
   const body = data.map((r) => k.cols.map(([, get]) => ({ value: String(get(r) ?? ""), type: String })));
   const widths = k.cols.map(([label]) => ({ width: Math.max(16, label.length + 2) }));
