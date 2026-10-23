@@ -1748,26 +1748,38 @@ function fillCaseFilter() {
 
 // Case list filters: text, department → city (or its circuit) → area → court.
 let caseCourtIds = null; // courts of the chosen place and area, from the directory
+let caseCourtList = []; // those courts, to match court names written by hand in the cases (v2.83)
 async function refreshCaseCourts() {
   const dep = $("#case-dep").value, city = $("#case-city").value, area = $("#case-area").value;
   const sel = $("#case-court");
   const cur = sel.value;
   const courts = dep || city || area ? await courtsFor(dep, city, area) : [];
+  caseCourtList = courts;
   caseCourtIds = city || area ? new Set(courts.map((c) => c.id)) : null;
   // Courts named in the cases count too, so a case whose court is not in the directory can still be found.
   const named = new Map(courts.map((c) => [`id:${c.id}`, c.name]));
-  for (const k of casesByPlace()) if (k.court_name && !(k.court_id && named.has(`id:${k.court_id}`))) named.set(k.court_id ? `id:${k.court_id}` : `n:${k.court_name}`, k.court_name);
+  for (const k of casesByPlace()) if (k.court_name && !(k.court_id && named.has(`id:${k.court_id}`)) && !(!k.court_id && directoryCourt(k))) named.set(k.court_id ? `id:${k.court_id}` : `n:${k.court_name}`, k.court_name);
   sel.innerHTML = '<option value="">Todos los despachos</option>' + [...named].sort((a, b) => a[1].localeCompare(b[1], "es"))
     .map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join("");
   sel.value = [...sel.options].some((o) => o.value === cur) ? cur : "";
   renderCaseRows();
 }
 const plainText = (x) => window.JuanmaCombo.norm(x || "");
+// v2.83: the directory court of a case: its court_id, or (when the court was typed by hand) the one that says the same name. Nothing is saved.
+function directoryCourt(k) {
+  if (k.court_id) return caseCourtList.find((c) => c.id === k.court_id) || null;
+  if (!k.court_name) return null;
+  const hits = caseCourtList.filter((c) => window.JuanmaCaseMeta.sameCourtName(k.court_name, c));
+  return hits.length === 1 ? hits[0] : null;
+}
 function casesByPlace() {
   const dep = plainText($("#case-dep").value), city = plainText($("#case-city").value), area = $("#case-area").value;
-  return state.cases.filter((k) => (!dep || plainText(k.department) === dep)
-    && (!city || plainText(k.city) === city || (caseCourtIds && k.court_id && caseCourtIds.has(k.court_id)))
-    && (!area || k.area === area || (!k.area && caseCourtIds && k.court_id && caseCourtIds.has(k.court_id))));
+  const inPlace = (k) => caseCourtIds && (k.court_id ? caseCourtIds.has(k.court_id) : !!directoryCourt(k));
+  // A case without its own area takes it from its court's name («Juzgado 02 Laboral…» → Laboral).
+  const caseArea = (k) => k.area || (k.court_name && window.JuanmaPlaces.inferArea(k.court_name)) || "";
+  return state.cases.filter((k) => (!dep || plainText(k.department) === dep || (!k.department && inPlace(k)))
+    && (!city || plainText(k.city) === city || inPlace(k))
+    && (!area || k.area === area || caseArea(k) === area || (!k.area && inPlace(k))));
 }
 // Version 2.70: the list hides archived cases unless «Estado» asks for them (Archivo provisional / Archivo definitivo / Todos).
 const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo"]);
@@ -1783,7 +1795,7 @@ function renderCaseRows() {
   const court = $("#case-court").value, status = $("#case-status").value, adLitem = $("#case-adlitem").checked;
   const rows = casesByPlace().filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
     && (!mine || k.assigned_user_id === me.id) && (status === "todos" || (status ? k.status === status : !ARCHIVED_STATUSES.has(k.status))) && (!adLitem || k.ad_litem)
-    && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) : k.court_name === court.slice(2)))
+    && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) || (!k.court_id && directoryCourt(k)?.id === Number(court.slice(3))) : k.court_name === court.slice(2)))
     && matches(k));
   const hidden = status ? 0 : state.cases.filter((k) => ARCHIVED_STATUSES.has(k.status)).length;
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} archivado(s) oculto(s)` : ""}`;

@@ -95,6 +95,24 @@ export function filterCourts(list, want = {}) {
   return exact.length ? exact : list.filter((c) => courtMatches(c, want));
 }
 
+// v2.83: a court written by hand in a case («Juzgado 02 Laboral Circuito - Tolima - Ibagué») is the directory court
+// «Juzgado 002 Laboral del Circuito de Ibagué» when, ignoring accents, case, zeros, ordinals and the place words, they say the same.
+const COURT_ORD = { primero: 1, primer: 1, segundo: 2, tercero: 3, tercer: 3, cuarto: 4, quinto: 5, sexto: 6, septimo: 7, octavo: 8, noveno: 9, decimo: 10 };
+const COURT_FILLER = new Set(["juzgado", "de", "del", "la", "el", "los", "las", "y", "en", "judicial", "distrito", "departamento", "dpto"]);
+const COURT_KIND = new Set(["circuito", "municipal"]);
+const courtWords = (t) => plain(String(t ?? "").replace(/[-–,;()/]/g, " ")).split(" ").filter(Boolean)
+  .map((w) => COURT_ORD[w] !== undefined ? String(COURT_ORD[w]) : /^\d+$/.test(w) ? String(Number(w)) : w);
+export function sameCourtName(written, court) {
+  const place = new Set([court.department, court.city, court.circuit].flatMap(courtWords));
+  const keep = (t) => new Set(courtWords(t).filter((w) => !COURT_FILLER.has(w) && !place.has(w)));
+  const a = keep(written), b = keep(court.name);
+  if (!a.size || !b.size) return false;
+  const only = (x, y) => [...x].filter((w) => !y.has(w));
+  const da = only(a, b), db = only(b, a);
+  // Same words, or one side merely lacks «circuito»/«municipal»; «Municipal» against «Circuito» are different courts.
+  return (!da.length && db.every((w) => COURT_KIND.has(w))) || (!db.length && da.every((w) => COURT_KIND.has(w)));
+}
+
 // The case's folder number lives in a custom field called "No. Carpeta" (or "Carpeta", "N° de carpeta"…).
 export const isFolderLabel = (label) => /^(n|no|nro|num|numero)?(de)?carpeta$/.test(nrm(label).replace(/[^a-z]/g, ""));
 // Version 2.33: an Excel radicado that was not 23 digits was kept in "Radicado (como venía)";
