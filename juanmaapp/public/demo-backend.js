@@ -541,7 +541,8 @@
     ["POST", /^\/auth\/logout$/, () => { try { auditAdd({ action: "Salió", summary: "Cerró sesión" }); } catch {} setCurrent(null); return null; }],
     ["GET", /^\/audit(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
-      if (q.caseId) visibleCase(+q.caseId); else need("audit.view");
+      const mine = !q.caseId && q.recent && !me().permissions.includes("audit.view");
+      if (q.caseId) visibleCase(+q.caseId); else if (!q.recent) need("audit.view");
       const from = q.from ? Date.parse(q.from + "T00:00:00-05:00") : null, to = q.to ? Date.parse(q.to + "T23:59:59-05:00") : null;
       const like = String(q.q || "").toLowerCase();
       // Who really did it stays in user_id; a hidden user reads "Asistente" unless unlocked.
@@ -549,10 +550,10 @@
       const mask = (t) => (open ? t : hidden.reduce((acc, u) => (u.name ? acc.split(u.name).join(ASSISTANT) : acc).split(u.email || "\u0000").join("(oculto)"), t));
       return clone(s.audit.filter((e) => {
         const t = Date.parse(e.at.replace(" ", "T") + "Z");
-        return (!q.caseId || e.case_id === +q.caseId) && (!from || t >= from) && (!to || t <= to) && (!q.userId || e.user_id === +q.userId)
+        return (!q.caseId || e.case_id === +q.caseId) && (!from || t >= from) && (!to || t <= to) && (!q.userId || e.user_id === +q.userId) && (!mine || e.user_id === me().id)
           && (!q.module || e.module === q.module) && (!q.device || e.device === q.device) && (!q.before || e.id < +q.before)
           && (!like || `${e.summary} ${open || !hiddenIds.has(e.user_id) ? e.user_name : ""} ${JSON.stringify(e.changes)}`.toLowerCase().includes(like));
-      }).sort((a, b) => b.id - a.id).slice(0, 300).map((e) => ({ ...e, summary: mask(e.summary), changes: JSON.parse(mask(JSON.stringify(e.changes || []))),
+      }).sort((a, b) => b.id - a.id).slice(0, q.recent ? 15 : 300).map((e) => ({ ...e, summary: mask(e.summary), changes: JSON.parse(mask(JSON.stringify(e.changes || []))),
         ...(hiddenIds.has(e.user_id) ? { user_name: open ? `${hidden.find((u) => u.id === e.user_id).name} (oculto)` : ASSISTANT, hidden_user: true } : {}) })));
     }],
     ["POST", /^\/auth\/password$/, () => fail("En el enlace de prueba la identidad la da su cuenta de Claude; las contraseñas se usan en la app instalada.")],

@@ -8,3 +8,4 @@
 - Efectos de movimiento (fundido, ampliación, desenfoque) dependen de Pantalla → Efectos, no de la configuración de animaciones de Windows: John las tiene apagadas.
 - Nada se abre con un clic suelto: solo con botones «Ver …». Todo borrado pregunta antes.
 - Nunca mostrar datos inventados (casos, actuaciones, sentencias). Si algo necesita internet o correo y no está disponible, decirlo en pantalla.
+- Inicio: recuadro «Últimos movimientos» (15 últimas entradas de la Bitácora vía GET /audit?recent=1; con permiso audit.view ve todo, sin él solo lo propio) junto a «Próximas audiencias y vencimientos», que se mantiene.

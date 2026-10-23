@@ -118,6 +118,9 @@ export function auditRouter(db) {
       const sc = scopeOf(req.user);
       if (!k || (sc !== null && !sc.includes(k.office_id))) return res.status(404).json({ error: "El expediente no existe." });
       where.push("case_id = ?"); params.push(Number(q.caseId));
+    } else if (q.recent) {
+      // Inicio's «Últimos movimientos»: who can read the whole log sees everyone's; the rest, only their own.
+      if (!can(req, "audit.view")) { where.push("user_id = ?"); params.push(req.user.id); }
     } else if (!can(req, "audit.view")) {
       return res.status(403).json({ error: "Su rol no tiene permiso para ver la bitácora." });
     }
@@ -131,7 +134,7 @@ export function auditRouter(db) {
     const unlocked = hiddenUnlocked(req);
     if (q.q) { where.push(`(summary LIKE ? OR (user_name LIKE ?${unlocked ? "" : " AND COALESCE(user_id, 0) NOT IN (SELECT id FROM users WHERE hidden = 1)"}) OR changes LIKE ?)`); const like = `%${String(q.q).slice(0, 80)}%`; params.push(like, like, like); }
     if (q.before) { where.push("id < ?"); params.push(Number(q.before)); }
-    const rows = db.prepare(`SELECT * FROM audit_log ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT 300`).all(...params);
+    const rows = db.prepare(`SELECT * FROM audit_log ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT ${q.recent ? 15 : 300}`).all(...params);
     // The entry keeps who really did it (user_id); a hidden user reads "Asistente" unless unlocked.
     const hiddenRows = db.prepare("SELECT id, name, email FROM users WHERE hidden = 1").all();
     const hidden = new Map(hiddenRows.map((u) => [u.id, u.name]));
