@@ -3,8 +3,8 @@ import express from "express";
 import { str } from "./http.js";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser } from "./auth.js";
-import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, taskLogEvents, taskNotice } from "./case-meta.js";
-import { notify } from "./monitor.js";
+import { TASK_KINDS as KINDS, TASK_KIND_LABEL, RESPONSE_KINDS, bellShows, noteTaskId, taskLogEvents, taskNotice } from "./case-meta.js";
+import { notify, bogotaMs } from "./monitor.js";
 import { sendEmail, sendWhatsapp, channelReady } from "./notify.js";
 import { publicBase } from "./public-url.js";
 const STATUSES = ["pendiente", "hecha", "cancelada"];
@@ -98,7 +98,7 @@ export function agendaRouter(db) {
     const message = str(opts.message).slice(0, 500);
     const n = taskNotice(t, { to: u.name, by: req.user.name, message, link });
     notify(db, u.id, "asignada", `${req.user.name} le notificó: ${TASK_KIND_LABEL[t.kind]} · ${t.title}`,
-      `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${t.client_name}${message ? " · " + message : ""}`, `#expediente-${t.case_id}`, null);
+      `${t.kind === "audiencia" ? "Fecha" : "Plazo"} ${t.due_at} · ${t.client_name}${message ? " · " + message : ""}`, `#expediente-${t.case_id}`, `notice:${t.id}:${Date.now()}`);
     const results = [{ channel: "app", ok: true, detail: "Aviso en la campana de la App" }];
     if (opts.email) results.push(await sendEmail(u.email, n.subject, n.text));
     if (opts.whatsapp) {
@@ -220,10 +220,14 @@ export function agendaRouter(db) {
       .sort((a, b) => String(b.at).localeCompare(String(a.at)) || (b.id || 0) - (a.id || 0)));
   });
 
+  // Version 2.97: resolved tasks and agenda items whose date has come leave the bell (see bellShows); nothing is deleted.
   r.get("/notifications", (req, res) => {
-    const items = db.prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 50").all(req.user.id).map((n) => ({ ...n }));
-    const unread = db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL").get(req.user.id).n;
-    res.json({ items, unread });
+    const rows = db.prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 500").all(req.user.id);
+    const ids = [...new Set(rows.map(noteTaskId).filter(Boolean))];
+    const tasks = new Map(ids.length ? db.prepare(`SELECT id, kind, status, due_at FROM tasks WHERE id IN (${ids.join(",")})`).all().map((t) => [t.id, t]) : []);
+    const now = Date.now();
+    const shown = rows.filter((n) => { const t = tasks.get(noteTaskId(n)) || null; return bellShows(n, t, now, t ? bogotaMs(t.due_at) : 0); });
+    res.json({ items: shown.slice(0, 50), unread: shown.filter((n) => !n.read_at).length });
   });
 
   r.post("/notifications/read", (req, res) => {
