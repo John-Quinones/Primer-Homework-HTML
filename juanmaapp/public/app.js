@@ -6813,6 +6813,7 @@ wireDialog($("#receipt-dialog"), async (form) => {
   const r = await api("POST", "/payments/receipts", { client_id: Number(d.client_id), charge_id: Number(d.charge_id) || null, case_id: Number(d.case_id) || null, amount: parseMoney(d.amount),
     method: d.method, reference: d.reference, paid_on: d.paid_on, concept: d.concept, notes: d.notes });
   toast(`Recibo ${receiptNo(r.number)} registrado.`);
+  $("#receipt-dialog").close(); // the window goes away at «Guardar recibo»; the Word/PDF is built behind it
   payTab = "recibos";
   if (FICHAS[route().name]) await refreshView();
   else location.hash === "#pagos" ? await renderPagos() : (location.hash = "#pagos");
@@ -6972,10 +6973,11 @@ async function receiptStampPng(r) {
   ctx.drawImage(qr, 10, 10, 170, 170);
   ctx.textBaseline = "alphabetic";
   const text = (t, x, y, font, color) => { ctx.font = font; ctx.fillStyle = color; ctx.fillText(t, x, y); };
-  text(r.signer_name || "[FILL: nombre completo de quien firma]", 200, 64, "27px Arial, sans-serif", "#555");
-  text(`CC. ${r.signer_id || "[FILL: cédula]"}`, 200, 104, "27px Arial, sans-serif", "#555");
-  text("Firma Electrónica", 200, 140, "bold 20px Arial, sans-serif", "#027cc6");
-  text(when, 200, 166, "18px Arial, sans-serif", "#027cc6");
+  text(r.signer_name || "[FILL: nombre completo de quien firma]", 200, 58, "27px Arial, sans-serif", "#555");
+  text(`CC. ${r.signer_id || "[FILL: cédula]"}`, 200, 98, "27px Arial, sans-serif", "#555");
+  if (r.signer_card) text(`T.P. ${r.signer_card} C.S. de la J.`, 200, 128, "20px Arial, sans-serif", "#555");
+  text("Firma Electrónica", 200, 152, "bold 20px Arial, sans-serif", "#027cc6");
+  text(when, 200, 176, "18px Arial, sans-serif", "#027cc6");
   return canvas.toDataURL("image/png");
 }
 /** Saves Word and PDF in the case, once per receipt. Returns true when they are (now) in the case. */

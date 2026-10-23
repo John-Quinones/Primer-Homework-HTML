@@ -26,3 +26,5 @@ Pedido de John (19/10/2026, hilo «Recibos de pago con firma»). Instrucciones c
 
 ## Firma certificada: proveedores (20/10/2026, pregunta de John)
 La firma de la App es electrónica con evidencia, no certificada. Entidades de certificación digital acreditadas por el ONAC que citan las fuentes: Certicámara, GSE, Andes SCD, Camerfirma Colombia, Thomas Signe, Viafirma (acreditada marzo 2024), OlimpIA. Precio: solo una referencia de un blog (POS Colombia): $120.000 a $180.000 COP por año por un certificado de firma digital; ninguna entidad publica tarifa verificada, los planes de empresa con API se cotizan. Recomendado: pedir cotización a Certicámara, Andes SCD y Viafirma (firma en la nube con API). Pendiente de John.
+
+- v2.2.33 (23/10/2026, John): al dar «Guardar recibo» la ventana se cierra (`$("#receipt-dialog").close()` justo tras registrar, antes de armar el Word/PDF); el sello (`receiptStampPng`) añade la T.P. del firmante. Los datos de firma (nombre completo, cédula, T.P.) los carga Gerencia en Usuarios → editar; si faltan salen [FILL] resaltados (John no los tenía cargados el 23/10).
