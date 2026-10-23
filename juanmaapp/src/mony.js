@@ -142,6 +142,22 @@ export async function runTool(name, input, { db, user, caseContext }) {
   throw new Error(`Herramienta desconocida: ${name}.`);
 }
 
+const TOOL_LABELS = { consultar_estado_proceso: "Rama Judicial", calcular_terminos_legales: "Términos", redactar_plantilla_memorial: "Plantilla" };
+const bogotaDay = (now = Date.now()) => new Date(now - 5 * 3600 * 1000).toISOString().slice(0, 10);
+
+/** Interactive card the page can show for a tool result (no action runs by itself: the person clicks). */
+export function cardFor(name, input, out, now = Date.now()) {
+  if (name === "calcular_terminos_legales" && out?.fecha_vencimiento) {
+    const left = Math.round((Date.parse(out.fecha_vencimiento) - Date.parse(bogotaDay(now))) / 86400000);
+    return { type: "termino", title: `${out.fundamento || "Término"}`, date: out.fecha_vencimiento, weekday: out.dia_semana, daysLeft: left };
+  }
+  if (name === "consultar_estado_proceso" && out?.radicado) {
+    return { type: "proceso", title: out.despacho, radicado: out.radicado, caseId: Number(input?.caso_id) || null };
+  }
+  if (name === "redactar_plantilla_memorial" && out?.plantilla) return { type: "borrador", title: out.plantilla.nombre };
+  return null;
+}
+
 /** Clean the conversation sent by the page: only plain user/assistant text, the last messages. */
 export function cleanHistory(messages) {
   if (!Array.isArray(messages) || !messages.length) throw Object.assign(new Error("Escriba un mensaje."), { expose: true });
@@ -180,14 +196,14 @@ export async function runMony({ messages, db, user, caseContext, onText, onTool,
       convo.push({ role: "assistant", content: msg.content });
       const results = [];
       for (const b of msg.content.filter((c) => c.type === "tool_use")) {
-        onTool?.({ name: b.name, status: "running" });
+        onTool?.({ name: b.name, label: TOOL_LABELS[b.name], status: "running" });
         try {
           const out = await runTool(b.name, b.input, { db, user, caseContext });
           results.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(out) });
-          onTool?.({ name: b.name, status: "ok" });
+          onTool?.({ name: b.name, label: TOOL_LABELS[b.name], status: "ok", card: cardFor(b.name, b.input, out) });
         } catch (err) {
           results.push({ type: "tool_result", tool_use_id: b.id, is_error: true, content: String(err.message || "Error en la herramienta.").slice(0, 500) });
-          onTool?.({ name: b.name, status: "error" });
+          onTool?.({ name: b.name, label: TOOL_LABELS[b.name], status: "error" });
         }
       }
       convo.push({ role: "user", content: results });

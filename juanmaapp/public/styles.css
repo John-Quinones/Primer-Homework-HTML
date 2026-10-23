@@ -1275,13 +1275,27 @@ dialog:not([open]) { pointer-events: none; }
 .banda-dots i.on { background: #fff; }
 @media (max-width: 560px) { .banda-tabs button { padding-inline: 6px; font-size: .86rem; } .banda-days { min-width: 0; flex-basis: 100%; } }
 
-/* Mony, asistente jurídico (versión 2.2.8) */
-.mony-log { display: flex; flex-direction: column; gap: 10px; min-height: 260px; max-height: 58vh; overflow-y: auto; padding: 12px; border-radius: 14px; background: rgba(255, 255, 255, .5); }
+/* Mony, asistente jurídico (versión 2.2.8): azul medianoche #0F172A, cian eléctrico, gris pizarra */
+.mony-log { display: flex; flex-direction: column; gap: 10px; min-height: 260px; max-height: 58vh; overflow-y: auto; padding: 14px; border-radius: 16px; background: #0F172A; border: 1px solid #243352; }
 .mony-msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
-.mony-user { align-self: flex-end; background: #1f3864; color: #fff; }
-.mony-assistant { align-self: flex-start; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
-.mony-typing { opacity: .65; font-style: italic; }
-.mony-error { background: #fde8e6; color: #b3261e; }
+.mony-user { align-self: flex-end; background: #22d3ee; color: #06243a; font-weight: 500; }
+.mony-assistant { align-self: flex-start; background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+.mony-typing { opacity: .7; font-style: italic; }
+.mony-error { background: #3b1620; color: #fda4af; border-color: #7f1d33; }
+.mony-tags { align-self: flex-start; display: flex; flex-wrap: wrap; gap: 6px; }
+.mony-tag { font-size: .78rem; padding: 3px 10px; border-radius: 99px; border: 1px solid #22d3ee66; background: #22d3ee14; color: #67e8f9; }
+.mony-tag-running { animation: mony-pulse 1.1s ease-in-out infinite; }
+.mony-tag-ok { color: #6ee7b7; border-color: #34d39966; background: #34d39914; }
+.mony-tag-error { color: #fda4af; border-color: #fb718566; background: #fb718514; }
+@keyframes mony-pulse { 50% { opacity: .45; } }
+.mony-cards { align-self: flex-start; display: flex; flex-direction: column; gap: 8px; max-width: 82%; width: 100%; }
+.mony-card { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 14px; background: #0b1426; border: 1px solid #22d3ee66; color: #e2e8f0; box-shadow: 0 0 14px #22d3ee1f; }
+.mony-card > div:not(.mony-count) { flex: 1; min-width: 0; }
+.mony-card b, .mony-card small { display: block; overflow-wrap: anywhere; }
+.mony-card small { color: #94a3b8; }
+.mony-count { width: 54px; height: 54px; flex: none; border-radius: 50%; display: grid; place-content: center; text-align: center; font-size: 1.35rem; font-weight: 800; line-height: 1; color: #22d3ee; border: 3px solid #22d3ee; }
+.mony-count small { font-size: .62rem; font-weight: 500; }
+.mony-urgent .mony-count { color: #fb7185; border-color: #fb7185; }
 .mony-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 10px; }
 .mony-form textarea { flex: 1; resize: vertical; }
-@media (max-width: 560px) { .mony-msg { max-width: 94%; } }
+@media (max-width: 560px) { .mony-msg, .mony-cards { max-width: 94%; } }

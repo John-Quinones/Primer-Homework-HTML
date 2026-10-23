@@ -3,7 +3,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
-import { setClient, MODEL, TOOLS, cleanHistory, systemPrompt } from "../src/mony.js";
+import { setClient, MODEL, TOOLS, cleanHistory, systemPrompt, cardFor } from "../src/mony.js";
 import { setFetch } from "../src/ramajudicial.js";
 import { addJudicialDays, holidays } from "../src/terms.js";
 
@@ -62,6 +62,11 @@ test("the agent loop runs the real tool, gives the result back and streams the a
   const res = await chat([{ role: "user", content: "¿Cuándo vence un término de 3 días desde el 23/10?" }]);
   const ev = await ndjson(res);
   assert.deepEqual(ev.map((e) => e.type), ["tool", "tool", "text", "done"]);
+  assert.equal(ev[0].status, "running");
+  assert.equal(ev[0].label, "Términos");
+  assert.equal(ev[1].status, "ok");
+  assert.equal(ev[1].card.type, "termino", "a countdown card travels with the result");
+  assert.equal(ev[1].card.date, "2026-10-28");
   assert.equal(ev.at(-1).stopReason, "end_turn");
   assert.equal(ev.at(-1).rounds, 2);
   const back = stub.calls[1].messages.at(-1).content[0];
@@ -127,4 +132,13 @@ test("history: only plain user/assistant text, last messages, ends with the user
 test("Mony needs a signed-in user", async () => {
   const r = await fetch(srv.base + "/mony/chat", { method: "POST", headers: { "Content-Type": "application/json", "X-JuanMa": "1" }, body: JSON.stringify({ messages: [{ role: "user", content: "hola" }] }) });
   assert.equal(r.status, 401);
+});
+
+test("action cards: countdown in days (Colombia time), open the case, download the draft", () => {
+  const now = Date.parse("2026-10-23T15:00:00Z");
+  assert.equal(cardFor("calcular_terminos_legales", {}, { fecha_vencimiento: "2026-10-26", dia_semana: "lunes", fundamento: "art. 318 CGP" }, now).daysLeft, 3);
+  assert.equal(cardFor("calcular_terminos_legales", {}, { fecha_vencimiento: "2026-10-22", dia_semana: "jueves" }, now).daysLeft, -1);
+  assert.deepEqual(cardFor("consultar_estado_proceso", { caso_id: 7 }, { radicado: "R", despacho: "J2" }, now), { type: "proceso", title: "J2", radicado: "R", caseId: 7 });
+  assert.equal(cardFor("redactar_plantilla_memorial", {}, { plantilla: { nombre: "Petición" } }, now).type, "borrador");
+  assert.equal(cardFor("redactar_plantilla_memorial", {}, { plantilla: null }, now), null);
 });
