@@ -953,6 +953,35 @@ const secId = (key, html) => html.replace('<section class="', `<section id="sec-
 const VER_CASE = [["", "Ver expediente"], ["tareas", "Ver tareas"], ["actuaciones", "Ver actuaciones"], ["pagos", "Ver pagos"], ["correos", "Ver correos"], ["historial", "Ver historial"]];
 const verCaseButtons = (k, keys = ["", "tareas", "actuaciones", "pagos", "correos"]) => VER_CASE.filter(([x]) => keys.includes(x))
   .map(([x, label]) => `<button class="mini ${x === "" ? "primary" : ""}" data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}">${label}</button>`).join("");
+// Version 2.98 (user's choice «C»): the case row's buttons are one bar of equal icon buttons with their name underneath.
+const ICON = {
+  case: '<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
+  pay: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  client: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.6-3.6 3.4-5.5 7-5.5s6.4 1.9 7 5.5"/>',
+  task: '<path d="M12 5v14M5 12h14"/>',
+  docs: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/>',
+  draft: '<path d="M4 20l4-1 11-11-3-3L5 16z"/>',
+  portals: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  del: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>',
+};
+const iconBtn = (icon, label, attrs, cls = "") => `<button type="button" class="ico-btn ${cls}" ${attrs} title="${label}">`
+  + `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[icon]}</svg><span>${label}</span></button>`;
+function caseActionBar(k) {
+  const go = (x) => `data-action="go" data-to="#expediente-${k.id}${x ? "-" + x : ""}"`;
+  return `<div class="case-bar">`
+    + iconBtn("case", "Expediente", go(""), "primary")
+    + iconBtn("pay", "Pagos", go("pagos")) + iconBtn("mail", "Correos", go("correos"))
+    + iconBtn("client", "Cliente", `data-action="go" data-to="#cliente-${k.client_id}"`)
+    + (can("cases.write") ? iconBtn("task", "Tarea", `data-action="new-task" data-case="${k.id}"`) : "")
+    + iconBtn("docs", "Documentos", `data-action="case-docs" data-id="${k.id}"`)
+    + (can("drafts.generate") ? iconBtn("draft", "Borrador", `data-action="draft-case" data-id="${k.id}"`) : "")
+    + iconBtn("portals", "Portales", `data-action="portals" data-id="${k.id}"`)
+    + (can("cases.write") ? iconBtn("edit", "Editar", `data-action="edit-case" data-id="${k.id}"`) : "")
+    + (can("cases.delete") ? iconBtn("del", "Eliminar", `data-action="delete-case" data-id="${k.id}" aria-label="Eliminar"`, "danger") : "")
+    + `</div>`;
+}
 /** Parties by side, our clients marked (main client included). */
 function partiesView(k) {
   const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
@@ -1834,15 +1863,7 @@ function renderCaseRows() {
       <td>${k.radicado
         ? `<label class="switch"><input type="checkbox" data-case-monitor="${k.id}" ${k.monitor ? "checked" : ""} ${can("processes.consult") ? "" : "disabled"} /> <span>${k.monitor ? "Sí" : "No"}</span></label>`
         : '<span class="muted" title="Agregue el radicado para poder consultarlo">Sin radicado</span>'}</td>
-      <td class="row-actions">
-        <span class="ver-group">${verCaseButtons(k, ["", "pagos", "correos"])}<button class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></span>
-        ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
-        ${can("cases.write") ? `<button data-action="new-task" data-case="${k.id}">+ Tarea</button>` : ""}
-        <button data-action="portals" data-id="${k.id}">Portales</button>
-        <button data-action="case-docs" data-id="${k.id}">Documentos</button>
-        ${can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Borrador</button>` : ""}
-        ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}" aria-label="Eliminar">✕</button>` : ""}
-      </td>
+      <td class="row-actions">${caseActionBar(k)}</td>
     </tr>`).join("");
 }
 

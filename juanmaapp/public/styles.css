@@ -723,7 +723,7 @@ a.chip-stat strong { color: var(--link); }
 .hist-filters .chip { border: 1px solid var(--border); cursor: pointer; font: inherit; font-size: .78rem; color: var(--text); }
 .history { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-height: 560px; overflow: auto; }
 .history li { display: grid; grid-template-columns: 9.5rem 14px 1fr; gap: 10px; align-items: start; padding: 8px 4px; border-bottom: 1px solid var(--border); }
-.history li > div { min-width: 0; overflow-wrap: anywhere; }
+.history li > div { min-width: 0; overflow-wrap: normal; word-break: normal; }
 .history .h-when { font-size: .8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .history .h-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: var(--brand-silver); }
 .history .h-actuacion { background: var(--brand-blue); }
@@ -802,7 +802,7 @@ tr.audit-denied td { background: color-mix(in srgb, var(--error) 6%, transparent
 .cm-cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cm-cases li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .cm-cases li:last-child { border-bottom: 0; }
-.cm-cases li > span { min-width: 0; overflow-wrap: anywhere; }
+.cm-cases li > span { min-width: 0; overflow-wrap: normal; word-break: normal; }
 /* Change 55: one consult for every platform */
 .portal-check { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-muted); }
 .portal-check ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
@@ -1225,3 +1225,11 @@ dialog:not([open]) { pointer-events: none; }
 .kpi .kpi-label a:hover { text-decoration-thickness: 2px; }
 /* Version 2.96: the longest status («Pendiente Pago Sentencia») must not spill over the recent-movement rows. */
 .recent li > span:last-child { max-width: 9rem; text-align: right; overflow-wrap: anywhere; font-size: .8rem; }
+
+/* Version 2.98: the case row's action bar (user's choice «C»): five equal columns, icon over name. */
+#case-rows .row-actions { min-width: 400px; }
+.case-bar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.ico-btn { display: grid; justify-items: center; align-content: center; gap: 3px; padding: 8px 2px; margin: 0 !important; font-size: .7rem; line-height: 1.15; white-space: normal; text-align: center; min-width: 0; overflow-wrap: normal; word-break: normal; }
+.ico-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ico-btn.danger { color: var(--error, #b3261e); }
+@media (max-width: 560px) { .case-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); } #case-rows .row-actions { min-width: 0; } }
