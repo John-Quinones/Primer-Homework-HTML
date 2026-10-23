@@ -3,7 +3,7 @@
 // Sign-ins, sign-outs and password events are logged explicitly by auth.js / microsoft.js.
 // Entries are never edited or deleted from the app.
 import express from "express";
-import { auditTarget, auditVerb, auditDiff, deviceOf } from "./case-meta.js";
+import { auditTarget, auditVerb, auditDiff, auditDeleted, deviceOf } from "./case-meta.js";
 import { scopeOf, hiddenUnlocked, ASSISTANT } from "./auth.js";
 
 export const AUDIT_SCHEMA = `CREATE TABLE IF NOT EXISTS audit_log (
@@ -100,7 +100,7 @@ export function auditMiddleware(db) {
       audit(db, req, {
         action: verb, module: t.module, entity: t.entity, record_id: record, case_id: caseId, ok,
         summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto", archive: "archivo del cliente", radicado: "radicado", number: "número de expediente" }[extra]})` : ""}`,
-        changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : [],
+        changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : ok && req.method === "DELETE" && before ? auditDeleted(before) : [],
       });
     });
     next();

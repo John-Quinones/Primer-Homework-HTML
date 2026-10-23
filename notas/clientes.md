@@ -28,3 +28,5 @@ Para no releer todo el código cada vez (regla de John, 19/10/2026). Leer esta n
 - v2.101 (elección de John 23/10/2026, propuesta «C»): el estado del cliente se cambia con `clientStateSelect(c)` (`[data-client-state]`, `changeClientState`) en `public/app.js`; reemplaza los botones `archive-client` de la 2.94. Mismas reglas: definitivo solo Gerencia, aviso si hay expedientes activos.
 
 - Orden (v2.2.17): clientes se listan por la carpeta más baja de sus expedientes (`clientsByFolder`); ver notas/expedientes.md.
+
+- Eliminar cliente (v2.2.34, pedido de John 23/10/2026, solo Gerencia `clients.delete`): `GET /clients/:id/deletion` → `{expected, blockers}` y `DELETE /clients/:id` con `{confirm}` (nombre del cliente). Reglas en `deletionPlan`/`checkDeletion` (`src/record-rules.js`, una sola copia). Se bloquea (409) si tiene expedientes, cobros o recibos; copia previa `backupBeforeReceiptDelete(db, "antes-de-borrar-cliente")`; la bitácora guarda los campos (`deletedFields` en `src/audit.js`); en el enlace va a `deleteTrash`. UI: `confirmDeletion` en `public/app.js`. Prueba: `test/v2234-eliminar.test.js`.

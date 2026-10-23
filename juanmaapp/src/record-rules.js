@@ -199,3 +199,31 @@ export function radicadoChange(cur, body, lib) {
   const monitor = !radicado ? 0 : body && "monitor" in body ? (body.monitor ? 1 : 0) : cur.monitor ? 1 : 0;
   return { radicado, monitor, department: place?.department || cur.department || "", city: place ? cur.city || place.city : cur.city || "" };
 }
+
+// ---------- Deleting a client or a case (version 2.2.34, user's request 23/10/2026; Gerencia only) ----------
+// One rule for the server and the published link. Money is never lost with a record: a client with cases,
+// charges or receipts, and a case with charges or receipts, is refused with the numbers. To delete one,
+// the user types the client's name / the case's folder number; the callers make a copy first.
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const keyOf = (s) => str(s).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").toLowerCase();
+
+/** kind "client": counts { cases, charges, receipts }, name; kind "case": counts { charges, receipts }, folder/radicado.
+ *  Returns { expected, blockers[] }: the text to type and the reasons that forbid the deletion. */
+export function deletionPlan(kind, { name = "", folder = "", radicado = "", counts }) {
+  const blockers = [];
+  if (kind === "client") {
+    const parts = [counts.cases && plural(counts.cases, "expediente", "expedientes"), counts.charges && plural(counts.charges, "cobro", "cobros"), counts.receipts && plural(counts.receipts, "recibo", "recibos")].filter(Boolean);
+    if (parts.length) blockers.push(`Tiene ${parts.join(", ")}. Un cliente con expedientes, cobros o recibos no se elimina: sus datos y su dinero no se pierden.`);
+    return { expected: str(name), blockers };
+  }
+  const parts = [counts.charges && plural(counts.charges, "cobro", "cobros"), counts.receipts && plural(counts.receipts, "recibo", "recibos")].filter(Boolean);
+  if (parts.length) blockers.push(`Tiene ${parts.join(" y ")}. Un expediente con cobros o recibos no se elimina: el dinero registrado no se pierde con el expediente.`);
+  return { expected: str(folder) || str(radicado) || "ELIMINAR", blockers };
+}
+
+/** Throws (409) for a blocker, (400) when the typed text is not the expected one. */
+export function checkDeletion(plan, confirm, fail409, fail400) {
+  if (plan.blockers.length) fail409(`No se eliminó. ${plan.blockers.join(" ")}`);
+  if (keyOf(confirm) !== keyOf(plan.expected)) fail400(`Para eliminar escriba exactamente: ${plan.expected}`);
+}

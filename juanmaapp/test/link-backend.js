@@ -40,7 +40,7 @@ export async function startLink({ state } = {}) {
       // Plain JSON, as the page receives it (and objects of this realm, for deepEqual).
       return { status: method === "POST" && out != null ? 201 : out == null ? 204 : 200, body: out == null ? null : JSON.parse(JSON.stringify(out)) };
     } catch (err) {
-      return { status: /permiso/.test(err.message) ? 403 : /no existe/.test(err.message) ? 404 : 400, body: { error: err.message } };
+      return { status: /permiso/.test(err.message) ? 403 : /no existe/.test(err.message) ? 404 : /^No se eliminó/.test(err.message) ? 409 : 400, body: { error: err.message } };
     }
   };
   return { call, backend };

@@ -72,6 +72,6 @@ test("cases link a client to a sub-process and enforce required fields", async (
   assert.equal((await call("DELETE", `/clients/${client.id}`)).status, 409);
   assert.equal((await call("DELETE", `/types/${typeId}`)).status, 409);
 
-  assert.equal((await call("DELETE", `/cases/${k.body.id}`)).status, 204);
-  assert.equal((await call("DELETE", `/clients/${client.id}`)).status, 204);
+  assert.equal((await call("DELETE", `/cases/${k.body.id}`, { confirm: "ELIMINAR" })).status, 204);
+  assert.equal((await call("DELETE", `/clients/${client.id}`, { confirm: client.full_name })).status, 204);
 });

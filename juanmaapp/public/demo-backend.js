@@ -80,7 +80,7 @@
       for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
       st.info.monitorOffFromNumber = true;
     }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash"]) st[k] ||= [];
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -263,7 +263,7 @@
     const name = auditName(after) || auditName(snap?.before) || auditName(created) || "";
     const verb = ok ? CM.auditVerb(method, path) : "Intentó (sin permiso)";
     auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
-      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : [] });
+      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : ok && method === "DELETE" ? CM.auditDeleted(snap?.before) : [] });
   }
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
   const onlyGerencia = () => { if (me().role !== "Gerencia") fail("Solo Gerencia puede ocultar usuarios: su rol no tiene permiso para esta acción."); };
@@ -314,6 +314,18 @@
     const k = s.cases.find((k) => k.id === id);
     if (!k || !inScope(k.office_id)) fail("El expediente no existe.");
     return k;
+  };
+  const clientDeletion = (id) => {
+    const c = s.clients.find((x) => x.id === id && clientVisible(x)) || fail("El cliente no existe.");
+    const n = (list) => list.filter((x) => x.client_id === id).length;
+    return RR.deletionPlan("client", { name: c.full_name, counts: { cases: n(s.cases), charges: n(s.charges), receipts: n(s.receipts) } });
+  };
+  const caseDeletion = (id) => {
+    const k = visibleCase(id);
+    const t = s.types.find((x) => x.id === k.process_type_id);
+    const folder = s.fields.filter((f) => t && f.category_id === t.category_id && CM.isFolderLabel(f.label)).map((f) => String(k.field_values?.[f.id] ?? "").trim()).find(Boolean) || "";
+    const receipts = s.receipts.filter((x) => x.case_id === id).length + s.casedocs.filter((d) => d.case_id === id && d.kind === "recibo" && !d.receipt_id).length;
+    return RR.deletionPlan("case", { folder, radicado: k.radicado, counts: { charges: s.charges.filter((x) => x.case_id === id).length, receipts } });
   };
   const cleanValues = (typeId, values) => {
     const t = s.types.find((t) => t.id === typeId) || fail("El subproceso no existe.");
@@ -1033,10 +1045,13 @@
       }
       return clientOut(c, true);
     }],
-    ["DELETE", /^\/clients\/(\d+)$/, (m) => {
+    // Version 2.2.34: same rule as the server (RR.deletionPlan/checkDeletion). The link keeps what it deletes in deleteTrash
+    // (the copy that the server makes of its database).
+    ["GET", /^\/clients\/(\d+)\/deletion$/, (m) => { need("clients.delete"); return clientDeletion(+m[1]); }],
+    ["DELETE", /^\/clients\/(\d+)$/, (m, b) => {
       need("clients.delete");
-      s.clients.some((c) => c.id === +m[1] && clientVisible(c)) || fail("El cliente no existe.");
-      s.cases.some((k) => k.client_id === +m[1]) && fail("No se puede eliminar: tiene expedientes asociados.");
+      RR.checkDeletion(clientDeletion(+m[1]), b.confirm, (t) => fail(t), (t) => fail(t));
+      s.deleteTrash.push({ at: stamp(), by: me().id, kind: "client", client: clone(s.clients.find((c) => c.id === +m[1])), photo: s.blobs[`photo-${m[1]}`] ?? null });
       s.clients = s.clients.filter((c) => c.id !== +m[1]);
       delete s.blobs[`photo-${m[1]}`];
       for (const r of s.consents) if (r.client_id === +m[1]) r.client_id = null; // the evidence stays, with the name and document
@@ -1309,11 +1324,13 @@
       if (next) Object.assign(k, next, { updated_at: stamp() });
       return caseOut(k);
     }],
-    ["DELETE", /^\/cases\/(\d+)$/, (m) => {
-      need("cases.delete"); visibleCase(+m[1]);
-      s.casedocs.some((d) => d.case_id === +m[1] && d.kind === "recibo") && fail("El expediente tiene recibos guardados: un recibo no se pierde con el expediente. Elimine primero cada recibo (con copia de respaldo).");
+    ["GET", /^\/cases\/(\d+)\/deletion$/, (m) => { need("cases.delete"); return caseDeletion(+m[1]); }],
+    ["DELETE", /^\/cases\/(\d+)$/, (m, b) => {
+      need("cases.delete");
+      RR.checkDeletion(caseDeletion(+m[1]), b.confirm, (t) => fail(t), (t) => fail(t));
+      const docs = s.casedocs.filter((x) => x.case_id === +m[1]);
+      s.deleteTrash.push({ at: stamp(), by: me().id, kind: "case", case: clone(s.cases.find((k) => k.id === +m[1])), tasks: clone(s.tasks.filter((t) => t.case_id === +m[1])), docs: clone(docs) }); // files stay in blobs
       s.cases = s.cases.filter((k) => k.id !== +m[1]);
-      for (const d of s.casedocs.filter((x) => x.case_id === +m[1])) delete s.blobs[`doc-${d.id}`];
       s.casedocs = s.casedocs.filter((x) => x.case_id !== +m[1]);
       return null;
     }],
