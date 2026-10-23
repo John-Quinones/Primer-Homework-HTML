@@ -877,16 +877,22 @@
           <div class="grid4">
             <label>Reporte <select id="report-type" name="type"></select></label>
             <label>Oficina <select id="report-office" name="officeId"><option value="">Todas mis oficinas</option></select></label>
-            <label>Desde <input id="report-from" name="from" type="date" /></label>
-            <label>Hasta <input id="report-to" name="to" type="date" /></label>
+            <label data-rf-not="carpetas clientesestado">Desde <input id="report-from" name="from" type="date" /></label>
+            <label data-rf-not="carpetas clientesestado">Hasta <input id="report-to" name="to" type="date" /></label>
+            <label data-rf="carpetas">Carpeta desde <input name="folderFrom" inputmode="numeric" placeholder="Ej. 1" /></label>
+            <label data-rf="carpetas">Carpeta hasta <input name="folderTo" inputmode="numeric" placeholder="Ej. 500" /></label>
+            <label data-rf="clientesestado">Estado del cliente
+              <select name="clientState"><option value="">Todos</option><option value="activos">Activos</option><option>Archivo provisional</option><option>Archivo definitivo</option><option>Pendiente Pago Sentencia</option></select>
+            </label>
+            <label data-rf="carpetas clientesestado">Orden <select name="folderOrder"><option value="asc">De la menor a la mayor</option><option value="desc">De la mayor a la menor</option></select></label>
             <label data-rf="expedientes">Tipo de proceso <select id="report-category" name="categoryId"><option value="">Todos</option></select></label>
-            <label data-rf="expedientes">Estado
+            <label data-rf="expedientes carpetas">Estado
               <select id="report-status" name="status">
                 <option value="">Todos</option><option>Activo</option><option>Archivo provisional</option><option>Archivo definitivo</option><option>Pendiente Pago Sentencia</option>
                 <option value="archivados">Archivados (provisional y definitivo)</option>
               </select>
             </label>
-            <label data-rf="expedientes">Responsable <select id="report-user" name="assignedUserId"><option value="">Todos</option></select></label>
+            <label data-rf="expedientes carpetas">Responsable <select id="report-user" name="assignedUserId"><option value="">Todos</option></select></label>
           </div>
           <div class="toolbar">
             <button class="primary">Ver reporte</button>

@@ -1381,7 +1381,28 @@
       const statusOk = (st) => !q.status || (q.status === "activos" ? OPEN.includes(st) : q.status === "archivados" || q.status === "cerrados" ? ARCHIVED.includes(st) : st === q.status);
       const cases = s.cases.filter((k) => officeOk(k.office_id)).map(caseOut);
       let columns, rows;
-      if (type === "expedientes") {
+      if (type === "clientesestado") {
+        const folderIds = s.fields.filter((f) => CM.isFolderLabel(f.label)).map((f) => f.id);
+        columns = [["folder", "No. Carpeta"], ["name", "Nombre"], ["doc", "Documento"], ["phone", "Teléfono"], ["email", "Correo"], ["city", "Ciudad"], ["state", "Estado"], ["cases", "Expedientes"], ["office", "Oficina"]];
+        const wanted = q.clientState === "activos" ? "" : q.clientState;
+        rows = s.clients.filter((c) => clientVisible(c) && (!q.officeId || c.office_id === +q.officeId)
+          && (!q.clientState || (c.archive_status || "") === wanted)).map((c) => {
+          const ks = s.cases.filter((k) => k.client_id === c.id);
+          return { office: officeName(c.office_id), name: c.full_name, doc: `${c.id_type} ${c.id_number}`.trim(), phone: c.phone, email: c.email, city: c.city,
+            state: c.archive_status || "Activo", cases: ks.length, folder: ks.map((k) => folderIds.map((i) => str(k.field_values?.[i])).find(Boolean)).filter(Boolean).join(", ") };
+        });
+      } else if (type === "carpetas") {
+        const folderIds = s.fields.filter((f) => CM.isFolderLabel(f.label)).map((f) => f.id);
+        columns = [["folder", "No. Carpeta"], ["client", "Cliente"], ["doc", "Documento"], ["category", "Tipo de proceso"], ["type", "Subproceso"],
+          ["radicado", "Número de expediente"], ["court", "Despacho"], ["status", "Estado"], ["assigned", "Responsable"], ["office", "Oficina"]];
+        rows = cases.filter((k) => statusOk(k.status) && (!q.assignedUserId || k.assigned_user_id === +q.assignedUserId)).map((k) => {
+          const c = s.clients.find((x) => x.id === k.client_id);
+          const folder = folderIds.map((i) => str(k.field_values?.[i])).find(Boolean) || "";
+          const rad = k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : k.case_number || "";
+          return { folder, client: k.client_name, doc: `${c.id_type} ${c.id_number}`.trim(), category: k.category_name, type: k.type_name, radicado: rad,
+            court: k.court_name || "", status: k.status, assigned: k.assigned_name || "", office: k.office_name };
+        });
+      } else if (type === "expedientes") {
         columns = [["office", "Oficina"], ["client", "Cliente"], ["doc", "Documento"], ["category", "Tipo de proceso"], ["type", "Subproceso"],
           ["title", "Asunto"], ["radicado", "Radicado"], ["role", "Calidad del cliente"], ["affiliated", "Afiliado"], ["status", "Estado"], ["assigned", "Responsable"],
           ["counterparty", "Contraparte"], ["created", "Creado"], ["updated", "Actualizado"]];
