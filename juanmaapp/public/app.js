@@ -3042,9 +3042,9 @@ $(".actions").addEventListener("click", async (e) => {
 
 // ---------- Importar ----------
 const IMP = window.JuanmaImport;
-const imp = { sheets: [], headers: [], body: [], mapping: [] };
+const imp = { sheets: [], headers: [], body: [], mapping: [], kind: null };
 
-const importMode = () => $("input[name=import-mode]:checked").value;
+const importMode = () => (imp.kind ? IMPORT_KINDS[imp.kind].mode : $("input[name=import-mode]:checked").value);
 
 async function renderImportar() {
   await loadCatalog();
@@ -3055,6 +3055,7 @@ async function renderImportar() {
   catSel.value = cur;
   fillDefaultTypes();
   renderImportKinds();
+  importDivipola ||= await window.JuanmaCombo.loadPlaces();
 }
 
 function fillDefaultTypes() {
@@ -3066,10 +3067,14 @@ $("#import-default-cat").addEventListener("change", fillDefaultTypes);
 
 $("#import-file").addEventListener("change", (e) => guarded(async () => {
   const file = e.target.files[0];
-  if (file) await loadImportFile(file);
+  if (file) {
+    imp.kind = null;
+    await loadImportFile(file);
+  }
 }));
 async function loadImportFile(file) {
   $("#import-result").hidden = true;
+  $("input[name=import-update][value=fill]").checked = true; // each new file starts on «solo lo vacío»
   imp.sheets = await IMP.readFile(file);
   const sel = $("#import-sheet");
   sel.innerHTML = imp.sheets.map((s, i) => `<option value="${i}">${escapeHtml(s.name)} (${s.rows.length} filas)</option>`).join("");
@@ -3078,11 +3083,37 @@ async function loadImportFile(file) {
 }
 $("#import-sheet").addEventListener("change", (e) => loadSheet(Number(e.target.value)));
 
+// Column mapping per tab, remembered in this browser by column name (version 2.85).
+const mapKey = (kind) => `jm-import-map-${kind}`;
+function savedImportMapping(kind) {
+  try { return JSON.parse(localStorage.getItem(mapKey(kind)) || "{}"); } catch { return {}; }
+}
+function saveImportMapping(kind, headers, mapping) {
+  if (!kind) return;
+  try {
+    const saved = savedImportMapping(kind);
+    headers.forEach((h, i) => { saved[IMP.norm(h)] = mapping[i] || ""; });
+    localStorage.setItem(mapKey(kind), JSON.stringify(saved));
+  } catch { /* private window: the mapping is simply not remembered */ }
+}
+// Guess first, then what the user chose last time for the same column name; anything this tab does not offer → none.
+function fitMapping(kind, headers, guess) {
+  const ok = new Set(IMP.targetsFor(kind).map((t) => t.key));
+  const saved = savedImportMapping(kind);
+  return headers.map((h, i) => {
+    const want = IMP.norm(h) in saved ? saved[IMP.norm(h)] : guess[i];
+    if (ok.has(want)) return want;
+    const plain = IMP.guessTarget(h);
+    return ok.has(plain) ? plain : "";
+  });
+}
+
 function loadSheet(i) {
   const { headers, body } = IMP.splitHeader(imp.sheets[i].rows);
   imp.headers = headers;
   imp.body = body;
   imp.mapping = IMP.guessAll(headers);
+  if (imp.kind) imp.mapping = fitMapping(imp.kind, headers, imp.mapping);
   const info = $("#import-file-info");
   info.hidden = false;
   if (!headers.length) {
@@ -3093,15 +3124,23 @@ function loadSheet(i) {
   info.textContent = `${body.length} filas de datos y ${headers.length} columnas.`;
   // A file with process columns is most likely one row per case.
   const hasCase = imp.mapping.some((m) => m.startsWith("case."));
-  $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
+  if (!imp.kind) $(`input[name=import-mode][value=${hasCase ? "cases" : "clients"}]`).checked = true;
   ["#import-step2", "#import-step3", "#import-step4"].forEach((s) => ($(s).hidden = false));
+  // From a tab the type of file is already chosen: no «Solo clientes / Clientes y expedientes» question.
+  $("#import-step2 .radio-row").hidden = !!imp.kind;
+  $("#import-step2").hidden = imp.kind === "clientes";
+  $("#import-step3-title").innerHTML = imp.kind
+    ? `<span class="step-no">3</span> Columnas del Excel de ${IMPORT_KINDS[imp.kind].title}`
+    : '<span class="step-no">3</span> Columnas';
   renderMapping();
 }
 
 function renderMapping() {
   const casesMode = importMode() === "cases";
   $("#import-case-opts").hidden = !casesMode;
-  const targets = IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  const targets = imp.kind ? IMP.targetsFor(imp.kind) : IMP.TARGETS.filter((t) => casesMode || !t.key.startsWith("case."));
+  // A column whose guessed field this tab does not offer stays unassigned (never silently falls to the first option).
+  imp.mapping = imp.mapping.map((m) => (targets.some((t) => t.key === m) ? m : ""));
   $("#import-map").innerHTML = imp.headers.map((h, i) => {
     const sample = imp.body.find((r) => r[i])?.[i] ?? "";
     return `<tr>
@@ -3121,18 +3160,72 @@ $("#import-map").addEventListener("change", (e) => {
   const sel = e.target.closest("select[data-col]");
   if (!sel) return;
   imp.mapping[sel.dataset.col] = sel.value;
+  saveImportMapping(imp.kind, imp.headers, imp.mapping);
   renderImportPreview();
 });
 
+// Place of issue of the ID card (version 2.83): matched against DIVIPOLA ignoring accents and capitals
+// ("CARTAGENA" → "Cartagena de Indias"). What is not recognized is left out and reported, never blocks the row.
+let importDivipola = null;
+function resolveIdPlace(rec) {
+  const c = rec.client;
+  if (!c.id_department && !c.id_city) return [];
+  const warn = [];
+  const places = window.JuanmaPlaces.makePlaces(importDivipola, window.JuanmaPerson.properName);
+  const depName = c.id_department;
+  const dep = places.canonicalDepartment(depName);
+  const depCode = importDivipola.departamentos.find((d) => d.name === dep)?.code;
+  if (depName && !dep) warn.push(`departamento de expedición «${depName}» no reconocido`);
+  let city = "";
+  if (c.id_city && !(depName && !dep)) {
+    const name = places.canonicalCity(c.id_city, dep);
+    const hits = importDivipola.municipios.filter((m) => m.name === name && (!depCode || m.dep === depCode));
+    if (hits.length === 1) {
+      city = hits[0].name;
+      if (!dep) c.id_department = importDivipola.departamentos.find((d) => d.code === hits[0].dep)?.name;
+    } else warn.push(hits.length ? `ciudad de expedición «${c.id_city}» está en varios departamentos: indique el departamento` : `ciudad de expedición «${c.id_city}» no reconocida`);
+  }
+  if (dep) c.id_department = dep; else if (!(city && c.id_department)) delete c.id_department;
+  if (city) c.id_city = city; else delete c.id_city;
+  return warn;
+}
+
+const updateMode = () => $("input[name=import-update]:checked")?.value || "fill";
+const FIELD_LABEL = { full_name: "Nombre", id_type: "Tipo de documento", email: "Correo", phone: "Teléfono", address: "Dirección", city: "Ciudad",
+  department: "Departamento", notes: "Notas", id_department: "Depto. expedición", id_city: "Ciudad expedición", person_type: "Tipo de persona", gender: "Género" };
+let changesToken = 0;
+// Before / after for the clients that already exist (dry run, nothing is written).
+async function renderImportChanges() {
+  const box = $("#import-changes");
+  const token = ++changesToken;
+  const clientsData = importMode() === "clients" || importMode() === "cases";
+  $("#import-update-opts").hidden = !clientsData;
+  if (!clientsData) { box.hidden = true; return; }
+  const plan = await IMP.plan(importRecords(), api, { withCases: false, updateMode: updateMode() });
+  if (token !== changesToken) return;
+  const rows = plan.changes;
+  box.hidden = false;
+  const upd = rows.filter((c) => c.kind === "update").length;
+  box.innerHTML = `<p><strong>${plan.clientsExisting}</strong> cliente(s) del archivo ya existen: se completarán <strong>${rows.filter((c) => c.kind === "fill").length}</strong> dato(s) vacío(s)${updateMode() === "update" ? ` y se actualizarán <strong>${upd}</strong> dato(s) que difieren` : ""}. ${rows.length ? "" : "No hay cambios."}</p>
+    ${rows.length ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Fila</th><th>Cliente</th><th>Dato</th><th>Antes</th><th>Después</th></tr></thead><tbody>${rows.slice(0, 40).map((c) =>
+      `<tr><td>${c.row}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(FIELD_LABEL[c.field] || c.field)}</td><td>${escapeHtml(c.before || "(vacío)")}</td><td>${escapeHtml(c.after)}</td></tr>`).join("")}</tbody></table></div>
+      ${rows.length > 40 ? `<p class="hint">… y ${rows.length - 40} cambio(s) más.</p>` : ""}` : ""}`;
+}
+$$("input[name=import-update]").forEach((r) => r.addEventListener("change", () => guarded(renderImportChanges)));
+
 function importRecords() {
   return imp.body.map((row, i) => ({ ...IMP.buildRecord(row, imp.headers, imp.mapping), rowNumber: i + 2 }))
-    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length);
+    .filter((r) => Object.keys(r.client).length || Object.keys(r.case).length)
+    .map((r) => ({ ...r, placeWarnings: importDivipola ? resolveIdPlace(r) : [] }));
 }
 
 function renderImportPreview() {
   const casesMode = importMode() === "cases";
   const recs = importRecords();
   const cols = [["client.full_name", "Cliente"], ["client.id_number", "Documento"], ["client.email", "Correo"], ["client.phone", "Teléfono"]];
+  if (imp.mapping.includes("client.id_city") || imp.mapping.includes("client.id_department")) {
+    cols.push(["client.id_department", "Depto. expedición"], ["client.id_city", "Ciudad expedición"]);
+  }
   if (casesMode) {
     cols.push(["case.category", "Tipo de proceso"], ["case.type", "Subproceso"]);
     for (const [k, l] of [["case.radicado", "Radicado"], ["case.status", "Estado"], ["case.court_name", "Despacho"], ["case.folder", "Carpeta"], ["pay.fees", "Honorarios"], ["pay.paid", "Pagos"], ["case.title", "Asunto"]])
@@ -3145,14 +3238,29 @@ function renderImportPreview() {
     return `<td>${escapeHtml(k === "case.status" && v ? window.JuanmaCaseMeta.normStatus(v) : o === "pay" && v ? cop(IMP.parsePesos(v)) : v)}</td>`;
   }).join("")}${casesMode ? `<td>${escapeHtml(Object.entries(r.custom).map(([k, v]) => `${k}: ${v}`).join("\n"))}</td>` : ""}</tr>`).join("");
   $("#import-preview").innerHTML = head + `<tbody>${rows}</tbody>`;
+  const warned = recs.filter((r) => r.placeWarnings.length);
+  $("#import-place-warnings").hidden = !warned.length;
+  $("#import-place-warnings").innerHTML = warned.length
+    ? `<strong>Lugar de expedición sin reconocer en ${warned.length} fila(s)</strong> (se importa la fila sin ese dato):<ul>${warned.slice(0, 8).map((r) =>
+      `<li>Fila ${r.rowNumber}: ${escapeHtml(r.placeWarnings.join("; "))}</li>`).join("")}${warned.length > 8 ? `<li>… y ${warned.length - 8} más</li>` : ""}</ul>` : "";
   const noName = !imp.mapping.includes("client.full_name") && !imp.mapping.includes("client.first_names");
   const btn = $("#import-run");
   btn.disabled = noName || !recs.length;
   btn.textContent = noName ? "Asigne la columna del nombre del cliente" : `Importar ${recs.length} filas`;
+  renderImportChanges().catch(() => {});
 }
 
 $("#import-run").addEventListener("click", () => guarded(async () => {
+  saveImportMapping(imp.kind, imp.headers, imp.mapping);
   const records = importRecords();
+  if (updateMode() === "update") {
+    const plan = await IMP.plan(records, api, { withCases: false, updateMode: "update" });
+    const n = plan.changes.filter((c) => c.kind === "update").length;
+    if (n) {
+      if (!(await ask({ title: "Actualizar clientes existentes", message: `Se cambiarán ${n} dato(s) que ya estaban guardados. Antes se descarga un Excel con los clientes tal como están hoy, para poder volver atrás. Nada se borra.`, okLabel: "Descargar copia y actualizar" }))) return;
+      await downloadImportKind("clientes", "data", `clientes-antes-de-actualizar-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+  }
   const casesMode = importMode() === "cases";
   const btn = $("#import-run");
   const bar = $("#import-progress");
@@ -3166,6 +3274,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       defaultCategory: $("#import-default-cat").value,
       defaultType: $("#import-default-type").value,
       canPay: can("payments.manage"),
+      updateMode: updateMode(),
       onProgress: (done, total) => (bar.value = done / total),
     });
     const res = $("#import-result");
@@ -3174,7 +3283,7 @@ $("#import-run").addEventListener("click", () => guarded(async () => {
       <p class="${sum.errors.length ? "" : "ok"}"><strong>Importación terminada.</strong></p>
       <ul>
         <li>Clientes nuevos: <strong>${sum.clientsCreated}</strong></li>
-        <li>Clientes existentes completados: <strong>${sum.clientsCompleted}</strong></li>
+        <li>Clientes existentes completados o actualizados: <strong>${sum.clientsCompleted}</strong>${sum.clientsUpdated ? ` (con datos cambiados: ${sum.clientsUpdated})` : ""}</li>
         ${casesMode ? `<li>Expedientes nuevos: <strong>${sum.casesCreated}</strong></li>
         <li>Expedientes que ya existían (omitidos): <strong>${sum.casesSkipped}</strong></li>` : ""}
         ${sum.charges ? `<li>Honorarios registrados en Pagos: <strong>${sum.charges}</strong></li>` : ""}
@@ -3199,7 +3308,8 @@ const IMPORT_KINDS = {
   clientes: {
     title: "Clientes", mode: "clients",
     cols: [["Nombre completo", (c) => c.full_name], ["Tipo de documento", (c) => c.id_type], ["Número de documento", (c) => c.id_number],
-      ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city], ["Notas", (c) => c.notes]],
+      ["Correo", (c) => c.email], ["Teléfono", (c) => c.phone], ["Dirección", (c) => c.address], ["Ciudad", (c) => c.city],
+      ["Departamento de expedición", (c) => c.id_department], ["Ciudad de expedición", (c) => c.id_city], ["Notas", (c) => c.notes]],
     rows: async () => api("GET", "/clients"),
   },
   expedientes: {
@@ -3240,7 +3350,7 @@ function renderImportKinds() {
     </div>`).join("");
 }
 
-async function downloadImportKind(key, what) {
+async function downloadImportKind(key, what, filename) {
   const k = IMPORT_KINDS[key];
   const header = k.cols.map(([label]) => ({ value: label, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
   const data = what === "data" ? await k.rows() : [];
@@ -3248,7 +3358,7 @@ async function downloadImportKind(key, what) {
   const widths = k.cols.map(([label]) => ({ width: Math.max(16, label.length + 2) }));
   const blob = await window.writeXlsxFile([header, ...body], { columns: widths, sheet: k.title }).toBlob();
   const day = new Date().toISOString().slice(0, 10);
-  await saveFile(what === "data" ? `${key}-${day}.xlsx` : `plantilla-${key}.xlsx`, blob);
+  await saveFile(filename || (what === "data" ? `${key}-${day}.xlsx` : `plantilla-${key}.xlsx`), blob);
   if (what === "data") toast(`${data.length} ${k.title.toLowerCase()} en el archivo.`);
 }
 
@@ -3256,26 +3366,163 @@ async function downloadImportKind(key, what) {
 async function uploadImportKind(key, file) {
   const k = IMPORT_KINDS[key];
   if (k.mode === "courts") {
-    const rows = await readCourtRows(file);
-    const sample = rows.slice(0, 5).map((r) => `${r.name} · ${r.city}`).join("\n");
-    if (!(await ask({ title: "Cargar despachos", message: `Se leyeron ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.\n\n${sample}${rows.length > 5 ? "\n…" : ""}`, okLabel: "Cargar" }))) return;
-    const out = await importCourtRows(rows);
-    showImportResult(`<li>Despachos nuevos: <strong>${out.created}</strong></li><li>Despachos actualizados: <strong>${out.updated}</strong></li>
-      <li>Omitidos: <strong>${out.skipped.length}</strong></li>`, out.skipped.map((e) => `Fila ${e.row}: ${e.reason}`));
+    imp.kind = null;
+    ["#import-step2", "#import-step3", "#import-step4", "#import-result"].forEach((id) => ($(id).hidden = true));
+    await openCourtMapping(file);
     return;
   }
+  $("#courts-map-panel").hidden = true;
+  imp.kind = key;
   // Clients / cases go through the regular mapping, preview and confirmation below.
   await loadImportFile(file);
-  $(`input[name=import-mode][value=${k.mode}]`).checked = true;
   renderMapping();
-  const plan = await IMP.plan(importRecords(), api, { withCases: k.mode === "cases" });
+  const recs = importRecords();
+  const plan = await IMP.plan(recs, api, { withCases: k.mode === "cases" });
+  const placeWarn = recs.filter((r) => r.placeWarnings.length).length;
   const res = $("#import-result");
   res.hidden = false;
-  res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. Revise la vista previa y pulse «Importar».</p>`;
+  res.innerHTML = `<p><strong>Antes de importar:</strong> de ${plan.rows} filas, ${plan.clientsNew} cliente(s) nuevo(s), ${plan.clientsExisting} ya existen (solo se completan datos vacíos)${k.mode === "cases" ? `; ${plan.casesNew} expediente(s) nuevo(s) y ${plan.casesExisting} que ya existen (se omiten)` : ""}. ${placeWarn ? ` El lugar de expedición no se reconoció en ${placeWarn} fila(s): se importan sin ese dato (ver el aviso debajo de la vista previa).` : ""} Revise la vista previa y pulse «Importar».</p>`;
   $("#import-step4").scrollIntoView({ behavior: "smooth" });
 }
 
+// ---------- Despachos: the user assigns the file's columns (version 2.85) ----------
+const COURT_FIELDS = [["name", "Nombre del despacho"], ["department", "Departamento"], ["city", "Ciudad"], ["area", "Corporación o Área"],
+  ["circuit", "Circuito"], ["email", "Correo (Email)"], ["code", "Código"], ["judge", "Juez o titular"], ["phone", "Teléfono"], ["address", "Dirección"]];
+const courtMap = { headers: [], body: [], mapping: [] };
+
+async function openCourtMapping(file) {
+  const sheets = await IMP.readFile(file);
+  // The sheet with the most data rows (the official file may carry a cover sheet).
+  const parsed = sheets.map((sh) => IMP.splitHeader(sh.rows)).sort((a, b) => b.body.length - a.body.length)[0];
+  if (!parsed?.headers.length) throw new Error("No se encontró una fila de encabezados en el archivo.");
+  courtMap.headers = parsed.headers;
+  courtMap.body = parsed.body;
+  const saved = savedImportMapping("despachos");
+  const taken = new Set();
+  courtMap.mapping = parsed.headers.map((h) => {
+    const n = IMP.norm(h);
+    let want = n in saved ? saved[n] : (COURT_FIELDS.map(([k]) => k).find((k) => COURT_COLS[k]?.includes(n)) || "");
+    if (want && taken.has(want)) want = ""; // one column per field
+    if (want) taken.add(want);
+    return want;
+  });
+  renderCourtMapping();
+  $("#courts-map-panel").hidden = false;
+  $("#courts-map-panel").scrollIntoView({ behavior: "smooth" });
+}
+
+function courtMapRows() {
+  const col = Object.fromEntries(COURT_FIELDS.map(([k]) => [k, courtMap.mapping.indexOf(k)]));
+  return courtMap.body.map((r, j) => ({ rowNumber: j + 2, ...Object.fromEntries(Object.entries(col).map(([k, i]) => [k, i < 0 ? "" : r[i]])) }))
+    .filter((r) => r.name || r.department);
+}
+
+function renderCourtMapping() {
+  $("#courts-map").innerHTML = courtMap.headers.map((h, i) => {
+    const sample = courtMap.body.find((r) => r[i])?.[i] ?? "";
+    return `<tr><td><strong>${escapeHtml(h)}</strong></td><td title="${escapeHtml(sample)}">${escapeHtml(sample)}</td>
+      <td><select data-ccol="${i}"><option value="">— No importar —</option>${COURT_FIELDS.map(([k, l]) =>
+        `<option value="${k}" ${courtMap.mapping[i] === k ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select></td></tr>`;
+  }).join("");
+  const rows = courtMapRows();
+  const used = COURT_FIELDS.filter(([k]) => courtMap.mapping.includes(k));
+  $("#courts-map-preview").innerHTML = `<thead><tr>${used.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${rows.slice(0, 5).map((r) =>
+    `<tr>${used.map(([k]) => `<td>${escapeHtml(r[k])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  const missing = ["name", "department"].filter((k) => !courtMap.mapping.includes(k));
+  const btn = $("#courts-map-run");
+  btn.disabled = !!missing.length || !rows.length;
+  btn.textContent = missing.length ? `Asigne la columna de ${missing.map((k) => COURT_FIELDS.find(([f]) => f === k)[1].toLowerCase()).join(" y ")}` : `Cargar ${rows.length.toLocaleString("es-CO")} despachos`;
+}
+
+$("#courts-map").addEventListener("change", (e) => {
+  const sel = e.target.closest("select[data-ccol]");
+  if (!sel) return;
+  const i = Number(sel.dataset.ccol);
+  if (sel.value) courtMap.mapping = courtMap.mapping.map((m, j) => (j !== i && m === sel.value ? "" : m)); // one column per field
+  courtMap.mapping[i] = sel.value;
+  saveImportMapping("despachos", courtMap.headers, courtMap.mapping);
+  renderCourtMapping();
+});
+$("#courts-map-run").addEventListener("click", () => guarded(async () => {
+  const rows = courtMapRows();
+  if (!(await ask({ title: "Cargar despachos", message: `Se cargarán ${rows.length.toLocaleString("es-CO")} despachos. Los que ya existen (mismo nombre y ciudad) se actualizan; nada se borra.`, okLabel: "Cargar" }))) return;
+  saveImportMapping("despachos", courtMap.headers, courtMap.mapping);
+  await runCourtImport(rows);
+}));
+
+// Cases whose saved court name matches a directory court get linked to it (version 2.86): the case then carries the
+// court's e-mail, department, city and area. Same tolerant match as the case form (accents, capitals, «Primero» = «001»,
+// the case's city or circuit). Only cases with a court name and no link are considered; nothing is overwritten.
+const clientLabel = (k) => `${k.client_name}${caseFolder(k) ? ` · Carpeta ${caseFolder(k)}` : ""}`;
+async function planCourtLinks() {
+  const cases = (await api("GET", "/cases")).filter((k) => k.court_name && !k.court_id);
+  const links = [], none = [], several = [];
+  const byDep = new Map();
+  for (const k of cases) {
+    const dep = k.department || "";
+    if (!byDep.has(dep)) byDep.set(dep, dep ? await api("GET", `/courts?${new URLSearchParams({ department: dep, limit: "2000" })}`) : []);
+    const words = courtKey(k.court_name).split(" ");
+    const pool = byDep.get(dep).filter((c) => !k.city || courtKey(c.city) === courtKey(k.city) || courtKey(c.circuit) === courtKey(k.city));
+    const hits = pool.filter((c) => { const hay = courtKey(c.name).split(" "); return words.every((w) => hay.includes(w)); });
+    if (hits.length === 1) links.push({ k, court: hits[0] });
+    else (hits.length ? several : none).push({ k, why: dep ? (hits.length ? `${hits.length} despachos posibles` : "sin coincidencia en el directorio") : "el expediente no tiene departamento" });
+  }
+  return { links, none, several, total: cases.length };
+}
+
+async function showCourtLinks() {
+  courtCache.clear();
+  const plan = await planCourtLinks();
+  const res = $("#import-result");
+  if (!plan.total) return;
+  const list = (rows) => rows.slice(0, 12).map(({ k, why }) => `<li>${escapeHtml(clientLabel(k))} · ${escapeHtml(k.court_name)} (${escapeHtml(why)})</li>`).join("");
+  res.insertAdjacentHTML("beforeend", `<div id="court-links"><h4>Expedientes con despacho escrito</h4>
+    <p><strong>${plan.links.length}</strong> expediente(s) se pueden enlazar con el despacho del directorio (traen su correo, departamento, ciudad y área);
+    <strong>${plan.several.length}</strong> tienen varios despachos posibles y <strong>${plan.none.length}</strong> no tienen coincidencia.</p>
+    ${plan.links.length ? `<div class="toolbar"><button type="button" class="primary" id="court-links-run">Enlazar ${plan.links.length} expediente(s)</button></div>` : ""}
+    ${plan.none.length + plan.several.length ? `<details><summary>Ver los que no se enlazan</summary><ul>${list([...plan.several, ...plan.none])}${plan.none.length + plan.several.length > 12 ? "<li>…</li>" : ""}</ul></details>` : ""}</div>`);
+  $("#court-links-run")?.addEventListener("click", () => guarded(async () => {
+    const btn = $("#court-links-run");
+    btn.disabled = true;
+    let done = 0;
+    const failed = [];
+    for (const { k, court } of plan.links) {
+      try { await api("PUT", `/cases/${k.id}`, { court_id: court.id }); done++; } catch (e) { failed.push(`${clientLabel(k)}: ${e.message}`); }
+    }
+    $("#court-links").insertAdjacentHTML("beforeend", `<p class="ok"><strong>${done}</strong> expediente(s) enlazado(s).${failed.length ? ` No se pudo enlazar ${failed.length}: ${escapeHtml(failed.slice(0, 3).join("; "))}` : ""}</p>`);
+    btn.remove();
+    await loadCases();
+    toast(`${done} expediente(s) enlazado(s) con su despacho.`);
+  }));
+}
+
+// Courts: loads the rows and keeps the skipped ones so they can be retried or downloaded with the reason (version 2.84).
+async function runCourtImport(rows) {
+  const out = await importCourtRows(rows);
+  const byRow = new Map(rows.map((r) => [r.rowNumber, r]));
+  const skipped = out.skipped.map((e) => ({ ...e, data: byRow.get(e.row) }));
+  showImportResult(`<li>Despachos nuevos: <strong>${out.created}</strong></li><li>Despachos actualizados: <strong>${out.updated}</strong></li>
+    <li>Omitidos: <strong>${skipped.length}</strong></li>`, skipped.map((e) => `Fila ${e.row}: ${e.reason}`));
+  const res = $("#import-result");
+  res.insertAdjacentHTML("beforeend", `<div class="toolbar">
+    ${skipped.length ? `<button type="button" id="courts-retry">Reintentar las ${skipped.length} omitidas</button>
+    <button type="button" id="courts-skipped-xlsx">Descargar las omitidas (Excel con el motivo)</button>` : ""}
+    <button type="button" class="primary" data-go-view="despachos">Ver los despachos cargados</button></div>
+    ${skipped.length ? '<p class="hint">Corrija el departamento o el nombre en el Excel de omitidas y súbalo de nuevo en «Despachos»: los ya cargados no se duplican.</p>' : ""}`);
+  await showCourtLinks().catch(() => {});
+  $("#courts-retry")?.addEventListener("click", () => guarded(() => runCourtImport(skipped.map((e) => e.data).filter(Boolean))));
+  $("#courts-skipped-xlsx")?.addEventListener("click", () => guarded(async () => {
+    const cols = [["Departamento", "department"], ["Ciudad", "city"], ["Nombre", "name"], ["Corporación o Área", "area"], ["Email", "email"],
+      ["Código", "code"], ["Teléfono", "phone"], ["Dirección", "address"]];
+    const header = [...cols.map(([l]) => l), "Motivo (no se importa)"].map((value) => ({ value, fontWeight: "bold", backgroundColor: "#002B6A", color: "#FFFFFF" }));
+    const body = skipped.map((e) => [...cols.map(([, k]) => ({ value: String(e.data?.[k] ?? ""), type: String })), { value: e.reason, type: String }]);
+    const blob = await window.writeXlsxFile([header, ...body], { columns: [...cols.map(() => ({ width: 24 })), { width: 50 }], sheet: "Omitidas" }).toBlob();
+    await saveFile(`despachos-omitidos-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+  }));
+}
+
 function showImportResult(items, errors = []) {
+  $("#courts-map-panel").hidden = true;
   const res = $("#import-result");
   res.hidden = false;
   res.innerHTML = `<p class="ok"><strong>Importación terminada.</strong></p><ul>${items}</ul>
@@ -3284,6 +3531,10 @@ function showImportResult(items, errors = []) {
   toast("Importación terminada.");
 }
 
+$("#import-result").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-go-view]");
+  if (b) location.hash = `#${b.dataset.goView}`;
+});
 $("#import-kind-cards").addEventListener("click", (e) => {
   const b = e.target.closest("[data-imp-dl]");
   if (b) guarded(() => downloadImportKind(b.closest("[data-kind]").dataset.kind, b.dataset.impDl));
