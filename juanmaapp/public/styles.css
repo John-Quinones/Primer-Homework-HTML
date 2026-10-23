@@ -1366,3 +1366,6 @@ dialog:not([open]) { pointer-events: none; }
 .mony-cv { display: block; }
 .mony-zoom .mony-cv { margin: 0 auto; }
 .mony-zoom.full .mony-cv { margin: 0; object-fit: contain; }
+#mony-body { transition: opacity 1.1s ease, transform 1.1s ease; }
+#mony-body.mony-intro { opacity: 0; transform: translateY(14px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { #mony-body { transition: none; } }

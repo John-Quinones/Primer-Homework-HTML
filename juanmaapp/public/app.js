@@ -7167,6 +7167,16 @@ async function monyDictate() {
 }
 if (MonyRec) { $("#mony-mic").hidden = false; $("#mony-mic").addEventListener("click", () => guarded(monyDictate)); }
 
+// Opening (version 2.2.16): the first time the «Mony» screen opens in a visit, points gather into her face and, once it is
+// formed, the chat fades in. Reduced motion or no WebGL: no opening.
+let monyIntroDone = false;
+function monyIntro() {
+  if (monyIntroDone || WEB || !window.MonyFace?.ok || $("#mony-body").parentElement.id !== "view-mony") return;
+  monyIntroDone = true;
+  const body = $("#mony-body");
+  body.classList.add("mony-intro");
+  window.MonyFace.intro(() => body.classList.remove("mony-intro"));
+}
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;
@@ -7240,7 +7250,7 @@ const RENDER = {
   usuarios: renderUsuarios,
   inicio: renderInicio,
   jurisprudencia: renderJurisprudencia,
-  mony: renderMony,
+  mony: () => { renderMony(); monyIntro(); },
   clientes: renderClientes,
   expedientes: renderExpedientes,
   borradores: renderBorradores,
