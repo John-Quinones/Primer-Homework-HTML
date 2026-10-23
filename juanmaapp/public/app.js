@@ -3670,7 +3670,6 @@ async function renderInicio() {
   ]);
   const hour = Number(now.slice(11, 13));
   $("#greeting").textContent = `${hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches"}, ${me.name.split(" ")[0]}`;
-  $("#kpi-pps").textContent = cases.filter((k) => k.status === "Pendiente Pago Sentencia").length; // version 2.96
   $("#kpi-pps-clients").textContent = clients.filter((c) => c.archive_status === "Pendiente Pago Sentencia").length; // version 2.2.5
   $("#kpi-clients").textContent = clients.filter((c) => !c.archive_status).length; // version 2.87: only activos
   const nProv = clients.filter((c) => c.archive_status === "Archivo provisional").length, nDef = clients.filter((c) => c.archive_status === "Archivo definitivo").length;
