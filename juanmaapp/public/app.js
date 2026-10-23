@@ -7036,7 +7036,7 @@ document.addEventListener("pointermove", (e) => {
 
 // Living face (version 2.2.15): every picture of Mony becomes a canvas that blinks, looks at the pointer, turns its head and
 // moves its mouth when she speaks (public/mony-face.js). Without WebGL the plain picture stays.
-$$(".mony-id img, #mony-zoom img, .mony-fab img").forEach((i) => window.MonyFace?.mount(i));
+$$(".mony-id img, #mony-zoom img, .mony-fab img, #mony-panel header img").forEach((i) => window.MonyFace?.mount(i));
 
 // Mony's face (version 2.2.12): one click opens it about 3 times larger, a double click fills the screen;
 // in every size it keeps following the pointer. Esc, «Cerrar» or a click outside closes it.
@@ -7190,29 +7190,49 @@ async function monyDictate() {
   const input = $("#mony-input"), base = input.value ? input.value.trimEnd() + " " : "";
   const rec = new MonyRec();
   monyRec = rec;
-  rec.lang = "es-CO"; rec.interimResults = true; rec.continuous = false;
-  rec.onresult = (e) => { input.value = (base + [...e.results].map((r) => r[0].transcript).join(" ")).slice(0, 4000); };
-  rec.onerror = (e) => {
-    const why = { "not-allowed": "Permita el micrófono en el navegador para hablarle a Mony.", "service-not-allowed": "Permita el micrófono en el navegador para hablarle a Mony.",
-      "no-speech": "No se escuchó nada. Intente de nuevo.", "audio-capture": "No se encontró un micrófono.", "network": "No hay conexión con el servicio de dictado." }[e.error];
-    if (why) toast(why, true);
+  let heard = false, failed = false;
+  rec.lang = "es-CO"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  // Phones (Chrome for Android, Safari) hand over every partial phrase as its own result, each one repeating the one before:
+  // joining them all writes «hola hola cómo hola cómo está». The last result always holds the whole phrase.
+  rec.onresult = (e) => {
+    const last = e.results[e.results.length - 1];
+    const said = last?.[0]?.transcript?.trim();
+    if (!said) return;
+    heard = true;
+    input.value = (base + said).slice(0, 4000);
   };
-  rec.onend = () => { monyRec = null; monyMicUi(false); monyMode("idle"); input.focus(); };
+  rec.onerror = (e) => {
+    failed = true;
+    const why = { "not-allowed": "Permita el micrófono en el navegador (candado de la barra de direcciones) para hablarle a Mony.", "service-not-allowed": "El celular no permite el dictado: actívelo en Ajustes (Google o dictado de Siri) y permita el micrófono para este sitio.",
+      "no-speech": "No se escuchó nada. Acerque el celular y pulse el micrófono de nuevo.", "audio-capture": "No se encontró un micrófono.", "network": "No hay conexión con el servicio de dictado.",
+      "language-not-supported": "Este equipo no tiene dictado en español de Colombia." }[e.error];
+    if (why) toast(why, true);
+    else if (e.error !== "aborted") toast("No se pudo usar el micrófono. Intente de nuevo.", true);
+  };
+  rec.onend = () => {
+    monyRec = null; monyMicUi(false); monyMode("idle");
+    if (!heard && !failed) toast("No se escuchó nada. Acerque el celular y pulse el micrófono de nuevo.", true);
+    if (window.matchMedia?.("(pointer: fine)").matches) input.focus(); // on a phone, focusing would pop the keyboard over the text
+  };
   monyMicUi(true); monyMode("listening");
-  try { rec.start(); } catch { monyRec = null; monyMicUi(false); }
+  try { rec.start(); } catch { monyRec = null; monyMicUi(false); monyMode("idle"); toast("No se pudo abrir el micrófono. Pulse el botón de nuevo.", true); }
 }
 if (MonyRec) { $("#mony-mic").hidden = false; $("#mony-mic").addEventListener("click", () => guarded(monyDictate)); }
 
-// Opening (version 2.2.16): the first time the «Mony» screen opens in a visit, points gather into her face and, once it is
-// formed, the chat fades in. Reduced motion or no WebGL: no opening.
-let monyIntroDone = false;
-function monyIntro() {
-  if (monyIntroDone || WEB || !window.MonyFace?.ok || $("#mony-body").parentElement.id !== "view-mony") return;
-  monyIntroDone = true;
+// Opening (versions 2.2.16 and 2.2.19): every time Mony is entered (the screen, the floating chat) points gather into her face
+// (the floating button does it too each time it appears) and, once the face is formed, the chat fades in. Reduced motion or
+// no WebGL: no opening. mony-face.js announces the start and the end; the timer is a safety net so the chat never stays hidden.
+let monyIntroTimer = null;
+document.addEventListener("mony-intro-start", (e) => {
+  if (!e.target.closest?.(".mony-id, #mony-panel")) return;
   const body = $("#mony-body");
   body.classList.add("mony-intro");
-  window.MonyFace.intro(() => body.classList.remove("mony-intro"));
-}
+  clearTimeout(monyIntroTimer); monyIntroTimer = setTimeout(() => body.classList.remove("mony-intro"), 6000);
+});
+document.addEventListener("mony-formed", (e) => {
+  if (!e.target.closest?.(".mony-id, #mony-panel")) return;
+  clearTimeout(monyIntroTimer); $("#mony-body").classList.remove("mony-intro");
+});
 function renderMony() {
   if (WEB) {
     $("#mony-box").hidden = true;
@@ -7286,7 +7306,7 @@ const RENDER = {
   usuarios: renderUsuarios,
   inicio: renderInicio,
   jurisprudencia: renderJurisprudencia,
-  mony: () => { renderMony(); monyIntro(); },
+  mony: renderMony,
   clientes: renderClientes,
   expedientes: renderExpedientes,
   borradores: renderBorradores,

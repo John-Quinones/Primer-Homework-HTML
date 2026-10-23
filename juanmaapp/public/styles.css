@@ -1333,7 +1333,7 @@ dialog:not([open]) { pointer-events: none; }
   border-radius: 20px; background: #0F172A; border: 1px solid #22d3ee66; box-shadow: 0 18px 50px #000a, 0 0 28px #22d3ee33; overflow: hidden; color: #e2e8f0; }
 .mony-panel[hidden] { display: none; }
 .mony-panel header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #243352; background: #111c36; }
-.mony-panel header img { width: 44px; height: 44px; border-radius: 50%; filter: drop-shadow(0 0 6px #22d3ee88); }
+.mony-panel header img, .mony-panel header .mony-cv { width: 44px; height: 44px; border-radius: 50%; filter: drop-shadow(0 0 6px #22d3ee88); }
 .mony-panel header div { flex: 1; min-width: 0; }
 .mony-panel header b { display: block; letter-spacing: .1em; }
 .mony-panel header small { color: #6ee7b7; }
@@ -1373,3 +1373,5 @@ dialog:not([open]) { pointer-events: none; }
 .mony-voice-box .mony-voice { margin-left: 0; }
 .mony-voice-pick { max-width: 220px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 10px; padding: 5px 8px; font: inherit; font-size: .8rem; }
 .mony-voice-pick[hidden] { display: none; }
+@media (max-width: 560px) { .mony-panel { top: 8px; bottom: 12px; height: auto; z-index: 60; } }
+@media (max-width: 560px) { .mony-panel header { flex-wrap: wrap; row-gap: 6px; } .mony-panel header small { white-space: nowrap; } .mony-panel header div { flex: 1 1 120px; min-width: 0; } }
