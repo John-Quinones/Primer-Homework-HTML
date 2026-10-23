@@ -3700,6 +3700,19 @@ async function renderInicio() {
       <div><strong>${escapeHtml(k.client_name)}</strong><span>${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</span></div>
       <span class="status-tag">${escapeHtml(k.status)}</span>
     </li>`).join("") || '<li class="empty">Aún no hay expedientes.</li>';
+
+  // Últimos movimientos: the audit log's latest entries (everyone's with Bitácora permission, otherwise your own).
+  const moves = await api("GET", "/audit?recent=1").catch(() => null);
+  $("#dash-moves-panel").hidden = !moves;
+  if (moves) {
+    $("#dash-moves").innerHTML = moves.map((e) => `
+      <li class="${e.ok ? "" : "late"}">
+        <span class="badge">${escapeHtml(e.module)}</span>
+        <div><strong>${escapeHtml(e.summary)}</strong><span>${escapeHtml(e.user_name || "—")} · ${escapeHtml(CMETA.utcToBogota(e.at))}</span></div>
+        ${e.case_id ? `<button class="mini" data-action="go" data-to="#expediente-${e.case_id}-historial">Ver expediente</button>` : "<span></span>"}
+      </li>`).join("") || '<li class="empty">Aún no hay movimientos registrados.</li>';
+    $("#dash-moves-more").hidden = !can("audit.view");
+  }
 }
 
 // ---------- Jurisprudencia ----------
