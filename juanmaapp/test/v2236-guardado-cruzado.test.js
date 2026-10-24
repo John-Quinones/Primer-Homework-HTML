@@ -75,13 +75,20 @@ test("cases: an update only touches its own case", async () => {
   const type = (await A.call("GET", "/catalog")).body[0].types[0];
   const cl = (await A.call("POST", "/clients", person(9001))).body;
   const mk = async (t) => (await A.call("POST", "/cases", { client_id: cl.id, process_type_id: type.id, title: t })).body;
-  const ks = []; for (let i = 0; i < 130; i++) ks.push(await mk("Caso " + i));
-  const k1 = ks[0], k2 = ks.find((k) => k.id !== k1.id && bucket(k.id) === bucket(k1.id));
+  // cases are created until two of them share a bucket
+  const ks = []; let k1, k2;
+  for (let i = 0; !k2 && i < 600; i++) {
+    const k = await mk("Caso " + i);
+    k2 = ks.find((x) => bucket(x.id) === bucket(k.id)) && k;
+    if (k2) k1 = ks.find((x) => bucket(x.id) === bucket(k.id));
+    ks.push(k);
+  }
+  assert.ok(k1 && k2, "two cases in the same bucket");
   B = await open();
   await B.call("PUT", `/cases/${k1.id}`, { title: "Editado en B" });
   await A.call("PUT", `/cases/${k2.id}`, { title: "Editado en A" });
   const C = await open(), list = (await C.call("GET", "/cases")).body;
   assert.equal(list.find((k) => k.id === k1.id).title, "Editado en B");
   assert.equal(list.find((k) => k.id === k2.id).title, "Editado en A");
-  assert.equal(list.filter((k) => k.client_id === cl.id).length, 130);
+  assert.equal(list.filter((k) => k.client_id === cl.id).length, ks.length);
 });
