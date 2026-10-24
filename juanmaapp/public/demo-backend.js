@@ -175,6 +175,9 @@
   let saving = Promise.resolve();
   // One save at a time, in order.
   const save = () => (saving = saving.catch(() => {}).then(() => window.JuanmaStore.save(s)));
+  // Version 2.2.36: takes what other devices saved (on sign-in and when this tab is shown again), in order with the saves.
+  const sync = () => (saving = saving.catch(() => {}).then(() => window.JuanmaStore.pull?.(s)));
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && s) sync().catch(() => {}); });
   const READY = (async () => {
     const loaded = await window.JuanmaStore.load();
     s = migrate(loaded || rescueOld() || fresh());
@@ -2043,6 +2046,7 @@ Return only a JSON object:
     async request(method, url, body) {
       await READY;
       const path = url.split("?")[0];
+      if (method === "POST" && path === "/auth/login") await sync();
       const logged = method !== "GET" && !/^\/(notifications|auth\/|monitor\/report\/preview|admin\/hidden-users\/)/.test(path) && !/^\/admin\/users\/\d+\/hidden$/.test(path) && s.users.some((x) => x.id === currentId);
       if (method === "DELETE" && me().role !== "Gerencia") {
         auditChange(method, path, body, null, null, false); await save();
