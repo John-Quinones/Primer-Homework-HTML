@@ -15,3 +15,8 @@ Desde el 17/10/2026 (03:02) John carga datos reales en la App. Todo lo que cargu
 - Enlace de pruebas: base del Artifact; republicar al mismo enlace conserva los datos.
 - Son dos bases separadas y no se sincronizan. Si John dice que algo «no aparece», buscar primero en la otra base.
 - El contenedor de Claude no alcanza Azure: la verificación allá la hace John.
+
+## Guardado del enlace de pruebas (v2.2.36)
+- `public/web-store.js` guarda por registro: antes de escribir un «cajón» (jm_<colección>/bN) lo lee y le aplica solo lo que ESA copia cambió, creó o borró frente a lo que leyó al cargar (`mergeItems`). Nunca escribir un cajón entero desde la copia local: borraba lo que otra pantalla guardó (edición perdida, registro vecino borrado).
+- `pull()` toma lo guardado por otras pantallas al ingresar (`POST /auth/login`) y al volver a la pestaña. `test/link-shared.js` simula varias pantallas sobre una base compartida.
+- El servidor (Azure) siempre actualiza y borra por id; el error era solo del enlace.

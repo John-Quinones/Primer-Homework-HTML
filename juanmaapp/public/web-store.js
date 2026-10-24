@@ -84,9 +84,7 @@
     try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "null"); } catch { return null; }
   }
 
-  async function write(path, body) {
-    const json = JSON.stringify(body);
-    if (saved.get(path) === json) return;
+  async function put(path, body) {
     const [col, id] = path.split("/");
     try {
       await db.collection(col).doc(id).set(body);
@@ -95,12 +93,60 @@
       if (err?.code === "invalid_argument") throw new Error("Usted puede ver estos datos pero no modificarlos con su nivel de acceso a este enlace.");
       throw new Error(`No se pudo guardar (${err?.code || err?.message}).`);
     }
-    saved.set(path, json);
+    saved.set(path, JSON.stringify(body));
+  }
+  async function write(path, body) {
+    if (saved.get(path) === JSON.stringify(body)) return;
+    await put(path, body);
   }
   async function remove(path) {
     const [col, id] = path.split("/");
     await db.collection(col).doc(id).delete();
     saved.delete(path);
+  }
+
+  // ---- Records are saved one by one, never as whole buckets from an old copy (version 2.2.36) ----
+  // Every device keeps its own copy of the data. Writing a bucket from that copy would erase what another device
+  // saved in the same bucket after this copy was loaded: an edit lost, a new record gone, a deleted one back, or the
+  // record next to the deleted one disappearing too. So before writing a bucket the current one is read and only
+  // the records THIS copy added, changed or removed (compared with what it last read) are applied to it.
+  const byId = (a, b) => (a.id > b.id ? 1 : -1);
+  const bucketItems = (path) => { const j = saved.get(path); return j ? JSON.parse(j).items || [] : []; };
+  const sameItems = (a, b) => JSON.stringify([...a].sort(byId)) === JSON.stringify([...b].sort(byId));
+  function mergeItems(base, mine, remote) {
+    const was = new Map(base.map((x) => [x.id, JSON.stringify(x)]));
+    const now = new Map(mine.map((x) => [x.id, x]));
+    const out = new Map(remote.map((x) => [x.id, x]));
+    for (const [id, x] of now) if (was.get(id) !== JSON.stringify(x)) out.set(id, x); // added or changed here
+    for (const id of was.keys()) if (!now.has(id)) out.delete(id);                      // removed here
+    return [...out.values()];
+  }
+  async function readDoc(col, id) {
+    try {
+      const d = await db.collection(col).doc(id).get();
+      return d.exists ? JSON.parse(JSON.stringify(d.data())) : null;
+    } catch {
+      return (await readCollection(col)).find((x) => x.id === id)?.data ?? null;
+    }
+  }
+  async function saveBuckets(state, c, want) {
+    const paths = new Set([...Object.keys(want), ...[...saved.keys()].filter((p) => p.startsWith(`jm_${c}/`))]);
+    const merged = new Map();
+    for (const path of paths) {
+      const mine = want[path] || [], base = bucketItems(path);
+      if (sameItems(mine, base)) continue; // nothing changed here
+      const [, id] = path.split("/");
+      const remote = (await readDoc(`jm_${c}`, id))?.items || [];
+      const items = mergeItems(base, mine, remote);
+      if (!items.length) { if (remote.length) await db.collection(`jm_${c}`).doc(id).delete(); saved.delete(path); }
+      else if (sameItems(items, remote)) saved.set(path, JSON.stringify({ items: remote }));
+      else await put(path, { items });
+      merged.set(path, items);
+    }
+    if (!merged.size) return;
+    // This copy adopts what the other devices had saved in the buckets it touched.
+    const touched = new Set([...merged.keys()].map((p) => Number(p.split("/")[1].slice(1))));
+    state[c] = [...(state[c] || []).filter((x) => !touched.has(bucketOf(x.id))), ...[...merged.values()].flat()].sort(byId);
   }
 
   async function save(state) {
@@ -113,8 +159,8 @@
     for (const m of META) want.set(`jm_meta/${m}`, { value: state[m] ?? null });
     for (const c of COLLECTIONS) {
       const buckets = {};
-      for (const item of state[c] || []) (buckets[bucketOf(item.id)] ||= []).push(item);
-      for (const [b, items] of Object.entries(buckets)) want.set(`jm_${c}/b${b}`, { items });
+      for (const item of state[c] || []) (buckets[`jm_${c}/b${bucketOf(item.id)}`] ||= []).push(item);
+      await saveBuckets(state, c, buckets);
     }
     const index = {};
     for (const [key, b64] of Object.entries(state.blobs || {})) {
@@ -125,7 +171,16 @@
     want.set("jm_meta/blobs", { index });
     // Write changed documents first, then drop ones that no longer exist.
     for (const [path, body] of want) await write(path, body);
-    for (const path of [...saved.keys()]) if (!want.has(path)) await remove(path);
+    for (const path of [...saved.keys()]) if (!want.has(path) && !COLLECTIONS.some((c) => path.startsWith(`jm_${c}/`))) await remove(path);
+  }
+
+  // Takes the records the other devices saved since this copy was loaded (on sign-in and when the tab is shown again).
+  async function pull(state) {
+    if (kind !== "db") return;
+    for (const c of COLLECTIONS) {
+      const now = await refresh(c);
+      if (now) state[c] = now.items;
+    }
   }
 
   // Re-reads one collection (and the blobs whose key starts with blobPrefix) as stored now, so
@@ -151,5 +206,5 @@
     return { items, blobs };
   }
 
-  window.JuanmaStore = { load, save, refresh, kind: () => kind };
+  window.JuanmaStore = { load, save, refresh, pull, kind: () => kind };
 })();

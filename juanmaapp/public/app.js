@@ -1569,6 +1569,8 @@ function wireDialog(dialog, onSave) {
   form.addEventListener("submit", async (e) => {
     if (e.submitter?.value === "cancel") return;
     e.preventDefault();
+    if (form._saving) return; // a second tap on «Guardar» while the first save runs would create the record twice (v2.2.36)
+    form._saving = true;
     try {
       const from = location.hash;
       await onSave(form);
@@ -1580,6 +1582,8 @@ function wireDialog(dialog, onSave) {
       const p = $(".form-error", dialog);
       p.textContent = err.message;
       p.hidden = false;
+    } finally {
+      form._saving = false;
     }
   });
 }
