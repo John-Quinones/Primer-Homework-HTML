@@ -14,7 +14,7 @@ import { formatRadicado } from "./portals.js";
 
 const FIELD_TYPES = ["text", "textarea", "number", "date", "select"];
 const CLIENT_FIELDS = ["full_name", "id_type", "id_number", "email", "phone", "address", "department", "city", "notes", "office_id",
-  "person_type", "first_names", "last_names", "legal_rep", "gender", "id_department", "id_city", "affiliated", "extra_phones"];
+  "person_type", "first_names", "last_names", "legal_rep", "gender", "id_department", "id_city", "affiliated", "extra_phones", "extra_emails"];
 
 const fail400 = (msg) => { throw new HttpError(400, msg); };
 const PLACE = { canonicalDepartment, canonicalCity, placeFromRadicado, areas: AREAS, fail: fail400 };

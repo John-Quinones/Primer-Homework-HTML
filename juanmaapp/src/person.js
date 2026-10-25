@@ -185,6 +185,11 @@ export function extraPhoneList(c) {
   try { const l = JSON.parse(c?.extra_phones || "[]"); return Array.isArray(l) ? l.filter((x) => x && x.phone) : []; } catch { return []; }
 }
 
+/** The client's additional emails as [{label, email}] (version 2.2.45; same storage as the phones). */
+export function extraEmailList(c) {
+  try { const l = JSON.parse(c?.extra_emails || "[]"); return Array.isArray(l) ? l.filter((x) => x && x.email) : []; } catch { return []; }
+}
+
 export function clientMatches(c, q, by = "") {
   const text = String(q ?? "").trim();
   if (!text) return true;
@@ -192,7 +197,7 @@ export function clientMatches(c, q, by = "") {
   const docHit = digits.length >= 3 && String(c.id_number ?? "").replace(/\D/g, "").includes(digits);
   if (by === "doc") return docHit;
   const fields = { first: [c.first_names], last: [c.last_names], city: [c.city, c.department], idplace: [c.id_city, c.id_department] }[by]
-    || [c.full_name, c.first_names, c.last_names, c.legal_rep, c.city, c.email, c.phone, ...extraPhoneList(c).map((p) => p.phone)];
+    || [c.full_name, c.first_names, c.last_names, c.legal_rep, c.city, c.email, c.phone, ...extraPhoneList(c).map((p) => p.phone), ...extraEmailList(c).map((p) => p.email)];
   const hay = words(fields.filter(Boolean).join(" ")).join(" ");
   const ok = words(text).every((w) => hay.split(" ").some((h) => h.startsWith(w)) || (w.length >= 4 && hay.includes(w)));
   return ok || (!by && docHit);
