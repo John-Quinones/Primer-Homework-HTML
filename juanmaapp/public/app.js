@@ -1893,6 +1893,19 @@ function openClientDialog(c) {
   showFormPhoto(c?.photo || "", c || {});
 }
 
+// Version 2.2.44: warn when the ID number (clients) or the radicado (cases) is already registered, in ANY state and any
+// archive, and let the user decide: «Ver el existente» opens that record (nothing is saved) or «Crear de todos modos»
+// saves the duplicate on purpose. Checked when creating, and when editing only if the value changed; the record itself is excluded.
+const dupKey = (v) => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+async function confirmDuplicate(form, { title, what, found, hash }) {
+  if (!found) return;
+  const go = !(await ask({ title, message: `${what} Puede crearlo de todos modos (queda duplicado a propósito) o ir a revisar el que ya existe.`, okLabel: "Crear de todos modos", cancelLabel: "Ver el existente" }));
+  if (!go) return;
+  form.closest("dialog").close();
+  location.hash = hash;
+  throw new Error("No se guardó: se abrió el registro que ya existe.");
+}
+
 wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   data.affiliated = form.elements.affiliated.checked;
@@ -1912,6 +1925,14 @@ wireDialog($("#client-dialog"), async (form) => {
     const a = bag(was?.full_name), b = bag(now);
     if (was?.full_name && a.size && b.size && ![...b].some((w) => a.has(w))) {
       if (!(await ask({ title: "¿Cambiar el nombre de este cliente?", message: `Este cliente se llama «${was.full_name}» y lo va a guardar como «${String(now).trim()}», un nombre sin nada en común. Si es otra persona, cancele y use «+ Nuevo cliente».`, okLabel: "Sí, cambiar el nombre" }))) throw new Error("No se guardó: el nombre del cliente no cambió. Para otra persona use «+ Nuevo cliente».");
+    }
+  }
+  {
+    const num = dupKey(data.id_number), was = id ? state.clients.find((x) => x.id === Number(id)) : null;
+    if (num && (!was || dupKey(was.id_number) !== num)) {
+      const hit = (await api("GET", "/clients")).find((x) => x.id !== Number(id) && dupKey(x.id_number) === num);
+      const st = hit?.archive_status ? ` · ${hit.archive_status}` : "";
+      await confirmDuplicate(form, { title: `Ya existe un cliente con ese ${data.person_type === "juridica" ? "NIT" : "documento"}`, what: hit && `«${hit.full_name}» (${[hit.id_type, hit.id_number].filter(Boolean).join(" ")})${st}, ${hit.case_count || 0} expediente(s).`, found: hit, hash: `#cliente-${hit?.id}` });
     }
   }
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
@@ -2585,6 +2606,13 @@ wireDialog($("#case-dialog"), async (form) => {
     court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_type, id_number, ours, client_id }) => ({ side, role: role || "", name, id_type: id_type || "", id_number, ours, client_id })),
   };
+  {
+    const rad = String(d.radicado ?? "").replace(/\D/g, ""), was = d.id ? state.cases.find((x) => x.id === Number(d.id)) : null;
+    if (rad && (!was || String(was.radicado || "").replace(/\D/g, "") !== rad)) {
+      const hit = (await api("GET", "/cases")).find((x) => x.id !== Number(d.id) && String(x.radicado || "").replace(/\D/g, "") === rad);
+      await confirmDuplicate(form, { title: "Ya existe un expediente con ese radicado", what: hit && `${formatRadicado(rad)}: ${[caseFolder(hit) && "carpeta " + caseFolder(hit), hit.client_name, hit.status].filter(Boolean).join(" · ")}.`, found: hit, hash: `#expediente-${hit?.id}` });
+    }
+  }
   const savedCase = d.id ? await api("PUT", `/cases/${d.id}`, body) : await api("POST", "/cases", body);
   if (savedCase?.id) form.elements.id.value = savedCase.id; // reopening with Atrás edits this case, never creates a second one
   toast(d.id ? "Expediente actualizado." : "Expediente creado.");
