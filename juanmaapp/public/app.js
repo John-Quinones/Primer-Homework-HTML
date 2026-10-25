@@ -67,8 +67,11 @@ if (WEB) {
 const state = { catalog: [], clients: [], cases: [], selectedClientId: null };
 
 async function loadCatalog() { state.catalog = await api("GET", "/catalog"); }
+let clientsSeq = 0; // 2.2.40: a slow answer to an older search must not overwrite the newer one
 async function loadClients(q = "", by = $("#client-search-by")?.value || "") {
-  state.clients = await api("GET", `/clients?${new URLSearchParams({ q, by })}`);
+  const mine = ++clientsSeq;
+  const list = await api("GET", `/clients?${new URLSearchParams({ q, by })}`);
+  if (mine === clientsSeq) state.clients = list;
 }
 async function loadCases() { state.cases = await api("GET", "/cases"); }
 
@@ -712,17 +715,20 @@ function renderClientList() {
   const byClient = new Map();
   for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
   const f = clientArchiveFilter();
-  const shown = clientsByFolder(state.clients.filter((c) => (c.archive_status || "") === f));
+  // Version 2.2.40: while something is typed in the search box it looks in ALL states (activo, archivos, PPS) so a client
+  // whose state was changed never «disappears»; each result outside Activo carries its state tag.
+  const searching = !!($("#client-search")?.value || "").trim();
+  const shown = clientsByFolder(searching ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f));
   const others = CLIENT_ARCHIVE.map((st) => [st, state.clients.filter((c) => c.archive_status === st).length]);
   const note = $("#client-archive-note");
-  if (note) note.textContent = f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
+  if (note) note.textContent = (f || searching) ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
   if (!shown.length) {
-    ul.innerHTML = `<li class="empty">${f ? `No hay clientes en ${f.toLowerCase()}.` : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
+    ul.innerHTML = `<li class="empty">${searching ? "Ningún cliente coincide con la búsqueda (se buscó en todos los estados)." : f ? `No hay clientes en ${f.toLowerCase()}.` : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
     return;
   }
   ul.innerHTML = shown.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
-      <strong>${escapeHtml(c.full_name)}</strong>
+      <strong>${escapeHtml(c.full_name)}</strong>${searching && c.archive_status ? ` <span class="pill">${escapeHtml(c.archive_status)}</span>` : ""}
       <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
@@ -1847,7 +1853,7 @@ const extraPhoneRows = (c, rowFn) => window.JuanmaPerson.extraPhoneList(c).map((
 function residence(c) { return [c.city, c.department].filter(Boolean).join(" · "); }
 function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
 
-// Version 2.2.39: more phone numbers of the client (label + number), added by hand in the client's window.
+// Version 2.2.40: more phone numbers of the client (label + number), added by hand in the client's window.
 function extraPhoneRow(v = {}) {
   const d = document.createElement("div");
   d.className = "extra-phone-row";
@@ -1960,14 +1966,18 @@ function renderCaseRows() {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const q = flat($("#case-search").value.trim());
   const qDigits = q.replace(/\D/g, "");
-  const matches = (k) => !q || [caseFolder(k), k.case_number, k.client_name, k.title, k.type_name, ...(k.parties || []).map((p) => p.name)].some((x) => flat(x).includes(q))
+  // Version 2.2.40: every typed word must appear in the folder, case number, client name AND document, title, type, parties or
+  // radicado (any order, no accents); 4+ digits also match the radicado. Searching looks in ALL states, not only «Activos».
+  const qWords = q.split(/\s+/).filter(Boolean);
+  const matches = (k) => !q || qWords.every((w) => [caseFolder(k), k.case_number, k.client_name, state.clients.find((c) => c.id === k.client_id)?.id_number, k.title, k.type_name, k.court_name, k.radicado, ...(k.parties || []).flatMap((p) => [p.name, p.id_number])]
+    .some((x) => flat(x).includes(w) || (w.replace(/\D/g, "").length >= 4 && String(x ?? "").replace(/\D/g, "").includes(w.replace(/\D/g, "")))))
     || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
   const court = $("#case-court").value, status = $("#case-status").value, adLitem = $("#case-adlitem").checked;
   const rows = casesByFolder(casesByPlace()).filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
-    && (!mine || k.assigned_user_id === me.id) && (status === "todos" || (status ? k.status === status : !ARCHIVED_STATUSES.has(k.status))) && (!adLitem || k.ad_litem)
+    && (!mine || k.assigned_user_id === me.id) && (status === "todos" || (status ? k.status === status : (!!q || !ARCHIVED_STATUSES.has(k.status)))) && (!adLitem || k.ad_litem)
     && (!court || (court.startsWith("id:") ? k.court_id === Number(court.slice(3)) || (!k.court_id && directoryCourt(k)?.id === Number(court.slice(3))) : k.court_name === court.slice(2)))
     && matches(k));
-  const hidden = status ? 0 : state.cases.filter((k) => ARCHIVED_STATUSES.has(k.status)).length;
+  const hidden = (status || q) ? 0 : state.cases.filter((k) => ARCHIVED_STATUSES.has(k.status)).length;
   $("#case-count").textContent = `${rows.length} de ${state.cases.length} expediente(s)${hidden ? ` · ${hidden} en otro estado, ocultos` : ""}`;
   $("#case-empty").hidden = rows.length > 0;
   $("#case-rows").innerHTML = rows.map((k) => `
