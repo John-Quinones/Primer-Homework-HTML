@@ -1853,7 +1853,7 @@ const extraPhoneRows = (c, rowFn) => window.JuanmaPerson.extraPhoneList(c).map((
 function residence(c) { return [c.city, c.department].filter(Boolean).join(" · "); }
 function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
 
-// Version 2.2.40: more phone numbers of the client (label + number), added by hand in the client's window.
+// Version 2.2.39: more phone numbers of the client (label + number), added by hand in the client's window.
 function extraPhoneRow(v = {}) {
   const d = document.createElement("div");
   d.className = "extra-phone-row";
