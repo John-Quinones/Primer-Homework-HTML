@@ -40,7 +40,32 @@ export function clientValues(body, existing, lib) {
   v.address = lib.properAddress(v.address);
   v.phone = lib.properPhone(v.phone);
   v.extra_phones = "extra_phones" in body ? extraPhones(body.extra_phones, lib, lib.fail) : str(existing.extra_phones);
+  v.extra_emails = "extra_emails" in body ? extraEmails(body.extra_emails, lib.fail) : str(existing.extra_emails);
   return v;
+}
+
+/** Version 2.2.45: more emails of a client, each with an optional label. Stored as JSON text [{label, email}];
+ * the main `email` stays as is. Lowercase, valid format, no repeats (nor the main one), up to 10. */
+export const MAX_EXTRA_EMAILS = 10;
+const EMAIL_RE = /^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']{2,}$/;
+export function extraEmails(value, fail, main = "") {
+  let list = value;
+  if (typeof list === "string") {
+    if (!list.trim()) return "";
+    try { list = JSON.parse(list); } catch { fail("Los correos adicionales no son válidos."); }
+  }
+  if (list == null || list === "") return "";
+  if (!Array.isArray(list)) fail("Los correos adicionales no son válidos.");
+  const seen = new Set(), out = [];
+  for (const it of list) {
+    const email = str(it?.email).toLowerCase(), label = str(it?.label).replace(/\s+/g, " ").slice(0, 40);
+    if (!email) continue;
+    if (!EMAIL_RE.test(email)) fail(`El correo adicional «${email}» no es válido.`);
+    if (seen.has(email)) continue;
+    seen.add(email); out.push({ label, email });
+  }
+  if (out.length > MAX_EXTRA_EMAILS) fail(`Máximo ${MAX_EXTRA_EMAILS} correos adicionales.`);
+  return out.length ? JSON.stringify(out) : "";
 }
 
 /** Version 2.2.39: more phone numbers of a client, each with an optional label («Esposa», «Trabajo»).

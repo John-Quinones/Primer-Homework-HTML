@@ -794,7 +794,7 @@ async function renderClientDetail() {
       ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
       ${c.person_type === "juridica" ? "" : row("Cédula expedida en", idPlace(c) || "Sin indicar")}
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
-      ${row("Correo", c.email || "Sin indicar")}${row("Teléfono", c.phone)}${extraPhoneRows(c, row)}
+      ${row("Correo", c.email || "Sin indicar")}${extraEmailRows(c, row)}${row("Teléfono", c.phone)}${extraPhoneRows(c, row)}
       ${row("Dirección", c.address)}
       ${row("Residencia", residence(c) || "Sin indicar")}
       ${row("Afiliado", c.affiliated ? "Sí" : "No")}
@@ -848,7 +848,7 @@ async function renderClienteFicha(id) {
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
           ${c.person_type === "juridica" ? "" : factRow("Cédula expedida en", idPlace(c) || "Sin indicar")}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
-          ${factRow("Correo", c.email || "Sin indicar")}${factRow("Teléfono", c.phone)}${extraPhoneRows(c, factRow)}${factRow("Dirección", c.address)}
+          ${factRow("Correo", c.email || "Sin indicar")}${extraEmailRows(c, factRow)}${factRow("Teléfono", c.phone)}${extraPhoneRows(c, factRow)}${factRow("Dirección", c.address)}
           ${factRow("Residencia", residence(c) || "Sin indicar")}${factRow("Afiliado", c.affiliated ? "Sí" : "No")}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
@@ -1855,6 +1855,7 @@ $("#my-signature-dialog").addEventListener("click", (e) => {
 /** Where the client's ID card was issued: «Ibagué (Tolima)» (version 2.56). */
 // «Ibagué · Tolima»: the client's place of residence (department and city of the client form).
 const extraPhoneRows = (c, rowFn) => window.JuanmaPerson.extraPhoneList(c).map((p) => rowFn(p.label ? `Teléfono (${p.label})` : "Otro teléfono", p.phone)).join("");
+const extraEmailRows = (c, rowFn) => window.JuanmaPerson.extraEmailList(c).map((p) => rowFn(p.label ? `Correo (${p.label})` : "Otro correo", p.email)).join("");
 function residence(c) { return [c.city, c.department].filter(Boolean).join(" · "); }
 function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
 
@@ -1872,6 +1873,20 @@ const extraPhonesOf = (form) => $$("#extra-phones .extra-phone-row", form).map((
 $("#add-extra-phone").addEventListener("click", () => { const r = extraPhoneRow(); $("#extra-phones").append(r); $("[data-k=phone]", r).focus(); });
 $("#extra-phones").addEventListener("click", (e) => { if (e.target.closest("[data-remove-phone]")) e.target.closest(".extra-phone-row").remove(); });
 
+// Version 2.2.45: more emails of the client (label + email), added by hand in the client's window.
+function extraEmailRow(v = {}) {
+  const d = document.createElement("div");
+  d.className = "extra-email-row";
+  d.style.cssText = "display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem";
+  d.innerHTML = `<input data-k="label" maxlength="40" placeholder="De quién (ej. Esposa)" value="${escapeHtml(v.label || "")}" aria-label="De quién es el correo" style="flex:1" />
+    <input data-k="email" type="email" inputmode="email" placeholder="Correo (ej. nombre@correo.com)" value="${escapeHtml(v.email || "")}" aria-label="Correo adicional" style="flex:1.2" />
+    <button type="button" class="mini" data-remove-email aria-label="Quitar este correo">Quitar</button>`;
+  return d;
+}
+const extraEmailsOf = (form) => $$("#extra-emails .extra-email-row", form).map((r) => ({ label: $("[data-k=label]", r).value.trim(), email: $("[data-k=email]", r).value.trim() })).filter((x) => x.email);
+$("#add-extra-email").addEventListener("click", () => { const r = extraEmailRow(); $("#extra-emails").append(r); $("[data-k=email]", r).focus(); });
+$("#extra-emails").addEventListener("click", (e) => { if (e.target.closest("[data-remove-email]")) e.target.closest(".extra-email-row").remove(); });
+
 function openClientDialog(c) {
   pendingPhoto = undefined;
   const sel = $("#client-dialog [name=office_id]");
@@ -1882,6 +1897,7 @@ function openClientDialog(c) {
     id_number: type === "natural" ? c.id_number : "",
   } : {});
   setPersonType(type);
+  $("#extra-emails").replaceChildren(...window.JuanmaPerson.extraEmailList(c).map(extraEmailRow));
   $("#extra-phones").replaceChildren(...window.JuanmaPerson.extraPhoneList(c).map(extraPhoneRow));
   clientForm.elements.affiliated.checked = !!c?.affiliated;
   // Version 2.94: state of the client. «Archivo definitivo» (to or from) is only for Gerencia.
@@ -1893,7 +1909,7 @@ function openClientDialog(c) {
   showFormPhoto(c?.photo || "", c || {});
 }
 
-// Version 2.2.44: warn when the ID number (clients) or the radicado (cases) is already registered, in ANY state and any
+// Version 2.2.45: warn when the ID number (clients) or the radicado (cases) is already registered, in ANY state and any
 // archive, and let the user decide: «Ver el existente» opens that record (nothing is saved) or «Crear de todos modos»
 // saves the duplicate on purpose. Checked when creating, and when editing only if the value changed; the record itself is excluded.
 const dupKey = (v) => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -1910,6 +1926,7 @@ wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   data.affiliated = form.elements.affiliated.checked;
   data.extra_phones = extraPhonesOf(form);
+  data.extra_emails = extraEmailsOf(form);
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
   const wantedState = form.elements.archive_status.value, before = id ? state.clients.find((x) => x.id === Number(id))?.archive_status || "" : "";
   if (id && wantedState && wantedState !== before) {
