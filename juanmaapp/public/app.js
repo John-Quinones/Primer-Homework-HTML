@@ -715,20 +715,23 @@ function renderClientList() {
   const byClient = new Map();
   for (const k of state.cases) byClient.set(k.client_id, [...(byClient.get(k.client_id) || []), k]);
   const f = clientArchiveFilter();
-  // Version 2.2.40: while something is typed in the search box it looks in ALL states (activo, archivos, PPS) so a client
-  // whose state was changed never «disappears»; each result outside Activo carries its state tag.
+  // Version 2.2.42: the chosen state rules, also while searching («Clientes activos» never lists archived clients);
+  // «Todos los estados» lists every state with its tag. The note says how many other matches sit in other states.
   const searching = !!($("#client-search")?.value || "").trim();
-  const shown = clientsByFolder(searching ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f));
-  const others = CLIENT_ARCHIVE.map((st) => [st, state.clients.filter((c) => c.archive_status === st).length]);
+  const everything = f === "todos";
+  const shown = clientsByFolder(everything ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f));
+  const others = ["", ...CLIENT_ARCHIVE].filter((st) => st !== f && !everything).map((st) => [st || "Activo", state.clients.filter((c) => (c.archive_status || "") === st).length]);
   const note = $("#client-archive-note");
-  if (note) note.textContent = (f || searching) ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · ");
+  if (note) note.textContent = !others.some(([, n]) => n) ? "" : searching
+    ? `Coinciden también ${others.filter(([, n]) => n).map(([st, n]) => `${n} en ${st.toLowerCase()}`).join(" · ")}: cambie el estado de arriba o elija «Todos los estados» para verlos.`
+    : (f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · "));
   if (!shown.length) {
-    ul.innerHTML = `<li class="empty">${searching ? "Ningún cliente coincide con la búsqueda (se buscó en todos los estados)." : f ? `No hay clientes en ${f.toLowerCase()}.` : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
+    ul.innerHTML = `<li class="empty">${searching ? `Ningún cliente coincide con la búsqueda en ${everything ? "ningún estado" : f ? f.toLowerCase() : "clientes activos"}.` : f && !everything ? `No hay clientes en ${f.toLowerCase()}.` : everything ? "No hay clientes registrados." : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
     return;
   }
   ul.innerHTML = shown.map((c) => `
     <li><button class="item ${c.id === state.selectedClientId ? "selected" : ""}" data-client="${c.id}">
-      <strong>${escapeHtml(c.full_name)}</strong>${searching && c.archive_status ? ` <span class="pill">${escapeHtml(c.archive_status)}</span>` : ""}
+      <strong>${escapeHtml(c.full_name)}</strong>${everything && c.archive_status ? ` <span class="pill">${escapeHtml(c.archive_status)}</span>` : ""}
       <span>${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))} · ${(byClient.get(c.id) || []).length} expediente(s)${offices.length > 1 ? " · " + escapeHtml(c.office_name || "") : ""}</span>
     </button></li>`).join("");
 }
@@ -752,7 +755,7 @@ async function changeClientState(id, to) {
   await api("PUT", `/clients/${id}/archive`, { status: to });
   toast(to ? `Cliente en ${to.toLowerCase()}.` : "Cliente devuelto a activos.");
   await loadClients();
-  if (location.hash === "#clientes" && (clientArchiveFilter() || "") !== to) state.selectedClientId = null; // it left this list
+  if (location.hash === "#clientes" && ![to, "todos"].includes(clientArchiveFilter() || "")) state.selectedClientId = null; // it left this list
   await refreshView();
   return true;
 }
