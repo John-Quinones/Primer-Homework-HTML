@@ -30,3 +30,5 @@ Leer primero; mapa para no releer todo (regla de John, 19/10/2026).
 - v2.2.38 (25/10/2026): el buscador `[data-party-pick]` ya NO excluye al cliente del expediente (`client_id`); al elegirlo fija `client_role` al primer rol de ese lado (como las casillas `#role-chips`) en vez de añadir una fila en `partyRows`.
 
 - Búsqueda de expedientes (v2.2.40): `renderCaseRows` exige que CADA palabra aparezca en algún campo (carpeta, número, cliente, documento del cliente, título, tipo, despacho, radicado, partes); con texto escrito incluye todos los estados (sin él, «Activos» oculta archivados como antes).
+
+- v2.2.41 (25/10/2026): botón «Eliminar» (`data-action="delete-case"`, `can("cases.delete")`) también en `caseCard` (ficha del cliente) y en la cabecera de la ficha del expediente (junto a «Editar»); antes solo estaba en `caseActionBar` (lista de Expedientes). El handler busca el expediente en `state.cases` o, si no está, con `GET /cases/:id`. Misma regla: `confirmDeletion` → bloquea con cobros/recibos y muestra el motivo.
