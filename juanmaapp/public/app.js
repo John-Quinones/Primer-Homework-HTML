@@ -1106,6 +1106,7 @@ async function renderExpedienteFicha(id) {
         <p class="ficha-sub">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span>${k.title ? ` · ${escapeHtml(k.title)}` : ""}</p></div>
       <div class="toolbar">
         ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+        ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}">Eliminar</button>` : ""}
         ${folderButton(k, "")}
         ${radicadoButton(k, "")}
         <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
@@ -1353,6 +1354,7 @@ function caseCard(k) {
       ${can("mail.send") ? `<button data-action="mail-case" data-case="${k.id}">Correo</button>` : ""}
       <button data-action="case-docs" data-id="${k.id}">Documentos</button>
       ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar borrador</button>` : ""}
+      ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}">Eliminar</button>` : ""}
     </div>
   </li>`;
 }
@@ -3042,7 +3044,7 @@ document.addEventListener("click", (e) => {
     "new-case": () => openCaseDialog(null, btn.dataset.client ? Number(btn.dataset.client) : state.selectedClientId),
     "edit-case": async () => openCaseDialog(await api("GET", `/cases/${id}`)),
     "delete-case": async () => {
-      const k = state.cases.find((x) => x.id === id);
+      const k = state.cases.find((x) => x.id === id) || await api("GET", `/cases/${id}`).catch(() => null);
       const which = k ? [caseFolder(k) && `carpeta ${caseFolder(k)}`, k.client_name, k.type_name].filter(Boolean).join(" · ") : "";
       if (!(await confirmDeletion("cases", id, "expediente", which && `(${which})`))) return;
       toast("Expediente eliminado. Quedó la copia de respaldo y el registro en la bitácora.");
