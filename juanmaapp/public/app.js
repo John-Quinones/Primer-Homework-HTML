@@ -2451,9 +2451,9 @@ partyBox.addEventListener("input", (e) => {
   if (!inp) return;
   const side = inp.dataset.partyPick, list = $(`[data-pick-list="${side}"]`, partyBox), q = pickFlat(inp.value);
   const mainId = Number(caseForm.elements.client_id.value);
-  const found = q ? clientsByFolder(activeClients(state.clients)).filter((c) => c.id !== mainId && pickText(c).includes(q)).slice(0, 8) : [];
+  const found = q ? clientsByFolder(activeClients(state.clients)).filter((c) => pickText(c).includes(q)).slice(0, 8) : [];
   list.hidden = !q;
-  list.innerHTML = found.length ? found.map((c) => `<li><button type="button" data-pick-client="${c.id}" data-pick-side="${side}"><strong>${escapeHtml(c.full_name)}</strong> <span class="muted">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</span></button></li>`).join("")
+  list.innerHTML = found.length ? found.map((c) => `<li><button type="button" data-pick-client="${c.id}" data-pick-side="${side}"><strong>${escapeHtml(c.full_name)}</strong> <span class="muted">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}${c.id === mainId ? " · cliente de este expediente" : ""}</span></button></li>`).join("")
     : `<li class="muted">Ningún cliente registrado coincide. Use «+ Agregar a mano».</li>`;
 });
 partyBox.addEventListener("click", (e) => {
@@ -2464,6 +2464,17 @@ partyBox.addEventListener("click", (e) => {
   const side = b.dataset.pickSide, cat = categoryOf(caseForm.elements.category_id.value);
   const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
   const role = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
+  if (c.id === Number(caseForm.elements.client_id.value)) {
+    // The case's own client goes to this side as «Nuestro cliente» (same as ticking the side above).
+    const sel = caseForm.elements.client_role;
+    if (role && ![...sel.options].some((o) => o.value === role)) sel.add(new Option(role, role));
+    sel.value = role;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    for (const el of $$("[data-party-pick]", partyBox)) el.value = "";
+    for (const el of $$("[data-pick-list]", partyBox)) el.hidden = true;
+    toast(`${c.full_name} quedó como ${role || "parte"} (nuestro cliente).`);
+    return;
+  }
   if (partyRows.some((p) => p.client_id === c.id)) { toast(`${c.full_name} ya está en las partes.`, true); return; }
   partyRows.push({ side, role, name: c.full_name, id_type: c.id_type || "", id_number: c.id_number || "", ours: true, client_id: c.id });
   for (const el of $$("[data-party-pick]", partyBox)) el.value = "";
