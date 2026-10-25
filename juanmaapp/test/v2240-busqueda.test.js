@@ -9,9 +9,9 @@ test("el buscador de clientes encuentra por nombre, apellido, orden distinto, ti
   for (const [q, by] of [["juan carlos", ""], ["gutiérrez", ""], ["URREA juan", ""], ["1.110.479.397", "doc"], ["urrea", "last"]]) assert.ok(clientMatches(c, q, by), q);
 });
 
-test("la pantalla busca en todos los estados cuando hay texto", () => {
+test("Clientes respeta el estado elegido y «Todos los estados» los lista todos", () => {
   const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
-  assert.match(app, /searching \? state\.clients : state\.clients\.filter/);
+  assert.match(app, /everything \? state\.clients : state\.clients\.filter/);
   assert.match(app, /\(!!q \|\| !ARCHIVED_STATUSES\.has\(k\.status\)\)/);
 });
 
