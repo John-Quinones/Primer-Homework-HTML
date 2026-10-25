@@ -180,6 +180,11 @@ const words = (s) => fold(s).split(/[^a-z0-9ñ]+/).filter(Boolean);
  * documents compare digits only ("14.296.116" finds 14296116).
  * by: "" (everything) | "first" | "last" | "doc" | "city" | "idplace" (place of issue of the ID card).
  */
+/** The client's additional phones as [{label, phone}] (stored as JSON text; bad or empty text gives []). */
+export function extraPhoneList(c) {
+  try { const l = JSON.parse(c?.extra_phones || "[]"); return Array.isArray(l) ? l.filter((x) => x && x.phone) : []; } catch { return []; }
+}
+
 export function clientMatches(c, q, by = "") {
   const text = String(q ?? "").trim();
   if (!text) return true;
@@ -187,7 +192,7 @@ export function clientMatches(c, q, by = "") {
   const docHit = digits.length >= 3 && String(c.id_number ?? "").replace(/\D/g, "").includes(digits);
   if (by === "doc") return docHit;
   const fields = { first: [c.first_names], last: [c.last_names], city: [c.city, c.department], idplace: [c.id_city, c.id_department] }[by]
-    || [c.full_name, c.first_names, c.last_names, c.legal_rep, c.city, c.email, c.phone];
+    || [c.full_name, c.first_names, c.last_names, c.legal_rep, c.city, c.email, c.phone, ...extraPhoneList(c).map((p) => p.phone)];
   const hay = words(fields.filter(Boolean).join(" ")).join(" ");
   const ok = words(text).every((w) => hay.split(" ").some((h) => h.startsWith(w)) || (w.length >= 4 && hay.includes(w)));
   return ok || (!by && docHit);

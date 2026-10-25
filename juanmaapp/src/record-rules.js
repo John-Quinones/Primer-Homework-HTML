@@ -39,7 +39,31 @@ export function clientValues(body, existing, lib) {
   v.affiliated = "affiliated" in body ? (body.affiliated ? 1 : 0) : existing.affiliated ? 1 : 0; // version 2.61
   v.address = lib.properAddress(v.address);
   v.phone = lib.properPhone(v.phone);
+  v.extra_phones = "extra_phones" in body ? extraPhones(body.extra_phones, lib, lib.fail) : str(existing.extra_phones);
   return v;
+}
+
+/** Version 2.2.39: more phone numbers of a client, each with an optional label («Esposa», «Trabajo»).
+ * Stored as JSON text [{label, phone}]; the main `phone` stays as is. Same format as the main phone, no repeats, up to 10. */
+export const MAX_EXTRA_PHONES = 10;
+export function extraPhones(value, lib, fail) {
+  let list = value;
+  if (typeof list === "string") {
+    if (!list.trim()) return "";
+    try { list = JSON.parse(list); } catch { fail("Los teléfonos adicionales no son válidos."); }
+  }
+  if (list == null || list === "") return "";
+  if (!Array.isArray(list)) fail("Los teléfonos adicionales no son válidos.");
+  const seen = new Set(), out = [];
+  for (const it of list) {
+    const phone = lib.properPhone(str(it?.phone)), label = str(it?.label).replace(/\s+/g, " ").slice(0, 40);
+    if (!phone) continue;
+    const key = phone.replace(/\D/g, "") || phone;
+    if (seen.has(key)) continue;
+    seen.add(key); out.push({ label, phone });
+  }
+  if (out.length > MAX_EXTRA_PHONES) fail(`Máximo ${MAX_EXTRA_PHONES} teléfonos adicionales.`);
+  return out.length ? JSON.stringify(out) : "";
 }
 
 // ----- Defaults (version 2.53, user's rule) -----

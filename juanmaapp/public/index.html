@@ -1059,6 +1059,11 @@
       <div class="grid2">
         <label>Correo electrónico <input name="email" type="email" /></label>
         <label>Teléfono <input name="phone" /></label>
+        <div class="span2" id="extra-phones-box">
+          <div id="extra-phones"></div>
+          <button type="button" class="mini" id="add-extra-phone">+ Agregar teléfono</button>
+          <p class="hint">Otros números del cliente (opcional): escriba el número y, si quiere, de quién es («Esposa», «Trabajo»). Quedan con el mismo formato del teléfono.</p>
+        </div>
         <label>Residencia: departamento <input name="department" class="combo" data-combo="dep" placeholder="Escriba: C… Caldas, Cesar…" autocomplete="off" /></label>
         <label>Residencia: ciudad o municipio <input name="city" class="combo" data-combo="city" data-dep="[name=department]" autocomplete="off" /></label>
         <label>Dirección <input name="address" /></label>

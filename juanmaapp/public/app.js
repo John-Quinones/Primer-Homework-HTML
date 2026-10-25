@@ -785,7 +785,7 @@ async function renderClientDetail() {
       ${row(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
       ${c.person_type === "juridica" ? "" : row("Cédula expedida en", idPlace(c) || "Sin indicar")}
       ${c.person_type === "juridica" ? row("Representante legal", c.legal_rep) : ""}
-      ${row("Correo", c.email || "Sin indicar")}${row("Teléfono", c.phone)}
+      ${row("Correo", c.email || "Sin indicar")}${row("Teléfono", c.phone)}${extraPhoneRows(c, row)}
       ${row("Dirección", c.address)}
       ${row("Residencia", residence(c) || "Sin indicar")}
       ${row("Afiliado", c.affiliated ? "Sí" : "No")}
@@ -839,7 +839,7 @@ async function renderClienteFicha(id) {
           ${factRow(c.person_type === "juridica" ? "NIT" : "Documento", c.person_type === "juridica" ? c.id_number : [c.id_type, c.id_number].filter(Boolean).join(" "))}
           ${c.person_type === "juridica" ? "" : factRow("Cédula expedida en", idPlace(c) || "Sin indicar")}
           ${c.person_type === "juridica" ? factRow("Representante legal", c.legal_rep) : ""}
-          ${factRow("Correo", c.email || "Sin indicar")}${factRow("Teléfono", c.phone)}${factRow("Dirección", c.address)}
+          ${factRow("Correo", c.email || "Sin indicar")}${factRow("Teléfono", c.phone)}${extraPhoneRows(c, factRow)}${factRow("Dirección", c.address)}
           ${factRow("Residencia", residence(c) || "Sin indicar")}${factRow("Afiliado", c.affiliated ? "Sí" : "No")}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
@@ -1607,7 +1607,7 @@ clientForm.addEventListener("change", (e) => { if (e.target.name === "person_typ
 // (JOHN or john → John; "clle 5 no 12b-30" → "Calle 5 No. 12B-30"; "3222531327" → "322 253 1327"). Cities and departments
 // take their DANE spelling in the type-ahead (IBAGUE → Ibagué). Company names stay as written.
 const PERSON_NAME_FIELDS = '[name=first_names], [name=last_names], [name=legal_rep], [name=typed_name], [data-form=user] [name=name], #setup-name, [data-p=name], #signer-rows [data-k=name]';
-const PHONE_FIELDS = '[name=phone], input[name=whatsapp]:not([type=checkbox]), #signer-rows [data-k=phone]';
+const PHONE_FIELDS = '[name=phone], input[name=whatsapp]:not([type=checkbox]), #signer-rows [data-k=phone], #extra-phones [data-k=phone]';
 document.addEventListener("focusout", (e) => {
   const el = e.target;
   if (!(el instanceof HTMLInputElement) || !el.value.trim()) return;
@@ -1843,8 +1843,23 @@ $("#my-signature-dialog").addEventListener("click", (e) => {
 
 /** Where the client's ID card was issued: «Ibagué (Tolima)» (version 2.56). */
 // «Ibagué · Tolima»: the client's place of residence (department and city of the client form).
+const extraPhoneRows = (c, rowFn) => window.JuanmaPerson.extraPhoneList(c).map((p) => rowFn(p.label ? `Teléfono (${p.label})` : "Otro teléfono", p.phone)).join("");
 function residence(c) { return [c.city, c.department].filter(Boolean).join(" · "); }
 function idPlace(c) { return window.JuanmaCaseMeta.idPlaceVariables(c)["cliente.expedicion"]; }
+
+// Version 2.2.39: more phone numbers of the client (label + number), added by hand in the client's window.
+function extraPhoneRow(v = {}) {
+  const d = document.createElement("div");
+  d.className = "extra-phone-row";
+  d.style.cssText = "display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem";
+  d.innerHTML = `<input data-k="label" maxlength="40" placeholder="De quién (ej. Esposa)" value="${escapeHtml(v.label || "")}" aria-label="De quién es el teléfono" style="flex:1" />
+    <input data-k="phone" type="tel" inputmode="tel" placeholder="Teléfono (ej. 300 123 4567)" value="${escapeHtml(v.phone || "")}" aria-label="Teléfono adicional" style="flex:1.2" />
+    <button type="button" class="mini" data-remove-phone aria-label="Quitar este teléfono">Quitar</button>`;
+  return d;
+}
+const extraPhonesOf = (form) => $$("#extra-phones .extra-phone-row", form).map((r) => ({ label: $("[data-k=label]", r).value.trim(), phone: $("[data-k=phone]", r).value.trim() })).filter((x) => x.phone);
+$("#add-extra-phone").addEventListener("click", () => { const r = extraPhoneRow(); $("#extra-phones").append(r); $("[data-k=phone]", r).focus(); });
+$("#extra-phones").addEventListener("click", (e) => { if (e.target.closest("[data-remove-phone]")) e.target.closest(".extra-phone-row").remove(); });
 
 function openClientDialog(c) {
   pendingPhoto = undefined;
@@ -1856,6 +1871,7 @@ function openClientDialog(c) {
     id_number: type === "natural" ? c.id_number : "",
   } : {});
   setPersonType(type);
+  $("#extra-phones").replaceChildren(...window.JuanmaPerson.extraPhoneList(c).map(extraPhoneRow));
   clientForm.elements.affiliated.checked = !!c?.affiliated;
   // Version 2.94: state of the client. «Archivo definitivo» (to or from) is only for Gerencia.
   const st = clientForm.elements.archive_status;
@@ -1869,6 +1885,7 @@ function openClientDialog(c) {
 wireDialog($("#client-dialog"), async (form) => {
   const { id, business_name, nit, ...data } = formData(form);
   data.affiliated = form.elements.affiliated.checked;
+  data.extra_phones = extraPhonesOf(form);
   if (data.person_type === "juridica") Object.assign(data, { full_name: business_name, id_number: nit, id_type: "NIT", first_names: "", last_names: "" });
   const wantedState = form.elements.archive_status.value, before = id ? state.clients.find((x) => x.id === Number(id))?.archive_status || "" : "";
   if (id && wantedState && wantedState !== before) {
