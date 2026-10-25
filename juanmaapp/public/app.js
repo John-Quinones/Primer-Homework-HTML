@@ -1872,7 +1872,7 @@ function openClientDialog(c) {
   const sel = $("#client-dialog [name=office_id]");
   sel.innerHTML = myOffices().map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join("");
   const type = c?.person_type || "natural";
-  openDialog($("#client-dialog"), c ? "Editar cliente" : "Nuevo cliente", c ? {
+  openDialog($("#client-dialog"), c ? `Editar cliente: ${c.full_name}` : "Nuevo cliente", c ? {
     ...c, business_name: type === "juridica" ? c.full_name : "", nit: type === "juridica" ? c.id_number : "",
     id_number: type === "natural" ? c.id_number : "",
   } : {});
@@ -1897,6 +1897,17 @@ wireDialog($("#client-dialog"), async (form) => {
   if (id && wantedState && wantedState !== before) {
     const open = (await api("GET", `/cases?clientId=${id}`)).filter((k) => k.status === "Activo").length;
     if (open && !(await ask({ title: `¿Enviar a ${wantedState.toLowerCase()}?`, message: `Tiene ${open} expediente(s) activo(s): no se tocan, siguen activos en Expedientes. No se borra nada.`, okLabel: "Archivar" }))) throw new Error("No se guardó: confirme el archivo del cliente o déjelo en activo.");
+  }
+  // Version 2.2.40: a name with no word in common with the saved one is almost always typing a DIFFERENT person over this
+  // client («Juan Carlos Gutierrez Urrea» became «John Montaña»), so ask before overwriting; nothing else changes.
+  if (id) {
+    const was = state.clients.find((x) => x.id === Number(id)) || await api("GET", `/clients/${id}`).catch(() => null);
+    const now = data.person_type === "juridica" ? data.full_name : `${data.first_names ?? ""} ${data.last_names ?? ""}`;
+    const bag = (t) => new Set(String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1));
+    const a = bag(was?.full_name), b = bag(now);
+    if (was?.full_name && a.size && b.size && ![...b].some((w) => a.has(w))) {
+      if (!(await ask({ title: "¿Cambiar el nombre de este cliente?", message: `Este cliente se llama «${was.full_name}» y lo va a guardar como «${String(now).trim()}», un nombre sin nada en común. Si es otra persona, cancele y use «+ Nuevo cliente».`, okLabel: "Sí, cambiar el nombre" }))) throw new Error("No se guardó: el nombre del cliente no cambió. Para otra persona use «+ Nuevo cliente».");
+    }
   }
   const saved = id ? await api("PUT", `/clients/${id}`, data) : await api("POST", "/clients", data);
   if (wantedState !== (saved.archive_status || "")) {

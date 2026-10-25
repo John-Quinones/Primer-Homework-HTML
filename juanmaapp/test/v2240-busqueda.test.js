@@ -14,3 +14,9 @@ test("la pantalla busca en todos los estados cuando hay texto", () => {
   assert.match(app, /searching \? state\.clients : state\.clients\.filter/);
   assert.match(app, /\(!!q \|\| !ARCHIVED_STATUSES\.has\(k\.status\)\)/);
 });
+
+test("editar un cliente con un nombre sin nada en común pide confirmación", () => {
+  const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+  assert.match(app, /¿Cambiar el nombre de este cliente\?/);
+  assert.match(app, /Editar cliente: \$\{c\.full_name\}/);
+});
