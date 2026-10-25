@@ -318,10 +318,15 @@
     if (!k || !inScope(k.office_id)) fail("El expediente no existe.");
     return k;
   };
+  const folderOf = (k) => {
+    const t = s.types.find((x) => x.id === k.process_type_id);
+    return s.fields.filter((f) => t && f.category_id === t.category_id && CM.isFolderLabel(f.label)).map((f) => String(k.field_values?.[f.id] ?? "").trim()).find(Boolean) || "";
+  };
   const clientDeletion = (id) => {
     const c = s.clients.find((x) => x.id === id && clientVisible(x)) || fail("El cliente no existe.");
     const n = (list) => list.filter((x) => x.client_id === id).length;
-    return RR.deletionPlan("client", { name: c.full_name, counts: { cases: n(s.cases), charges: n(s.charges), receipts: n(s.receipts) } });
+    const folders = s.cases.filter((k) => k.client_id === id).map((k) => folderOf(k) || `sin carpeta (#${k.id})`);
+    return RR.deletionPlan("client", { name: c.full_name, folders, counts: { cases: n(s.cases), charges: n(s.charges), receipts: n(s.receipts) } });
   };
   const caseDeletion = (id) => {
     const k = visibleCase(id);
@@ -1048,16 +1053,28 @@
       }
       return clientOut(c, true);
     }],
-    // Version 2.2.34: same rule as the server (RR.deletionPlan/checkDeletion). The link keeps what it deletes in deleteTrash
-    // (the copy that the server makes of its database).
+    // Version 2.2.34 / 2.2.42: same rule as the server (RR.deletionPlan/checkDeletion). The client goes with its cases, charges and
+    // receipts; the link keeps everything it deletes in deleteTrash (the copy that the server makes of its database).
     ["GET", /^\/clients\/(\d+)\/deletion$/, (m) => { need("clients.delete"); return clientDeletion(+m[1]); }],
     ["DELETE", /^\/clients\/(\d+)$/, (m, b) => {
       need("clients.delete");
-      RR.checkDeletion(clientDeletion(+m[1]), b.confirm, (t) => fail(t), (t) => fail(t));
-      s.deleteTrash.push({ at: stamp(), by: me().id, kind: "client", client: clone(s.clients.find((c) => c.id === +m[1])), photo: s.blobs[`photo-${m[1]}`] ?? null });
-      s.clients = s.clients.filter((c) => c.id !== +m[1]);
-      delete s.blobs[`photo-${m[1]}`];
-      for (const r of s.consents) if (r.client_id === +m[1]) r.client_id = null; // the evidence stays, with the name and document
+      const id = +m[1];
+      RR.checkDeletion(clientDeletion(id), b.confirm, (t) => fail(t), (t) => fail(t));
+      const caseIds = new Set(s.cases.filter((k) => k.client_id === id).map((k) => k.id));
+      const chargeIds = new Set(s.charges.filter((x) => x.client_id === id).map((x) => x.id));
+      s.deleteTrash.push({ at: stamp(), by: me().id, kind: "client", client: clone(s.clients.find((c) => c.id === id)), photo: s.blobs[`photo-${id}`] ?? null,
+        cases: clone(s.cases.filter((k) => caseIds.has(k.id))), tasks: clone(s.tasks.filter((t) => caseIds.has(t.case_id))), docs: clone(s.casedocs.filter((d) => caseIds.has(d.case_id))), // files stay in blobs
+        charges: clone(s.charges.filter((x) => x.client_id === id)), receipts: clone(s.receipts.filter((x) => x.client_id === id)),
+        reminders: clone(s.reminders.filter((x) => x.client_id === id || chargeIds.has(x.charge_id))) });
+      s.receipts = s.receipts.filter((x) => x.client_id !== id);
+      s.reminders = s.reminders.filter((x) => !(x.client_id === id || chargeIds.has(x.charge_id)));
+      s.charges = s.charges.filter((x) => x.client_id !== id);
+      s.casedocs = s.casedocs.filter((d) => !caseIds.has(d.case_id));
+      s.tasks = s.tasks.filter((t) => !caseIds.has(t.case_id));
+      s.cases = s.cases.filter((k) => k.client_id !== id);
+      s.clients = s.clients.filter((c) => c.id !== id);
+      delete s.blobs[`photo-${id}`];
+      for (const r of s.consents) if (r.client_id === id) r.client_id = null; // the evidence stays, with the name and document
       return null;
     }],
 

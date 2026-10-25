@@ -604,7 +604,7 @@ async function confirmDeletion(collection, id, noun, which) {
     return false;
   }
   const typed = await ask({ title: `¿Eliminar ${noun}?`, input: "", okLabel: "Eliminar", danger: true,
-    message: `Se eliminará el ${noun} ${which} con todos sus datos. Antes se hace una copia de respaldo y queda en la bitácora. Esta acción no se puede deshacer desde la App.\nPara confirmar escriba exactamente: ${plan.expected}` });
+    message: `Se eliminará el ${noun} ${which} con todos sus datos.${plan.detail ? ` ${plan.detail}` : ""} Antes se hace una copia de respaldo y queda en la bitácora. Esta acción no se puede deshacer desde la App.\nPara confirmar escriba exactamente: ${plan.expected}` });
   if (!typed) return false;
   await api("DELETE", `/${collection}/${id}`, { confirm: typed });
   return true;

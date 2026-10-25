@@ -44,18 +44,22 @@ test("case: refuses without the typed folder, deletes with it; client deletes af
     r.push((await call("GET", `/clients/${client.id}`)).status);
     return r;
   });
-  assert.deepEqual(out, [{ expected: "77", blockers: [] }, 400, 400, 1, 409, 204, 204, 404]);
+  assert.deepEqual(out, [{ expected: "77", blockers: [] }, 400, 400, 0, 204, 404, 404, 404]);
 });
 
-test("charges or receipts block deleting the client and the case", async () => {
+test("charges or receipts block deleting the case; the client goes with everything (2.2.42)", async () => {
   const out = await same(async (call) => {
     const { client, k } = await setup(call, "Bea Cobros");
-    await call("POST", "/payments/charges", { client_id: client.id, case_id: k.id, concept: "Honorarios", amount: 100000, due_date: "2026-12-01" });
+    const ch = (await call("POST", "/payments/charges", { client_id: client.id, case_id: k.id, concept: "Honorarios", amount: 100000, due_date: "2026-12-01" })).body;
+    await call("POST", "/payments/receipts", { client_id: client.id, charge_id: ch.id, amount: 50000, method: "Efectivo", paid_on: "2026-10-01" });
     const c = await call("DELETE", `/cases/${k.id}`, { confirm: "77" });
+    const plan = (await call("GET", `/clients/${client.id}/deletion`)).body;
+    const bad = await call("DELETE", `/clients/${client.id}`, { confirm: "otro" });
     const l = await call("DELETE", `/clients/${client.id}`, { confirm: "Bea Cobros" });
-    return [c.status, /1 cobro/.test(c.body.error), l.status, /1 expediente/.test(l.body.error)];
+    return [c.status, /1 cobro/.test(c.body.error), plan.blockers.length, /1 expediente, 1 cobro, 1 recibo \(carpetas: 77\)/.test(plan.detail), bad.status, l.status,
+      (await call("GET", `/clients/${client.id}`)).status, (await call("GET", `/cases/${k.id}`)).status];
   });
-  assert.deepEqual(out, [409, true, 409, true]);
+  assert.deepEqual(out, [409, true, 0, true, 400, 204, 404, 404]);
 });
 
 test("server: copy before deleting and a log entry keeping the data", async () => {
@@ -67,4 +71,15 @@ test("server: copy before deleting and a log entry keeping the data", async () =
   assert.match(log[0].summary, /Eva Bitacora/);
   assert.match(log[0].changes, /Eva Bitacora/);
   assert.match(log[1].changes, /Caso/);
+});
+
+test("server: deleting a client with money leaves the log with every record and nothing behind", async () => {
+  const call = sides.server;
+  const { client, k } = await setup(call, "Flor Cascada");
+  const ch = (await call("POST", "/payments/charges", { client_id: client.id, case_id: k.id, concept: "Cuota", amount: 1000, due_date: "2026-12-01" })).body;
+  await call("POST", "/payments/receipts", { client_id: client.id, charge_id: ch.id, amount: 500, method: "Efectivo", paid_on: "2026-10-01" });
+  assert.equal((await call("DELETE", `/clients/${client.id}`, { confirm: "Flor Cascada" })).status, 204);
+  const log = srv.db.prepare("SELECT changes FROM audit_log WHERE action = 'Eliminó' ORDER BY id DESC LIMIT 1").get().changes;
+  assert.match(log, /Expediente eliminado/); assert.match(log, /Cobro eliminado/); assert.match(log, /Recibo eliminado/);
+  for (const t of ["cases", "charges", "receipts"]) assert.equal(srv.db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE client_id = ?`).get(client.id).n, 0);
 });

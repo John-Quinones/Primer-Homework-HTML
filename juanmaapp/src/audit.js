@@ -100,7 +100,7 @@ export function auditMiddleware(db) {
       audit(db, req, {
         action: verb, module: t.module, entity: t.entity, record_id: record, case_id: caseId, ok,
         summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}${extra ? ` (${{ void: "anulación", cancel: "cancelación", resend: "reenvío", invite: "invitación", monitor: "consulta automática", documents: "documento", folder: "número de carpeta", photo: "foto", archive: "archivo del cliente", radicado: "radicado", number: "número de expediente" }[extra]})` : ""}`,
-        changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : ok && req.method === "DELETE" && before ? auditDeleted(before) : [],
+        changes: req.method === "PUT" || req.method === "PATCH" ? auditDiff(before, after) : ok && req.method === "DELETE" && before ? [...auditDeleted(before), ...(res.locals?.auditExtra || [])] : [],
       });
     });
     next();
