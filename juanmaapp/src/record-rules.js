@@ -224,21 +224,23 @@ export function radicadoChange(cur, body, lib) {
 }
 
 // ---------- Deleting a client or a case (version 2.2.34, user's request 23/10/2026; Gerencia only) ----------
-// One rule for the server and the published link. Money is never lost with a record: a client with cases,
-// charges or receipts, and a case with charges or receipts, is refused with the numbers. To delete one,
-// the user types the client's name / the case's folder number; the callers make a copy first.
+// One rule for the server and the published link. A case with charges or receipts is refused with the numbers;
+// a client is deleted with everything it has (2.2.42). To delete one, the user types the client's name / the
+// case's folder number; the callers make a full copy first.
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const keyOf = (s) => str(s).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").toLowerCase();
 
 /** kind "client": counts { cases, charges, receipts }, name; kind "case": counts { charges, receipts }, folder/radicado.
  *  Returns { expected, blockers[] }: the text to type and the reasons that forbid the deletion. */
-export function deletionPlan(kind, { name = "", folder = "", radicado = "", counts }) {
+export function deletionPlan(kind, { name = "", folder = "", radicado = "", counts, folders = [] }) {
   const blockers = [];
   if (kind === "client") {
+    // Version 2.2.42 (user's request 25/10/2026): Gerencia may delete a client together with its cases, charges and receipts.
+    // Nothing blocks; `detail` lists exactly what goes, and the callers make a full copy first so it can be restored.
     const parts = [counts.cases && plural(counts.cases, "expediente", "expedientes"), counts.charges && plural(counts.charges, "cobro", "cobros"), counts.receipts && plural(counts.receipts, "recibo", "recibos")].filter(Boolean);
-    if (parts.length) blockers.push(`Tiene ${parts.join(", ")}. Un cliente con expedientes, cobros o recibos no se elimina: sus datos y su dinero no se pierden.`);
-    return { expected: str(name), blockers };
+    const detail = parts.length ? `Se eliminarán también: ${parts.join(", ")}${folders.length ? ` (carpetas: ${folders.join(", ")})` : ""}.` : "";
+    return { expected: str(name), blockers, detail, counts };
   }
   const parts = [counts.charges && plural(counts.charges, "cobro", "cobros"), counts.receipts && plural(counts.receipts, "recibo", "recibos")].filter(Boolean);
   if (parts.length) blockers.push(`Tiene ${parts.join(" y ")}. Un expediente con cobros o recibos no se elimina: el dinero registrado no se pierde con el expediente.`);

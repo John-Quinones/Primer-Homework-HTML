@@ -68,8 +68,8 @@ test("cases link a client to a sub-process and enforce required fields", async (
   assert.deepEqual(k.body.field_values, { [field.id]: "Juzgado 5 Laboral" });
 
   assert.equal((await call("GET", `/cases?clientId=${client.id}`)).body.length, 1);
-  // A client or sub-process with cases cannot be deleted.
-  assert.equal((await call("DELETE", `/clients/${client.id}`)).status, 409);
+  // A sub-process with cases cannot be deleted; a client with cases needs its typed name (2.2.42: then it goes with them).
+  assert.equal((await call("DELETE", `/clients/${client.id}`)).status, 400);
   assert.equal((await call("DELETE", `/types/${typeId}`)).status, 409);
 
   assert.equal((await call("DELETE", `/cases/${k.body.id}`, { confirm: "ELIMINAR" })).status, 204);

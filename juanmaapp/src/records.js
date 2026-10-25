@@ -162,19 +162,42 @@ export function recordsRouter(db) {
     return getClient(req, id);
   }));
 
-  // Version 2.2.34: deleting needs Gerencia, the typed name, no cases/charges/receipts, and a copy of the database first.
+  // Version 2.2.34 / 2.2.42: deleting needs Gerencia, the typed name and a full copy of the database first. A client goes
+  // with its cases, charges and receipts (all in one transaction); the log keeps what was deleted.
   const clientPlan = (req, id) => {
     const c = getClient(req, id);
     const n = (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE client_id = ?`).get(id).n;
-    return deletionPlan("client", { name: c.full_name, counts: { cases: n("cases"), charges: n("charges"), receipts: n("receipts") } });
+    const folders = [];
+    for (const { id: caseId } of db.prepare("SELECT id FROM cases WHERE client_id = ? ORDER BY id").all(id)) {
+      try {
+        const k = getCase(req, caseId);
+        const f = db.prepare("SELECT id, label FROM custom_fields WHERE category_id = ?").all(k.category_id)
+          .filter((x) => isFolderLabel(x.label)).map((x) => String(k.field_values?.[x.id] ?? "").trim()).find(Boolean);
+        folders.push(f || `sin carpeta (#${caseId})`);
+      } catch { folders.push(`#${caseId}`); }
+    }
+    return deletionPlan("client", { name: c.full_name, folders, counts: { cases: n("cases"), charges: n("charges"), receipts: n("receipts") } });
   };
   r.get("/clients/:id/deletion", h((req) => { checkPerm(req, "clients.delete"); return clientPlan(req, toInt(req.params.id, "id")); }));
   r.delete("/clients/:id", h((req, res) => {
     checkPerm(req, "clients.delete");
     const id = toInt(req.params.id, "id");
-    checkDeletion(clientPlan(req, id), req.body?.confirm, (m) => { throw new HttpError(409, m); }, (m) => { throw new HttpError(400, m); });
+    const plan = clientPlan(req, id);
+    checkDeletion(plan, req.body?.confirm, (m) => { throw new HttpError(409, m); }, (m) => { throw new HttpError(400, m); });
     backupBeforeReceiptDelete(db, "antes-de-borrar-cliente");
-    db.prepare("DELETE FROM clients WHERE id = ?").run(id);
+    const rows = (t) => db.prepare(`SELECT * FROM ${t} WHERE client_id = ?`).all(id);
+    const gone = [
+      ...rows("cases").map((k) => ({ field: "case", label: "Expediente eliminado", before: `#${k.id} ${k.title}`.slice(0, 300), after: "(eliminado)" })),
+      ...rows("charges").map((x) => ({ field: "charge", label: "Cobro eliminado", before: `#${x.id} ${x.concept} $${x.amount} (${x.status})`.slice(0, 300), after: "(eliminado)" })),
+      ...rows("receipts").map((x) => ({ field: "receipt", label: "Recibo eliminado", before: `N.º ${x.number} $${x.amount} ${x.paid_on}${x.voided_at ? " (anulado)" : ""}`.slice(0, 300), after: "(eliminado)" })),
+    ];
+    db.exec("BEGIN");
+    try {
+      for (const t of ["receipts", "charges", "cases"]) db.prepare(`DELETE FROM ${t} WHERE client_id = ?`).run(id);
+      db.prepare("DELETE FROM clients WHERE id = ?").run(id);
+      db.exec("COMMIT");
+    } catch (err) { db.exec("ROLLBACK"); throw err; }
+    res.locals.auditExtra = gone;
     res.status(204).end();
   }));
 
