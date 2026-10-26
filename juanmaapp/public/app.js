@@ -5059,10 +5059,12 @@ function feeChecklist(vals) {
     <input type="hidden" data-var="${FEE.tipo}" value="${escapeHtml(tipo)}" />
     <label data-fee-field="fijo" ${show("fijo") ? "" : "hidden"}>Valor de los honorarios (solo números)
       <input data-var="${FEE.fijo}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.fijo] ?? "")}" placeholder="Ej. 2000000" class="${vals[FEE.fijo] && L.pesosFromText(vals[FEE.fijo]) ? "" : "missing"}" />
-      <span class="muted" data-fee-preview="fijo">${escapeHtml(preview("honorarios.fijo"))}</span></label>
+      <span class="muted" data-fee-preview="fijo">${escapeHtml(preview("honorarios.fijo"))}</span>
+      <span class="muted" data-fee-places="fijo">${escapeHtml(L.placeValues(L.pesosFromText(vals[FEE.fijo])))}</span></label>
     <label data-fee-field="litis" ${show("litis") ? "" : "hidden"}>Cuota de litis (valor en números o porcentaje, ej. 35%)
       <input data-var="${FEE.litis}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.litis] ?? "")}" placeholder="Ej. 5000000 o 35%" class="${vals[FEE.litis] ? "" : "missing"}" />
-      <span class="muted" data-fee-preview="litis">${escapeHtml(preview("honorarios.litis_valor") || preview("honorarios.litis_porcentaje"))}</span></label>
+      <span class="muted" data-fee-preview="litis">${escapeHtml(preview("honorarios.litis_valor") || preview("honorarios.litis_porcentaje"))}</span>
+      <span class="muted" data-fee-places="litis">${escapeHtml(/%|por\s*ciento/i.test(vals[FEE.litis] ?? "") ? "" : L.placeValues(L.pesosFromText(vals[FEE.litis])))}</span></label>
     ${tipo ? "" : '<p class="muted">Marque una opción para que el contrato lleve los honorarios.</p>'}
   </fieldset>`;
 }
@@ -5125,6 +5127,31 @@ $("#tpl-vars").addEventListener("input", (e) => {
   if (i.tagName === "SELECT") renderTplVars();
 });
 // Checklist of the fees: one box at a time (Mixto = both); typed numbers are shown as $ with dots when the box is left.
+// Version 2.2.49 (John: «los valores deben ir mostrando unidades, decenas, centenas»): while the amount is typed the box puts the
+// thousands dots (1.000.000), and under it the number in words and its place values appear at once.
+$("#tpl-vars").addEventListener("input", (e) => {
+  const money = e.target.closest("[data-fee-money]");
+  if (!money) return;
+  const key = money.dataset.var, raw = money.value;
+  const percent = key === FEE.litis && /[%a-z]/i.test(raw);
+  if (percent) money.value = raw.replace(/\$/g, "");
+  else {
+    const caret = money.selectionStart ?? raw.length;
+    const digitsBefore = raw.slice(0, caret).replace(/\D/g, "").length;
+    const digits = raw.replace(/\D/g, "");
+    money.value = digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+    let at = 0, seen = 0;
+    while (at < money.value.length && seen < digitsBefore) if (/\d/.test(money.value[at++])) seen++;
+    money.setSelectionRange(at, at);
+  }
+  tplOverrides[key] = money.value.trim();
+  const vals = tplValues(), t = L.feeTerms(vals[FEE.tipo], vals[FEE.fijo], vals[FEE.litis]);
+  const kind = key === FEE.fijo ? "fijo" : "litis", said = kind === "fijo" ? t["honorarios.fijo"] : t["honorarios.litis_valor"] || t["honorarios.litis_porcentaje"];
+  $(`[data-fee-preview="${kind}"]`, $("#tpl-vars")).textContent = said ? `En el contrato: ${said}` : "";
+  $(`[data-fee-places="${kind}"]`, $("#tpl-vars")).textContent = percent ? "" : L.placeValues(L.pesosFromText(money.value));
+  money.classList.toggle("missing", !(percent ? money.value.trim() : L.pesosFromText(money.value)));
+  if (!$("#tpl-edit-mode").checked) renderTplDoc();
+});
 $("#tpl-vars").addEventListener("change", (e) => {
   const obj = e.target.closest("[data-pick]");
   if (obj) {
