@@ -564,6 +564,18 @@ export function normGender(v) {
  * «Proceso Ordinario Laboral de Primera Instancia. Radicación No. 73001…». Penal cases leave all three empty
  * (not every poder is for a criminal case), so the passage is left out.
  */
+/**
+ * Version 2.2.62 (user: «radicado y número de expediente es lo mismo»): a Word that asks for the radicado as a loose case field
+ * ({{campo.Radicado}}, {{campo.Número de expediente}}…) gets the case's number when that field is empty or does not exist.
+ * Writes into `v` only the keys still empty, so a value typed in a real field always wins.
+ */
+const RADICADO_ALIASES = ["Radicado", "Radicación", "Número de radicado", "Número de expediente", "Radicado del proceso", "Radicado del expediente", "Número del expediente", "No. de radicado", "No. Radicado", "Número de proceso"];
+export function fillRadicadoAliases(v, numero) {
+  const n = String(numero || "").trim();
+  if (!n) return v;
+  for (const a of RADICADO_ALIASES) if (!String(v[`campo.${a}`] ?? "").trim()) v[`campo.${a}`] = n;
+  return v;
+}
 export function processVariables(category, area, typeName, radicado) {
   const penal = /penal/i.test(`${category || ""} ${area || ""}`);
   const clase = penal ? "" : String(typeName || "").replace(/\s*›\s*/g, " ").trim();

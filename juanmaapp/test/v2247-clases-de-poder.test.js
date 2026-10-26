@@ -205,3 +205,18 @@ test("{{expediente.demandados|líneas}}: each defendant entity with its document
   const out = await filled(tplw, { "expediente.demandados": counterpartyLines([P("pasiva", "Colpensiones", "NIT", "900.336.004-7"), P("pasiva", "Empresa S.A.S.", "NIT", "800.1")]) });
   assert.match(out.lines[1], /^Colpensiones \(NIT 900\.336\.004-7\)\s*\nEmpresa S\.A\.S\. \(NIT 800\.1\)$/);
 });
+
+test("{{campo.Radicado}} (and similar loose fields) fall back to the case's radicado; expediente.radicado to the case number", async () => {
+  const out = await same(async (call) => {
+    const cl = (await call("POST", "/clients", { full_name: "Cliente Radicado", id_number: "7003" })).body;
+    const cat = (await call("GET", "/catalog")).body.categories?.[0] ?? (await call("GET", "/catalog")).body[0];
+    const type = cat.types?.[0] ?? cat.children?.[0];
+    const k = (await call("POST", "/cases", { client_id: cl.id, process_type_id: type.id, title: "Caso radicado", radicado: "73001400300820240002900" })).body;
+    const d = (await call("GET", `/templates/data?caseId=${k.id}`)).body;
+    return { numero: d["expediente.numero"], radicado: d["expediente.radicado"], campo: d["campo.Radicado"], exp: d["campo.Número de expediente"] };
+  });
+  assert.equal(out.numero, "73-001-40-03-008-2024-00029-00");
+  assert.equal(out.radicado, out.numero);
+  assert.equal(out.campo, out.numero);
+  assert.equal(out.exp, out.numero);
+});
