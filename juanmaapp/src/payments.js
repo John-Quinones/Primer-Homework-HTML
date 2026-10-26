@@ -7,8 +7,9 @@ import { scopeOf } from "./auth.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 import { bogota } from "./monitor.js";
 import { backupBeforeReceiptDelete } from "./backup.js";
+import { checkDeletion, receiptDeletionPlan, chargeDeletionPlan } from "./record-rules.js";
 import { METHODS, AGING, STATE_LABELS, applyPayments, portfolio, clientRows, reminderMessage, splitAmount, addMonths, addDays, fmtCOP,
-  RECEIPT_START, nextReceiptNumber, receiptLabel, collectionWindow } from "./ledger.js";
+  RECEIPT_START, balanceEffect, nextReceiptNumber, receiptLabel, collectionWindow } from "./ledger.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (v) => (typeof v === "number" ? Math.round(v) : Number(String(v ?? "").replace(/[^\d]/g, "")));
@@ -35,6 +36,17 @@ const officeSql = (user, col) => {
   const sc = scopeOf(user);
   return sc === null ? "1 = 1" : sc.length ? `${col} IN (${sc.map(Number).join(",")})` : "0 = 1";
 };
+
+// Version 2.2.70: a receipt number, once issued, is never issued again, even if the receipt is deleted. The highest number ever
+// issued is kept in settings (receipt_issued); every deletion calls noteIssuedReceipts first, and the next number goes past it.
+export function noteIssuedReceipts(db) {
+  const top = Math.max(db.prepare("SELECT MAX(number) AS n FROM receipts").get().n || 0,
+    Number(db.prepare("SELECT value FROM settings WHERE key = 'receipt_issued'").get()?.value) || 0);
+  if (top) db.prepare("INSERT INTO settings (key, value) VALUES ('receipt_issued', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(top));
+  return top;
+}
+const issuedTop = (db) => Math.max(db.prepare("SELECT MAX(number) AS n FROM receipts").get().n || 0,
+  Number(db.prepare("SELECT value FROM settings WHERE key = 'receipt_issued'").get()?.value) || 0);
 
 /** Charges and receipts the user can see, with balances computed. */
 export function loadLedger(db, user, { clientId = null, officeId = null } = {}, now = new Date()) {
@@ -275,7 +287,7 @@ export function paymentsRouter(db) {
     const concept = str(b.concept) || (charge ? [charge.concept, charge.plan_label].filter(Boolean).join(" · ") : "Abono a cuenta");
     db.exec("BEGIN IMMEDIATE");
     try {
-      const number = nextReceiptNumber(db.prepare("SELECT MAX(number) AS n FROM receipts").get().n, paymentSettings(db).receipt_start);
+      const number = nextReceiptNumber(issuedTop(db), paymentSettings(db).receipt_start);
       const id = db.prepare(`INSERT INTO receipts (number, client_id, charge_id, case_id, office_id, amount, method, reference, paid_on, concept, notes, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(number, client.id, charge?.id ?? null, caseId, officeId, amount, b.method, str(b.reference),
         paidOn, concept, str(b.notes), req.user.id).lastInsertRowid;
@@ -294,15 +306,62 @@ export function paymentsRouter(db) {
     return { ok: true };
   }));
 
-  // Version 2.58: a receipt is never lost. Only Gerencia deletes one (the DELETE gate in requireAuth), after a copy of the database,
-  // and its Word/PDF saved in the case go with it.
+  // Version 2.58 / 2.2.70: a receipt or a charge is deleted only by Gerencia (the DELETE gate in requireAuth), who types the confirmation,
+  // after a full copy of the database. The window (GET .../deletion) says what goes and what happens to the client's balance; the
+  // audit log keeps one line per deleted record. A deleted receipt number is never issued again.
+  const effectOf = (clientId, dropCharges, dropReceipts) => balanceEffect(
+    db.prepare("SELECT * FROM charges WHERE client_id = ?").all(clientId).map((x) => ({ ...x })),
+    db.prepare("SELECT * FROM receipts WHERE client_id = ?").all(clientId).map((x) => ({ ...x })), clientId, dropCharges, dropReceipts, today());
+  const receiptRow = (req, id) => db.prepare(`SELECT * FROM receipts WHERE id = ? AND ${officeSql(req.user, "office_id")}`).get(id)
+    || (() => { throw new HttpError(404, "El recibo no existe."); })();
+  const fail = (code) => (m) => { throw new HttpError(code, m); };
+  const adminOnly = (req, what) => { if (req.user.role !== "Gerencia") throw new HttpError(403, `Solo Gerencia puede eliminar ${what}.`); };
+
+  const receiptPlan = (req, id) => {
+    const x = receiptRow(req, id);
+    const docs = db.prepare("SELECT COUNT(*) AS n FROM case_documents WHERE kind = 'recibo' AND receipt_id = ?").get(x.id).n;
+    return receiptDeletionPlan(x, docs, effectOf(x.client_id, [], [x.id]));
+  };
+  r.get("/receipts/:id/deletion", h((req) => { adminOnly(req, "un recibo"); return receiptPlan(req, Number(req.params.id)); }));
   r.delete("/receipts/:id", h((req, res) => {
-    if (req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia puede eliminar un recibo.");
-    const x = db.prepare(`SELECT * FROM receipts WHERE id = ? AND ${officeSql(req.user, "office_id")}`).get(Number(req.params.id));
-    if (!x) throw new HttpError(404, "El recibo no existe.");
+    adminOnly(req, "un recibo");
+    const x = receiptRow(req, Number(req.params.id));
+    checkDeletion(receiptPlan(req, x.id), req.body?.confirm, fail(409), fail(400));
     backupBeforeReceiptDelete(db);
+    noteIssuedReceipts(db);
     db.prepare("DELETE FROM case_documents WHERE kind = 'recibo' AND receipt_id = ?").run(x.id);
     db.prepare("DELETE FROM receipts WHERE id = ?").run(x.id);
+    res.status(204).end();
+  }));
+
+  // A charge goes with its receipts (a receipt tied to a charge that no longer exists would be an orphan), its reminders and the
+  // Word/PDF of those receipts. The window lists every receipt that goes and the client's balance before and after.
+  const chargePlan = (req, id) => {
+    const c = getCharge(req, id);
+    const rs = db.prepare("SELECT * FROM receipts WHERE charge_id = ? ORDER BY number").all(c.id).map((x) => ({ ...x }));
+    const reminders = db.prepare("SELECT COUNT(*) AS n FROM payment_reminders WHERE charge_id = ?").get(c.id).n;
+    return chargeDeletionPlan(c, rs, reminders, effectOf(c.client_id, [c.id], rs.map((x) => x.id)));
+  };
+  r.get("/charges/:id/deletion", h((req) => { adminOnly(req, "un cobro"); return chargePlan(req, Number(req.params.id)); }));
+  r.delete("/charges/:id", h((req, res) => {
+    adminOnly(req, "un cobro");
+    const c = getCharge(req, Number(req.params.id));
+    const plan = chargePlan(req, c.id);
+    checkDeletion(plan, req.body?.confirm, fail(409), fail(400));
+    backupBeforeReceiptDelete(db, "antes-de-borrar-cobro");
+    noteIssuedReceipts(db);
+    const rs = db.prepare("SELECT * FROM receipts WHERE charge_id = ?").all(c.id);
+    db.exec("BEGIN");
+    try {
+      for (const x of rs) {
+        db.prepare("DELETE FROM case_documents WHERE kind = 'recibo' AND receipt_id = ?").run(x.id);
+        db.prepare("DELETE FROM receipts WHERE id = ?").run(x.id);
+      }
+      db.prepare("DELETE FROM payment_reminders WHERE charge_id = ?").run(c.id);
+      db.prepare("DELETE FROM charges WHERE id = ?").run(c.id);
+      db.exec("COMMIT");
+    } catch (err) { db.exec("ROLLBACK"); throw err; }
+    res.locals.auditExtra = rs.map((x) => ({ field: "receipt", label: "Recibo eliminado", before: `N.º ${x.number} $${x.amount} ${x.paid_on}${x.voided_at ? " (anulado)" : ""}`.slice(0, 300), after: "(eliminado)" }));
     res.status(204).end();
   }));
 
@@ -313,7 +372,7 @@ export function paymentsRouter(db) {
 
   r.get("/settings", h(() => {
     const v = paymentSettings(db);
-    return { ...v, receipt_next: nextReceiptNumber(db.prepare("SELECT MAX(number) AS n FROM receipts").get().n, v.receipt_start) };
+    return { ...v, receipt_next: nextReceiptNumber(issuedTop(db), v.receipt_start) };
   }));
   r.put("/settings", h((req) => {
     const b = req.body ?? {};

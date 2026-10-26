@@ -272,6 +272,28 @@ export function deletionPlan(kind, { name = "", folder = "", radicado = "", coun
   return { expected: str(folder) || str(radicado) || "ELIMINAR", blockers };
 }
 
+// Version 2.2.70: deleting from the cartera module (Gerencia only). The text says exactly what goes and what happens to the balance.
+const cop = (n) => `$${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+const effectText = (e) => `Saldo pendiente del cliente: ${cop(e.before.balance)} → ${cop(e.after.balance)}`
+  + (e.before.credit || e.after.credit ? `; saldo a favor: ${cop(e.before.credit)} → ${cop(e.after.credit)}` : "") + ".";
+const receiptLine = (x) => `Recibo N.º ${x.number} por ${cop(x.amount)} del ${x.paid_on}${x.voided_at ? " (anulado)" : ""}`;
+
+/** x: the receipt; docs: how many Word/PDF copies of it are saved in cases; effect: from ledger.balanceEffect. */
+export function receiptDeletionPlan(x, docs, effect) {
+  const detail = [`Se eliminará el ${receiptLine(x)}.`, docs ? `También se borran su Word/PDF guardados en el expediente (${docs}).` : "",
+    x.voided_at ? "Está anulado: no cambia el saldo." : effectText(effect), `El número N.º ${x.number} no se vuelve a usar.`].filter(Boolean).join(" ");
+  return { expected: String(x.number), blockers: [], detail, effect };
+}
+
+/** A charge goes with its receipts and reminders (nothing is left tied to a charge that no longer exists). */
+export function chargeDeletionPlan(c, receipts, reminders, effect) {
+  const detail = [`Se eliminará el cobro «${c.concept}${c.plan_label ? ` · ${c.plan_label}` : ""}» por ${cop(c.amount)}, vence ${c.due_date}${c.status === "anulado" ? " (anulado)" : ""}.`,
+    receipts.length ? `Se eliminan también ${receipts.length === 1 ? "su recibo" : `sus ${receipts.length} recibos`}: ${receipts.map(receiptLine).join("; ")} (y su Word/PDF del expediente).` : "No tiene recibos.",
+    reminders ? `Y ${reminders} recordatorio${reminders === 1 ? "" : "s"} de pago.` : "", effectText(effect),
+    receipts.length ? `Los números de recibo (${receipts.map((x) => x.number).join(", ")}) no se vuelven a usar.` : ""].filter(Boolean).join(" ");
+  return { expected: "ELIMINAR", blockers: [], detail, effect, receipts: receipts.map((x) => x.id) };
+}
+
 /** Throws (409) for a blocker, (400) when the typed text is not the expected one. */
 export function checkDeletion(plan, confirm, fail409, fail400) {
   if (plan.blockers.length) fail409(`No se eliminó. ${plan.blockers.join(" ")}`);

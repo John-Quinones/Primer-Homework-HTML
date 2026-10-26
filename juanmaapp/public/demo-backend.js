@@ -263,6 +263,7 @@
       summary: "", changes: [], ok: true, ip: "", device: d.kind, device_detail: d.detail, user_agent: navigator.userAgent.slice(0, 300), ...entry });
     if (s.audit.length > AUDIT_MAX) s.audit.splice(0, s.audit.length - AUDIT_MAX);
   }
+  let auditExtraNext = []; // 2.2.70: extra «deleted» lines a handler leaves for the entry that is about to be logged (like res.locals.auditExtra)
   function auditChange(method, path, body, out, snap, ok = true) {
     const t = CM.auditTarget(path);
     const after = ok && snap && method !== "DELETE" ? (s[snap.coll] || []).find((x) => x.id === snap.id) : null;
@@ -271,7 +272,7 @@
     const name = auditName(after) || auditName(snap?.before) || auditName(created) || "";
     const verb = ok ? CM.auditVerb(method, path) : "Intentó (sin permiso)";
     auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
-      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : ok && method === "DELETE" ? CM.auditDeleted(snap?.before) : [] });
+      summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : ok && method === "DELETE" ? [...CM.auditDeleted(snap?.before), ...auditExtraNext.splice(0)] : [] });
   }
   // Lists of «Objetos contractuales» (kind contrato) and «Clases de poder» (kind poder) share one store; rows from 2.2.46 have no kind = contrato.
   const kindOf = (o) => o.kind || "contrato";
@@ -1151,6 +1152,7 @@
       need("clients.delete");
       const id = +m[1];
       RR.checkDeletion(clientDeletion(id), b.confirm, (t) => fail(t), (t) => fail(t));
+      noteIssued(); // 2.2.70: receipt numbers of this client are never issued again
       const caseIds = new Set(s.cases.filter((k) => k.client_id === id).map((k) => k.id));
       const chargeIds = new Set(s.charges.filter((x) => x.client_id === id).map((x) => x.id));
       s.deleteTrash.push({ at: stamp(), by: me().id, kind: "client", client: clone(s.clients.find((c) => c.id === id)), photo: s.blobs[`photo-${id}`] ?? null,
@@ -1959,6 +1961,19 @@
     }
     return inScope(client.office_id) ? client.office_id : scope()?.[0] ?? null;
   };
+  // Version 2.2.70: an issued receipt number is never issued again, even if the receipt is deleted (same rule as src/payments.js).
+  const issuedTop = () => Math.max(s.info.receiptIssued || 0, ...s.receipts.map((x) => x.number));
+  const noteIssued = () => { s.info = { ...s.info, receiptIssued: issuedTop() }; };
+  const payEffect = (clientId, dropCharges, dropReceipts) => LG.balanceEffect(s.charges, s.receipts, clientId, dropCharges, dropReceipts, todayCO());
+  const receiptPlan = (id) => {
+    const x = s.receipts.find((y) => y.id === id && inScope(y.office_id)) || fail("El recibo no existe.");
+    return RR.receiptDeletionPlan(x, s.casedocs.filter((d) => d.kind === "recibo" && d.receipt_id === x.id).length, payEffect(x.client_id, [], [x.id]));
+  };
+  const chargePlan = (id) => {
+    const c = getCharge(id);
+    const rs = s.receipts.filter((x) => x.charge_id === c.id).sort((a, b) => a.number - b.number);
+    return RR.chargeDeletionPlan(c, rs, s.reminders.filter((x) => x.charge_id === c.id).length, payEffect(c.client_id, [c.id], rs.map((x) => x.id)));
+  };
   const getCharge = (id) => s.charges.find((c) => c.id === +id && inScope(c.office_id)) || fail("El cobro no existe.");
   const userName = (id) => shownName(s.users.find((u) => u.id === id)) || "";
 
@@ -2054,13 +2069,35 @@
       if (results.some((r) => r.ok)) raw.last_reminder_at = stamp();
       return { results, message };
     }],
-    // Version 2.58: only Gerencia deletes a receipt. The link keeps what it deletes in receiptTrash (the copy that the server makes of its database).
-    ["DELETE", /^\/payments\/receipts\/(\d+)$/, (m) => {
+    // Version 2.58 / 2.2.70: only Gerencia deletes a receipt or a charge, typing the confirmation. The link keeps what it deletes in
+    // receiptTrash (the copy that the server makes of its database). A charge goes with its receipts and reminders.
+    ["GET", /^\/payments\/receipts\/(\d+)\/deletion$/, (m) => { need("payments.manage"); me().role === "Gerencia" || fail("Solo Gerencia puede eliminar un recibo."); return receiptPlan(+m[1]); }],
+    ["DELETE", /^\/payments\/receipts\/(\d+)$/, (m, b) => {
       need("payments.manage");
+      me().role === "Gerencia" || fail("Solo Gerencia puede eliminar un recibo.");
       const r = s.receipts.find((x) => x.id === +m[1] && inScope(x.office_id)) || fail("El recibo no existe.");
+      RR.checkDeletion(receiptPlan(r.id), b.confirm, (t) => fail(t), (t) => fail(t));
+      noteIssued();
       s.receiptTrash.push({ at: stamp(), by: me().id, receipt: clone(r), docs: s.casedocs.filter((d) => d.kind === "recibo" && d.receipt_id === r.id).map(clone) });
       s.casedocs = s.casedocs.filter((d) => !(d.kind === "recibo" && d.receipt_id === r.id)); // their files stay in blobs
       s.receipts = s.receipts.filter((x) => x.id !== r.id);
+      return null;
+    }],
+    ["GET", /^\/payments\/charges\/(\d+)\/deletion$/, (m) => { need("payments.manage"); me().role === "Gerencia" || fail("Solo Gerencia puede eliminar un cobro."); return chargePlan(+m[1]); }],
+    ["DELETE", /^\/payments\/charges\/(\d+)$/, (m, b) => {
+      need("payments.manage");
+      me().role === "Gerencia" || fail("Solo Gerencia puede eliminar un cobro.");
+      const c = getCharge(m[1]);
+      RR.checkDeletion(chargePlan(c.id), b.confirm, (t) => fail(t), (t) => fail(t));
+      noteIssued();
+      const rs = s.receipts.filter((x) => x.charge_id === c.id), ids = new Set(rs.map((x) => x.id));
+      s.receiptTrash.push({ at: stamp(), by: me().id, charge: clone(c), receipt: null, receipts: clone(rs), reminders: clone(s.reminders.filter((x) => x.charge_id === c.id)),
+        docs: s.casedocs.filter((d) => d.kind === "recibo" && ids.has(d.receipt_id)).map(clone) });
+      s.casedocs = s.casedocs.filter((d) => !(d.kind === "recibo" && ids.has(d.receipt_id)));
+      s.receipts = s.receipts.filter((x) => !ids.has(x.id));
+      s.reminders = s.reminders.filter((x) => x.charge_id !== c.id);
+      s.charges = s.charges.filter((x) => x.id !== c.id);
+      auditExtraNext = rs.map((x) => ({ field: "receipt", label: "Recibo eliminado", before: `N.º ${x.number} $${x.amount} ${x.paid_on}${x.voided_at ? " (anulado)" : ""}`.slice(0, 300), after: "(eliminado)" }));
       return null;
     }],
     ["GET", /^\/payments\/receipts(?:\?.*)?$/, (m, b, url) => {
@@ -2090,7 +2127,7 @@
         charge.status === "anulado" && fail("El cobro está anulado.");
       }
       const caseId = charge?.case_id || +b.case_id || null;
-      const r = { id: nextId(), number: LG.nextReceiptNumber(s.receipts.reduce((a, x) => Math.max(a, x.number), 0), paySettings().receipt_start), client_id: client.id, charge_id: charge?.id ?? null,
+      const r = { id: nextId(), number: LG.nextReceiptNumber(issuedTop(), paySettings().receipt_start), client_id: client.id, charge_id: charge?.id ?? null,
         case_id: caseId, office_id: charge?.office_id ?? payOffice(client, caseId), amount, method: b.method, reference: str(b.reference), paid_on: paidOn,
         concept: str(b.concept) || (charge ? [charge.concept, charge.plan_label].filter(Boolean).join(" · ") : "Abono a cuenta"), notes: str(b.notes),
         voided_at: null, void_reason: "", created_by: me().id, created_at: stamp() };
@@ -2115,7 +2152,7 @@
     }],
     ["GET", /^\/payments\/settings$/, () => {
       need("payments.manage");
-      return { ...paySettings(), receipt_next: LG.nextReceiptNumber(s.receipts.reduce((a, x) => Math.max(a, x.number), 0), paySettings().receipt_start) };
+      return { ...paySettings(), receipt_next: LG.nextReceiptNumber(issuedTop(), paySettings().receipt_start) };
     }],
     ["PUT", /^\/payments\/settings$/, (m, b) => {
       need("payments.manage");
