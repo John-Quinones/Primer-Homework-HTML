@@ -86,7 +86,7 @@
   }
   // Version 2.2.58 (John): every document the App generates ends its footer with the name of the user who generated it.
   // The page tells who that is with window.JuanmaGeneratedBy(); without it (tests, public pages) nothing is added.
-  const FOOT_MARK = "Documento generado por:";
+  const FOOT_MARK = "Elaboró:";
   function stampFooter(zip) {
     const who = String(window.JuanmaGeneratedBy?.() || "").trim();
     if (!who || !zip.file("word/document.xml")) return;
@@ -137,7 +137,7 @@
     const num = String(data["documento.numero"] ?? "");
     if (/^\d/.test(num) && !docxVariables(bytes).includes("documento.numero")) {
       const kind = String(data["documento.clase"] || "");
-      const p = `<w:p><w:pPr><w:jc w:val="right"/><w:spacing w:after="120"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${xml(`${kind ? kind + " " : ""}No. ${num}`)}</w:t></w:r></w:p>`;
+      const p = `<w:p><w:pPr><w:jc w:val="right"/><w:spacing w:after="120"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:b/><w:sz w:val="22"/><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">${xml(`${kind ? kind + " " : ""}No. ${num}`)}</w:t></w:r></w:p>`;
       const doc = out.file("word/document.xml").asText();
       out.file("word/document.xml", doc.replace(/<w:body>/, () => `<w:body>${p}`));
     }
