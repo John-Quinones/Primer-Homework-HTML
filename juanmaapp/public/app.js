@@ -4776,15 +4776,89 @@ const PICK = {
 };
 const pickState = { contrato: { list: [], picked: new Set() }, poder: { list: [], picked: new Set() } };
 
+// ----- Version 2.2.48: asistente por pasos «Contrato o poder» -----
+// 1 cliente → 2 expediente → 3 contrato o poder → 4 checklist (objetos o clases) → 5 honorarios (solo contrato) → Word.
+// Steps 4–6 are the existing document panel (#tpl-active), moved into the assistant while its tab is open.
+const wizardOn = () => !$("[data-dpanel=guiado]").hidden;
+const stepTag = (n) => (wizardOn() ? `${n}. ` : "");
+const wz = { clients: [], cases: [], kind: "" };
+function wzDock() {
+  const act = $("#tpl-active"), on = wizardOn();
+  (on ? $("#wz-host") : $(".tpl-work")).append(act);
+}
+const wzNorm = (t) => window.JuanmaCombo.norm(String(t ?? "")).replace(/[.\s]/g, "");
+function wzBar() {
+  const steps = ["Cliente", "Expediente", "Contrato o poder", "Tipo", ...(wz.kind === "Contrato" ? ["Honorarios"] : []), "Word"];
+  const at = !$("#wz-client").value ? 0 : $("#wz-s2").hidden || $("#wz-case").value === "-" ? 1 : !wz.kind ? 2 : !tplActive || tplActive.category !== wz.kind ? 2 : 3;
+  $("#wz-bar").innerHTML = steps.map((t, i) => `<li class="${i < at ? "done" : i === at ? "now" : ""}"><span class="step-no">${i + 1}</span> ${t}</li>`).join("");
+}
+function wzClients() {
+  const q = wzNorm($("#wz-client-q").value), cur = $("#wz-client").value;
+  const list = wz.clients.filter((c) => !q || wzNorm(`${c.full_name} ${c.id_number}`).includes(q));
+  $("#wz-client").innerHTML = list.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}${c.id_number ? ` · ${escapeHtml(c.id_number)}` : ""}</option>`).join("")
+    || '<option disabled>Ningún cliente coincide</option>';
+  if (cur && list.some((c) => String(c.id) === cur)) $("#wz-client").value = cur;
+}
+async function renderWizard() {
+  if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
+  if (!tplList.length) tplList = await api("GET", "/templates");
+  wz.clients = await api("GET", "/clients");
+  wzClients();
+  wzBar();
+}
+async function wzPickClient(clientId, keepCase) {
+  $("#wz-client").value = String(clientId);
+  wz.cases = clientId ? await api("GET", `/cases?clientId=${clientId}`) : [];
+  $("#wz-s2").hidden = !clientId;
+  $("#wz-case").innerHTML = '<option value="-">— Elija el expediente —</option><option value="">Sin expediente: llenar a mano</option>' + wz.cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml([caseFolder(k) && `Carpeta ${caseFolder(k)}`, k.type_name, k.title].filter(Boolean).join(" · "))}</option>`).join("");
+  $("#wz-case").value = keepCase != null ? String(keepCase) : wz.cases.length === 1 ? String(wz.cases[0].id) : "-";
+  wzCaseChosen();
+}
+function wzCaseChosen() {
+  const v = $("#wz-case").value;
+  $("#wz-s3").hidden = v === "-" || $("#wz-s2").hidden;
+  if (v !== "-") {
+    const sel = $("#tpl-case");
+    if (v && !$$("option", sel).some((o) => o.value === v)) sel.insertAdjacentHTML("beforeend", `<option value="${v}"></option>`);
+    sel.value = v;
+    if (tplActive) sel.dispatchEvent(new Event("change"));
+  }
+  wzBar();
+}
+async function wzPreselect(caseId) {
+  const k = await api("GET", `/cases/${caseId}`);
+  $("#wz-client-q").value = "";
+  wzClients();
+  await wzPickClient(k.client_id, caseId);
+}
+function wzKind(kind) {
+  wz.kind = kind;
+  const list = tplList.filter((t) => t.category === kind);
+  $("#wz-tpl-label").hidden = false;
+  $("#wz-tpl").innerHTML = (list.length === 1 ? "" : '<option value="">— Elija la plantilla —</option>') + list.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("")
+    || '<option value="">No hay plantillas de esta clase</option>';
+  wzBar();
+  if (list.length === 1) return openTemplate(list[0].id).then(wzBar);
+  if (tplActive && tplActive.category !== kind) $("#tpl-active").hidden = true;
+}
+$("#wz-client-q").addEventListener("input", wzClients);
+$("#wz-client").addEventListener("change", () => guarded(() => wzPickClient(Number($("#wz-client").value) || null)));
+$("#wz-case").addEventListener("change", wzCaseChosen);
+$$("[name=wz-kind]").forEach((r) => r.addEventListener("change", () => guarded(() => wzKind(r.value))));
+$("#wz-tpl").addEventListener("change", () => guarded(async () => { const id = Number($("#wz-tpl").value); if (id) await openTemplate(id); wzBar(); }));
+
 function showDTab(name) {
   $$("[data-dtab]").forEach((b) => b.classList.toggle("active", b.dataset.dtab === name));
   $$("[data-dpanel]").forEach((p) => (p.hidden = p.dataset.dpanel !== name));
+  wzDock();
 }
 $("#doc-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("[data-dtab]");
   if (!b) return;
   crossfade(() => showDTab(b.dataset.dtab));
   if (b.dataset.dtab === "nomos") guarded(renderNomos);
+  if (b.dataset.dtab === "guiado") guarded(renderWizard);
   if (b.dataset.dtab === "objetos") guarded(() => renderPickAdmin("contrato"));
   if (b.dataset.dtab === "poderes") guarded(() => renderPickAdmin("poder"));
 });
@@ -4802,7 +4876,10 @@ async function renderBorradores() {
   sel.innerHTML = '<option value="">— Sin expediente: llenar a mano —</option>' + cases.map((k) =>
     `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
   sel.value = cur ? String(cur) : "";
-  if (pendingDraftCase && !tplActive) showDTab("nomos");
+  // Version 2.2.48: «Generar documento» from a case opens the step-by-step assistant with client and case already chosen.
+  if (pendingDraftCase) { const id = pendingDraftCase; pendingDraftCase = null; showDTab("guiado"); await renderWizard(); await wzPreselect(id); }
+  else if (!$("[data-dpanel=guiado]").hidden) await renderWizard();
+  wzDock();
   if (!$("[data-dpanel=nomos]").hidden) await renderNomos();
   else if (tplActive) await loadTplData();
 }
@@ -4960,9 +5037,9 @@ const anyPickKey = (k) => Object.values(PICK).some((x) => x.keys.includes(k));
 const tickedOf = (kind) => CO.sortObjects(pickState[kind].list).filter((o) => pickState[kind].picked.has(o.id));
 function pickChecklist(kind) {
   const P = PICK[kind], list = CO.sortObjects(pickState[kind].list);
-  if (!list.length) return `<fieldset class="fee-kind"><legend>${P.title}</legend><p class="muted">${isGerencia() ? P.none : P.noneUser}</p></fieldset>`;
+  if (!list.length) return `<fieldset class="fee-kind"><legend>${stepTag(4)}${P.title}</legend><p class="muted">${isGerencia() ? P.none : P.noneUser}</p></fieldset>`;
   const merged = CO.mergeObjects(tickedOf(kind), tplValues());
-  return `<fieldset class="fee-kind span2" data-cobj-block><legend>${P.title}</legend>
+  return `<fieldset class="fee-kind span2" data-cobj-block><legend>${stepTag(4)}${P.title}</legend>
     <div class="fee-choices">${list.map((o) => `<label class="inline" ${o.description ? `title="${escapeHtml(o.description)}"` : ""}><input type="checkbox" data-pick="${kind}" data-pick-id="${o.id}" ${pickState[kind].picked.has(o.id) ? "checked" : ""} /> ${escapeHtml(o.title)}</label>`).join("")}</div>
     ${merged ? `<p class="muted">${P.inDoc}:</p><pre class="cobj-preview">${escapeHtml(merged.replace(/\u2063/g, ""))}</pre>` : `<p class="muted">Marque una o varias casillas: ${kind === "poder" ? "el texto de cada una se imprime en el poder" : "la cláusula de cada una se imprime en el contrato"}.</p>`}
   </fieldset>`;
@@ -4977,7 +5054,7 @@ function feeChecklist(vals) {
   const show = (kind) => (kind === "fijo" ? ["Honorarios", "Mixto"] : ["Cuota de litis", "Mixto"]).includes(tipo);
   const preview = (k, extra) => { const t = L.feeTerms(tipo, vals[FEE.fijo], vals[FEE.litis]); return t[k] || extra ? `En el contrato: ${t[k] || extra}` : ""; };
   const choice = (o, label) => `<label class="inline"><input type="checkbox" data-fee-kind="${o}" ${tipo === o ? "checked" : ""} /> ${label}</label>`;
-  return `<fieldset class="fee-kind" data-fee-block><legend>Honorarios del contrato</legend>
+  return `<fieldset class="fee-kind" data-fee-block><legend>${stepTag(5)}Honorarios del contrato</legend>
     <div class="fee-choices">${choice("Honorarios", "Honorarios")}${choice("Cuota de litis", "Cuota de litis")}${choice("Mixto", "Mixto (ambos)")}</div>
     <input type="hidden" data-var="${FEE.tipo}" value="${escapeHtml(tipo)}" />
     <label data-fee-field="fijo" ${show("fijo") ? "" : "hidden"}>Valor de los honorarios (solo números)
@@ -5017,12 +5094,12 @@ function renderTplVars() {
   const missing = tplMissing();
   $("#tpl-missing").textContent = missing.length ? `${missing.length} por completar` : "Completo";
   $("#tpl-missing").className = `badge ${missing.length ? "warn" : "ok"}`;
-  $("#tpl-vars-box").open = missing.length > 0;
+  $("#tpl-vars-box").open = missing.length > 0 || wizardOn();
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
   const ordered = allVars().filter((k) => !FEE_VARS.includes(k) && !anyPickKey(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
-  $("#tpl-vars").innerHTML = (usesFeeChecklist() ? feeChecklist(vals) : "") + Object.keys(PICK).map((kind) => usesPick(kind) ? pickChecklist(kind) : "").join("") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
+  $("#tpl-vars").innerHTML = Object.keys(PICK).map((kind) => usesPick(kind) ? pickChecklist(kind) : "").join("") + (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
     <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
     : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>

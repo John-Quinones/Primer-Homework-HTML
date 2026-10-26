@@ -58,3 +58,9 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Solo Gerencia crea/edita/ordena/elimina; los demás con `drafts.generate` leen las activas. Eliminar una clase ya usada solo la desactiva.
 - Pantalla: pestaña «Clases de poder» (`renderPickAdmin('poder')`, `#pcls-dialog`) y casillas en «Datos del documento» (`pickChecklist`, tabla `PICK` en `public/app.js`). Los datos escritos dentro del texto de una clase (`{{campo.Deudor}}`) se piden en el formulario (`clauseVars`).
 - Word de ejemplo (poder de víctima al empleador) con el marcador en lugar del párrafo de facultades: /mnt/project-files/clases-de-poder/. Pruebas: `test/v2247-clases-de-poder.test.js`.
+
+## Asistente «Contrato o poder» (v2.2.48, 26/10/2026)
+- Pedido de John: orden claro cliente → expediente → contrato/poder → checklist del tipo → honorarios (solo contrato) → Word; entrada desde el expediente o directo desde Documentos.
+- Pestaña `data-dtab="guiado"` (primera; las plantillas de siempre quedan en «Otras plantillas»). Pasos 1–3 propios (`#wz-client`, `#wz-case`, `[name=wz-kind]`, `#wz-tpl`; código `renderWizard`, `wzPickClient`, `wzKind`, `wzPreselect` en `public/app.js`). Los pasos 4–6 son el panel `#tpl-active` de siempre: `wzDock()` lo mueve a `#wz-host` mientras la pestaña está abierta y lo devuelve al salir; el CSS (`#wz-host`) pone los botones de generar al final y oculta el selector de expediente y el cuadro viejo «Registrar honorarios en Pagos» solo en el asistente.
+- `draft-case` («Generar documento» del expediente) ya no abre NomosAI: `renderBorradores` llama `wzPreselect(caseId)`. Las leyendas «4.» y «5.» (`stepTag`) solo salen dentro del asistente.
+

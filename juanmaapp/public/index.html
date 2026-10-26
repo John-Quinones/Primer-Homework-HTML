@@ -462,7 +462,8 @@
           </div>
         </div>
         <div class="tabs" role="tablist" id="doc-tabs">
-          <button role="tab" data-dtab="plantillas" class="active">Plantillas</button>
+          <button role="tab" data-dtab="guiado" class="active">Contrato o poder</button>
+          <button role="tab" data-dtab="plantillas">Otras plantillas</button>
           <button role="tab" data-dtab="nomos">Redactar con NomosAI</button>
           <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Objetos del contrato</button>
           <button role="tab" data-dtab="poderes" id="dtab-poderes" hidden title="Solo Gerencia">Clases de poder</button>
@@ -490,7 +491,32 @@
           </section>
         </div>
 
-        <div data-dpanel="plantillas">
+        <div data-dpanel="guiado">
+          <section class="panel wz" id="wz">
+            <p class="hint">Siga los pasos en orden: cliente, expediente, contrato o poder, su tipo, los honorarios (si es contrato) y el Word. También puede llegar aquí desde el botón «Generar documento» de un expediente.</p>
+            <ol class="wz-bar" id="wz-bar"></ol>
+            <div class="wz-step" id="wz-s1">
+              <h4><span class="step-no">1</span> Cliente</h4>
+              <input id="wz-client-q" type="search" placeholder="Buscar por nombre o documento" aria-label="Buscar cliente" autocomplete="off" />
+              <select id="wz-client" size="6" aria-label="Cliente"></select>
+            </div>
+            <div class="wz-step" id="wz-s2" hidden>
+              <h4><span class="step-no">2</span> Expediente</h4>
+              <select id="wz-case" aria-label="Expediente"></select>
+            </div>
+            <div class="wz-step" id="wz-s3" hidden>
+              <h4><span class="step-no">3</span> ¿Qué documento va a generar?</h4>
+              <div class="fee-choices">
+                <label class="inline"><input type="radio" name="wz-kind" value="Contrato" /> Contrato</label>
+                <label class="inline"><input type="radio" name="wz-kind" value="Poder" /> Poder</label>
+              </div>
+              <label id="wz-tpl-label" hidden>Plantilla <select id="wz-tpl" aria-label="Plantilla"></select></label>
+            </div>
+            <div id="wz-host"></div>
+          </section>
+        </div>
+
+        <div data-dpanel="plantillas" hidden>
           <div class="tpl-layout">
             <aside class="panel tpl-lib">
               <label for="tpl-file" class="tpl-drop" id="tpl-drop" data-manage-only title="Solo Gerencia">
@@ -520,7 +546,7 @@
                     <button type="button" data-tpl-out="sign">Enviar a firma</button>
                   </div>
                 </div>
-                <label>Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
+                <label id="tpl-case-label">Expediente <select id="tpl-case"><option value="">— Sin expediente: llenar a mano —</option></select></label>
                 <fieldset id="tpl-fees" class="fees-box" hidden>
                   <legend>Honorarios del contrato</legend>
                   <p class="hint" id="tpl-fees-status"></p>
