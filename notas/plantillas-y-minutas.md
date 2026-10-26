@@ -50,3 +50,11 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Pantalla: pestaña «Objetos del contrato» (`renderCobjAdmin`, `#cobj-dialog`) y casillas en «Datos del documento» (`objectsChecklist`, `tplObjects`). Se registra el uso al descargar, guardar, enviar por correo o WhatsApp.
 - Interpretaciones: objetos globales de la categoría Contrato (sirven a cualquier Word con el marcador); texto simple, sin editor enriquecido (el formato lo da el Word). Pruebas: `test/v2246-objetos-contractuales.test.js`.
 
+
+## Clases de poder (v2.2.47, 26/10/2026, hilo «Clases de poder configurables en poder»)
+- Pedido de John: en la Plantilla de Poder el administrador crea, edita, ordena y desactiva/elimina «Clases de poder» (título, descripción opcional, texto de facultades, activo, orden); al hacer el poder el usuario marca casillas y el texto de cada una va al marcador `{{CLASES_DE_PODER}}` (o `{{FACULTADES_ESPECIFICAS}}`). Una casilla: texto tal cual; varias: A), B), C)… Se guarda qué clases llevó cada poder (`contract_object_uses`, kind poder).
+- No se duplicó código: es el mecanismo de «Objetos contractuales» (v2.2.46) con columna `kind` ('contrato' | 'poder') y `description` en `contract_objects`; `contract_object_uses` también lleva `kind`. `contractObjectsRouter(db, kind)` se monta en `/api/contract-objects` y `/api/power-classes` (`src/app.js`); enlace: `cobjRoutes(path, kind)` en `public/demo-backend.js`. Texto de la clase = columna `clause` (al escribir la API acepta `clause` o `content_template`; al leer devuelve `clause`).
+- Migración (`src/db.js` + `addKindColumns`): solo ADD COLUMN, copia previa `antes-v2.2.47` si ya existían las tablas de la 2.2.46 sin `kind` y hay datos. Filas anteriores quedan como contrato.
+- Solo Gerencia crea/edita/ordena/elimina; los demás con `drafts.generate` leen las activas. Eliminar una clase ya usada solo la desactiva.
+- Pantalla: pestaña «Clases de poder» (`renderPickAdmin('poder')`, `#pcls-dialog`) y casillas en «Datos del documento» (`pickChecklist`, tabla `PICK` en `public/app.js`). Los datos escritos dentro del texto de una clase (`{{campo.Deudor}}`) se piden en el formulario (`clauseVars`).
+- Word de ejemplo (poder de víctima al empleador) con el marcador en lugar del párrafo de facultades: /mnt/project-files/clases-de-poder/. Pruebas: `test/v2247-clases-de-poder.test.js`.

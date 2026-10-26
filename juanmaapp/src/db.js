@@ -14,7 +14,7 @@ import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 import { dbFiles, makeBackup } from "./backup.js";
 import { defaultsPlan, defaultResponsible, genderPlan } from "./record-rules.js";
-import { CONTRACT_OBJECTS_SCHEMA } from "./contract-objects-routes.js";
+import { CONTRACT_OBJECTS_SCHEMA, addKindColumns } from "./contract-objects-routes.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -639,6 +639,14 @@ function migrate(db) {
     if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar los objetos contractuales: ${copy.error}`);
   }
   db.exec(CONTRACT_OBJECTS_SCHEMA);
+  // Version 2.2.47: «Clases de poder» share those tables through a `kind` column (and a description). Added only; a copy is made first
+  // when the 2.2.46 tables already exist without it and the database holds data.
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'contract_objects'").get()
+    && !db.prepare("PRAGMA table_info(contract_objects)").all().some((c) => c.name === "kind") && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.2.47" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar las clases de poder: ${copy.error}`);
+  }
+  addKindColumns(db);
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'radicado-from-number'").get()) {
     const all = db.prepare("SELECT id, radicado, case_number, department, city FROM cases").all();
     const byId = new Map(all.map((k) => [k.id, k]));
