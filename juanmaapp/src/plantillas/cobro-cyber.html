@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notificación de Honorarios — Tecjurídicos S.A.S.</title>
+  <style>
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; outline: none; text-decoration: none; }
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100% !important;
+      background-color: #050b14;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #e2e8f0;
+    }
+    @media screen and (max-width: 600px) {
+      .container-table { width: 100% !important; padding: 14px !important; }
+      .card-content { padding: 22px 16px !important; }
+      .data-row { display: block !important; width: 100% !important; }
+      .data-col { display: block !important; width: 100% !important; margin-bottom: 12px !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 28px 0; background-color: #050b14;" bgcolor="#050b14">
+
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center">
+        <table role="presentation" class="container-table" border="0" cellpadding="0" cellspacing="0" width="600" style="max-width: 600px; margin: 0 auto;">
+
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom: 22px;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td align="left" style="vertical-align: middle;">
+                    <div style="font-size: 20px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; text-transform: uppercase;">
+                      <span style="color: #00f0ff;">TEC</span>JURÍDICOS <span style="font-size: 11px; font-weight: 400; color: #64748b; letter-spacing: 2px;">S.A.S.</span>
+                    </div>
+                    <div style="font-size: 11px; color: #64748b; letter-spacing: 0.5px; margin-top: 3px;">
+                      LegalTech • Trazabilidad &amp; Procesos Judiciales
+                    </div>
+                  </td>
+                  <td align="right" style="vertical-align: middle;">
+                    <span style="display: inline-block; padding: 4px 12px; font-size: 10px; font-weight: 600; letter-spacing: 1px; color: #00f5a0; background: rgba(0, 245, 160, 0.08); border: 1px solid rgba(0, 245, 160, 0.3); border-radius: 20px; text-transform: uppercase;">
+                      ● Expediente Sincronizado
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Tarjeta Principal Glassmorphism -->
+          <tr>
+            <td>
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#0d1b2a" style="background: linear-gradient(145deg, #0d1b2a 0%, #08111e 100%); background-color: #0d1b2a; border: 1px solid rgba(0, 240, 255, 0.22); border-radius: 18px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); overflow: hidden;">
+
+                <tr>
+                  <td height="3" bgcolor="#00f0ff" style="background: linear-gradient(90deg, #00f0ff 0%, #00f5a0 100%); background-color: #00f0ff; font-size: 0; line-height: 0;">&nbsp;</td>
+                </tr>
+
+                <tr>
+                  <td class="card-content" style="padding: 34px 30px;">
+                    <div style="font-size: 12px; font-weight: 600; color: #00f0ff; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;">
+                      Notificación Programada de Honorarios
+                    </div>
+                    <h1 style="margin: 0 0 14px 0; font-size: 21px; font-weight: 700; color: #ffffff; line-height: 1.3;">
+                      Estimado(a) {{nombreCliente}},
+                    </h1>
+                    <p style="margin: 0 0 22px 0; font-size: 14px; line-height: 1.6; color: #94a3b8;">
+                      Desde la plataforma central de <strong style="color: #f1f5f9;">Tecjurídicos S.A.S.</strong>, realizamos la gestión continua de su defensa legal. En cumplimiento del cronograma acordado, le presentamos el estado de cuenta correspondiente al próximo corte:
+                    </p>
+
+                    <!-- Bloque HUD Datos Financieros -->
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: rgba(4, 9, 18, 0.65); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 12px; margin-bottom: 26px;">
+                      <tr>
+                        <td style="padding: 18px 20px;">
+                          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 4px;">Concepto del servicio</div>
+                          <div style="font-size: 15px; font-weight: 600; color: #ffffff; padding-bottom: 14px; border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+                            {{concepto}}
+                          </div>
+
+                          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 14px;">
+                            <tr class="data-row">
+                              <td class="data-col" width="50%" style="vertical-align: top;">
+                                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 3px;">Monto programado</div>
+                                <div style="font-size: 24px; font-weight: 800; color: #00f5a0; letter-spacing: -0.5px;">
+                                  {{monto}} <span style="font-size: 12px; font-weight: 500; color: #64748b;">COP</span>
+                                </div>
+                              </td>
+                              <td class="data-col" width="50%" style="vertical-align: top;">
+                                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 3px;">Fecha límite de pago</div>
+                                <div style="font-size: 15px; font-weight: 700; color: #e2e8f0; padding-top: 4px;">
+                                  {{fechaLimite}}
+                                </div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+<!--LINK-->
+                    <!-- Botón Cyber CTA -->
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td align="center" style="padding-bottom: 20px;">
+                          <a href="{{linkPago}}" target="_blank" style="display: block; width: 100%; max-width: 440px; background: linear-gradient(135deg, #00d2ff 0%, #00f5a0 100%); background-color: #00d2ff; color: #041017; text-align: center; font-size: 15px; font-weight: 700; text-decoration: none; padding: 15px 24px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0, 245, 160, 0.28); letter-spacing: 0.5px;">
+                            PAGAR EN LÍNEA DE FORMA SEGURA →
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin: 0 0 20px 0; font-size: 11px; line-height: 1.5; color: #64748b; text-align: center;">
+                      Canal protegido mediante cifrado bancario Bold®.<br>
+                      Si el botón no abre directamente, copie este enlace seguro: <br>
+                      <a href="{{linkPago}}" target="_blank" style="color: #00f0ff; text-decoration: underline; word-break: break-all;">
+                        {{linkPago}}
+                      </a>
+                    </p>
+
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: rgba(0, 240, 255, 0.04); border-left: 3px solid #00f0ff; border-radius: 4px; padding: 12px 16px;">
+                      <tr>
+                        <td style="font-size: 12px; line-height: 1.5; color: #94a3b8;">
+                          <strong style="color: #e2e8f0;">Sincronización automática:</strong> Una vez completada su transacción por PSE, tarjeta o Nequi, la pasarela Bold® notificará a nuestra plataforma central y su estado de cuenta se conciliará automáticamente.
+                        </td>
+                      </tr>
+                    </table>
+<!--/LINK-->
+<!--NOLINK-->
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background: rgba(0, 240, 255, 0.04); border-left: 3px solid #00f0ff; border-radius: 4px; padding: 12px 16px;">
+                      <tr>
+                        <td style="font-size: 12px; line-height: 1.5; color: #94a3b8; white-space: pre-line;">
+                          <strong style="color: #e2e8f0;">Datos para el pago:</strong> {{datosPago}}
+                        </td>
+                      </tr>
+                    </table>
+<!--/NOLINK-->
+                  </td>
+                </tr>
+
+                <!-- Firma -->
+                <tr>
+                  <td bgcolor="#070e17" style="padding: 22px 30px; background: #070e17; border-top: 1px solid rgba(148, 163, 184, 0.08);">
+                    <div style="font-size: 14px; font-weight: 700; color: #ffffff;">John Fredy Quiñones Montaña</div>
+                    <div style="font-size: 12px; color: #00f0ff; margin-top: 2px;">Gerencia General | Tecjurídicos S.A.S.</div>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Gestión de clientes, procesos judiciales y borradores legales</div>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding: 22px 16px; font-size: 11px; line-height: 1.6; color: #475569;">
+              © {{anio}} Tecjurídicos S.A.S. Todos los derechos reservados.<br>
+              Este mensaje ha sido emitido de manera automatizada a través de la plataforma central Tecjurídicos.
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

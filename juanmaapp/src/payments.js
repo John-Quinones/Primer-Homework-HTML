@@ -7,6 +7,8 @@ import { scopeOf } from "./auth.js";
 import { sendEmail, sendWhatsapp, channelsStatus } from "./notify.js";
 import { bogota } from "./monitor.js";
 import { backupBeforeReceiptDelete } from "./backup.js";
+import { ensureBoldLink } from "./bold.js";
+import { renderCobroEmail, longDate, montoCOP } from "./email-cobro.js";
 import { checkDeletion, receiptDeletionPlan, chargeDeletionPlan } from "./record-rules.js";
 import { METHODS, AGING, STATE_LABELS, applyPayments, portfolio, clientRows, reminderMessage, splitAmount, addMonths, addDays, fmtCOP,
   RECEIPT_START, balanceEffect, nextReceiptNumber, receiptLabel, collectionWindow } from "./ledger.js";
@@ -95,16 +97,24 @@ export function paymentsReport(db, user, type, q) {
 }
 
 async function remind(db, charge, client, { channels, trigger, userId, settings, now }) {
+  // With Bold configured, the reminder carries a link that reconciles itself; if Bold fails, the reminder still goes out without it.
+  let linkNote = "";
+  if (process.env.BOLD_API_KEY && channels.length) {
+    try { charge = { ...charge, pay_link: await ensureBoldLink(db, charge, charge.balance) }; }
+    catch (err) { linkNote = ` (sin link Bold: ${err.message})`; }
+  }
   const msg = reminderMessage({ clientName: client.full_name, charge, firmName: settings.firm_name, payInfo: settings.pay_info, today: today(now) });
+  const html = renderCobroEmail({ nombreCliente: client.full_name, concepto: [charge.concept, charge.plan_label].filter(Boolean).join(" · "),
+    monto: montoCOP(charge.balance), fechaLimite: longDate(charge.due_date), linkPago: charge.pay_link, datosPago: settings.pay_info });
   const results = [];
   for (const ch of channels) {
     const r = ch === "manual" ? { channel: "manual", ok: true, detail: "Enviado por el usuario (WhatsApp o copia del texto)." }
       : ch === "whatsapp" ? await sendWhatsapp(client.phone, msg.text)
-      : await sendEmail(client.email, msg.subject, msg.text, `<div style="font-family:Arial,sans-serif;white-space:pre-wrap">${msg.text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]))}</div>`);
+      : await sendEmail(client.email, msg.subject, msg.text, html);
     if (ch === "email" && !client.email) r.detail = "El cliente no tiene correo.";
     if (ch === "whatsapp" && !client.phone) r.detail = "El cliente no tiene teléfono.";
     db.prepare("INSERT INTO payment_reminders (charge_id, client_id, channel, ok, detail, trigger, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(charge.id, client.id, ch, r.ok ? 1 : 0, str(r.detail), trigger, userId);
+      .run(charge.id, client.id, ch, r.ok ? 1 : 0, str(r.detail) + linkNote, trigger, userId);
     results.push(r);
   }
   if (results.some((r) => r.ok)) db.prepare("UPDATE charges SET last_reminder_at = datetime('now') WHERE id = ?").run(charge.id);
@@ -252,6 +262,15 @@ export function paymentsRouter(db) {
       if (!w.ok) throw new HttpError(400, `${w.reason} Programe el envío para un horario permitido.`);
     }
     return remind(db, c, client, { channels, trigger: "manual", userId: req.user.id, settings: paymentSettings(db) });
+  }));
+
+  // Version 2.2.72: creates (or renews) the charge's Bold link for its pending balance and saves it as the charge's pay link.
+  r.post("/charges/:id/bold-link", h(async (req) => {
+    const raw = getCharge(req, Number(req.params.id));
+    if (raw.status === "anulado") throw new HttpError(400, "El cobro está anulado.");
+    const c = loadLedger(db, req.user, { clientId: raw.client_id }).charges.find((x) => x.id === raw.id);
+    if (!(c.balance > 0)) throw new HttpError(400, "Este cobro no tiene saldo pendiente.");
+    return { pay_link: await ensureBoldLink(db, raw, c.balance, { force: !!req.body?.renew }) };
   }));
 
   r.get("/receipts", h((req) => {
