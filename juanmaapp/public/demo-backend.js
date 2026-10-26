@@ -434,7 +434,9 @@
   const memcatOut = (o) => ({ ...clone(o), is_active: !!o.is_active, templates: s.templates.filter((t) => t.memorial_category_id === o.id).length });
   const memcatGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar las categorías de memoriales (solo Gerencia)."); };
   // A template belongs to a memorial category only when its own category is «Memorial» (empty = «Otros memoriales»).
-  const memcatOf = (b, t) => { const id = "memorial_category_id" in b ? Number(b.memorial_category_id) || null : t.memorial_category_id || null; if (id && !s.memcats.some((o) => o.id === id)) fail("Elija una categoría de memoriales válida."); return t.category === "Memorial" ? id : null; };
+  const memcatOf = (b, t) => {
+    if ("memorial_category_id" in b && (Number(b.memorial_category_id) || null) !== (t.memorial_category_id || null) && me().role !== "Gerencia") fail("Solo Gerencia puede asignar plantillas a una categoría de memoriales.");
+    const id = "memorial_category_id" in b ? Number(b.memorial_category_id) || null : t.memorial_category_id || null; if (id && !s.memcats.some((o) => o.id === id)) fail("Elija una categoría de memoriales válida."); return t.category === "Memorial" ? id : null; };
   const tplMetaOut = (t) => ({ id: t.id, name: t.name, category: t.category, description: t.description, format: t.format, filename: t.filename,
     builtin: !!t.builtin, memorial_category_id: t.memorial_category_id || null, created_at: t.created_at, updated_at: t.updated_at, file_size: s.blobs[`tpl-${t.id}`] ? Math.round(s.blobs[`tpl-${t.id}`].length * 0.75) : null });
   const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
