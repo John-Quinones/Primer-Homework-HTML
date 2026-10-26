@@ -7,10 +7,11 @@ import { startServer } from "./helpers.js";
 import { startLink } from "./link-backend.js";
 import { MEMORIAL_CATEGORIES_SCHEMA, addMemorialColumn } from "../src/memorial-categories-routes.js";
 
-let srv, admin, sides;
+let srv, admin, sides, office;
 before(async () => {
   srv = await startServer();
   admin = await srv.setup();
+  office = (await admin.call("GET", "/admin/offices")).body[0].id;
   const link = await startLink();
   await link.call("POST", "/auth/setup", { name: "Gerente General", email: "gerencia@firma.co" });
   sides = { server: admin.call, link: link.call };
@@ -75,4 +76,18 @@ test("the migration only adds: old templates stay and read as «sin categoría»
   db.prepare("INSERT INTO document_templates (name, category) VALUES ('Derecho de petición', 'Memorial')").run();
   db.exec(MEMORIAL_CATEGORIES_SCHEMA); addMemorialColumn(db); addMemorialColumn(db);
   assert.deepEqual(db.prepare("SELECT name, memorial_category_id FROM document_templates").all().map((r) => ({ ...r })), [{ name: "Derecho de petición", memorial_category_id: null }]);
+});
+
+test("only Gerencia assigns a template to a memorial category (the Director Jurídico can still manage templates)", async () => {
+  const cat = (await admin.call("GET", "/memorial-categories")).body[0];
+  const t = (await admin.call("POST", "/templates", { name: "Memorial base", category: "Memorial", body: "x", memorial_category_id: cat.id })).body;
+  await admin.call("POST", "/admin/users", { name: "Directora Memoriales", email: "dirmem@firma.co", role: "Director Jurídico", office_ids: [office],
+    password: "tribunal-azul-2026", custom_permissions: true, permissions: ["templates.manage", "drafts.generate", "cases.write"] });
+  const d = await srv.login("dirmem@firma.co", "tribunal-azul-2026");
+  await d.call("POST", "/auth/password", { current: "tribunal-azul-2026", next: "tribunal-verde-2026" });
+  assert.equal((await d.call("POST", "/templates", { name: "Otro memorial", category: "Memorial", body: "y", memorial_category_id: cat.id })).status, 400);
+  assert.equal((await d.call("POST", "/templates", { name: "Otro memorial", category: "Memorial", body: "y" })).status, 201);
+  assert.equal((await d.call("PUT", `/templates/${t.id}`, { memorial_category_id: "" })).status, 400);
+  assert.equal((await d.call("PUT", `/templates/${t.id}`, { name: "Memorial base 2", memorial_category_id: cat.id })).body.memorial_category_id, cat.id);
+  assert.equal((await d.call("POST", "/memorial-categories", { title: "Nueva" })).status, 403);
 });

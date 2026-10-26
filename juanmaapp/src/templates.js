@@ -122,7 +122,7 @@ export function templatesRouter(db) {
     res.json({ filename: t.filename, base64: Buffer.from(t.file).toString("base64") });
   });
 
-  function values(b, cur = {}) {
+  function values(b, cur = {}, user = null) {
     const v = {
       name: "name" in b ? str(b.name) : cur.name,
       category: "category" in b ? str(b.category) : cur.category,
@@ -131,6 +131,8 @@ export function templatesRouter(db) {
     if (!v.name) return "Escriba el nombre de la plantilla.";
     if (!DOC_CATEGORIES.includes(v.category)) return "Categoría no válida.";
     // Version 2.2.64: only a Memorial template belongs to a memorial category (empty = «Otros memoriales»).
+    // Version 2.2.66 (John): only Gerencia assigns a template to a memorial category.
+    if ("memorial_category_id" in b && (Number(b.memorial_category_id) || null) !== (cur.memorial_category_id || null) && user?.role !== "Gerencia") return "Solo Gerencia puede asignar plantillas a una categoría de memoriales.";
     const mc = "memorial_category_id" in b ? Number(b.memorial_category_id) || null : cur.memorial_category_id || null;
     v.memorial_category_id = v.category === "Memorial" ? mc : null;
     if (v.memorial_category_id && !db.prepare("SELECT 1 FROM memorial_categories WHERE id = ?").get(v.memorial_category_id)) return "Elija una categoría de memoriales válida.";
@@ -139,7 +141,7 @@ export function templatesRouter(db) {
 
   r.post("/", manage, (req, res) => {
     const b = req.body ?? {};
-    const v = values(b);
+    const v = values(b, {}, req.user);
     if (typeof v === "string") return res.status(400).json({ error: v });
     if (b.file_base64) {
       const file = Buffer.from(String(b.file_base64), "base64");
@@ -160,7 +162,7 @@ export function templatesRouter(db) {
   r.put("/:id", manage, (req, res) => {
     const cur = db.prepare("SELECT * FROM document_templates WHERE id = ?").get(Number(req.params.id));
     if (!cur) return res.status(404).json({ error: "La plantilla no existe." });
-    const v = values(req.body ?? {}, cur);
+    const v = values(req.body ?? {}, cur, req.user);
     if (typeof v === "string") return res.status(400).json({ error: v });
     // Replacing with an updated Word file (version 2.16): a text template becomes a Word one;
     // a Word template also gets a new file when its blanks turn into {{variables}}.

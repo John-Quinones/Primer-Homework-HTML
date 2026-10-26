@@ -5564,6 +5564,7 @@ async function openTemplateDialog(t = null) {
   tplForm.elements.memorial_category_id.innerHTML = '<option value="">Otros memoriales (sin categoría)</option>' + mcats.map((c) => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
   openDialog($("#tpl-dialog"), t ? "Editar plantilla" : "Nueva plantilla", t ? { id: t.id, name: t.name, category: t.category, description: t.description, body: t.body, memorial_category_id: t.memorial_category_id || "" }
     : { category: tplCat || "Contrato", body: "# TÍTULO DEL DOCUMENTO\n\n{{fecha.ciudad_y_fecha}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}…\n" });
+  tplForm.elements.memorial_category_id.disabled = !isGerencia(); // version 2.2.67: only Gerencia assigns the memorial category
   const showMcat = () => ($("#tpl-mcat-label").hidden = tplForm.elements.category.value !== "Memorial");
   tplForm.elements.category.onchange = showMcat;
   showMcat();
