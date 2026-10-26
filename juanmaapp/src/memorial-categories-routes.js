@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS memorial_categories (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
+  clause TEXT NOT NULL DEFAULT '',
   is_active INTEGER NOT NULL DEFAULT 1,
   display_order INTEGER NOT NULL DEFAULT 0,
   created_by INTEGER,
@@ -19,6 +20,10 @@ CREATE TABLE IF NOT EXISTS memorial_categories (
 
 // A template belongs to at most one category; the column is only added, existing templates keep working (they show as «Otros memoriales»).
 export function addMemorialColumn(db) {
+  // Version 2.2.68: the text of each category (added only).
+  if (db.prepare("PRAGMA table_info(memorial_categories)").all().length && !db.prepare("PRAGMA table_info(memorial_categories)").all().some((x) => x.name === "clause")) {
+    db.exec("ALTER TABLE memorial_categories ADD COLUMN clause TEXT NOT NULL DEFAULT ''");
+  }
   if (!db.prepare("PRAGMA table_info(document_templates)").all().some((x) => x.name === "memorial_category_id")) {
     db.exec("ALTER TABLE document_templates ADD COLUMN memorial_category_id INTEGER");
   }
@@ -41,8 +46,8 @@ export function memorialCategoriesRouter(db) {
     const v = categoryValues(req.body, null, all());
     if (typeof v === "string") throw new HttpError(400, v);
     const order = (db.prepare("SELECT MAX(display_order) AS m FROM memorial_categories").get().m ?? 0) + 1;
-    const id = db.prepare("INSERT INTO memorial_categories (title, description, is_active, display_order, created_by) VALUES (?, ?, ?, ?, ?)")
-      .run(v.title, v.description, v.is_active, order, req.user.id).lastInsertRowid;
+    const id = db.prepare("INSERT INTO memorial_categories (title, description, clause, is_active, display_order, created_by) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(v.title, v.description, v.clause, v.is_active, order, req.user.id).lastInsertRowid;
     res.status(201).json(out(find(id)));
   });
 
@@ -62,7 +67,7 @@ export function memorialCategoriesRouter(db) {
     const cur = find(req.params.id);
     const v = categoryValues(req.body, cur, all().filter((o) => o.id !== cur.id));
     if (typeof v === "string") throw new HttpError(400, v);
-    db.prepare("UPDATE memorial_categories SET title = ?, description = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?").run(v.title, v.description, v.is_active, cur.id);
+    db.prepare("UPDATE memorial_categories SET title = ?, description = ?, clause = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?").run(v.title, v.description, v.clause, v.is_active, cur.id);
     res.json(out(find(cur.id)));
   });
 

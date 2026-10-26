@@ -662,6 +662,12 @@ function migrate(db) {
     const copy = makeBackup(db, { trigger: "antes-v2.2.65" });
     if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar las categorías de memoriales: ${copy.error}`);
   }
+  // Version 2.2.68: each category gets a text column (added only); a copy first when the 2.2.65 table already holds categories.
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memorial_categories'").get()
+    && !db.prepare("PRAGMA table_info(memorial_categories)").all().some((c) => c.name === "clause") && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.2.68" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar el texto de las categorías de memoriales: ${copy.error}`);
+  }
   db.exec(MEMORIAL_CATEGORIES_SCHEMA);
   addMemorialColumn(db);
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'memorial-categories-v1'").get()) {
