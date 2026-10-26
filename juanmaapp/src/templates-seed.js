@@ -70,6 +70,8 @@ export const VARIABLES = [
   ["honorarios.litis_valor", "Cuota de litis en pesos, en número y letras (según la casilla)", "Honorarios"],
   ["honorarios.litis_porcentaje", "Cuota de litis en porcentaje, en número y letras (según la casilla)", "Honorarios"],
   ["OBJETOS_CONTRACTUALES", "Objetos contractuales", "Contrato"],
+  ["CLASES_DE_PODER", "Clases de poder (facultades)", "Poder"],
+  ["FACULTADES_ESPECIFICAS", "Facultades específicas (clases de poder)", "Poder"],
   ["fecha.hoy", "Fecha de hoy (14 de octubre de 2026)", "Fecha"],
   ["fecha.ciudad_y_fecha", "Ciudad y fecha (Ibagué, 14 de octubre de 2026)", "Fecha"],
 ].map(([key, label, group]) => ({ key, label, group }));

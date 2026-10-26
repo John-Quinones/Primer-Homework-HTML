@@ -4,6 +4,14 @@
 
 export const OBJECTS_KEY = "OBJETOS_CONTRACTUALES";
 export const OBJECTS_LABEL = "Objetos contractuales (marque en la lista)";
+// Version 2.2.47: the same mechanism serves the power of attorney («Clases de poder»); each list is told apart by its `kind`.
+export const POWER_KEYS = ["CLASES_DE_PODER", "FACULTADES_ESPECIFICAS"];
+export const POWER_LABEL = "Clases de poder (marque en la lista)";
+export const KINDS = {
+  contrato: { noun: "objeto contractual", nounThe: "El objeto contractual", keys: [OBJECTS_KEY] },
+  poder: { noun: "clase de poder", nounThe: "La clase de poder", keys: POWER_KEYS },
+};
+export const MAX_DESCRIPTION = 300;
 export const MAX_TITLE = 120;
 export const MAX_CLAUSE = 8000;
 
@@ -17,17 +25,22 @@ const fold = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
  * Validates a create/update body. `existing` is the stored row on update (omitted fields keep their value);
  * `others` are the other objects, to refuse a repeated title. Returns { title, clause, is_active } or an error text.
  */
-export function objectValues(body, existing = null, others = []) {
+export function objectValues(body, existing = null, others = [], kind = "contrato") {
+  const noun = (KINDS[kind] ?? KINDS.contrato).noun;
   const b = body ?? {};
   const title = "title" in b ? String(b.title ?? "").replace(/\s+/g, " ").trim() : existing?.title ?? "";
-  const clause = "clause" in b ? clean(b.clause).replace(/\n{3,}/g, "\n\n") : existing?.clause ?? "";
+  // The power class calls its text `content_template`; both names are accepted.
+  const clauseIn = "clause" in b ? b.clause : "content_template" in b ? b.content_template : undefined;
+  const clause = clauseIn !== undefined ? clean(clauseIn).replace(/\n{3,}/g, "\n\n") : existing?.clause ?? "";
+  const description = "description" in b ? String(b.description ?? "").replace(/\s+/g, " ").trim() : existing?.description ?? "";
   const active = "is_active" in b ? !!b.is_active : existing ? !!existing.is_active : true;
-  if (!title) return "Escriba el título del objeto contractual.";
+  if (!title) return `Escriba el título ${kind === "poder" ? "de la" : "del"} ${noun}.`;
   if (title.length > MAX_TITLE) return `El título debe tener máximo ${MAX_TITLE} caracteres.`;
-  if (!clause) return "Escriba la cláusula de este objeto contractual.";
+  if (!clause) return kind === "poder" ? "Escriba el texto de las facultades de esta clase de poder." : "Escriba la cláusula de este objeto contractual.";
   if (clause.length > MAX_CLAUSE) return `La cláusula debe tener máximo ${MAX_CLAUSE} caracteres.`;
-  if (others.some((o) => fold(o.title) === fold(title))) return "Ya existe un objeto contractual con ese título.";
-  return { title, clause, is_active: active ? 1 : 0 };
+  if (description.length > MAX_DESCRIPTION) return `La descripción debe tener máximo ${MAX_DESCRIPTION} caracteres.`;
+  if (others.some((o) => fold(o.title) === fold(title))) return `Ya existe ${kind === "poder" ? "una" : "un"} ${noun} con ese título.`;
+  return { title, description, clause, is_active: active ? 1 : 0 };
 }
 
 /** Objects in the order of the checklist. */

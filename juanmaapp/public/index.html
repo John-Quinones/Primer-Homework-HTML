@@ -465,6 +465,7 @@
           <button role="tab" data-dtab="plantillas" class="active">Plantillas</button>
           <button role="tab" data-dtab="nomos">Redactar con NomosAI</button>
           <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Objetos del contrato</button>
+          <button role="tab" data-dtab="poderes" id="dtab-poderes" hidden title="Solo Gerencia">Clases de poder</button>
         </div>
 
         <div data-dpanel="objetos" hidden>
@@ -475,6 +476,17 @@
             </div>
             <p class="hint">Cada objeto es una cláusula lista para el contrato (por ejemplo «Reintegro laboral» o «Proceso ejecutivo»). Al hacer un contrato, el usuario marca una o varias casillas y la cláusula de cada una se imprime donde el Word tiene el marcador <code>{{OBJETOS_CONTRACTUALES}}</code>. Si marca varias, salen como A), B), C… en el orden de esta lista. En la cláusula puede usar datos como <code>{{cliente.nombre}}</code>. Un objeto que ya se usó en algún contrato no se borra: se desactiva y deja de aparecer en la lista de casillas.</p>
             <div id="cobj-list"></div>
+          </section>
+        </div>
+
+        <div data-dpanel="poderes" hidden>
+          <section class="panel">
+            <div class="toolbar">
+              <h3>Clases de poder · Plantilla de Poder</h3>
+              <button type="button" class="primary" data-action="new-pcls">+ Nueva clase de poder</button>
+            </div>
+            <p class="hint">Cada clase es el texto de facultades de un tipo de poder (por ejemplo «Poder para proceso ejecutivo», «laboral», «de familia» o «trámite administrativo»). Al hacer un poder, el usuario marca una o varias casillas y el texto de cada una se imprime donde el Word tiene el marcador <code>{{CLASES_DE_PODER}}</code> (también sirve <code>{{FACULTADES_ESPECIFICAS}}</code>). Si marca varias, salen como A), B), C… en el orden de esta lista. En el texto puede usar datos como <code>{{cliente.nombre}}</code>. Una clase que ya se usó en algún poder no se borra: se desactiva y deja de aparecer en la lista de casillas.</p>
+            <div id="pcls-list"></div>
           </section>
         </div>
 
@@ -1472,6 +1484,26 @@
         <label class="span2">Título de la casilla * <input name="title" required maxlength="120" placeholder="Ej. Reintegro laboral" /></label>
         <label class="span2">Cláusula que se imprime en el contrato * <textarea name="clause" rows="10" required maxlength="8000" placeholder="Ej. Representar al PODERDANTE en el proceso ordinario laboral de reintegro contra {{expediente.contraparte}}…"></textarea></label>
         <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activo (aparece como casilla al hacer el contrato)</label>
+      </div>
+      <p class="hint">Texto simple: una línea en blanco separa párrafos. La letra, el tamaño y el formato los pone el Word de la plantilla.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Clase de poder -->
+  <dialog id="pcls-dialog" class="wide-dialog">
+    <form method="dialog" data-form="pcls">
+      <h3 data-title>Nueva clase de poder</h3>
+      <input type="hidden" name="id" />
+      <div class="grid2">
+        <label class="span2">Título de la casilla * <input name="title" required maxlength="120" placeholder="Ej. Poder para proceso ejecutivo" /></label>
+        <label class="span2">Descripción (opcional) <input name="description" maxlength="300" placeholder="Ej. Cobro judicial de obligaciones claras, expresas y exigibles" /></label>
+        <label class="span2">Texto de facultades que se imprime en el poder * <textarea name="clause" rows="10" required maxlength="8000" placeholder="Ej. para que en mi nombre y representación inicie y lleve hasta su terminación proceso ejecutivo contra {{expediente.contraparte}}…"></textarea></label>
+        <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activa (aparece como casilla al hacer el poder)</label>
       </div>
       <p class="hint">Texto simple: una línea en blanco separa párrafos. La letra, el tamaño y el formato los pone el Word de la plantilla.</p>
       <p class="form-error" hidden></p>

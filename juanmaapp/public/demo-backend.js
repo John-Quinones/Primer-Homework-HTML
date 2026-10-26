@@ -269,9 +269,82 @@
     auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
       summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : ok && method === "DELETE" ? CM.auditDeleted(snap?.before) : [] });
   }
-  const cobjGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar los objetos contractuales (solo Gerencia)."); };
-  const cobjUses = (id) => new Set(s.cobjuses.filter((u) => u.object_id === id).map((u) => u.batch)).size;
-  const cobjOut = (o) => ({ ...clone(o), is_active: !!o.is_active, uses: cobjUses(o.id) });
+  // Lists of «Objetos contractuales» (kind contrato) and «Clases de poder» (kind poder) share one store; rows from 2.2.46 have no kind = contrato.
+  const kindOf = (o) => o.kind || "contrato";
+  const cobjUses = (id, kind) => new Set(s.cobjuses.filter((u) => u.object_id === id && (u.kind || "contrato") === kind).map((u) => u.batch)).size;
+  function cobjRoutes(path, kind) {
+    const K = CO.KINDS[kind], P = kind === "poder";
+    const list = () => s.cobjects.filter((o) => kindOf(o) === kind);
+    const out = (o) => ({ description: "", ...clone(o), kind, is_active: !!o.is_active, uses: cobjUses(o.id, kind) });
+    const gerencia = () => { if (me().role !== "Gerencia") fail(`Su rol no tiene permiso para administrar ${P ? "las clases de poder" : "los objetos contractuales"} (solo Gerencia).`); };
+    const find = (id) => list().find((o) => o.id === id) || fail(`${K.nounThe} no existe.`);
+    const re = (tail = "") => new RegExp(`^/${path}${tail}$`);
+    return [
+      ["GET", new RegExp(`^/${path}(?:\\?(.*))?$`), (m, b, url) => {
+        need("drafts.generate");
+        const all = qs(url).all === "1" && me().role === "Gerencia";
+        return CO.sortObjects(list()).filter((o) => o.is_active || all).map(out);
+      }],
+      ["POST", re(), (m, b) => {
+        gerencia();
+        const v = CO.objectValues(b, null, list(), kind);
+        typeof v === "string" && fail(v);
+        const o = { id: nextId(), kind, ...v, display_order: Math.max(0, ...list().map((x) => x.display_order)) + 1, created_by: me().id, created_at: stamp(), updated_at: stamp() };
+        s.cobjects.push(o);
+        return out(o);
+      }],
+      ["PUT", re("/order"), (m, b) => {
+        gerencia();
+        const ids = Array.isArray(b.ids) ? b.ids.map(Number) : [];
+        if (!ids.length || ids.some((id) => !list().some((o) => o.id === id)) || new Set(ids).size !== ids.length) fail("La lista de orden no es válida.");
+        const rest = CO.sortObjects(list()).map((o) => o.id).filter((id) => !ids.includes(id));
+        [...ids, ...rest].forEach((id, i) => { const o = s.cobjects.find((x) => x.id === id); o.display_order = i + 1; o.updated_at = stamp(); });
+        return CO.sortObjects(list()).map(out);
+      }],
+      ["PUT", re("/(\\d+)"), (m, b) => {
+        gerencia();
+        const cur = find(+m[1]);
+        const v = CO.objectValues(b, cur, list().filter((o) => o !== cur), kind);
+        typeof v === "string" && fail(v);
+        Object.assign(cur, v, { updated_at: stamp() });
+        return out(cur);
+      }],
+      ["DELETE", re("/(\\d+)"), (m) => {
+        gerencia();
+        const cur = find(+m[1]);
+        if (cobjUses(cur.id, kind)) { cur.is_active = 0; cur.updated_at = stamp(); return { id: cur.id, deleted: false, deactivated: true }; }
+        s.cobjects = s.cobjects.filter((o) => o !== cur);
+        return { id: cur.id, deleted: true, deactivated: false };
+      }],
+      ["POST", re("/uses"), (m, b) => {
+        need("drafts.generate");
+        const ids = [...new Set((Array.isArray(b.object_ids) ? b.object_ids : []).map(Number))];
+        ids.length || fail(P ? "Marque al menos una clase de poder." : "Marque al menos un objeto contractual.");
+        const objs = ids.map((id) => list().find((o) => o.id === id && o.is_active));
+        objs.some((o) => !o) && fail(P ? "Una de las clases de poder ya no está disponible." : "Uno de los objetos contractuales ya no está disponible.");
+        const caseId = b.case_id ? +b.case_id : null;
+        if (b.case_id && !(Number.isInteger(caseId) && caseId > 0)) fail("El expediente no es válido.");
+        caseId && visibleCase(caseId);
+        const batch = String(nextId());
+        const action = ["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(b.action) ? b.action : "";
+        const sorted = CO.sortObjects(objs);
+        for (const o of sorted) s.cobjuses.push({ id: nextId(), batch, kind, object_id: o.id, object_title: o.title, case_id: caseId, template_id: Number(b.template_id) || null, document_id: Number(b.document_id) || null, action, created_by: me().id, created_at: stamp() });
+        return { batch, objects: sorted.map((o) => ({ id: o.id, title: o.title })) };
+      }],
+      ["GET", new RegExp(`^/${path}/uses\\?(.*)$`), (m, b, url) => {
+        need("drafts.generate");
+        const caseId = +qs(url).case_id;
+        (Number.isInteger(caseId) && caseId > 0) || fail("El expediente no es válido.");
+        visibleCase(caseId);
+        const batches = new Map();
+        for (const x of s.cobjuses.filter((u) => u.case_id === caseId && (u.kind || "contrato") === kind)) {
+          if (!batches.has(x.batch)) batches.set(x.batch, { batch: x.batch, action: x.action, template_id: x.template_id, document_id: x.document_id, created_at: x.created_at, objects: [] });
+          batches.get(x.batch).objects.push({ id: x.object_id, title: x.object_title });
+        }
+        return [...batches.values()];
+      }],
+    ];
+  }
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
   const onlyGerencia = () => { if (me().role !== "Gerencia") fail("Solo Gerencia puede ocultar usuarios: su rol no tiene permiso para esta acción."); };
   const hiddenTries = { n: 0, until: 0 };
@@ -1182,70 +1255,9 @@
     ["PUT", /^\/category-order$/, (m, b) => { need("catalog.manage"); (b.ids || []).map(Number).forEach((id, i) => { const c = s.categories.find((x) => x.id === id); if (c) c.sort = i; }); return { ok: true }; }],
     ["PUT", /^\/categories\/(\d+)\/fields\/order$/, (m, b) => { need("catalog.manage"); (b.field_ids || []).map(Number).forEach((id, i) => { const f = s.fields.find((x) => x.id === id && x.category_id === +m[1]); if (f) f.sort = i; }); return { ok: true }; }],
 
-    // ----- contract objects (version 2.2.46) -----
-    ["GET", /^\/contract-objects(?:\?(.*))?$/, (m, b, url) => {
-      need("drafts.generate");
-      const all = qs(url).all === "1" && me().role === "Gerencia";
-      return CO.sortObjects(s.cobjects).filter((o) => o.is_active || all).map(cobjOut);
-    }],
-    ["POST", /^\/contract-objects$/, (m, b) => {
-      cobjGerencia();
-      const v = CO.objectValues(b, null, s.cobjects);
-      typeof v === "string" && fail(v);
-      const o = { id: nextId(), ...v, display_order: Math.max(0, ...s.cobjects.map((x) => x.display_order)) + 1, created_by: me().id, created_at: stamp(), updated_at: stamp() };
-      s.cobjects.push(o);
-      return cobjOut(o);
-    }],
-    ["PUT", /^\/contract-objects\/order$/, (m, b) => {
-      cobjGerencia();
-      const ids = Array.isArray(b.ids) ? b.ids.map(Number) : [];
-      if (!ids.length || ids.some((id) => !s.cobjects.some((o) => o.id === id)) || new Set(ids).size !== ids.length) fail("La lista de orden no es válida.");
-      const rest = CO.sortObjects(s.cobjects).map((o) => o.id).filter((id) => !ids.includes(id));
-      [...ids, ...rest].forEach((id, i) => { const o = s.cobjects.find((x) => x.id === id); o.display_order = i + 1; o.updated_at = stamp(); });
-      return CO.sortObjects(s.cobjects).map(cobjOut);
-    }],
-    ["PUT", /^\/contract-objects\/(\d+)$/, (m, b) => {
-      cobjGerencia();
-      const cur = s.cobjects.find((o) => o.id === +m[1]) || fail("El objeto contractual no existe.");
-      const v = CO.objectValues(b, cur, s.cobjects.filter((o) => o !== cur));
-      typeof v === "string" && fail(v);
-      Object.assign(cur, v, { updated_at: stamp() });
-      return cobjOut(cur);
-    }],
-    ["DELETE", /^\/contract-objects\/(\d+)$/, (m) => {
-      cobjGerencia();
-      const cur = s.cobjects.find((o) => o.id === +m[1]) || fail("El objeto contractual no existe.");
-      if (cobjUses(cur.id)) { cur.is_active = 0; cur.updated_at = stamp(); return { id: cur.id, deleted: false, deactivated: true }; }
-      s.cobjects = s.cobjects.filter((o) => o !== cur);
-      return { id: cur.id, deleted: true, deactivated: false };
-    }],
-    ["POST", /^\/contract-objects\/uses$/, (m, b) => {
-      need("drafts.generate");
-      const ids = [...new Set((Array.isArray(b.object_ids) ? b.object_ids : []).map(Number))];
-      ids.length || fail("Marque al menos un objeto contractual.");
-      const objs = ids.map((id) => s.cobjects.find((o) => o.id === id && o.is_active));
-      objs.some((o) => !o) && fail("Uno de los objetos contractuales ya no está disponible.");
-      const caseId = b.case_id ? +b.case_id : null;
-      if (b.case_id && !(Number.isInteger(caseId) && caseId > 0)) fail("El expediente no es válido.");
-      caseId && visibleCase(caseId);
-      const batch = String(nextId());
-      const action = ["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(b.action) ? b.action : "";
-      const sorted = CO.sortObjects(objs);
-      for (const o of sorted) s.cobjuses.push({ id: nextId(), batch, object_id: o.id, object_title: o.title, case_id: caseId, template_id: Number(b.template_id) || null, document_id: Number(b.document_id) || null, action, created_by: me().id, created_at: stamp() });
-      return { batch, objects: sorted.map((o) => ({ id: o.id, title: o.title })) };
-    }],
-    ["GET", /^\/contract-objects\/uses\?(.*)$/, (m, b, url) => {
-      need("drafts.generate");
-      const caseId = +qs(url).case_id;
-      (Number.isInteger(caseId) && caseId > 0) || fail("El expediente no es válido.");
-      visibleCase(caseId);
-      const batches = new Map();
-      for (const x of s.cobjuses.filter((u) => u.case_id === caseId)) {
-        if (!batches.has(x.batch)) batches.set(x.batch, { batch: x.batch, action: x.action, template_id: x.template_id, document_id: x.document_id, created_at: x.created_at, objects: [] });
-        batches.get(x.batch).objects.push({ id: x.object_id, title: x.object_title });
-      }
-      return [...batches.values()];
-    }],
+    // ----- contract objects (version 2.2.46) and power classes (2.2.47): same rules, told apart by `kind` -----
+    ...cobjRoutes("contract-objects", "contrato"),
+    ...cobjRoutes("power-classes", "poder"),
 
     // ----- document templates -----
     ["GET", /^\/templates\/meta$/, () => { need("drafts.generate"); return { categories: TPL.categories, variables: TPL.variables }; }],
