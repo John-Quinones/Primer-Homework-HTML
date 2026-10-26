@@ -307,6 +307,20 @@ export function sideRoles(category, type = "") {
   return { activa: own.filter((r) => sideOfRole(r) === "activa"), pasiva: own.filter((r) => sideOfRole(r) === "pasiva"),
     others: ALL_PARTY_ROLES.filter((r) => !own.includes(r)) };
 }
+/**
+ * Text for {{expediente.contraparte}} (version 2.2.50): the defendant side of the case with each one's document,
+ * "Colpensiones (NIT 900.336.004-7) y Juan Pérez (C.C. 123)". Without parties on that side, the case's counterparty text.
+ */
+export function counterpartyText(parties, counterparty = "") {
+  let list = parties;
+  if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+  const names = (Array.isArray(list) ? list : []).filter((p) => p && p.side === "pasiva" && !p.ours && String(p.name || "").trim()).map((p) => {
+    const id = String(p.id_number || "").trim();
+    return id ? `${p.name.trim()} (${[String(p.id_type || "").trim(), id].filter(Boolean).join(" ")})` : p.name.trim();
+  });
+  if (!names.length) return String(counterparty || "").trim();
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
 /** Validated list of parties; returns { parties } or { error }. */
 export function cleanParties(list) {
   if (list == null) return { parties: [] };

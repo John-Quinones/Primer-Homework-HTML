@@ -6,7 +6,7 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables } from "./case-meta.js";
+import { counterpartyText, isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES } from "./templates-seed.js";
 
@@ -54,7 +54,7 @@ export function templateData(db, user, caseId) {
       "cliente.correo": c.email, "cliente.telefono": c.phone, "cliente.direccion": c.address,
       "cliente.ciudad": c.city, "cliente.departamento": c.department, ...idPlaceVariables(c), ...genderWords(c.person_type === "juridica" ? "" : c.gender),
       "expediente.radicado": formatRadicado(k.radicado), "expediente.tipo_proceso": k.category_name, "expediente.subproceso": k.type_name,
-      "expediente.asunto": k.title, "expediente.contraparte": k.counterparty, "expediente.hechos": k.facts,
+      "expediente.asunto": k.title, "expediente.contraparte": counterpartyText(k.parties, k.counterparty), "expediente.hechos": k.facts,
       "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
       "expediente.ciudad": k.city, "expediente.departamento": k.department,
       ...processVariables(k.category_name, k.area, k.type_name, k.radicado ? formatRadicado(k.radicado) : ""),
