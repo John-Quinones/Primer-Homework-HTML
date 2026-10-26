@@ -32,6 +32,7 @@ let html = read("public/index.html");
 html = html
   .replace('<link rel="stylesheet" href="brand.css" />', () => `<style>\n${read("public/brand.css")}\n</style>`)
   .replace('<link rel="stylesheet" href="styles.css" />', () => `<style>\n${read("public/styles.css")}\n</style>`)
+  .replace('<link rel="stylesheet" href="hud.css" />', () => `<style>\n${read("public/hud.css")}\n</style>`)
   .replaceAll("logo-t.png", logo)
   .replace('<script src="vendor/marked.min.js"></script>', () => `<script>${safe(read("node_modules/marked/marked.min.js"))}</script>`)
   .replace('<script src="vendor/purify.min.js"></script>', () => `<script>${safe(read("node_modules/dompurify/dist/purify.min.js"))}</script>`)
@@ -82,6 +83,7 @@ window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: D
     `<script>${safe(read("public/web-store.js"))}</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,
     `<script>${safe(read("public/app.js"))}</script>`,
+    `<script>${safe(read("public/hud.js"))}</script>`,
   ].join("\n"));
 
 mkdirSync(path.join(root, "preview"), { recursive: true });

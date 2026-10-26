@@ -1,0 +1,232 @@
+/*
+ * Tema «Holograma HUD» (solo estilos): azul medianoche, vidrio oscuro, trazos finos y resplandor
+ * verde menta / cian. Se carga al final: reemplaza los tokens de brand.css sin tocar la lógica.
+ * Para volver al aspecto anterior basta quitar el <link> de hud.css (y hud.js) de index.html.
+ */
+html:root:root:root {
+  color-scheme: dark;
+  --hud-mint: #39ff14; --hud-cyan: #00f0ff; --hud-teal: #2cf5c0;
+  --hud-line: rgba(44, 245, 192, .35); --hud-line-soft: rgba(0, 240, 255, .16);
+  --hud-ink: #d8f7ff; --hud-dim: #6fa9bd; --hud-glow: 0 0 14px rgba(44, 245, 192, .35);
+  --hud-panel: linear-gradient(160deg, rgba(8, 24, 52, .72), rgba(4, 10, 26, .82));
+
+  --bg: #040a18; --surface: #07142b; --surface-muted: rgba(0, 240, 255, .06);
+  --border: rgba(0, 240, 255, .2); --text: #e4f6ff; --text-muted: #8bb4c6;
+  --heading: #b8f6ff; --link: #52e8ff; --brand-primary: #0b6f86; --brand-primary-ink: #eaffff;
+  --brand-blue: #00c8e6; --ok: #2cf5a0; --warn: #ffc857; --error: #ff6b81;
+  --fill-highlight: #4a4210;
+  --shadow: 0 0 0 1px rgba(0, 240, 255, .14), 0 10px 30px rgba(0, 0, 0, .45);
+  --sidebar-bg: linear-gradient(180deg, rgba(3, 9, 24, .92), rgba(5, 16, 38, .86));
+  --nav-foot-bg: rgba(3, 9, 24, .9);
+  --sidebar-ink: #7fb7c9;
+  --app-bg: radial-gradient(900px 520px at 90% -5%, rgba(80, 70, 220, .22), transparent 60%),
+            radial-gradient(800px 500px at 0% 100%, rgba(0, 200, 230, .12), transparent 60%),
+            linear-gradient(180deg, #030816 0%, #061226 100%);
+  --command-bg: var(--hud-panel); --command-tile: rgba(0, 240, 255, .05);
+  --on-dark: var(--hud-ink); --on-dark-muted: var(--hud-dim);
+  --k1: #52e8ff; --k2: #2cf5c0; --k3: #ffc857; --k4: #9fc3d1; --k5: #a99bff;
+
+  --neu-base: rgba(8, 28, 58, .75); --neu-ink: var(--hud-ink); --neu-edge: rgba(0, 240, 255, .35);
+  --neu-dark: rgba(0, 0, 0, .55); --neu-light: rgba(0, 240, 255, .06);
+  --neu-raise: 0 0 10px rgba(0, 240, 255, .12); --neu-raise-sm: 0 0 6px rgba(0, 240, 255, .1);
+  --neu-press: inset 0 0 12px rgba(44, 245, 192, .25);
+  --glass-btn: rgba(0, 240, 255, .08); --glass-btn-hover: rgba(44, 245, 192, .2);
+  --glass-ring: inset 0 0 0 1px rgba(0, 240, 255, .38); --glass-drop: 0 0 14px rgba(0, 240, 255, .12);
+  --auth-bg: radial-gradient(800px 560px at 15% 8%, rgba(0, 200, 230, .28), transparent 60%), radial-gradient(800px 600px at 90% 95%, rgba(110, 80, 240, .3), transparent 60%), linear-gradient(135deg, #020712 0%, #061330 60%, #0a1c4a 100%);
+  --select-tint: rgba(44, 245, 192, .12); --select-ring: rgba(44, 245, 192, .5);
+}
+
+html { background: #040a18; }
+body {
+  background: var(--app-bg) fixed; color: var(--text);
+  font-family: "Inter", system-ui, sans-serif;
+}
+/* Cuadrícula digital muy tenue de fondo */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: linear-gradient(rgba(0, 240, 255, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, .035) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+.topbar, .shell { position: relative; z-index: 1; }
+
+/* ---- Barra superior ---- */
+.topbar { background: rgba(3, 10, 26, .82); border-bottom: 1px solid var(--hud-line-soft); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 1px 18px rgba(0, 240, 255, .08); }
+
+/* ---- Menú lateral ---- */
+.sidenav { background: var(--sidebar-bg); border-right: 1px solid var(--hud-line-soft); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); counter-reset: hudnav; }
+.sidenav a { position: relative; color: var(--sidebar-ink); border: 1px solid transparent; border-radius: 10px; transition: color .15s, background .15s, box-shadow .15s; }
+.sidenav a:not(.nav-legal)::after {
+  counter-increment: hudnav; content: counter(hudnav, decimal-leading-zero) " " counter(hudnav, decimal);
+  margin-left: auto; padding-left: 8px; font: 500 .56rem/1 ui-monospace, "SFMono-Regular", Menlo, monospace; letter-spacing: .06em; color: rgba(0, 240, 255, .38); white-space: nowrap;
+}
+.sidenav a .ico { stroke-width: 1.4; opacity: .85; }
+.sidenav a:hover { color: var(--hud-mint); background: rgba(44, 245, 192, .07); }
+.sidenav a.active {
+  color: #021018; background: linear-gradient(90deg, rgba(44, 245, 192, .95), rgba(0, 220, 240, .85));
+  border-color: rgba(190, 255, 240, .8); box-shadow: 0 0 18px rgba(44, 245, 192, .45), inset 0 0 8px rgba(255, 255, 255, .25);
+}
+.sidenav a.active::after { color: rgba(2, 16, 24, .6); }
+.sidenav a.active .ico { opacity: 1; }
+
+/* ---- Marcos con esquinas HUD (corchetes angulares) ---- */
+.command, .panel, .kpi, .banda, dialog { position: relative; }
+.command::before, .panel::before, .kpi::before, dialog::before,
+.command::after, .panel::after, .kpi::after, dialog::after {
+  content: ""; position: absolute; width: 14px; height: 14px; pointer-events: none; z-index: 2;
+  border: 0 solid var(--hud-teal); filter: drop-shadow(0 0 4px rgba(44, 245, 192, .7));
+}
+.command::before, .panel::before, .kpi::before, dialog::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 3px; }
+.command::after, .panel::after, .kpi::after, dialog::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 3px; }
+
+.panel, dialog, .list-panel {
+  background: var(--hud-panel); border: 1px solid var(--hud-line-soft); border-radius: 12px; color: var(--text);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(1, 5, 14, .72); backdrop-filter: blur(3px); }
+.panel-title { color: var(--hud-cyan); text-transform: uppercase; letter-spacing: .14em; font-size: .72rem; }
+
+/* ---- Tu comando central ---- */
+.command { background: linear-gradient(135deg, rgba(6, 22, 52, .78), rgba(26, 18, 70, .55)); border: 1px solid var(--hud-line); border-radius: 14px; box-shadow: var(--hud-glow), var(--shadow); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.command-head { position: relative; }
+.command-head::after {
+  content: "c: 4.438900 · l: -75.232200"; position: absolute; top: 0; right: 0;
+  font: 500 .6rem/1 ui-monospace, Menlo, monospace; letter-spacing: .08em; color: rgba(0, 240, 255, .4);
+}
+.eyebrow { color: #a8efff; letter-spacing: .24em; font-size: .64rem; }
+.command-head h2 { color: #fff; font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 500; text-shadow: 0 0 22px rgba(0, 240, 255, .35); }
+.banda { background: rgba(0, 240, 255, .04); border: 1px solid var(--hud-line-soft); border-radius: 14px; }
+.banda-tabs button { background: rgba(0, 120, 160, .15); color: #8fe3f4; border: 1px solid rgba(0, 240, 255, .28); border-radius: 999px; box-shadow: none; }
+.banda-tabs button[aria-selected="true"] { background: rgba(44, 245, 192, .22); color: #eafff8; border-color: var(--hud-mint); box-shadow: 0 0 14px rgba(57, 255, 20, .35); }
+.banda-body { background: rgba(0, 20, 44, .55); border: 1px solid var(--hud-line-soft); }
+.banda-dots i.on { background: var(--hud-teal); box-shadow: 0 0 6px var(--hud-teal); }
+
+/* ---- Tarjetas de métricas ---- */
+.kpi, .command .kpi {
+  background: linear-gradient(180deg, rgba(0, 240, 255, .07), rgba(4, 12, 30, .6)); border: 1px solid var(--hud-line-soft); border-top: 2px solid rgba(44, 245, 192, .5);
+  border-radius: 10px; box-shadow: var(--glass-ring); color: var(--hud-ink); overflow: hidden;
+}
+.kpi .kpi-value, .command .kpi-value { color: var(--hud-teal); font-weight: 300; text-shadow: 0 0 16px rgba(44, 245, 192, .55); font-size: 2.4rem; }
+.kpi .kpi-label, .command .kpi-label, .command .kpi-sub { color: #7fe8d6; font-size: .74rem; }
+.kpi .ico { stroke-width: 1.4; }
+.kpi:hover, .command .kpi:hover { border-color: var(--hud-teal); box-shadow: 0 0 18px rgba(44, 245, 192, .25); background: linear-gradient(180deg, rgba(44, 245, 192, .12), rgba(4, 12, 30, .6)); }
+/* Matriz de puntos en la esquina inferior derecha */
+.kpis .kpi { background-image: radial-gradient(rgba(44, 245, 192, .55) 1px, transparent 1.4px), linear-gradient(180deg, rgba(0, 240, 255, .07), rgba(4, 12, 30, .6)); background-size: 30px 18px, auto; background-position: right 8px bottom 8px, 0 0; background-repeat: no-repeat; }
+/* Prioridad: clientes pendientes de pago de sentencia */
+#kpi-pps-clients-tile { border: 1px solid var(--hud-mint); border-top: 2px solid var(--hud-mint); box-shadow: 0 0 18px rgba(57, 255, 20, .45), inset 0 0 14px rgba(57, 255, 20, .12); filter: drop-shadow(0 0 8px rgba(57, 255, 20, .4)); }
+#kpi-pps-clients-tile .kpi-value { color: #8bff6a; text-shadow: 0 0 18px rgba(57, 255, 20, .7); }
+
+/* ---- Listas y gráfica ---- */
+.recent li { background: rgba(0, 240, 255, .05); border: 1px solid rgba(0, 240, 255, .1); border-radius: 8px; }
+.recent li div span { color: var(--text-muted); }
+.hbar-label { color: var(--hud-ink); }
+.hbar-track { height: 12px; border-radius: 999px; background: rgba(0, 240, 255, .08); box-shadow: inset 0 0 0 1px rgba(0, 240, 255, .14); }
+.hbar-fill { border-radius: 999px; background: linear-gradient(90deg, #0a5ad6, #00c8e6 55%, #39ffa0); box-shadow: 0 0 10px rgba(44, 245, 192, .55); }
+.hbar-fill.late { background: linear-gradient(90deg, #8a6a10, #ffc857); box-shadow: 0 0 10px rgba(255, 200, 87, .5); }
+.hbar-fill.bad { background: linear-gradient(90deg, #8a1f35, #ff6b81); box-shadow: 0 0 10px rgba(255, 107, 129, .5); }
+.hbar-value { color: var(--hud-teal); }
+
+/* ---- Botones (cápsulas de trazo fino) ---- */
+button, a.button, .file-btn { background: rgba(8, 28, 58, .7); color: var(--hud-ink); border: 1px solid rgba(0, 240, 255, .35); border-radius: 999px; box-shadow: none; }
+button:hover:not(:disabled), a.button:hover, .file-btn:hover { background: rgba(44, 245, 192, .16); border-color: var(--hud-teal); box-shadow: 0 0 12px rgba(44, 245, 192, .3); color: #fff; }
+button.primary, a.button, .file-btn { background: linear-gradient(90deg, rgba(0, 120, 170, .75), rgba(20, 180, 190, .75)); border-color: rgba(120, 255, 230, .6); color: #f2ffff; }
+button.primary:hover:not(:disabled), a.button:hover { background: linear-gradient(90deg, rgba(0, 150, 200, .9), rgba(44, 245, 192, .85)); border-color: var(--hud-mint); }
+button.danger { color: var(--error); border-color: rgba(255, 107, 129, .5); }
+button.danger-solid { background: #9c1d36; border-color: #ff6b81; }
+button.mini { border-radius: 999px; }
+button:disabled { opacity: .4; }
+button:focus-visible, a.button:focus-visible, .sidenav a:focus-visible { outline: 2px solid var(--hud-teal); outline-offset: 2px; }
+.link-btn, .legal-links button, .order-btns button, .help-btn { background: none; border: 0; box-shadow: none; }
+.help-btn { border: 1px solid rgba(0, 240, 255, .4); border-radius: 50%; }
+.tabs button, .legal-tabs button, .legal-tabs a { background: rgba(8, 28, 58, .7); border-color: rgba(0, 240, 255, .3); color: #9fe9f7; }
+.tabs button.active { background: rgba(44, 245, 192, .2); border-color: var(--hud-mint); color: #fff; box-shadow: 0 0 12px rgba(57, 255, 20, .3); }
+.item.selected, .tpl-item.selected { background: var(--select-tint); box-shadow: inset 3px 0 0 var(--hud-teal); }
+
+/* ---- Atrás / Adelante: cápsulas con borde cian ---- */
+.page-nav { background: linear-gradient(to top, rgba(3, 9, 24, .96) 70%, transparent); }
+.page-nav button, .history-nav button { border: 1px solid rgba(0, 240, 255, .6); background: rgba(0, 40, 80, .45); color: #fff; border-radius: 999px; box-shadow: 0 0 10px rgba(0, 240, 255, .2); padding-inline: 18px; }
+.page-nav button:hover:not(:disabled), .history-nav button:hover:not(:disabled) { border-color: var(--hud-teal); background: rgba(44, 245, 192, .2); }
+
+/* ---- Formularios y tablas ---- */
+input:not([type=radio]):not([type=checkbox]), select, textarea { background: rgba(0, 20, 44, .7); color: var(--text); border: 1px solid rgba(0, 240, 255, .25); border-radius: 8px; }
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--hud-teal); background-color: rgba(0, 40, 70, .75); box-shadow: 0 0 10px rgba(44, 245, 192, .3); }
+option { background: #07142b; color: var(--text); }
+table { color: var(--text); }
+th { color: var(--hud-cyan); }
+th, td { border-color: rgba(0, 240, 255, .12) !important; }
+hr { border-color: rgba(0, 240, 255, .15); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, .25); border-radius: 6px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, .25); }
+
+/* ---- Movimiento reciente: radar + botones direccionales (hud.js) ---- */
+.hud-radar-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; }
+.hud-radar {
+  position: relative; flex: none; width: 150px; height: 150px; border-radius: 50%;
+  border: 1px solid var(--hud-line); box-shadow: 0 0 18px rgba(44, 245, 192, .35), inset 0 0 22px rgba(0, 240, 255, .2);
+  background:
+    radial-gradient(circle, transparent 0 22%, rgba(44, 245, 192, .35) 22.5% 23.5%, transparent 24% 46%, rgba(44, 245, 192, .3) 46.5% 47.5%, transparent 48% 70%, rgba(44, 245, 192, .25) 70.5% 71.5%, transparent 72%),
+    linear-gradient(rgba(44, 245, 192, .28), rgba(44, 245, 192, .28)) center / 1px 100% no-repeat,
+    linear-gradient(90deg, rgba(44, 245, 192, .28), rgba(44, 245, 192, .28)) center / 100% 1px no-repeat,
+    radial-gradient(circle, rgba(0, 240, 255, .12), rgba(0, 10, 30, .6) 70%);
+  overflow: hidden;
+}
+.hud-radar::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(57, 255, 20, .55), rgba(57, 255, 20, 0) 28%, transparent 28%); animation: hud-sweep 4s linear infinite; }
+.hud-radar::after { content: ""; position: absolute; left: 62%; top: 30%; width: 6px; height: 6px; border-radius: 50%; background: var(--hud-mint); box-shadow: 0 0 8px var(--hud-mint), -34px 52px 0 -1px var(--hud-cyan), -50px 18px 0 -2px var(--hud-teal); animation: hud-blip 2s ease-in-out infinite; }
+@keyframes hud-sweep { to { transform: rotate(360deg); } }
+@keyframes hud-blip { 50% { opacity: .35; } }
+.hud-pad { display: flex; flex-direction: column; gap: 8px; }
+.hud-pad button {
+  width: 38px; height: 38px; min-height: 0; padding: 0; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(0, 240, 255, .06); border: 1px solid rgba(44, 245, 192, .55); color: var(--hud-teal); box-shadow: 0 0 8px rgba(44, 245, 192, .2);
+}
+.hud-pad button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hud-pad button svg .solid { fill: currentColor; stroke: none; }
+.hud-pad button:hover:not(:disabled) { background: rgba(44, 245, 192, .22); color: #fff; box-shadow: 0 0 14px rgba(44, 245, 192, .55); }
+@media (prefers-reduced-motion: reduce) { .hud-radar::before, .hud-radar::after { animation: none; } }
+
+@media (max-width: 760px) {
+  .sidenav a:not(.nav-legal)::after { display: none; }
+  .command-head::after { position: static; display: block; margin-top: 6px; }
+  .kpi .kpi-value, .command .kpi-value { font-size: 2rem; }
+  .hud-radar { width: 120px; height: 120px; }
+}
+
+/* ---- Ingreso ---- */
+.auth-card { background: var(--hud-panel); border: 1px solid var(--hud-line); box-shadow: var(--hud-glow), var(--shadow); }
+.auth-card button.wide, .auth-card button.primary { background: linear-gradient(90deg, rgba(0, 120, 170, .8), rgba(44, 245, 192, .75)); color: #f2ffff; border: 1px solid rgba(120, 255, 230, .7); box-shadow: 0 0 16px rgba(44, 245, 192, .3); }
+
+/* ---- Fiel a la imagen de referencia ---- */
+html:root:root:root { --font-ui: "Rajdhani", "Inter", system-ui, sans-serif; }
+.panel-title { text-transform: none; letter-spacing: .01em; font-size: 1.15rem; color: #dff8ff; font-weight: 500; font-family: var(--font-ui); }
+.command-head h2 { font-family: var(--font-ui); font-weight: 500; }
+.eyebrow { font-family: var(--font-ui); font-size: .8rem; letter-spacing: .2em; }
+.hbar { grid-template-columns: minmax(110px, 160px) 1fr 32px; }
+/* Menú de iconos en escritorio: el nombre sale al pasar el cursor (título) */
+@media (min-width: 761px) {
+  .shell { grid-template-columns: 84px 1fr; }
+  .sidenav { padding: 18px 0; gap: 6px; align-items: stretch; }
+  .sidenav a:not(.nav-legal) { justify-content: flex-start; gap: 6px; padding: 14px 8px 14px 24px; border-radius: 0; }
+  .sidenav a .nav-text { display: none; }
+  .sidenav a .ico { width: 26px; height: 26px; stroke-width: 1.3; }
+  .sidenav a:not(.nav-legal)::after { margin-left: 0; padding-left: 0; font-size: .5rem; width: 18px; white-space: normal; line-height: 1.2; border-left: 1px solid rgba(0, 240, 255, .3); padding-left: 4px; }
+  .sidenav a.active { background: linear-gradient(90deg, rgba(44, 245, 192, .9), rgba(20, 200, 200, .7)); border-color: transparent; box-shadow: inset 4px 0 0 var(--hud-mint), 0 0 18px rgba(44, 245, 192, .3); color: #eafff8; }
+  .sidenav a.active::after { color: rgba(2, 16, 24, .6); border-color: rgba(2, 16, 24, .35); }
+  .sidenav .nav-legal, .sidenav .nav-version { display: none; }
+}
+/* Globo holográfico en «Movimiento reciente» */
+.hud-radar {
+  width: 190px; height: 190px;
+  background:
+    radial-gradient(circle at 38% 35%, rgba(57, 255, 160, .55) 0 2px, transparent 2.5px) 0 0 / 9px 9px,
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, .18), rgba(2, 14, 34, .85) 72%);
+  box-shadow: 0 0 26px rgba(44, 245, 192, .45), inset 0 0 30px rgba(44, 245, 192, .28);
+  -webkit-mask: none;
+}
+.hud-radar i { position: absolute; border-radius: 50%; border: 1px solid rgba(44, 245, 192, .45); inset: 18%; }
+.hud-radar i:nth-child(2) { inset: 36%; }
+.hud-radar i:nth-child(3) { inset: 0 38%; border-radius: 50%; }
+.hud-radar i:nth-child(4) { inset: 38% 0; }
+.hud-pad button { width: 46px; height: 46px; background: rgba(0, 120, 120, .18); }
+.hud-pad button svg { width: 22px; height: 22px; }
+.hud-pad { gap: 12px; }
+@media (max-width: 760px) { .hud-radar { width: 130px; height: 130px; } .hud-pad button { width: 40px; height: 40px; } }
