@@ -5023,7 +5023,7 @@ const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
-  const all = { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis]) };
+  const all = { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
   // Versions 2.2.46 / 2.2.47: the clauses of the ticked objects / power classes go where the Word has the kind's marker.
   for (const kind of Object.keys(PICK)) {
     if (!usesPick(kind)) continue;
@@ -5046,8 +5046,8 @@ function pickChecklist(kind) {
 }
 // Version 2.67: «Honorarios / Cuota de litis / Mixto» checklist of the services contract; the amounts are typed as plain
 // numbers and the contract writes them as «$2.000 (dos mil pesos m/cte.)». The three data are kept in the case.
-const FEE = { tipo: "campo.Tipo de honorarios", fijo: "campo.Honorarios valor", litis: "campo.Cuota de litis" };
-const FEE_VARS = ["honorarios.modalidad", "honorarios.fijo", "honorarios.litis_porcentaje", "honorarios.litis_valor"];
+const FEE = { tipo: "campo.Tipo de honorarios", fijo: "campo.Honorarios valor", litis: "campo.Cuota de litis", cuotas: "campo.Cuotas de honorarios" };
+const FEE_VARS = ["honorarios.modalidad", "honorarios.fijo", "honorarios.litis_porcentaje", "honorarios.litis_valor", "honorarios.cuotas", "honorarios.numero_cuotas"];
 const usesFeeChecklist = () => !!tplActive?.vars.some((k) => FEE_VARS.includes(k));
 function feeChecklist(vals) {
   const tipo = vals[FEE.tipo] || "";
@@ -5061,12 +5061,32 @@ function feeChecklist(vals) {
       <input data-var="${FEE.fijo}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.fijo] ?? "")}" placeholder="Ej. 2000000" class="${vals[FEE.fijo] && L.pesosFromText(vals[FEE.fijo]) ? "" : "missing"}" />
       <span class="muted" data-fee-preview="fijo">${escapeHtml(preview("honorarios.fijo"))}</span>
       <span class="muted" data-fee-places="fijo">${escapeHtml(L.placeValues(L.pesosFromText(vals[FEE.fijo])))}</span></label>
+    ${installmentsBlock(vals, show("fijo"))}
     <label data-fee-field="litis" ${show("litis") ? "" : "hidden"}>Cuota de litis (solo porcentaje, ej. 35%)
       <input data-var="${FEE.litis}" data-fee-money inputmode="numeric" maxlength="4" value="${escapeHtml(vals[FEE.litis] ?? "")}" placeholder="Ej. 35%" class="${vals[FEE.litis] ? "" : "missing"}" />
       <span class="muted" data-fee-preview="litis">${escapeHtml(preview("honorarios.litis_porcentaje"))}</span>
       <span class="muted" data-fee-places="litis"></span></label>
     ${tipo ? "" : '<p class="muted">Marque una opción para que el contrato lleve los honorarios.</p>'}
   </fieldset>`;
+}
+// Version 2.2.52 (John): with «Honorarios» or «Mixto» the fixed fee can be paid in installments: how many, the value of each
+// and the date of each; what is left over of the total becomes one last installment.
+function installmentsBlock(vals, visible) {
+  const text = vals[FEE.cuotas] || "", on = !!text.trim() && text !== "no";
+  const total = L.pesosFromText(vals[FEE.fijo]);
+  const st = L.parseInstallments(text), plan = L.installmentPlan(total, st);
+  const rows = plan.rows.map((r, i) => `<label class="inst-row">${escapeHtml(r.name)}: ${escapeHtml(L.fmtPesos(r.amount))}
+      <input type="date" data-inst-date="${i}" value="${escapeHtml(r.date)}" class="${r.date ? "" : "missing"}" /></label>`).join("");
+  const note = !on ? "" : !total ? "Escriba primero el valor de los honorarios."
+    : plan.over ? "Las cuotas suman más que los honorarios: baje el número o el valor de cada cuota."
+    : !st.n || !st.value ? "Indique el número de cuotas y el valor de cada una."
+    : plan.balance ? `Quedan ${L.fmtPesos(plan.balance)} de saldo: se toman como la última cuota.` : "Las cuotas cubren el total de los honorarios.";
+  return `<div class="fee-inst" data-inst-block ${visible ? "" : "hidden"}>
+    <label class="inline"><input type="checkbox" data-inst-on ${on ? "checked" : ""} /> Pagar los honorarios en cuotas</label>
+    ${on ? `<div class="fee-inst-fields"><label>Número de cuotas <input type="number" min="1" max="${L.MAX_INSTALLMENTS}" data-inst-n value="${st.n || ""}" placeholder="Ej. 3" /></label>
+      <label>Valor de cada cuota <input data-inst-value inputmode="numeric" value="${st.value ? escapeHtml(L.fmtPesos(st.value)) : ""}" placeholder="Ej. 1000000" /></label>
+      <p class="muted">${escapeHtml(note)}</p>${rows}</div>` : ""}
+  </div>`;
 }
 // The number the person typed becomes «$2.000» (or «35 %») when they leave the box.
 const feeShown = (key, text) => {
@@ -5160,6 +5180,18 @@ $("#tpl-vars").addEventListener("change", (e) => {
   const obj = e.target.closest("[data-pick]");
   if (obj) {
     pickState[obj.dataset.pick].picked[obj.checked ? "add" : "delete"](Number(obj.dataset.pickId));
+    renderTplVars();
+    if (!$("#tpl-edit-mode").checked) renderTplDoc();
+    return;
+  }
+  if (e.target.closest("[data-inst-block]") && !e.target.closest("[data-fee-kind]")) {
+    const box = e.target.closest("[data-inst-block]");
+    if (!$("[data-inst-on]", box).checked) tplOverrides[FEE.cuotas] = "no"; // "no" because an empty override would let the saved value come back
+    else if (e.target.matches("[data-inst-on]")) tplOverrides[FEE.cuotas] = L.serializeInstallments({ n: 0, value: 0, dates: [] });
+    else {
+      const dates = $$("[data-inst-date]", box).map((x) => x.value);
+      tplOverrides[FEE.cuotas] = L.serializeInstallments({ n: Number($("[data-inst-n]", box)?.value) || 0, value: L.pesosFromText($("[data-inst-value]", box)?.value) || 0, dates });
+    }
     renderTplVars();
     if (!$("#tpl-edit-mode").checked) renderTplDoc();
     return;

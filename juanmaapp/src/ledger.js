@@ -220,7 +220,7 @@ export const fmtPesos = (n) => "$" + dots(Math.round(n));
  * Only the parts that apply are returned, so the passages of the Word for the others disappear, and
  * `honorarios.modalidad` appears only when every amount the type needs is valid (otherwise the Word shows it as missing).
  */
-export function feeTerms(tipo, fijo, litis) {
+export function feeTerms(tipo, fijo, litis, cuotas = "") {
   const t = String(tipo ?? "").trim().toLowerCase();
   const money = (n) => `${fmtPesos(n)} (${pesosEnLetras(n).replace(/^./, (c) => c.toLowerCase())})`;
   const out = {};
@@ -234,9 +234,45 @@ export function feeTerms(tipo, fijo, litis) {
     const p = pct ? Number(pct[1]) : 0;
     if (p > 0 && p <= 100) out["honorarios.litis_porcentaje"] = `${numeroEnLetras(p)} por ciento (${p} %)`;
   }
+  // Version 2.2.52: payment of the fixed fee in installments (only for «Honorarios» and «Mixto»).
+  if (n) {
+    const plan = installmentPlan(n, cuotas);
+    if (plan.ok) {
+      out["honorarios.cuotas"] = plan.rows.map((r) => `${r.name}: ${money(r.amount)}, el ${longDateEs(r.date)}.`).join("\n");
+      out["honorarios.numero_cuotas"] = `${numeroEnLetras(plan.rows.length)} (${plan.rows.length})`;
+    }
+  }
   const ok = (!wantFijo || out["honorarios.fijo"]) && (!wantLitis || out["honorarios.litis_porcentaje"]);
   if ((wantFijo || wantLitis) && ok) out["honorarios.modalidad"] = t === "mixto" ? "honorarios fijos y cuota de litis" : wantFijo ? "honorarios fijos" : "cuota de litis";
   return out;
+}
+
+// Installments of the fixed fee (version 2.2.52). Stored as text «3 | 3000000 | 2026-11-05, 2026-12-05, 2027-01-05, …»:
+// number of installments, value of each, and one date per installment (plus one more for the balance when there is one).
+const ORDINALS = ["Primera", "Segunda", "Tercera", "Cuarta", "Quinta", "Sexta", "Séptima", "Octava", "Novena", "Décima"];
+export const MAX_INSTALLMENTS = 36;
+export function parseInstallments(text) {
+  const [n, v, d] = String(text ?? "").split("|").map((x) => x.trim());
+  return { n: Math.min(parseInt(n, 10) || 0, MAX_INSTALLMENTS), value: pesosFromText(v) || 0, dates: (d || "").split(",").map((x) => x.trim()) };
+}
+export const serializeInstallments = ({ n, value, dates }) => `${n || ""} | ${value || ""} | ${(dates || []).join(", ")}`;
+/**
+ * The plan for `total` pesos: `n` installments of `value` each; what is left over is taken as one last installment («saldo»).
+ * Returns { ok, rows: [{name, amount, date}], balance, over }. `ok` only when every installment has its date and the sum is not above the total.
+ */
+export function installmentPlan(total, text) {
+  const { n, value, dates } = typeof text === "object" && text ? text : parseInstallments(text);
+  const empty = { ok: false, rows: [], balance: 0, over: false };
+  if (!total || n < 1 || !value) return empty;
+  const balance = total - n * value;
+  if (balance < 0) return { ...empty, over: true };
+  const count = n + (balance > 0 ? 1 : 0);
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    const last = balance > 0 && i === n;
+    rows.push({ name: last ? "Cuota final (saldo)" : i < ORDINALS.length ? `${ORDINALS[i]} cuota` : `Cuota ${i + 1}`, amount: last ? balance : value, date: dates[i] || "" });
+  }
+  return { ok: rows.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date)), rows, balance, over: false };
 }
 
 const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];

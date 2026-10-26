@@ -1446,3 +1446,8 @@ dialog:not([open]) { pointer-events: none; }
 #wz-host #tpl-case-label, #wz-host #tpl-fees { display: none !important; }
 #wz-host .actions { order: 90; display: flex; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(0, 43, 106, .15); }
 #wz-host .actions::before { content: "Generar el documento"; flex-basis: 100%; font-weight: 700; }
+
+/* Version 2.2.52: installments of the fixed fee in the contract checklist */
+.fee-inst { margin: .5rem 0; }
+.fee-inst-fields { display: grid; gap: .5rem; margin-top: .5rem; padding-left: .75rem; border-left: 3px solid var(--select-tint, #c4c8cb); }
+.fee-inst .inst-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
