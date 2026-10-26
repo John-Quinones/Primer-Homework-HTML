@@ -21,7 +21,7 @@ test("text round trip and the Word markers", () => {
   assert.deepEqual(parseInstallments(text), { n: 2, value: 4000000, dates: D.slice(0, 3) });
   const t = feeTerms("Mixto", "$10.000.000", "35%", text);
   assert.equal(t["honorarios.numero_cuotas"], "tres (3)");
-  assert.equal(t["honorarios.cuotas"].split("\n").length, 3);
+  assert.equal(t["honorarios.cuotas"].split("\n").length, 3); // one line per installment
   assert.match(t["honorarios.cuotas"], /^Primera cuota: \$4\.000\.000 \(cuatro millones de pesos m\/cte\.\), el 5 de noviembre de 2026\./);
   assert.match(t["honorarios.cuotas"], /Cuota final \(saldo\): \$2\.000\.000/);
 });
