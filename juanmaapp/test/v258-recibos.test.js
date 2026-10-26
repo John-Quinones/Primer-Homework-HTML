@@ -71,7 +71,7 @@ test("Gerencia deletes a receipt with its documents; a case with receipts cannot
     const blocked = await call("DELETE", `/cases/${k.id}`);
     assert.equal(blocked.status >= 400, true);
     assert.match(blocked.body.error, /recibos/);
-    const del = await call("DELETE", `/payments/receipts/${r.id}`);
+    const del = await call("DELETE", `/payments/receipts/${r.id}`, { confirm: String(r.number) });
     assert.equal(del.status, 204);
     assert.deepEqual((await call("GET", `/cases/${k.id}/documents`)).body, []);
     assert.equal((await call("GET", `/payments/receipts?clientId=${r.client_id}`)).body.length, 0);
@@ -108,7 +108,7 @@ test("deleting a receipt makes a copy of the database first (and refuses if it c
   try {
     await call("POST", "/auth/setup", { name: "Gerente", email: "g@firma.co", password: "clave-segura-1" });
     const { r } = await receiptWithCase(call);
-    assert.equal((await call("DELETE", `/payments/receipts/${r.id}`)).status, 204);
+    assert.equal((await call("DELETE", `/payments/receipts/${r.id}`, { confirm: String(r.number) })).status, 204);
     const copies = readdirSync(path.join(dir, "respaldos"));
     assert.equal(copies.length, 1);
     const log = db.prepare("SELECT trigger FROM backup_log ORDER BY id DESC").get();

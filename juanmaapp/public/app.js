@@ -7306,6 +7306,7 @@ async function renderPayTab() {
         <button class="mini" data-action="pay-remind" data-id="${c.id}">Recordar</button>` : ""}
         ${c.state !== "anulado" ? `<button class="mini" data-action="edit-charge" data-id="${c.id}">Editar</button>
         <button class="mini danger" data-action="void-charge" data-id="${c.id}">Anular</button>` : `<span class="muted">${escapeHtml(c.void_reason)}</span>`}
+        ${isGerencia() ? `<button class="mini danger" data-action="delete-charge" data-id="${c.id}" title="Solo Gerencia; se hace una copia de respaldo antes">Eliminar</button>` : ""}
       </td></tr>`).join("");
     payChargesCache = list;
   } else if (payTab === "recibos") {
@@ -7670,10 +7671,12 @@ const PAY_ACTIONS = {
   "receipt-pdf": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id)), "pdf"),
   "receipt-word": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id)), "word"),
   "delete-receipt": async (b) => {
-    if (!(await confirmAsk("Eliminar recibo", "Un recibo no se borra sin necesidad. Solo Gerencia puede hacerlo y antes se hace una copia de respaldo de la base de datos. También se borra su Word y PDF del expediente."))) return;
-    await api("DELETE", `/payments/receipts/${b.dataset.id}`);
-    toast("Recibo eliminado (copia de respaldo hecha).");
-    await renderPagos();
+    const r = payReceiptsCache.find((x) => x.id === Number(b.dataset.id));
+    if (await confirmDeletion("payments/receipts", b.dataset.id, "recibo", r ? `N.º ${r.number}` : "")) { toast("Recibo eliminado (copia de respaldo hecha)."); await renderPagos(); }
+  },
+  "delete-charge": async (b) => {
+    const c = payChargesCache.find((x) => x.id === Number(b.dataset.id));
+    if (await confirmDeletion("payments/charges", b.dataset.id, "cobro", c ? `«${c.concept}»` : "")) { toast("Cobro eliminado (copia de respaldo hecha)."); await renderPagos(); }
   },
   "void-charge": async (b) => {
     const reason = await ask({ title: "Anular cobro", message: "El cobro deja de contar en la cartera. Escriba el motivo.", input: "", okLabel: "Anular", danger: true });

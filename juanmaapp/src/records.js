@@ -4,6 +4,7 @@ import express from "express";
 import { str, HttpError, toInt } from "./http.js";
 import { createHash } from "node:crypto";
 import { backupBeforeReceiptDelete } from "./backup.js";
+import { noteIssuedReceipts } from "./payments.js";
 import { typePath } from "./sql.js";
 import { can, scopeOf, loadUser, inTransaction } from "./auth.js";
 import { normStatus, normPartyRole, cleanParties, isFolderLabel, folderKey, nextFolder, cleanCaseNumber, cleanCaseFields, fieldLabelKey, fieldTypeFor, normGender } from "./case-meta.js";
@@ -185,6 +186,7 @@ export function recordsRouter(db) {
     const plan = clientPlan(req, id);
     checkDeletion(plan, req.body?.confirm, (m) => { throw new HttpError(409, m); }, (m) => { throw new HttpError(400, m); });
     backupBeforeReceiptDelete(db, "antes-de-borrar-cliente");
+    noteIssuedReceipts(db); // 2.2.70: receipt numbers of this client are never issued again
     const rows = (t) => db.prepare(`SELECT * FROM ${t} WHERE client_id = ?`).all(id);
     const gone = [
       ...rows("cases").map((k) => ({ field: "case", label: "Expediente eliminado", before: `#${k.id} ${k.title}`.slice(0, 300), after: "(eliminado)" })),

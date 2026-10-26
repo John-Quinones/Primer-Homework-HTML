@@ -63,6 +63,17 @@ export function applyPayments(charges, receipts, today) {
   return { charges: [...out.values()], credit };
 }
 
+/** Version 2.2.70: a client's pending balance and credit (saldo a favor) before and after dropping some charges and receipts, for the delete windows. */
+export function balanceEffect(charges, receipts, clientId, dropCharges, dropReceipts, today) {
+  const mine = (list) => list.filter((x) => x.client_id === clientId);
+  const calc = (cs, rs) => {
+    const { charges: out, credit } = applyPayments(cs, rs, today);
+    return { balance: out.reduce((a, c) => a + c.balance, 0), credit: credit.get(clientId) || 0 };
+  };
+  return { before: calc(mine(charges), mine(receipts)),
+    after: calc(mine(charges).filter((c) => !dropCharges.includes(c.id)), mine(receipts).filter((x) => !dropReceipts.includes(x.id))) };
+}
+
 /** Totals and aging for a set of computed charges. */
 export function portfolio(computed, credit = new Map()) {
   const aging = Object.fromEntries(AGING.map(([k]) => [k, 0]));
