@@ -215,7 +215,7 @@ export const fmtPesos = (n) => "$" + dots(Math.round(n));
 
 /**
  * Fee terms of a services contract (version 2.67). `tipo` is "Honorarios", "Cuota de litis" or "Mixto";
- * `fijo` and `litis` are what the person typed (pesos, or a percentage such as «35%» for the cuota de litis).
+ * `fijo` is what the person typed in pesos; `litis` is a percentage such as «35%».
  * Every amount comes out as number and words: «$2.000.000 (dos millones de pesos m/cte.)».
  * Only the parts that apply are returned, so the passages of the Word for the others disappear, and
  * `honorarios.modalidad` appears only when every amount the type needs is valid (otherwise the Word shows it as missing).
@@ -229,16 +229,12 @@ export function feeTerms(tipo, fijo, litis) {
   if (n) out["honorarios.fijo"] = money(n);
   if (wantLitis) {
     const text = String(litis ?? "").trim();
-    const pct = text.match(/^(\d{1,3})\s*(?:%|por\s*ciento)$/i);
-    if (pct) {
-      const p = Number(pct[1]);
-      if (p > 0 && p <= 100) out["honorarios.litis_porcentaje"] = `${numeroEnLetras(p)} por ciento (${p} %)`;
-    } else {
-      const v = pesosFromText(text);
-      if (v) out["honorarios.litis_valor"] = money(v);
-    }
+    // Version 2.2.51 (John): the cuota de litis is always a percentage, never pesos («35», «35%» or «35 por ciento»).
+    const pct = text.match(/^(\d{1,3})\s*(?:%|por\s*ciento)?$/i);
+    const p = pct ? Number(pct[1]) : 0;
+    if (p > 0 && p <= 100) out["honorarios.litis_porcentaje"] = `${numeroEnLetras(p)} por ciento (${p} %)`;
   }
-  const ok = (!wantFijo || out["honorarios.fijo"]) && (!wantLitis || out["honorarios.litis_porcentaje"] || out["honorarios.litis_valor"]);
+  const ok = (!wantFijo || out["honorarios.fijo"]) && (!wantLitis || out["honorarios.litis_porcentaje"]);
   if ((wantFijo || wantLitis) && ok) out["honorarios.modalidad"] = t === "mixto" ? "honorarios fijos y cuota de litis" : wantFijo ? "honorarios fijos" : "cuota de litis";
   return out;
 }

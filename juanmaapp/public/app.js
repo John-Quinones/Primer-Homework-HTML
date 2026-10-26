@@ -5061,17 +5061,17 @@ function feeChecklist(vals) {
       <input data-var="${FEE.fijo}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.fijo] ?? "")}" placeholder="Ej. 2000000" class="${vals[FEE.fijo] && L.pesosFromText(vals[FEE.fijo]) ? "" : "missing"}" />
       <span class="muted" data-fee-preview="fijo">${escapeHtml(preview("honorarios.fijo"))}</span>
       <span class="muted" data-fee-places="fijo">${escapeHtml(L.placeValues(L.pesosFromText(vals[FEE.fijo])))}</span></label>
-    <label data-fee-field="litis" ${show("litis") ? "" : "hidden"}>Cuota de litis (valor en números o porcentaje, ej. 35%)
-      <input data-var="${FEE.litis}" data-fee-money inputmode="numeric" value="${escapeHtml(vals[FEE.litis] ?? "")}" placeholder="Ej. 5000000 o 35%" class="${vals[FEE.litis] ? "" : "missing"}" />
-      <span class="muted" data-fee-preview="litis">${escapeHtml(preview("honorarios.litis_valor") || preview("honorarios.litis_porcentaje"))}</span>
-      <span class="muted" data-fee-places="litis">${escapeHtml(/%|por\s*ciento/i.test(vals[FEE.litis] ?? "") ? "" : L.placeValues(L.pesosFromText(vals[FEE.litis])))}</span></label>
+    <label data-fee-field="litis" ${show("litis") ? "" : "hidden"}>Cuota de litis (solo porcentaje, ej. 35%)
+      <input data-var="${FEE.litis}" data-fee-money inputmode="numeric" maxlength="4" value="${escapeHtml(vals[FEE.litis] ?? "")}" placeholder="Ej. 35%" class="${vals[FEE.litis] ? "" : "missing"}" />
+      <span class="muted" data-fee-preview="litis">${escapeHtml(preview("honorarios.litis_porcentaje"))}</span>
+      <span class="muted" data-fee-places="litis"></span></label>
     ${tipo ? "" : '<p class="muted">Marque una opción para que el contrato lleve los honorarios.</p>'}
   </fieldset>`;
 }
 // The number the person typed becomes «$2.000» (or «35 %») when they leave the box.
 const feeShown = (key, text) => {
   const t = String(text).trim();
-  if (key === FEE.litis && /^\d{1,3}\s*(%|por\s*ciento)$/i.test(t)) return `${parseInt(t, 10)} %`;
+  if (key === FEE.litis) { const m = t.match(/^(\d{1,3})\s*(%|por\s*ciento)?$/i); return m && +m[1] > 0 && +m[1] <= 100 ? `${+m[1]} %` : t; }
   const n = L.pesosFromText(t);
   return n ? L.fmtPesos(n) : t;
 };
@@ -5133,9 +5133,13 @@ $("#tpl-vars").addEventListener("input", (e) => {
   const money = e.target.closest("[data-fee-money]");
   if (!money) return;
   const key = money.dataset.var, raw = money.value;
-  const percent = key === FEE.litis && /[%a-z]/i.test(raw);
-  if (percent) money.value = raw.replace(/\$/g, "");
-  else {
+  const percent = key === FEE.litis;
+  if (percent) {
+    // Cuota de litis: only a percentage, 1 to 100; the % sign is added and the caret stays before it.
+    const d = raw.replace(/\D/g, "").slice(0, 3).replace(/^0+/, "");
+    money.value = d ? `${Math.min(Number(d), 100)}%` : "";
+    money.setSelectionRange(money.value.length - 1, money.value.length - 1);
+  } else {
     const caret = money.selectionStart ?? raw.length;
     const digitsBefore = raw.slice(0, caret).replace(/\D/g, "").length;
     const digits = raw.replace(/\D/g, "");
@@ -5146,10 +5150,10 @@ $("#tpl-vars").addEventListener("input", (e) => {
   }
   tplOverrides[key] = money.value.trim();
   const vals = tplValues(), t = L.feeTerms(vals[FEE.tipo], vals[FEE.fijo], vals[FEE.litis]);
-  const kind = key === FEE.fijo ? "fijo" : "litis", said = kind === "fijo" ? t["honorarios.fijo"] : t["honorarios.litis_valor"] || t["honorarios.litis_porcentaje"];
+  const kind = key === FEE.fijo ? "fijo" : "litis", said = kind === "fijo" ? t["honorarios.fijo"] : t["honorarios.litis_porcentaje"];
   $(`[data-fee-preview="${kind}"]`, $("#tpl-vars")).textContent = said ? `En el contrato: ${said}` : "";
   $(`[data-fee-places="${kind}"]`, $("#tpl-vars")).textContent = percent ? "" : L.placeValues(L.pesosFromText(money.value));
-  money.classList.toggle("missing", !(percent ? money.value.trim() : L.pesosFromText(money.value)));
+  money.classList.toggle("missing", !(percent ? t["honorarios.litis_porcentaje"] : L.pesosFromText(money.value)));
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
 });
 $("#tpl-vars").addEventListener("change", (e) => {
