@@ -14,6 +14,7 @@ import { newVerifyCode } from "./verify-code.js";
 import { looksLikeCompany, splitFullName } from "./person.js";
 import { dbFiles, makeBackup } from "./backup.js";
 import { defaultsPlan, defaultResponsible, genderPlan } from "./record-rules.js";
+import { CONTRACT_OBJECTS_SCHEMA } from "./contract-objects-routes.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -631,6 +632,13 @@ function migrate(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS gcal_accounts (
     id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, refresh_enc TEXT NOT NULL, calendar_id TEXT NOT NULL DEFAULT 'primary',
     connected_at TEXT NOT NULL DEFAULT (datetime('now')), created_by INTEGER)`);
+  // Version 2.2.46: «Objetos contractuales» of the services contract. Two new, empty tables (nothing existing is touched);
+  // a copy of the database is made first when it already holds data.
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'contract_objects'").get() && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.2.46" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar los objetos contractuales: ${copy.error}`);
+  }
+  db.exec(CONTRACT_OBJECTS_SCHEMA);
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'radicado-from-number'").get()) {
     const all = db.prepare("SELECT id, radicado, case_number, department, city FROM cases").all();
     const byId = new Map(all.map((k) => [k.id, k]));

@@ -211,6 +211,7 @@ function applyPermissions() {
   if (createCat.disabled) createCat.checked = false;
   $("#portal-probe").hidden = !can("users.manage");
   $("#tpl-manage-bar").hidden = !can("templates.manage");
+  $("#dtab-objetos").hidden = !isGerencia(); // version 2.2.46: contract objects are Gerencia's
   $("#tpl-drop").hidden = !can("templates.manage");
   $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
   $$('[data-tpl-out="mail"]').forEach((b) => (b.hidden = !can("mail.send")));
@@ -3104,6 +3105,22 @@ document.addEventListener("click", (e) => {
       $("#tpl-case").value = String(id);
       location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
     },
+    "new-cobj": () => openCobjDialog(null),
+    "edit-cobj": async () => openCobjDialog((await api("GET", "/contract-objects?all=1")).find((o) => o.id === id)),
+    "toggle-cobj": async () => {
+      const o = (await api("GET", "/contract-objects?all=1")).find((x) => x.id === id);
+      await api("PUT", `/contract-objects/${id}`, { is_active: !o.is_active });
+      toast(o.is_active ? "Desactivado: ya no aparece como casilla." : "Activado: ya aparece como casilla.");
+      await renderCobjAdmin();
+    },
+    "up-cobj": () => cobjMove(id, -1),
+    "down-cobj": () => cobjMove(id, 1),
+    "delete-cobj": async () => {
+      if (!(await confirmAsk("Eliminar objeto contractual", "Si ya se usó en algún contrato solo se desactiva (el historial conserva su título); si nunca se usó, se elimina.", "Eliminar"))) return;
+      const r = await api("DELETE", `/contract-objects/${id}`);
+      toast(r.deactivated ? "Ya se usó en contratos: quedó desactivado." : "Objeto contractual eliminado.");
+      await renderCobjAdmin();
+    },
     "new-template": () => openTemplateDialog(null),
     "edit-template": async () => openTemplateDialog(await api("GET", `/templates/${id}`)),
     "verify-sign": async () => {
@@ -4750,6 +4767,9 @@ wireDialog($("#password-dialog"), async (form) => {
 // ---------- Documentos: plantillas ----------
 const D = window.JuanmaDocx;
 let tplMeta = null, tplList = [], tplCat = "", tplActive = null, tplData = {}, tplOverrides = {};
+const CO = window.JuanmaContractObjects;
+// Version 2.2.46: the contract objects offered as checkboxes (active ones) and the ones ticked for this document.
+let tplObjects = { list: [], picked: new Set() };
 
 function showDTab(name) {
   $$("[data-dtab]").forEach((b) => b.classList.toggle("active", b.dataset.dtab === name));
@@ -4760,6 +4780,7 @@ $("#doc-tabs").addEventListener("click", (e) => {
   if (!b) return;
   crossfade(() => showDTab(b.dataset.dtab));
   if (b.dataset.dtab === "nomos") guarded(renderNomos);
+  if (b.dataset.dtab === "objetos") guarded(renderCobjAdmin);
 });
 
 async function renderBorradores() {
@@ -4827,6 +4848,7 @@ async function openTemplate(id) {
   t.vars = [...new Set(t.vars.map((k) => (CMETA.GENDER_KEYS.includes(k) ? "cliente.genero" : k)))];
   tplActive = t;
   tplOverrides = {};
+  tplObjects = { list: t.vars.includes(CO.OBJECTS_KEY) ? await api("GET", "/contract-objects") : [], picked: new Set() };
   $("#tpl-empty").hidden = true;
   $("#tpl-active").hidden = false;
   $("#tpl-name").textContent = t.name;
@@ -4918,8 +4940,23 @@ const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
-  return { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis]) };
+  const all = { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis]) };
+  // Version 2.2.46: the clauses of the ticked objects go where the Word has {{OBJETOS_CONTRACTUALES}}.
+  const merged = usesObjects() ? CO.mergeObjects(ticked(), all) : "";
+  if (merged) all[CO.OBJECTS_KEY] = merged;
+  return all;
 };
+const usesObjects = () => !!tplActive?.vars.includes(CO.OBJECTS_KEY);
+const ticked = () => CO.sortObjects(tplObjects.list).filter((o) => tplObjects.picked.has(o.id));
+function objectsChecklist() {
+  const list = CO.sortObjects(tplObjects.list);
+  if (!list.length) return `<fieldset class="fee-kind"><legend>Objetos contractuales</legend><p class="muted">${isGerencia() ? "Aún no hay objetos contractuales. Créelos en la pestaña «Objetos del contrato»." : "Gerencia aún no ha creado objetos contractuales."}</p></fieldset>`;
+  const merged = CO.mergeObjects(ticked(), tplValues());
+  return `<fieldset class="fee-kind span2" data-cobj-block><legend>Objetos contractuales</legend>
+    <div class="fee-choices">${list.map((o) => `<label class="inline"><input type="checkbox" data-cobj="${o.id}" ${tplObjects.picked.has(o.id) ? "checked" : ""} /> ${escapeHtml(o.title)}</label>`).join("")}</div>
+    ${merged ? `<p class="muted">En el contrato:</p><pre class="cobj-preview">${escapeHtml(merged.replace(/\u2063/g, ""))}</pre>` : '<p class="muted">Marque una o varias casillas: la cláusula de cada una se imprime en el contrato.</p>'}
+  </fieldset>`;
+}
 // Version 2.67: «Honorarios / Cuota de litis / Mixto» checklist of the services contract; the amounts are typed as plain
 // numbers and the contract writes them as «$2.000 (dos mil pesos m/cte.)». The three data are kept in the case.
 const FEE = { tipo: "campo.Tipo de honorarios", fijo: "campo.Honorarios valor", litis: "campo.Cuota de litis" };
@@ -4969,9 +5006,9 @@ function renderTplVars() {
   $("#tpl-vars-box").open = missing.length > 0;
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
-  const ordered = tplActive.vars.filter((k) => !FEE_VARS.includes(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
+  const ordered = tplActive.vars.filter((k) => !FEE_VARS.includes(k) && k !== CO.OBJECTS_KEY && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
-  $("#tpl-vars").innerHTML = (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
+  $("#tpl-vars").innerHTML = (usesFeeChecklist() ? feeChecklist(vals) : "") + (usesObjects() ? objectsChecklist() : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
     <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
     : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>
@@ -4998,6 +5035,13 @@ $("#tpl-vars").addEventListener("input", (e) => {
 });
 // Checklist of the fees: one box at a time (Mixto = both); typed numbers are shown as $ with dots when the box is left.
 $("#tpl-vars").addEventListener("change", (e) => {
+  const obj = e.target.closest("[data-cobj]");
+  if (obj) {
+    tplObjects.picked[obj.checked ? "add" : "delete"](Number(obj.dataset.cobj));
+    renderTplVars();
+    if (!$("#tpl-edit-mode").checked) renderTplDoc();
+    return;
+  }
   const kind = e.target.closest("[data-fee-kind]");
   if (kind) {
     tplOverrides[FEE.tipo] = kind.checked ? kind.dataset.feeKind : "";
@@ -5098,6 +5142,11 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
           catch (err) { console.warn("PDF del Word", err); toast("El PDF salió con el formato de la App: no se pudo dibujar el Word en esta pantalla.", true); return markdownToPdf(D.docxText(bytes)); }
         },
       });
+      // Version 2.2.46: keep which objects this contract carried (a failure here never blocks the document).
+      if (usesObjects() && tplObjects.picked.size) {
+        api("POST", "/contract-objects/uses", { object_ids: [...tplObjects.picked], case_id: Number($("#tpl-case").value) || null, template_id: tplActive.id, action })
+          .catch((err) => console.warn("Objetos contractuales", err));
+      }
     } else if (action === "copy") {
       try { await navigator.clipboard.writeText(currentText()); toast("Texto copiado."); }
       catch { toast("No se pudo copiar; active “Editar el texto” y cópielo desde allí.", true); }
@@ -5250,6 +5299,43 @@ wireDialog($("#tpl-dialog"), async (form) => {
   await renderBorradores();
   if (tplActive && Number(id) === tplActive.id) await openTemplate(tplActive.id);
 });
+
+// ----- Version 2.2.46: «Objetos contractuales» (Gerencia) — the clauses offered as checkboxes in the services contract -----
+async function renderCobjAdmin() {
+  const list = CO.sortObjects(await api("GET", "/contract-objects?all=1"));
+  $("#cobj-list").innerHTML = list.map((o, i) => `<article class="panel cobj-item ${o.is_active ? "" : "off"}">
+    <div class="cobj-head"><strong>${escapeHtml(o.title)}</strong>
+      <span class="badge ${o.is_active ? "ok" : "warn"}">${o.is_active ? "Activo" : "Desactivado"}</span>${o.uses ? `<span class="muted">· usado en ${o.uses} contrato(s)</span>` : ""}</div>
+    <p class="cobj-clause">${escapeHtml(o.clause)}</p>
+    <div class="toolbar">
+      <button type="button" class="mini" data-action="up-cobj" data-id="${o.id}" ${i ? "" : "disabled"} aria-label="Subir">↑ Subir</button>
+      <button type="button" class="mini" data-action="down-cobj" data-id="${o.id}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Bajar">↓ Bajar</button>
+      <button type="button" class="mini" data-action="edit-cobj" data-id="${o.id}">Editar</button>
+      <button type="button" class="mini" data-action="toggle-cobj" data-id="${o.id}">${o.is_active ? "Desactivar" : "Activar"}</button>
+      <button type="button" class="mini danger" data-action="delete-cobj" data-id="${o.id}">Eliminar</button>
+    </div></article>`).join("") || '<p class="empty">Todavía no hay objetos contractuales. Cree el primero con «+ Nuevo objeto contractual».</p>';
+  return list;
+}
+const cobjDialog = $("#cobj-dialog");
+function openCobjDialog(o = null) {
+  openDialog(cobjDialog, o ? "Editar objeto contractual" : "Nuevo objeto contractual", o ? { id: o.id, title: o.title, clause: o.clause } : {});
+  cobjDialog.querySelector("form").elements.is_active.checked = o ? !!o.is_active : true;
+}
+wireDialog(cobjDialog, async (form) => {
+  const { id, ...d } = formData(form);
+  d.is_active = form.elements.is_active.checked;
+  if (id) await api("PUT", `/contract-objects/${id}`, d); else await api("POST", "/contract-objects", d);
+  toast(id ? "Objeto contractual actualizado." : "Objeto contractual creado.");
+  await renderCobjAdmin();
+});
+const cobjMove = async (id, delta) => {
+  const ids = (await renderCobjAdmin()).map((o) => o.id);
+  const at = ids.indexOf(id), to = at + delta;
+  if (at < 0 || to < 0 || to >= ids.length) return;
+  [ids[at], ids[to]] = [ids[to], ids[at]];
+  await api("PUT", "/contract-objects/order", { ids });
+  await renderCobjAdmin();
+};
 
 $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
   const file = e.target.files[0];

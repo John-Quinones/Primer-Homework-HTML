@@ -13,6 +13,7 @@
   const AREAS = window.JuanmaPlaces.AREAS;
   const DIV = window.JUANMA_DIVIPOLA || { departamentos: [], municipios: [] };
   const CM = window.JuanmaCaseMeta;
+  const CO = window.JuanmaContractObjects; // contract objects, same code as the server (src/contract-objects.js)
   const RR = window.JuanmaRecords; // client and case rules, same code as the server (src/record-rules.js)
   const LG = window.JuanmaLedger;
   const OPEN = ["Activo"];
@@ -80,7 +81,7 @@
       for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
       st.info.monitorOffFromNumber = true;
     }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash"]) st[k] ||= [];
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -268,6 +269,9 @@
     auditAdd({ action: verb, module: t.module, entity: t.entity, record_id: snap?.id ?? t.id ?? created?.id ?? null, case_id: caseId, ok,
       summary: `${verb} ${t.entity}${name ? ` «${name}»` : ""}`, changes: method === "PUT" ? CM.auditDiff(snap?.before, after) : ok && method === "DELETE" ? CM.auditDeleted(snap?.before) : [] });
   }
+  const cobjGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar los objetos contractuales (solo Gerencia)."); };
+  const cobjUses = (id) => new Set(s.cobjuses.filter((u) => u.object_id === id).map((u) => u.batch)).size;
+  const cobjOut = (o) => ({ ...clone(o), is_active: !!o.is_active, uses: cobjUses(o.id) });
   const need = (perm) => { if (!me().permissions.includes(perm)) fail("Su rol no tiene permiso para esta acción."); };
   const onlyGerencia = () => { if (me().role !== "Gerencia") fail("Solo Gerencia puede ocultar usuarios: su rol no tiene permiso para esta acción."); };
   const hiddenTries = { n: 0, until: 0 };
@@ -1177,6 +1181,71 @@
     }],
     ["PUT", /^\/category-order$/, (m, b) => { need("catalog.manage"); (b.ids || []).map(Number).forEach((id, i) => { const c = s.categories.find((x) => x.id === id); if (c) c.sort = i; }); return { ok: true }; }],
     ["PUT", /^\/categories\/(\d+)\/fields\/order$/, (m, b) => { need("catalog.manage"); (b.field_ids || []).map(Number).forEach((id, i) => { const f = s.fields.find((x) => x.id === id && x.category_id === +m[1]); if (f) f.sort = i; }); return { ok: true }; }],
+
+    // ----- contract objects (version 2.2.46) -----
+    ["GET", /^\/contract-objects(?:\?(.*))?$/, (m, b, url) => {
+      need("drafts.generate");
+      const all = qs(url).all === "1" && me().role === "Gerencia";
+      return CO.sortObjects(s.cobjects).filter((o) => o.is_active || all).map(cobjOut);
+    }],
+    ["POST", /^\/contract-objects$/, (m, b) => {
+      cobjGerencia();
+      const v = CO.objectValues(b, null, s.cobjects);
+      typeof v === "string" && fail(v);
+      const o = { id: nextId(), ...v, display_order: Math.max(0, ...s.cobjects.map((x) => x.display_order)) + 1, created_by: me().id, created_at: stamp(), updated_at: stamp() };
+      s.cobjects.push(o);
+      return cobjOut(o);
+    }],
+    ["PUT", /^\/contract-objects\/order$/, (m, b) => {
+      cobjGerencia();
+      const ids = Array.isArray(b.ids) ? b.ids.map(Number) : [];
+      if (!ids.length || ids.some((id) => !s.cobjects.some((o) => o.id === id)) || new Set(ids).size !== ids.length) fail("La lista de orden no es válida.");
+      const rest = CO.sortObjects(s.cobjects).map((o) => o.id).filter((id) => !ids.includes(id));
+      [...ids, ...rest].forEach((id, i) => { const o = s.cobjects.find((x) => x.id === id); o.display_order = i + 1; o.updated_at = stamp(); });
+      return CO.sortObjects(s.cobjects).map(cobjOut);
+    }],
+    ["PUT", /^\/contract-objects\/(\d+)$/, (m, b) => {
+      cobjGerencia();
+      const cur = s.cobjects.find((o) => o.id === +m[1]) || fail("El objeto contractual no existe.");
+      const v = CO.objectValues(b, cur, s.cobjects.filter((o) => o !== cur));
+      typeof v === "string" && fail(v);
+      Object.assign(cur, v, { updated_at: stamp() });
+      return cobjOut(cur);
+    }],
+    ["DELETE", /^\/contract-objects\/(\d+)$/, (m) => {
+      cobjGerencia();
+      const cur = s.cobjects.find((o) => o.id === +m[1]) || fail("El objeto contractual no existe.");
+      if (cobjUses(cur.id)) { cur.is_active = 0; cur.updated_at = stamp(); return { id: cur.id, deleted: false, deactivated: true }; }
+      s.cobjects = s.cobjects.filter((o) => o !== cur);
+      return { id: cur.id, deleted: true, deactivated: false };
+    }],
+    ["POST", /^\/contract-objects\/uses$/, (m, b) => {
+      need("drafts.generate");
+      const ids = [...new Set((Array.isArray(b.object_ids) ? b.object_ids : []).map(Number))];
+      ids.length || fail("Marque al menos un objeto contractual.");
+      const objs = ids.map((id) => s.cobjects.find((o) => o.id === id && o.is_active));
+      objs.some((o) => !o) && fail("Uno de los objetos contractuales ya no está disponible.");
+      const caseId = b.case_id ? +b.case_id : null;
+      if (b.case_id && !(Number.isInteger(caseId) && caseId > 0)) fail("El expediente no es válido.");
+      caseId && visibleCase(caseId);
+      const batch = String(nextId());
+      const action = ["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(b.action) ? b.action : "";
+      const sorted = CO.sortObjects(objs);
+      for (const o of sorted) s.cobjuses.push({ id: nextId(), batch, object_id: o.id, object_title: o.title, case_id: caseId, template_id: Number(b.template_id) || null, document_id: Number(b.document_id) || null, action, created_by: me().id, created_at: stamp() });
+      return { batch, objects: sorted.map((o) => ({ id: o.id, title: o.title })) };
+    }],
+    ["GET", /^\/contract-objects\/uses\?(.*)$/, (m, b, url) => {
+      need("drafts.generate");
+      const caseId = +qs(url).case_id;
+      (Number.isInteger(caseId) && caseId > 0) || fail("El expediente no es válido.");
+      visibleCase(caseId);
+      const batches = new Map();
+      for (const x of s.cobjuses.filter((u) => u.case_id === caseId)) {
+        if (!batches.has(x.batch)) batches.set(x.batch, { batch: x.batch, action: x.action, template_id: x.template_id, document_id: x.document_id, created_at: x.created_at, objects: [] });
+        batches.get(x.batch).objects.push({ id: x.object_id, title: x.object_title });
+      }
+      return [...batches.values()];
+    }],
 
     // ----- document templates -----
     ["GET", /^\/templates\/meta$/, () => { need("drafts.generate"); return { categories: TPL.categories, variables: TPL.variables }; }],
