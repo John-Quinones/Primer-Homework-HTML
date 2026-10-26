@@ -91,14 +91,17 @@ function plain() {
   zip.file("word/document.xml", `<w:document ${W}><w:body><w:p><w:r><w:t>Texto</w:t></w:r></w:p></w:body></w:document>`);
   return zip.generate({ type: "uint8array" });
 }
-test("a minuta without {{documento.numero}} gets «Contrato No. 2.326» at the top; with the marker it is not repeated", async () => {
-  const D = load("AT");
-  const a = (await files(D.fillDocx(plain(), { "documento.numero": "2.326", "documento.clase": "Contrato" }))).file("word/document.xml").asText();
-  assert.match(a, /<w:body><w:p>.*Contrato No\. 2\.326/);
-  const b = (await files(D.fillDocx(word({ footer: false }), { "documento.numero": "2.326", "documento.clase": "Contrato" }))).file("word/document.xml").asText();
-  assert.equal(b.split("2.326").length - 1, 1);
-  const c = (await files(D.fillDocx(plain(), { "documento.numero": "(se asigna al generar)" }))).file("word/document.xml").asText();
-  assert.ok(!/No\. /.test(c));
+test("the number goes underlined in the footer after «Elaboró»; a receipt shows «Recibo No. 1155»", async () => {
+  const D = load("JFQ");
+  const a = await files(D.fillDocx(plain(), { "documento.numero": "2.326", "documento.clase": "Contrato" }));
+  const f = a.file("word/footer1.xml").asText();
+  assert.match(f, /Elaboró: JFQ/);
+  assert.match(f, /<w:u [^>]*\/><\/w:rPr><w:t xml:space="preserve">Contrato No\. 2\.326</);
+  assert.ok(!/No\. 2\.326/.test(a.file("word/document.xml").asText()), "nothing is added at the top");
+  const r = await files(D.fillDocx(plain(), { "documento.numero": "1155", "documento.clase": "Recibo" }));
+  assert.match(r.file("word/footer1.xml").asText(), /Recibo No\. 1155</);
+  const c = await files(D.fillDocx(plain(), { "documento.numero": "(se asigna al generar)" }));
+  assert.ok(!/No\. /.test(c.file("word/footer1.xml").asText()));
 });
 
 test("memorials are numbered from 12.325", () => {

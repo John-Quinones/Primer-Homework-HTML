@@ -7516,7 +7516,7 @@ async function buildReceiptFiles(r) {
   const open = await api("GET", `/payments/charges?clientId=${r.client_id}&state=abiertos`);
   const k = r.case_id ? await api("GET", `/cases/${r.case_id}`).catch(() => null) : null;
   const data = {
-    "recibo.numero": String(r.number), "recibo.fecha": longDate(r.paid_on), "recibo.cliente": r.client_name, "recibo.documento": r.client_doc,
+    "recibo.numero": String(r.number), "documento.clase": "Recibo", "documento.numero": String(r.number), "recibo.fecha": longDate(r.paid_on), "recibo.cliente": r.client_name, "recibo.documento": r.client_doc,
     "recibo.valor": cop(r.amount), "recibo.valor_letras": pesosEnLetras(r.amount), "recibo.concepto": r.concept, "recibo.medio": r.method,
     "recibo.referencia": r.reference, "recibo.notas": r.notes, "recibo.saldo": cop(open.reduce((a, c) => a + c.balance, 0)),
     "recibo.expediente": k ? [k.radicado ? formatRadicado(k.radicado) : "", k.title].filter(Boolean).join(" · ") : "",
