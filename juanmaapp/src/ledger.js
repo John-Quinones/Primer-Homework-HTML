@@ -196,6 +196,19 @@ export function pesosFromText(text) {
   s = s.replace(/[.,]/g, "");
   return /^\d+$/.test(s) && Number(s) > 0 ? Number(s) : null;
 }
+/** Place values of an amount, highest first, zeros left out: 2500000 → «2 unidades de millón · 5 centenas de mil». */
+export function placeValues(n) {
+  const digits = String(Math.round(Number(n) || 0));
+  const kind = ["unidad", "decena", "centena"], big = ["", " de mil", " de millón", " de mil millones", " de billón"];
+  const parts = [];
+  for (let i = 0; i < digits.length; i++) {
+    const d = Number(digits[digits.length - 1 - i]);
+    if (!d) continue;
+    const name = kind[i % 3] + (d === 1 ? "" : kind[i % 3] === "unidad" ? "es" : "s");
+    parts.unshift(`${d} ${name}${big[Math.floor(i / 3)] ?? ""}`);
+  }
+  return parts.join(" · ");
+}
 const dots = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 /** "$2.000" — the way a contract writes an amount typed as a plain number. */
 export const fmtPesos = (n) => "$" + dots(Math.round(n));
