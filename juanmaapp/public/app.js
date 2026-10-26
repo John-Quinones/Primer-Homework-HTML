@@ -4776,6 +4776,21 @@ wireDialog($("#password-dialog"), async (form) => {
 // ---------- Documentos: plantillas ----------
 const D = window.JuanmaDocx;
 let tplMeta = null, tplList = [], tplCat = "", tplActive = null, tplData = {}, tplOverrides = {};
+// Version 2.2.58: the footer of every generated document names who generated it (docx.js and membrete.js read this).
+window.JuanmaGeneratedBy = () => me?.name || "";
+// Version 2.2.58: each contract (from No. 2.326) and power of attorney (from No. 10.222) gets its consecutive number when it is generated,
+// saved in the case or not. One number per document: the same template, case and client keep it for Word, PDF, mail, etc.
+let docNum = null;
+async function ensureDocNumber(action) {
+  const N = window.JuanmaDocNumbers, kind = N.docKindOf(tplActive.category);
+  if (!kind) return;
+  const caseId = Number($("#tpl-case").value) || null;
+  const key = `${tplActive.id}|${caseId}|${caseId ? "" : tplData["cliente.nombre"] || ""}`;
+  if (docNum?.key === key) return;
+  const r = await api("POST", "/doc-numbers", { kind, case_id: caseId, template_id: tplActive.id, template_name: tplActive.name, action });
+  docNum = { key, label: r.label };
+  toast(`${N.DOC_KIND_NAME[kind]} No. ${r.label}`);
+}
 const CO = window.JuanmaContractObjects;
 // Version 2.2.46 / 2.2.47: the contract objects and the power classes work alike. For each kind: the active ones offered as checkboxes
 // and the ones ticked for this document. A Word offers them when it carries the kind's marker ({{OBJETOS_CONTRACTUALES}},
@@ -4793,16 +4808,27 @@ const pickState = { contrato: { list: [], picked: new Set() }, poder: { list: []
 // Steps 4–6 are the existing document panel (#tpl-active), moved into the assistant while its tab is open.
 const wizardOn = () => !$("[data-dpanel=guiado]").hidden;
 const stepTag = (n) => (wizardOn() ? `${n}. ` : "");
-const wz = { clients: [], cases: [], kind: "" };
+const wz = { clients: [], cases: [], kind: "", generated: false };
 function wzDock() {
   const act = $("#tpl-active"), on = wizardOn();
   (on ? $("#wz-host") : $(".tpl-work")).append(act);
 }
 const wzNorm = (t) => window.JuanmaCombo.norm(String(t ?? "")).replace(/[.\s]/g, "");
+// Version 2.2.58 (John: «la casilla debe ir cambiando a verde si se ha agotado el paso»): each step turns green by itself when its data is
+// complete, whatever the order the person worked in; the first step still open is the current one.
 function wzBar() {
-  const steps = ["Cliente", "Expediente", "Contrato o poder", "Tipo", ...(wz.kind === "Contrato" ? ["Honorarios"] : []), "Word"];
-  const at = !$("#wz-client").value ? 0 : $("#wz-s2").hidden || $("#wz-case").value === "-" ? 1 : !wz.kind ? 2 : !tplActive || tplActive.category !== wz.kind ? 2 : 3;
-  $("#wz-bar").innerHTML = steps.map((t, i) => `<li class="${i < at ? "done" : i === at ? "now" : ""}"><span class="step-no">${i + 1}</span> ${t}</li>`).join("");
+  const tplOk = !!tplActive && !!wz.kind && tplActive.category === wz.kind && !$("#tpl-active").hidden;
+  const kinds = tplOk ? Object.keys(PICK).filter(usesPick) : [];
+  const steps = [
+    ["Cliente", !!$("#wz-client").value],
+    ["Expediente", !$("#wz-s2").hidden && $("#wz-case").value !== "-"],
+    ["Contrato o poder", tplOk],
+    ["Tipo", tplOk && kinds.every((kind) => pickState[kind].picked.size > 0)],
+    ...(wz.kind === "Contrato" ? [["Honorarios", tplOk && (!usesFeeChecklist() || !!tplValues()["honorarios.modalidad"])]] : []),
+    ["Word", wz.generated],
+  ];
+  const now = steps.findIndex(([, ok]) => !ok);
+  $("#wz-bar").innerHTML = steps.map(([t, ok], i) => `<li class="${ok ? "done" : i === now ? "now" : ""}"><span class="step-no">${ok ? "✓" : i + 1}</span> ${t}</li>`).join("");
 }
 function wzClients() {
   const q = wzNorm($("#wz-client-q").value), cur = $("#wz-client").value;
@@ -4820,6 +4846,7 @@ async function renderWizard() {
 }
 async function wzPickClient(clientId, keepCase) {
   $("#wz-client").value = String(clientId);
+  wz.generated = false;
   wz.cases = clientId ? await api("GET", `/cases?clientId=${clientId}`) : [];
   $("#wz-s2").hidden = !clientId;
   $("#wz-case").innerHTML = '<option value="-">— Elija el expediente —</option><option value="">Sin expediente: llenar a mano</option>' + wz.cases.map((k) =>
@@ -4829,6 +4856,7 @@ async function wzPickClient(clientId, keepCase) {
 }
 function wzCaseChosen() {
   const v = $("#wz-case").value;
+  wz.generated = false;
   $("#wz-s3").hidden = v === "-" || $("#wz-s2").hidden;
   if (v !== "-") {
     const sel = $("#tpl-case");
@@ -4846,6 +4874,7 @@ async function wzPreselect(caseId) {
 }
 function wzKind(kind) {
   wz.kind = kind;
+  wz.generated = false;
   const list = tplList.filter((t) => t.category === kind);
   $("#wz-tpl-label").hidden = false;
   $("#wz-tpl").innerHTML = (list.length === 1 ? "" : '<option value="">— Elija la plantilla —</option>') + list.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("")
@@ -4858,7 +4887,7 @@ $("#wz-client-q").addEventListener("input", wzClients);
 $("#wz-client").addEventListener("change", () => guarded(() => wzPickClient(Number($("#wz-client").value) || null)));
 $("#wz-case").addEventListener("change", wzCaseChosen);
 $$("[name=wz-kind]").forEach((r) => r.addEventListener("change", () => guarded(() => wzKind(r.value))));
-$("#wz-tpl").addEventListener("change", () => guarded(async () => { const id = Number($("#wz-tpl").value); if (id) await openTemplate(id); wzBar(); }));
+$("#wz-tpl").addEventListener("change", () => guarded(async () => { const id = Number($("#wz-tpl").value); wz.generated = false; if (id) await openTemplate(id); wzBar(); }));
 
 function showDTab(name) {
   $$("[data-dtab]").forEach((b) => b.classList.toggle("active", b.dataset.dtab === name));
@@ -5037,7 +5066,7 @@ const partyWordsOf = (v) => { try { return CMETA.partyWords(JSON.parse(v._partes
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
-  const all = { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
+  const all = { ...v, "documento.numero": docNum?.label || "(se asigna al generar)", ...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
   // Versions 2.2.46 / 2.2.47: the clauses of the ticked objects / power classes go where the Word has the kind's marker.
   for (const kind of Object.keys(PICK)) {
     if (!usesPick(kind)) continue;
@@ -5134,7 +5163,7 @@ function renderTplVars() {
   $("#tpl-vars-box").open = missing.length > 0 || wizardOn();
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
-  const ordered = allVars().filter((k) => !FEE_VARS.includes(k) && !anyPickKey(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
+  const ordered = allVars().filter((k) => k !== "documento.numero" && !FEE_VARS.includes(k) && !anyPickKey(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
   $("#tpl-vars").innerHTML = Object.keys(PICK).map((kind) => usesPick(kind) ? pickChecklist(kind) : "").join("") + (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
@@ -5145,6 +5174,7 @@ function renderTplVars() {
     <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea)" : "Falta"}" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
     || '<p class="muted">Esta plantilla no tiene variables.</p>';
   $("#tpl-fields-row").hidden = !($("#tpl-case").value && can("cases.write") && (usesFeeChecklist() || tplActive.vars.some((k) => k.startsWith("campo."))));
+  if (wizardOn()) wzBar();
 }
 const isDateVar = (k) => k.startsWith("campo.") && CMETA.fieldTypeFor(k.slice(6)) === "date";
 const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -5158,6 +5188,7 @@ $("#tpl-vars").addEventListener("input", (e) => {
   if (!i) return;
   tplOverrides[i.dataset.var] = i.type === "date" ? CMETA.fieldDocValue({ field_type: "date" }, i.value) : i.value.trim();
   i.classList.toggle("missing", !i.value.trim() && !tplData[i.dataset.var] && !isOptionalVar(i.dataset.var));
+  if (wizardOn()) wzBar();
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
   if (i.tagName === "SELECT") renderTplVars();
 });
@@ -5310,6 +5341,7 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
   if (!action) return;
   guarded(async () => {
     if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action) && !(await missingOk())) return;
+    if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action)) await ensureDocNumber(action);
     if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
       if (!tplRecipient.hidden) await saveRecipientIfAsked(tplRecipient);
       const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues(), tplLabels()) : D.markdownToDocx(currentText(), tplActive.name));
@@ -5323,6 +5355,8 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
           catch (err) { console.warn("PDF del Word", err); toast("El PDF salió con el formato de la App: no se pudo dibujar el Word en esta pantalla.", true); return markdownToPdf(D.docxText(bytes)); }
         },
       });
+      wz.generated = true;
+      if (wizardOn()) wzBar();
       // Versions 2.2.46 / 2.2.47: keep which objects / power classes this document carried (a failure here never blocks the document).
       for (const kind of Object.keys(PICK)) {
         if (usesPick(kind) && pickState[kind].picked.size) {
@@ -5336,6 +5370,8 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
     } else if (action === "sign") {
       const text = tplActive.format === "docx" ? D.docxText(new Uint8Array(await D.fillDocx(tplActive.bytes, tplValues(), tplLabels()).arrayBuffer())) : currentText();
       await openSignDialog({ title: tplActive.name, text, caseId: Number($("#tpl-case").value) || null });
+      wz.generated = true;
+      if (wizardOn()) wzBar();
     } else if (action === "nomos") {
       setBaseTemplate({ name: tplActive.name, text: currentText() });
       const map = { Contrato: "CONTRACT", Poder: "POWER_OF_ATTORNEY", "Derecho de petición": "PETITION", Demanda: "LAWSUIT" };

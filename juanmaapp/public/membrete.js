@@ -73,7 +73,12 @@
     const n = doc.getNumberOfPages(), here = doc.getCurrentPageInfo().pageNumber, b = pdfBox(doc);
     for (let i = 1; i <= n; i++) {
       doc.setPage(i);
-      keepState(doc, () => { doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...INK); doc.text(`Página ${i} de ${n}`, b.right, b.H - (b.landscape ? 34 : 46), { align: "right" }); });
+      keepState(doc, () => {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...INK); doc.text(`Página ${i} de ${n}`, b.right, b.H - (b.landscape ? 34 : 46), { align: "right" });
+        // Version 2.2.58: who generated the document, at the end of the footer.
+        const who = String(window.JuanmaGeneratedBy?.() || "").trim();
+        if (who) { doc.setTextColor(120, 120, 120); doc.setFontSize(7); doc.text(`Documento generado por: ${who}`, b.left, b.H - (b.landscape ? 34 : 46)); }
+      });
     }
     doc.setPage(here);
     return doc;

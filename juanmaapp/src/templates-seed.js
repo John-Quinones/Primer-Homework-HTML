@@ -80,6 +80,7 @@ export const VARIABLES = [
   ["honorarios.litis_valor", "Cuota de litis en pesos, en número y letras (según la casilla)", "Honorarios"],
   ["honorarios.cuotas", "Cuotas de los honorarios: valor y fecha de cada una, una por renglón (solo si se marca pago en cuotas)", "Honorarios"],
   ["honorarios.numero_cuotas", "Número de cuotas de los honorarios, en letras y número (solo si se marca pago en cuotas)", "Honorarios"],
+  ["documento.numero", "Número consecutivo del documento (contratos desde el No. 2.326, poderes desde el No. 10.222); se asigna al generarlo", "Documento"],
   ["honorarios.litis_porcentaje", "Cuota de litis en porcentaje, en número y letras (según la casilla)", "Honorarios"],
   ["OBJETOS_CONTRACTUALES", "Objetos contractuales", "Contrato"],
   ["CLASES_DE_PODER", "Clases de poder (facultades)", "Poder"],

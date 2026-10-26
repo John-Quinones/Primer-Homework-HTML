@@ -84,6 +84,37 @@
       if (y !== x) zip.file(name, y);
     }
   }
+  // Version 2.2.58 (John): every document the App generates ends its footer with the name of the user who generated it.
+  // The page tells who that is with window.JuanmaGeneratedBy(); without it (tests, public pages) nothing is added.
+  const FOOT_MARK = "Documento generado por:";
+  function stampFooter(zip) {
+    const who = String(window.JuanmaGeneratedBy?.() || "").trim();
+    if (!who || !zip.file("word/document.xml")) return;
+    const line = `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="40" w:after="0"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:color w:val="989795"/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t xml:space="preserve">${FOOT_MARK} ${xml(who)}</w:t></w:r></w:p>`;
+    let feet = Object.keys(zip.files).filter((n) => /^word\/footer\d*\.xml$/.test(n));
+    if (!feet.length) {
+      // A Word without footer gets one (part, relationship, content type and a reference in every section).
+      const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+      zip.file("word/footer1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${NS}></w:ftr>`);
+      const rels = zip.file("word/_rels/document.xml.rels");
+      const relXml = rels ? rels.asText() : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+      zip.file("word/_rels/document.xml.rels", relXml.replace("</Relationships>", '<Relationship Id="rIdUserFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>'));
+      const ct = zip.file("[Content_Types].xml").asText();
+      zip.file("[Content_Types].xml", ct.replace("</Types>", '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>'));
+      let doc = zip.file("word/document.xml").asText();
+      const ref = '<w:footerReference w:type="default" r:id="rIdUserFooter"/>';
+      if (!/<w:sectPr[\s>]/.test(doc)) doc = doc.replace("</w:body>", `<w:sectPr>${ref}</w:sectPr></w:body>`);
+      else doc = doc.replace(/<w:sectPr([^>]*)\/>/g, `<w:sectPr$1>${ref}</w:sectPr>`).replace(/<w:sectPr(?![^>]*\/>)([^>]*)>/g, (m, a) => `<w:sectPr${a}>${ref}`);
+      if (!/xmlns:r=/.test(doc.slice(0, 600))) doc = doc.replace(/<w:document\b/, '<w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"');
+      zip.file("word/document.xml", doc);
+      feet = ["word/footer1.xml"];
+    }
+    for (const name of feet) {
+      const x = zip.file(name).asText();
+      if (x.includes(FOOT_MARK)) continue;
+      zip.file(name, /<\/w:ftr>\s*$/.test(x) ? x.replace(/<\/w:ftr>\s*$/, `${line}</w:ftr>`) : x.replace(/<w:ftr\b([^>]*)\/>\s*$/, `<w:ftr$1>${line}</w:ftr>`));
+    }
+  }
   function fillDocx(bytes, data, labels = {}) {
     const zip = new window.PizZip(bytes);
     unwrapMarkerLinks(zip);
@@ -101,6 +132,7 @@
       const x = out.file(name).asText();
       if (x.includes(MISS)) out.file(name, markMissing(x));
     }
+    stampFooter(out);
     return out.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 
@@ -152,6 +184,7 @@
       const lz = new window.PizZip(b64ToBytes(letterhead));
       lz.file("word/document.xml", lz.file("word/document.xml").asText().replace("<!--BODY-->", () => body.replace(/w:val="Heading(\d)"/g, 'w:val="Ttulo$1"')));
       if (lz.file("docProps/core.xml")) lz.file("docProps/core.xml", lz.file("docProps/core.xml").asText().replace(/<dc:title>[\s\S]*?<\/dc:title>|<dc:title\/>/, () => `<dc:title>${xml(title)}</dc:title>`));
+      stampFooter(lz);
       return lz.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
     }
     const zip = new window.PizZip();
@@ -168,6 +201,7 @@
 <w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:sz w:val="24"/><w:lang w:val="es-CO"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="60" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>${heading(1, 30)}${heading(2, 26)}${heading(3, 24)}</w:styles>`);
     zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="${W}"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+    stampFooter(zip);
     return zip.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 

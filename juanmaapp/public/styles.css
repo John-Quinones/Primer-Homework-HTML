@@ -1436,8 +1436,8 @@ dialog:not([open]) { pointer-events: none; }
 .wz-bar { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0; margin: 8px 0 14px; }
 .wz-bar li { display: flex; align-items: center; gap: 6px; opacity: .55; }
 .wz-bar li.now { opacity: 1; font-weight: 700; }
-.wz-bar li.done { opacity: .9; }
-.wz-bar li.done .step-no { background: var(--ok, #2e7d32); }
+.wz-bar li.done { opacity: 1; }
+.wz-bar li.done .step-no { background: var(--ok, #2e7d32); color: #fff; }
 .wz-step { margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: rgba(0, 43, 106, .04); }
 .wz-step h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
 .wz-step select[size] { width: 100%; }
