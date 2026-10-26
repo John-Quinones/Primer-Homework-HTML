@@ -10,7 +10,7 @@ import { startServer } from "./helpers.js";
 import { startLink } from "./link-backend.js";
 
 test("numbers start at 2.326 / 10.222, then follow; thousands dots", () => {
-  assert.deepEqual(DOC_START, { contrato: 2326, poder: 10222 });
+  assert.deepEqual(DOC_START, { contrato: 2326, poder: 10222, memorial: 12325 });
   assert.equal(nextDocNumber(null, "contrato"), 2326);
   assert.equal(nextDocNumber(2326, "contrato"), 2327);
   assert.equal(nextDocNumber(5, "poder"), 10222);
@@ -63,25 +63,25 @@ function word({ footer }) {
 }
 const files = async (blob) => new PizZip(new Uint8Array(await blob.arrayBuffer()));
 
-test("the Word's own footer keeps its text and gets «Documento generado por»", async () => {
-  const z = await files(load("Ana Torres").fillDocx(word({ footer: true }), { "documento.numero": "2.326" }));
+test("the Word's own footer keeps its text and gets «Elaboró»", async () => {
+  const z = await files(load("AT").fillDocx(word({ footer: true }), { "documento.numero": "2.326" }));
   const f = z.file("word/footer1.xml").asText();
   assert.match(f, /Pie original/);
-  assert.match(f, /Documento generado por: Ana Torres/);
+  assert.match(f, /Elaboró: AT/);
   assert.match(z.file("word/document.xml").asText(), /Contrato No\.2\.326/);
 });
 
 test("a Word without footer gets one", async () => {
-  const z = await files(load("Ana Torres").fillDocx(word({ footer: false }), { "documento.numero": "2.327" }));
+  const z = await files(load("AT").fillDocx(word({ footer: false }), { "documento.numero": "2.327" }));
   const names = Object.keys(z.files).filter((n) => /^word\/footer\d*\.xml$/.test(n));
   assert.equal(names.length, 1);
-  assert.match(z.file(names[0]).asText(), /Documento generado por: Ana Torres/);
+  assert.match(z.file(names[0]).asText(), /Elaboró: AT/);
   assert.match(z.file("word/document.xml").asText(), /<w:footerReference/);
 });
 
 test("no user name: the document comes out as before", async () => {
   const z = await files(load("").fillDocx(word({ footer: true }), { "documento.numero": "1" }));
-  assert.ok(!/generado por/.test(z.file("word/footer1.xml").asText()));
+  assert.ok(!/Elaboró:/.test(z.file("word/footer1.xml").asText()));
 });
 
 // Version 2.2.60: a minuta without the marker still shows the number at the top.
@@ -91,12 +91,21 @@ function plain() {
   zip.file("word/document.xml", `<w:document ${W}><w:body><w:p><w:r><w:t>Texto</w:t></w:r></w:p></w:body></w:document>`);
   return zip.generate({ type: "uint8array" });
 }
-test("a minuta without {{documento.numero}} gets «Contrato No. 2.326» at the top; with the marker it is not repeated", async () => {
-  const D = load("Ana Torres");
-  const a = (await files(D.fillDocx(plain(), { "documento.numero": "2.326", "documento.clase": "Contrato" }))).file("word/document.xml").asText();
-  assert.match(a, /<w:body><w:p>.*Contrato No\. 2\.326/);
-  const b = (await files(D.fillDocx(word({ footer: false }), { "documento.numero": "2.326", "documento.clase": "Contrato" }))).file("word/document.xml").asText();
-  assert.equal(b.split("2.326").length - 1, 1);
-  const c = (await files(D.fillDocx(plain(), { "documento.numero": "(se asigna al generar)" }))).file("word/document.xml").asText();
-  assert.ok(!/No\. /.test(c));
+test("the number goes underlined in the footer after «Elaboró»; a receipt shows «Recibo No. 1155»", async () => {
+  const D = load("JFQ");
+  const a = await files(D.fillDocx(plain(), { "documento.numero": "2.326", "documento.clase": "Contrato" }));
+  const f = a.file("word/footer1.xml").asText();
+  assert.match(f, /Elaboró: JFQ/);
+  assert.match(f, /<w:u [^>]*\/><\/w:rPr><w:t xml:space="preserve">Contrato No\. 2\.326</);
+  assert.ok(!/No\. 2\.326/.test(a.file("word/document.xml").asText()), "nothing is added at the top");
+  const r = await files(D.fillDocx(plain(), { "documento.numero": "1155", "documento.clase": "Recibo" }));
+  assert.match(r.file("word/footer1.xml").asText(), /Recibo No\. 1155</);
+  const c = await files(D.fillDocx(plain(), { "documento.numero": "(se asigna al generar)" }));
+  assert.ok(!/No\. /.test(c.file("word/footer1.xml").asText()));
+});
+
+test("memorials are numbered from 12.325", () => {
+  assert.equal(DOC_START.memorial, 12325);
+  assert.equal(docKindOf("Memorial"), "memorial");
+  assert.equal(nextDocNumber(12325, "memorial"), 12326);
 });

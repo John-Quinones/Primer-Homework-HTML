@@ -33,7 +33,7 @@ export function docNumbersRouter(db) {
   r.post("/", (req, res) => {
     const b = req.body ?? {};
     const kind = String(b.kind ?? "");
-    if (!DOC_START[kind]) throw new HttpError(400, "Solo se numeran los contratos y los poderes.");
+    if (!DOC_START[kind]) throw new HttpError(400, "Solo se numeran los contratos, los poderes y los memoriales.");
     const caseId = b.case_id ? toInt(b.case_id, "El expediente") : null;
     if (caseId) visibleCase(req, caseId);
     const row = inTransaction(db, () => {

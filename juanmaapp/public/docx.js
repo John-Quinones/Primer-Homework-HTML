@@ -86,11 +86,12 @@
   }
   // Version 2.2.58 (John): every document the App generates ends its footer with the name of the user who generated it.
   // The page tells who that is with window.JuanmaGeneratedBy(); without it (tests, public pages) nothing is added.
-  const FOOT_MARK = "Documento generado por:";
-  function stampFooter(zip) {
+  const FOOT_MARK = "Elaboró:";
+  function stampFooter(zip, label = "") {
     const who = String(window.JuanmaGeneratedBy?.() || "").trim();
-    if (!who || !zip.file("word/document.xml")) return;
-    const line = `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="40" w:after="0"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:color w:val="989795"/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t xml:space="preserve">${FOOT_MARK} ${xml(who)}</w:t></w:r></w:p>`;
+    if ((!who && !label) || !zip.file("word/document.xml")) return;
+    const rpr = (u) => `<w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:color w:val="${u ? "404040" : "7F7F7F"}"/><w:sz w:val="15"/><w:szCs w:val="15"/>${u ? '<w:u w:val="single" w:color="595959"/>' : ""}</w:rPr>`;
+    const line = `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="40" w:after="0"/></w:pPr>${who ? `<w:r>${rpr(false)}<w:t xml:space="preserve">${FOOT_MARK} ${xml(who)}</w:t></w:r>` : ""}${who && label ? `<w:r>${rpr(false)}<w:t xml:space="preserve">     </w:t></w:r>` : ""}${label ? `<w:r>${rpr(true)}<w:t xml:space="preserve">${xml(label)}</w:t></w:r>` : ""}</w:p>`;
     let feet = Object.keys(zip.files).filter((n) => /^word\/footer\d*\.xml$/.test(n));
     if (!feet.length) {
       // A Word without footer gets one (part, relationship, content type and a reference in every section).
@@ -132,16 +133,11 @@
       const x = out.file(name).asText();
       if (x.includes(MISS)) out.file(name, markMissing(x));
     }
-    // Version 2.2.60 (John: «no está arrojando la numeración»): a minuta without {{documento.numero}} still shows its number,
-    // in bold at the top right of the first page; with the marker, the number goes where the marker is.
+    // Versions 2.2.60 / 2.2.66 (John): the number of the document (Contrato No. 2.326, Poder No. 10.222, Memorial No. 12.325,
+    // Recibo No. 1155) goes underlined in the footer, right after «Elaboró: <iniciales>»; a {{documento.numero}} marker still prints it in the text.
     const num = String(data["documento.numero"] ?? "");
-    if (/^\d/.test(num) && !docxVariables(bytes).includes("documento.numero")) {
-      const kind = String(data["documento.clase"] || "");
-      const p = `<w:p><w:pPr><w:jc w:val="right"/><w:spacing w:after="120"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${xml(`${kind ? kind + " " : ""}No. ${num}`)}</w:t></w:r></w:p>`;
-      const doc = out.file("word/document.xml").asText();
-      out.file("word/document.xml", doc.replace(/<w:body>/, () => `<w:body>${p}`));
-    }
-    stampFooter(out);
+    const label = /^\d/.test(num) ? `${data["documento.clase"] ? data["documento.clase"] + " " : ""}No. ${num}` : "";
+    stampFooter(out, label);
     return out.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
 

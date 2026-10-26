@@ -4802,7 +4802,8 @@ wireDialog($("#password-dialog"), async (form) => {
 const D = window.JuanmaDocx;
 let tplMeta = null, tplList = [], tplCat = "", tplActive = null, tplData = {}, tplOverrides = {};
 // Version 2.2.58: the footer of every generated document names who generated it (docx.js and membrete.js read this).
-window.JuanmaGeneratedBy = () => me?.name || "";
+// Version 2.2.66 (John): «Elaboró» + the user's initials («John Fredy Quiñones» → JFQ).
+window.JuanmaGeneratedBy = () => String(me?.name || "").split(/\s+/).filter(Boolean).map((w) => w[0].toLocaleUpperCase("es-CO")).join("");
 // Version 2.2.58: each contract (from No. 2.326) and power of attorney (from No. 10.222) gets its consecutive number when it is generated,
 // saved in the case or not. One number per document: the same template, case and client keep it for Word, PDF, mail, etc.
 let docNum = null;
@@ -5127,7 +5128,7 @@ const partyWordsOf = (v) => { try { return CMETA.partyWords(JSON.parse(v._partes
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
-  const all = { ...v, "documento.numero": docNum?.label || "(se asigna al generar)", "documento.clase": tplActive?.category === "Poder" ? "Poder" : tplActive?.category === "Contrato" ? "Contrato" : "",...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
+  const all = { ...v, "documento.numero": docNum?.label || "(se asigna al generar)", "documento.clase": ["Contrato", "Poder", "Memorial"].includes(tplActive?.category) ? tplActive.category : "",...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
   // Versions 2.2.46 / 2.2.47: the clauses of the ticked objects / power classes go where the Word has the kind's marker.
   for (const kind of Object.keys(PICK)) {
     if (!usesPick(kind)) continue;
@@ -7515,7 +7516,7 @@ async function buildReceiptFiles(r) {
   const open = await api("GET", `/payments/charges?clientId=${r.client_id}&state=abiertos`);
   const k = r.case_id ? await api("GET", `/cases/${r.case_id}`).catch(() => null) : null;
   const data = {
-    "recibo.numero": String(r.number), "recibo.fecha": longDate(r.paid_on), "recibo.cliente": r.client_name, "recibo.documento": r.client_doc,
+    "recibo.numero": String(r.number), "documento.clase": "Recibo", "documento.numero": String(r.number), "recibo.fecha": longDate(r.paid_on), "recibo.cliente": r.client_name, "recibo.documento": r.client_doc,
     "recibo.valor": cop(r.amount), "recibo.valor_letras": pesosEnLetras(r.amount), "recibo.concepto": r.concept, "recibo.medio": r.method,
     "recibo.referencia": r.reference, "recibo.notas": r.notes, "recibo.saldo": cop(open.reduce((a, c) => a + c.balance, 0)),
     "recibo.expediente": k ? [k.radicado ? formatRadicado(k.radicado) : "", k.title].filter(Boolean).join(" · ") : "",
