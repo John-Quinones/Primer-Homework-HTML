@@ -91,3 +91,23 @@ test("only Gerencia assigns a template to a memorial category (the Director JurÃ
   assert.equal((await d.call("PUT", `/templates/${t.id}`, { name: "Memorial base 2", memorial_category_id: cat.id })).body.memorial_category_id, cat.id);
   assert.equal((await d.call("POST", "/memorial-categories", { title: "Nueva" })).status, 403);
 });
+
+test("v2.2.68: each category carries its text (same on server and link) and the old table gets the column without losing rows", async () => {
+  const out = await same(async (call) => {
+    const a = (await call("POST", "/memorial-categories", { title: "Con texto", clause: " Solicito a {{cliente.nombre}}\r\n\r\n\r\nimpulso. " })).body;
+    const e = (await call("PUT", `/memorial-categories/${a.id}`, { description: "x" })).body;
+    const long = await call("POST", "/memorial-categories", { title: "Larga", clause: "x".repeat(8001) });
+    const plain = (await call("POST", "/memorial-categories", { title: "Sin texto" })).body;
+    return { clause: a.clause, kept: e.clause, long: long.status, plain: plain.clause };
+  });
+  assert.equal(out.clause, "Solicito a {{cliente.nombre}}\n\nimpulso.");
+  assert.equal(out.kept, out.clause);
+  assert.equal(out.long, 400);
+  assert.equal(out.plain, "");
+  const db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE document_templates (id INTEGER PRIMARY KEY)");
+  db.exec("CREATE TABLE memorial_categories (id INTEGER PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', is_active INTEGER NOT NULL DEFAULT 1, display_order INTEGER NOT NULL DEFAULT 0, created_by INTEGER, created_at TEXT, updated_at TEXT)");
+  db.prepare("INSERT INTO memorial_categories (title) VALUES ('Solicitud de impulso')").run();
+  addMemorialColumn(db); addMemorialColumn(db);
+  assert.deepEqual(db.prepare("SELECT title, clause FROM memorial_categories").all().map((r) => ({ ...r })), [{ title: "Solicitud de impulso", clause: "" }]);
+});

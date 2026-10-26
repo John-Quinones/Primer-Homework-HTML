@@ -5035,6 +5035,7 @@ async function openTemplate(id) {
   tplActive = t;
   tplOverrides = {};
   for (const kind of Object.keys(PICK)) pickState[kind] = { list: PICK[kind].keys.some((k) => t.vars.includes(k)) || offersPick(kind, t) ? await api("GET", PICK[kind].api) : [], picked: new Set() };
+  memTexts = t.category === "Memorial" ? await api("GET", "/memorial-categories").catch(() => []) : [];
   $("#tpl-empty").hidden = true;
   $("#tpl-active").hidden = false;
   $("#tpl-name").textContent = t.name;
@@ -5125,6 +5126,14 @@ const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label ||
 const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 // Role words (el demandante / la demandada / los demandados) follow the gender chosen in the form.
 const partyWordsOf = (v) => { try { return CMETA.partyWords(JSON.parse(v._partes), v["cliente.genero"]); } catch { return {}; } };
+// Version 2.2.68: the text of the memorial category (the one chosen in the assistant, else the template's own) goes where the Word has {{CATEGORIA_MEMORIAL}}.
+let memTexts = [];
+const memorialText = (all) => {
+  if (tplActive?.category !== "Memorial") return "";
+  const id = wz.mode === "memorial" && wz.mcat ? wz.mcat : tplActive.memorial_category_id;
+  const c = memTexts.find((x) => x.id === id);
+  return c?.clause ? CO.mergeObjects([{ clause: c.clause }], all) : "";
+};
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
@@ -5135,12 +5144,15 @@ const tplValues = () => {
     const merged = CO.mergeObjects(tickedOf(kind), all);
     if (merged) for (const k of PICK[kind].keys) all[k] = merged;
   }
+  const mem = memorialText(all);
+  if (mem) all[MC_MARKER] = mem;
   return all;
 };
 // Version 2.2.48: a Word of category Poder always shows the power classes; without the marker it offers to put it in (offerMarker).
 const offersPick = (kind, t = tplActive) => kind === "poder" && t?.category === "Poder" && t.format === "docx";
 const usesPick = (kind) => !!tplActive?.vars.some((k) => PICK[kind].keys.includes(k));
-const anyPickKey = (k) => Object.values(PICK).some((x) => x.keys.includes(k));
+const MC_MARKER = window.JuanmaMemorialCategories.MARKER;
+const anyPickKey = (k) => k === MC_MARKER || Object.values(PICK).some((x) => x.keys.includes(k));
 const tickedOf = (kind) => CO.sortObjects(pickState[kind].list).filter((o) => pickState[kind].picked.has(o.id));
 function pickChecklist(kind) {
   const P = PICK[kind], list = CO.sortObjects(pickState[kind].list);
@@ -5648,6 +5660,7 @@ async function renderMcatAdmin() {
     <div class="cobj-head"><strong>${escapeHtml(o.title)}</strong>
       <span class="badge ${o.is_active ? "ok" : "warn"}">${o.is_active ? "Activa" : "Desactivada"}</span><span class="muted">· ${o.templates} plantilla(s)</span></div>
     ${o.description ? `<p class="muted">${escapeHtml(o.description)}</p>` : ""}
+    ${o.clause ? `<p class="cobj-clause">${escapeHtml(o.clause)}</p>` : '<p class="muted">Sin texto todavía.</p>'}
     <div class="toolbar">
       <button type="button" class="mini" data-action="up-mcat" data-id="${o.id}" ${i ? "" : "disabled"} aria-label="Subir">↑ Subir</button>
       <button type="button" class="mini" data-action="down-mcat" data-id="${o.id}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Bajar">↓ Bajar</button>
@@ -5659,7 +5672,7 @@ async function renderMcatAdmin() {
 }
 function openMcatDialog(o = null) {
   const dlg = $("#mcat-dialog");
-  openDialog(dlg, o ? "Editar categoría de memoriales" : "Nueva categoría de memoriales", o ? { id: o.id, title: o.title, description: o.description || "" } : {});
+  openDialog(dlg, o ? "Editar categoría de memoriales" : "Nueva categoría de memoriales", o ? { id: o.id, title: o.title, description: o.description || "", clause: o.clause || "" } : {});
   dlg.querySelector("form").elements.is_active.checked = o ? !!o.is_active : true;
 }
 wireDialog($("#mcat-dialog"), async (form) => {

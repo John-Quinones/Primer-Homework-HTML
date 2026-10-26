@@ -466,15 +466,15 @@
           <button role="tab" data-dtab="memoriales">Memoriales</button>
           <button role="tab" data-dtab="plantillas">Otras plantillas</button>
           <button role="tab" data-dtab="nomos">Redactar con NomosAI</button>
-          <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Objetos del contrato</button>
-          <button role="tab" data-dtab="poderes" id="dtab-poderes" hidden title="Solo Gerencia">Clases de poder</button>
-          <button role="tab" data-dtab="memcats" id="dtab-memcats" hidden title="Solo Gerencia">Categorías de memoriales</button>
+          <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Categorías Contratos</button>
+          <button role="tab" data-dtab="poderes" id="dtab-poderes" hidden title="Solo Gerencia">Categorías Poder</button>
+          <button role="tab" data-dtab="memcats" id="dtab-memcats" hidden title="Solo Gerencia">Categoría Memoriales</button>
         </div>
 
         <div data-dpanel="objetos" hidden>
           <section class="panel">
             <div class="toolbar">
-              <h3>Objetos contractuales · Plantilla de Contrato</h3>
+              <h3>Categorías Contratos · Plantilla de Contrato</h3>
               <button type="button" class="primary" data-action="new-cobj">+ Nuevo objeto contractual</button>
             </div>
             <p class="hint">Cada objeto es una cláusula lista para el contrato (por ejemplo «Reintegro laboral» o «Proceso ejecutivo»). Al hacer un contrato, el usuario marca una o varias casillas y la cláusula de cada una se imprime donde el Word tiene el marcador <code>{{OBJETOS_CONTRACTUALES}}</code>. Si marca varias, salen como A), B), C… en el orden de esta lista. En la cláusula puede usar datos como <code>{{cliente.nombre}}</code>. Un objeto que ya se usó en algún contrato no se borra: se desactiva y deja de aparecer en la lista de casillas.</p>
@@ -485,7 +485,7 @@
         <div data-dpanel="poderes" hidden>
           <section class="panel">
             <div class="toolbar">
-              <h3>Clases de poder · Plantilla de Poder</h3>
+              <h3>Categorías Poder · Plantilla de Poder</h3>
               <button type="button" class="primary" data-action="new-pcls">+ Nueva clase de poder</button>
             </div>
             <p class="hint">Cada clase es el texto de facultades de un tipo de poder (por ejemplo «Poder para proceso ejecutivo», «laboral», «de familia» o «trámite administrativo»). Al hacer un poder, el usuario marca una o varias casillas y el texto de cada una se imprime donde el Word tiene el marcador <code>{{CLASES_DE_PODER}}</code> (también sirve <code>{{FACULTADES_ESPECIFICAS}}</code>). Si marca varias, salen como A), B), C… en el orden de esta lista. En el texto puede usar datos como <code>{{cliente.nombre}}</code>. Una clase que ya se usó en algún poder no se borra: se desactiva y deja de aparecer en la lista de casillas.</p>
@@ -496,10 +496,10 @@
         <div data-dpanel="memcats" hidden>
           <section class="panel">
             <div class="toolbar">
-              <h3>Categorías de memoriales</h3>
+              <h3>Categoría Memoriales · Plantilla de Memorial</h3>
               <button type="button" class="primary" data-action="new-mcat">+ Nueva categoría</button>
             </div>
-            <p class="hint">Son los grupos que se ven al abrir «Memoriales» (por ejemplo «Solicitud de impulso», «Solicitud de link» o «Requerimiento»). Cada categoría reúne las plantillas de Word de esa clase de memorial: para meter una plantilla en una categoría, cárguela en «Otras plantillas», elija la categoría «Memorial» y luego la categoría de memoriales. Una categoría que ya tiene plantillas no se borra: se desactiva y deja de aparecer en la lista.</p>
+            <p class="hint">Son los grupos que se ven al abrir «Memoriales» (por ejemplo «Solicitud de impulso», «Solicitud de link» o «Requerimiento»). Cada categoría reúne las plantillas de Word de esa clase de memorial y lleva su propio texto: al hacer un memorial, el texto de la categoría elegida se imprime donde el Word tiene el marcador <code>{{CATEGORIA_MEMORIAL}}</code>, y puede usar datos como <code>{{cliente.nombre}}</code>. Para meter una plantilla en una categoría, cárguela en «Otras plantillas», elija la categoría «Memorial» y luego la categoría de memoriales. Una categoría que ya tiene plantillas no se borra: se desactiva y deja de aparecer en la lista.</p>
             <div id="mcat-list"></div>
           </section>
         </div>
@@ -1543,6 +1543,7 @@
       <div class="grid2">
         <label class="span2">Nombre * <input name="title" required maxlength="120" placeholder="Ej. Solicitud de impulso" /></label>
         <label class="span2">Descripción <input name="description" maxlength="300" placeholder="Ej. Pedir al despacho que impulse el proceso" /></label>
+        <label class="span2">Texto que se imprime en el memorial <textarea name="clause" rows="10" maxlength="8000" placeholder="Ej. Solicito respetuosamente que se impulse el proceso de {{cliente.nombre}}…"></textarea></label>
         <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activa (aparece al abrir «Memoriales»)</label>
       </div>
       <p class="form-error" hidden></p>

@@ -431,7 +431,7 @@
     return s.cases.flatMap((k) => ids.map((i) => str(k.field_values?.[i])).filter(Boolean).map((folder) => ({ case_id: k.id, folder })));
   };
   const qs = (url) => Object.fromEntries(new URLSearchParams(url.split("?")[1] || ""));
-  const memcatOut = (o) => ({ ...clone(o), is_active: !!o.is_active, templates: s.templates.filter((t) => t.memorial_category_id === o.id).length });
+  const memcatOut = (o) => ({ clause: "", ...clone(o), is_active: !!o.is_active, templates: s.templates.filter((t) => t.memorial_category_id === o.id).length });
   const memcatGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar las categorías de memoriales (solo Gerencia)."); };
   // A template belongs to a memorial category only when its own category is «Memorial» (empty = «Otros memoriales»).
   const memcatOf = (b, t) => {
