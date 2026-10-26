@@ -45,6 +45,7 @@ export const VARIABLES = [
   ["expediente.subproceso", "Subproceso", "Expediente"],
   ["expediente.asunto", "Asunto", "Expediente"],
   ["expediente.contraparte", "Contraparte / entidad", "Expediente"],
+  ["expediente.demandados", "Entidades o personas demandadas con su documento, una por línea (usar con |líneas)", "Expediente"],
   ["expediente.hechos", "Hechos", "Expediente"],
   ["expediente.despacho", "Despacho", "Expediente"],
   ["expediente.juez", "Juez del despacho", "Expediente"],
