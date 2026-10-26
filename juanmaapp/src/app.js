@@ -78,7 +78,7 @@ export function createApp(db) {
     if (req.secure || process.env.COOKIE_SECURE === "1") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     next();
   });
-  // Version 2.2.72: Bold calls this with no session; its signature is checked over the raw bytes, so it comes before the JSON parsers.
+  // Version 2.2.73: Bold calls this with no session; its signature is checked over the raw bytes, so it comes before the JSON parsers.
   app.get("/api/webhooks/bold", boldStatusHandler());
   app.post("/api/webhooks/bold", express.raw({ type: "*/*", limit: "256kb" }), boldWebhookHandler(db));
   // Sign-in and public pages accept small bodies; 12 MB only where files are uploaded (audit A06-002).

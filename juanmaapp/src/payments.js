@@ -264,7 +264,7 @@ export function paymentsRouter(db) {
     return remind(db, c, client, { channels, trigger: "manual", userId: req.user.id, settings: paymentSettings(db) });
   }));
 
-  // Version 2.2.72: creates (or renews) the charge's Bold link for its pending balance and saves it as the charge's pay link.
+  // Version 2.2.73: creates (or renews) the charge's Bold link for its pending balance and saves it as the charge's pay link.
   r.post("/charges/:id/bold-link", h(async (req) => {
     const raw = getCharge(req, Number(req.params.id));
     if (raw.status === "anulado") throw new HttpError(400, "El cobro está anulado.");
@@ -273,7 +273,7 @@ export function paymentsRouter(db) {
     return { pay_link: await ensureBoldLink(db, raw, c.balance, { force: !!req.body?.renew }) };
   }));
 
-  // Version 2.2.72: what Bold has reported (reconciled, rejected, voided, unmatched), newest first, for Gerencia while the integration is tested.
+  // Version 2.2.73: what Bold has reported (reconciled, rejected, voided, unmatched), newest first, for Gerencia while the integration is tested.
   r.get("/bold-events", h((req) => {
     if (req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia puede ver los eventos de Bold.");
     return db.prepare("SELECT payment_id, type, reference, bold_code, amount, method, outcome, detail, receipt_id, received_at FROM bold_events ORDER BY rowid DESC LIMIT 200").all().map((x) => ({ ...x }));

@@ -1,4 +1,4 @@
-# Cobro automático con Bold (v2.2.72)
+# Cobro automático con Bold (v2.2.73)
 
 Pedido de John (26/10/2026, hilo «Integrar cobro automático con Bold»): link de pago por cobro/cuota, correo «Cyber LegalTech» y webhook que concilia el pago solo. Su ejemplo era Node/Express genérico; se adaptó a la App.
 
