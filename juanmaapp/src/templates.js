@@ -6,7 +6,7 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { counterpartyText, counterpartyLines, fillRadicadoAliases, partyContext, partyWords, isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables } from "./case-meta.js";
+import { counterpartyText, counterpartyLines, fillRadicadoAliases, partyContext, partyWords, isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables, plaintiffNames, lastActuacionVariables } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES } from "./templates-seed.js";
 
@@ -56,7 +56,7 @@ export function templateData(db, user, caseId) {
       "cliente.ciudad": c.city, "cliente.departamento": c.department, ...idPlaceVariables(c), ...genderWords(c.person_type === "juridica" ? "" : c.gender),
       ...partyWords(party, c.gender), _partes: JSON.stringify(party),
       "expediente.radicado": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.tipo_proceso": k.category_name, "expediente.subproceso": k.type_name,
-      "expediente.asunto": k.title, "expediente.contraparte": counterpartyText(k.parties, k.counterparty), "expediente.demandados": counterpartyLines(k.parties, k.counterparty), "expediente.hechos": k.facts,
+      "expediente.asunto": k.title, "expediente.contraparte": counterpartyText(k.parties, k.counterparty), "expediente.demandados": counterpartyLines(k.parties, k.counterparty), "expediente.demandantes": plaintiffNames(k.parties), "expediente.hechos": k.facts,
       "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
       "expediente.ciudad": k.city, "expediente.departamento": k.department,
       ...processVariables(k.category_name, k.area, k.type_name, (k.radicado ? formatRadicado(k.radicado) : k.case_number) || ""),
@@ -65,6 +65,7 @@ export function templateData(db, user, caseId) {
     const values = JSON.parse(k.field_values);
     for (const f of fields) v[`campo.${f.label}`] = fieldDocValue(f, values[f.id]);
     fillRadicadoAliases(v, v["expediente.numero"]);
+    Object.assign(v, lastActuacionVariables(db.prepare("SELECT id, fecha, actuacion, anotacion FROM actuaciones WHERE case_id = ?").all(k.id)));
     const folder = fields.find((f) => isFolderLabel(f.label) && String(values[f.id] ?? "").trim());
     if (folder) v["expediente.carpeta"] = String(values[folder.id]).trim();
     // Addressee (version 2.27): the judge of the case or the official saved for the entity.
