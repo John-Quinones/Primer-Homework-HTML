@@ -7958,24 +7958,34 @@ function monyVoicePickUi() {
 function monySayable(text) { return text.replace(/\bMony\b/gi, "Móni"); }
 function monyClean(text) { return monySayable(String(text).replace(/[*_`#>|]/g, " ").replace(/\s+/g, " ").trim()); }
 function monyMode(m) { window.MonyFace?.setMode(m); }
-function monyStopVoice() { if (monyTTS) speechSynthesis.cancel(); $$(".mony-speak").forEach((b) => b.classList.remove("on")); monyMode("idle"); }
+function monyStopVoice() { monySpeakToken++; if (monyTTS) speechSynthesis.cancel(); $$(".mony-speak").forEach((b) => b.classList.remove("on")); monyMode("idle"); }
 function monySpeak(text, btn = null) {
   if (!monyTTS) return toast("Este navegador no tiene voz para leer en voz alta.", true);
   monyStopVoice();
-  const chunks = monyClean(text).match(/[^.!?;\n]+[.!?;]?/g) || []; // short pieces: long utterances get cut off in some browsers
-  const voice = monyPickVoice();
-  chunks.forEach((c, i) => {
-    const u = new SpeechSynthesisUtterance(c.trim());
-    u.lang = voice?.lang || "es-CO";
-    if (voice) u.voice = voice;
-    u.rate = 1.02; u.pitch = 1.06;
-    u.onboundary = () => window.MonyFace?.pulse();
-    if (i === chunks.length - 1) u.onend = u.onerror = () => { btn?.classList.remove("on"); monyMode("idle"); };
-    speechSynthesis.speak(u);
-  });
+  const chunks = (monyClean(text).match(/[^.!?;\n]+[.!?;]?/g) || []).map((c) => c.trim()).filter(Boolean); // short pieces: long utterances get cut off in some browsers
+  if (!chunks.length) return;
   btn?.classList.add("on");
   monyMode("speaking");
+  const token = ++monySpeakToken;
+  // Version 2.2.75: Chrome drops a speak() sent right after cancel(), keeps no hold on utterances (they are collected and never
+  // finish) and can stay paused; so wait a moment, hold the utterances in monyUtterances and resume the engine first.
+  setTimeout(() => {
+    if (token !== monySpeakToken) return;
+    const voice = monyPickVoice();
+    try { speechSynthesis.resume(); } catch {}
+    monyUtterances = chunks.map((c, i) => {
+      const u = new SpeechSynthesisUtterance(c);
+      u.lang = voice?.lang || "es-CO";
+      if (voice) u.voice = voice;
+      u.rate = 1.02; u.pitch = 1.06;
+      u.onboundary = () => window.MonyFace?.pulse();
+      if (i === chunks.length - 1) u.onend = u.onerror = () => { if (token === monySpeakToken) { btn?.classList.remove("on"); monyMode("idle"); } };
+      return u;
+    });
+    monyUtterances.forEach((u) => speechSynthesis.speak(u));
+  }, 120);
 }
+let monySpeakToken = 0, monyUtterances = [];
 /** The «Escuchar» button under each of Mony's answers. */
 function monyActions(bubble) {
   if (!monyTTS || !bubble || bubble.nextElementSibling?.classList.contains("mony-actions")) return;
@@ -8064,6 +8074,13 @@ async function monyDictate() {
     try { localStorage.setItem(key, "1"); } catch {}
   }
   monyStopVoice();
+  // Version 2.2.75: the first use shows the browser's microphone permission box; the 6 s watchdog used to cut the dictation while the
+  // person was still answering it. Ask for the microphone first (and release it), then start the recognition.
+  if (navigator.mediaDevices?.getUserMedia) {
+    try { (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach((t) => t.stop()); }
+    catch (err) { return toast(err?.name === "NotFoundError" ? MONY_REC_MSG["audio-capture"] : MONY_REC_MSG["not-allowed"], true); }
+    await new Promise((r) => setTimeout(r, 200));
+  }
   const input = $("#mony-input");
   const st = { rec: null, base: input.value.trimEnd() ? input.value.trimEnd() + " " : "", heard: false, stopped: false, quiet: 0, started: false, t0: Date.now(), wd: 0 };
   monyRec = st;
