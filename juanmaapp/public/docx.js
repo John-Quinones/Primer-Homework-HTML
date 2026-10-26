@@ -511,6 +511,30 @@
     }
     return { bytes: zip.generate({ type: "uint8array" }), count: total };
   }
+  /** The paragraphs of the Word's body that have text: [{index, text}] (index counts every paragraph, as docxInsertParagraph expects). */
+  function docxParagraphs(bytes) {
+    const body = new window.PizZip(bytes).file("word/document.xml")?.asText() || "";
+    return [...body.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((m, index) => ({ index, text: paragraphText(m[0]).trim() })).filter((p) => p.text);
+  }
+  /**
+   * Adds a paragraph holding `{{marker}}` right after paragraph `index` of the body, with that paragraph's own paragraph
+   * and first-run format (so it looks like the text around it). Returns the new Word.
+   */
+  function docxInsertParagraph(bytes, index, marker) {
+    const zip = new window.PizZip(bytes);
+    let at = -1, done = false;
+    const out = zip.file("word/document.xml").asText().replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
+      at++;
+      if (at !== index) return para;
+      done = true;
+      const pPr = (para.match(/<w:pPr>[\s\S]*?<\/w:pPr>/) || [""])[0];
+      const rPr = (para.match(/<w:r[ >][\s\S]*?(<w:rPr>[\s\S]*?<\/w:rPr>)/) || [])[1] || "";
+      return `${para}<w:p>${pPr}<w:r>${rPr}<w:t xml:space="preserve">{{${xml(marker)}}}</w:t></w:r></w:p>`;
+    });
+    if (!done) throw new Error("No se encontró ese párrafo en el Word.");
+    zip.file("word/document.xml", out);
+    return zip.generate({ type: "uint8array" });
+  }
   function caseTexts(data) {
     const out = [];
     for (const [key, raw] of Object.entries(data || {})) {
@@ -552,6 +576,6 @@
     }).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, docxGenderWords, docxReplaceAt, fillDocx, markdownToDocx, fillText, textVariables, textOptional, docxBlanks, applyBlanks, guessVariable,
+  window.JuanmaDocx = { b64ToBytes, docxText, docxVariables, docxOptional, docxLineVars, docxGenderWords, docxReplaceAt, docxParagraphs, docxInsertParagraph, fillDocx, markdownToDocx, fillText, textVariables, textOptional, docxBlanks, applyBlanks, guessVariable,
     markerKey, docxFind, docxReplace, caseTexts, markerFor, docxDates };
 })();

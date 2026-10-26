@@ -3124,6 +3124,7 @@ document.addEventListener("click", (e) => {
     "up-cobj": () => pickMove("contrato", id, -1),
     "down-cobj": () => pickMove("contrato", id, 1),
     "delete-cobj": () => deletePick("contrato", id),
+    "pick-marker": () => openMarkerDialog(),
     "new-pcls": () => openPickDialog("poder", null),
     "edit-pcls": () => editPick("poder", id),
     "toggle-pcls": () => togglePick("poder", id),
@@ -4972,7 +4973,7 @@ async function openTemplate(id) {
   t.vars = [...new Set(t.vars.map((k) => (CMETA.dependsOnGender(k) ? "cliente.genero" : k)))];
   tplActive = t;
   tplOverrides = {};
-  for (const kind of Object.keys(PICK)) pickState[kind] = { list: PICK[kind].keys.some((k) => t.vars.includes(k)) ? await api("GET", PICK[kind].api) : [], picked: new Set() };
+  for (const kind of Object.keys(PICK)) pickState[kind] = { list: PICK[kind].keys.some((k) => t.vars.includes(k)) || offersPick(kind, t) ? await api("GET", PICK[kind].api) : [], picked: new Set() };
   $("#tpl-empty").hidden = true;
   $("#tpl-active").hidden = false;
   $("#tpl-name").textContent = t.name;
@@ -5075,11 +5076,18 @@ const tplValues = () => {
   }
   return all;
 };
+// Version 2.2.48: a Word of category Poder always shows the power classes; without the marker it offers to put it in (offerMarker).
+const offersPick = (kind, t = tplActive) => kind === "poder" && t?.category === "Poder" && t.format === "docx";
 const usesPick = (kind) => !!tplActive?.vars.some((k) => PICK[kind].keys.includes(k));
 const anyPickKey = (k) => Object.values(PICK).some((x) => x.keys.includes(k));
 const tickedOf = (kind) => CO.sortObjects(pickState[kind].list).filter((o) => pickState[kind].picked.has(o.id));
 function pickChecklist(kind) {
   const P = PICK[kind], list = CO.sortObjects(pickState[kind].list);
+  if (!usesPick(kind)) {
+    return `<fieldset class="fee-kind span2"><legend>${stepTag(4)}${P.title}</legend>
+      <p class="muted">Este Word no tiene el marcador <code>{{${P.keys[0]}}}</code>, por eso las clases no se pueden imprimir.${can("templates.manage") ? "" : " Pida a Gerencia que lo agregue."}</p>
+      ${can("templates.manage") ? '<button type="button" class="mini" data-action="pick-marker">Elegir dónde van las clases de poder</button>' : ""}</fieldset>`;
+  }
   if (!list.length) return `<fieldset class="fee-kind"><legend>${stepTag(4)}${P.title}</legend><p class="muted">${isGerencia() ? P.none : P.noneUser}</p></fieldset>`;
   const merged = CO.mergeObjects(tickedOf(kind), tplValues());
   return `<fieldset class="fee-kind span2" data-cobj-block><legend>${stepTag(4)}${P.title}</legend>
@@ -5165,7 +5173,7 @@ function renderTplVars() {
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
   const ordered = allVars().filter((k) => k !== "documento.numero" && !FEE_VARS.includes(k) && !anyPickKey(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
-  $("#tpl-vars").innerHTML = Object.keys(PICK).map((kind) => usesPick(kind) ? pickChecklist(kind) : "").join("") + (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
+  $("#tpl-vars").innerHTML = Object.keys(PICK).map((kind) => usesPick(kind) || offersPick(kind) ? pickChecklist(kind) : "").join("") + (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
     <input type="date" data-var="${escapeHtml(k)}" value="${escapeHtml(isoFromLong(vals[k]))}" class="${vals[k] ? "" : "missing"}" /></label>`
     : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>
@@ -5565,6 +5573,22 @@ for (const kind of Object.keys(PICK)) {
     await renderPickAdmin(kind);
   });
 }
+// Version 2.2.48: a Poder Word without {{CLASES_DE_PODER}}: the user picks the paragraph after which the marker goes (a new paragraph
+// with that paragraph's own format) and the template is saved with it.
+const markerDialog = $("#pmark-dialog");
+function openMarkerDialog() {
+  const paras = D.docxParagraphs(tplActive.bytes);
+  const sel = markerDialog.querySelector("select[name=para]");
+  sel.innerHTML = paras.map((p) => `<option value="${p.index}">${escapeHtml(p.text.length > 110 ? p.text.slice(0, 110) + "…" : p.text)}</option>`).join("");
+  openDialog(markerDialog, "¿Dónde van las clases de poder?", {});
+}
+wireDialog(markerDialog, async (form) => {
+  const t = tplActive, bytes = D.docxInsertParagraph(t.bytes, Number(form.elements.para.value), PICK.poder.keys[0]);
+  await api("PUT", `/templates/${t.id}`, { file_base64: bytesToB64(bytes) });
+  toast("Listo: el marcador quedó en el Word. Ahora marque las clases.");
+  await renderBorradores();
+  await openTemplate(t.id);
+});
 const pickMove = async (kind, id, delta) => {
   const ids = (await renderPickAdmin(kind)).map((o) => o.id);
   const at = ids.indexOf(id), to = at + delta;
