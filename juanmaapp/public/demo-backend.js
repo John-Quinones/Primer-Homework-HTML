@@ -450,10 +450,12 @@
       const k = visibleCase(caseId);
       const o = caseOut(k);
       const c = s.clients.find((x) => x.id === k.client_id);
+      const party = CM.partyContext(k, o.category_name, o.type_name, c, (id) => s.clients.find((x) => x.id === id));
       Object.assign(v, {
         "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number, "cliente.correo": c.email,
         "cliente.telefono": c.phone, "cliente.direccion": c.address, "cliente.ciudad": c.city, "cliente.departamento": c.department, ...CM.idPlaceVariables(c),
         ...CM.genderWords(c.person_type === "juridica" ? "" : c.gender),
+        ...CM.partyWords(party, c.gender), _partes: JSON.stringify(party),
         "expediente.radicado": window.JuanmaPortals.formatRadicado(k.radicado),
         "expediente.tipo_proceso": o.category_name, "expediente.subproceso": o.type_name, "expediente.asunto": k.title,
         "expediente.contraparte": CM.counterpartyText(k.parties, k.counterparty), "expediente.hechos": k.facts, "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? window.JuanmaPortals.formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email,

@@ -562,9 +562,61 @@ export function processVariables(category, area, typeName, radicado) {
     "expediente.proceso_linea": [clase && `Proceso ${clase}`, rad].filter(Boolean).join(". "),
   };
 }
+// ----- Role words by gender and number (version 2.2.53): «el demandante», «la demandada», «los demandantes», «las demandadas» -----
+const INVARIABLE_ROLES = ["Demandante", "Ejecutante", "Convocante", "Querellante", "Denunciante", "Reclamante"];
+/** «el demandado» / «la demandada» / «los demandados» / «las demandadas» for a role. `fem`: every one is a woman; `plural`: several. */
+export function roleWords(role, fem, plural) {
+  const base = String(role || "").toLowerCase();
+  if (!base) return null;
+  const femOnly = base === "víctima"; // always «la víctima»
+  const f = fem || femOnly;
+  let word = base;
+  if (!INVARIABLE_ROLES.map((r) => r.toLowerCase()).includes(base) && !femOnly && base.endsWith("o") && f) word = `${base.slice(0, -1)}a`;
+  if (plural) word += "s";
+  const article = plural ? (f ? "las" : "los") : (f ? "la" : "el");
+  return { sola: word, con: `${article} ${word}`, titulo: word.charAt(0).toUpperCase() + word.slice(1) };
+}
+/**
+ * What the role words need from a case (kept in the template data as `_partes`, so the form's gender choice can redo them):
+ * the role of each side, which side the client is on, how many are on each side, and the genders of the client's other co-parties.
+ * `lookup(client_id)` gives { gender, person_type } of another client of the firm.
+ */
+export function partyContext(k, categoryName, typeName, client, lookup = () => null) {
+  const sides = sideRoles(categoryName, typeName);
+  let list = k?.parties;
+  if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+  list = Array.isArray(list) ? list : [];
+  const mine = sideOfRole(k?.client_role) || "activa";
+  const roleOf = (side) => (sideOfRole(k?.client_role) === side ? k.client_role : list.find((p) => p.side === side && p.role)?.role) || sides[side][0] || "";
+  const others = list.filter((p) => p.side === mine && p.ours && p.client_id !== client?.id);
+  const genderOf = (p) => { const c = p.client_id ? lookup(p.client_id) : null; return c ? (c.person_type === "juridica" ? "mujer" : normGender(c.gender) || "hombre") : "hombre"; };
+  const theirs = list.filter((p) => p.side !== mine && String(p.name || "").trim()).length;
+  return {
+    roles: { activa: roleOf("activa"), pasiva: roleOf("pasiva") }, mine, juridica: client?.person_type === "juridica",
+    n: { [mine]: 1 + others.length, [mine === "activa" ? "pasiva" : "activa"]: Math.max(1, theirs) },
+    others: others.map(genderOf),
+  };
+}
+/** The role words of both sides for the client's gender (marker keys parte.*, cliente.calidad*, contraparte.calidad*); {} while it is unknown. */
+export function partyWords(ctx, gender) {
+  if (!ctx || !ctx.mine) return {};
+  const g = ctx.juridica ? "mujer" : normGender(gender);
+  if (!g) return {};
+  const other = ctx.mine === "activa" ? "pasiva" : "activa";
+  const mineFem = ctx.n[ctx.mine] > 1 ? [g, ...ctx.others].every((x) => x === "mujer") : g === "mujer";
+  const forms = { [ctx.mine]: roleWords(ctx.roles[ctx.mine], mineFem, ctx.n[ctx.mine] > 1), [other]: roleWords(ctx.roles[other], false, ctx.n[other] > 1) };
+  const out = {};
+  const put = (prefix, w) => { if (!w) return; out[prefix] = w.con; out[`${prefix}_sola`] = w.sola; out[`${prefix}_titulo`] = w.titulo; };
+  put("parte.activa", forms.activa); put("parte.pasiva", forms.pasiva);
+  put("cliente.calidad", forms[ctx.mine]); put("contraparte.calidad", forms[other]);
+  return out;
+}
+export const PARTY_WORD_KEYS = ["parte.activa", "parte.pasiva", "cliente.calidad", "contraparte.calidad"].flatMap((k) => [k, `${k}_sola`, `${k}_titulo`]);
 export const GENDER_LABEL = { hombre: "Hombre", mujer: "Mujer" };
 /** Marker keys that change with the client's gender; the document form asks only «Género del cliente». */
 export const GENDER_KEYS = ["cliente.suscrito", "cliente.suscrito_solo", "cliente.identificado", "cliente.domiciliado", "cliente.el", "cliente.senor", "cliente.el_senor", "cliente.del_senor"];
+/** Markers that depend on the client's gender (the gendered words and the role words); the form asks only «Género del cliente» for them. */
+export const dependsOnGender = (k) => GENDER_KEYS.includes(k) || PARTY_WORD_KEYS.includes(k);
 /** The gendered words for a client, or {} while the gender is unknown (the document then shows [FILL: …]). */
 export function genderWords(v) {
   const g = normGender(v);
