@@ -14,6 +14,7 @@
   const DIV = window.JUANMA_DIVIPOLA || { departamentos: [], municipios: [] };
   const CM = window.JuanmaCaseMeta;
   const DN = window.JuanmaDocNumbers; // numbering of generated documents (src/doc-numbers.js)
+  const MC = window.JuanmaMemorialCategories; // memorial categories, same code as the server (src/memorial-categories.js)
   const CO = window.JuanmaContractObjects; // contract objects, same code as the server (src/contract-objects.js)
   const RR = window.JuanmaRecords; // client and case rules, same code as the server (src/record-rules.js)
   const LG = window.JuanmaLedger;
@@ -82,7 +83,9 @@
       for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
       st.info.monitorOffFromNumber = true;
     }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses", "docnums"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses", "docnums", "memcats"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
+    // 2.2.65: the three starter memorial categories, once and only if there are none (the firm renames or deletes them freely).
+    if (!st.info.memorialCats) { if (!st.memcats.length) MC.DEFAULT_TITLES.forEach((t, n) => st.memcats.push({ id: nextId(), title: t, description: "", is_active: 1, display_order: n + 1, created_at: stamp(), updated_at: stamp() })); st.info = { ...st.info, memorialCats: true }; }
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -428,8 +431,12 @@
     return s.cases.flatMap((k) => ids.map((i) => str(k.field_values?.[i])).filter(Boolean).map((folder) => ({ case_id: k.id, folder })));
   };
   const qs = (url) => Object.fromEntries(new URLSearchParams(url.split("?")[1] || ""));
+  const memcatOut = (o) => ({ ...clone(o), is_active: !!o.is_active, templates: s.templates.filter((t) => t.memorial_category_id === o.id).length });
+  const memcatGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar las categorías de memoriales (solo Gerencia)."); };
+  // A template belongs to a memorial category only when its own category is «Memorial» (empty = «Otros memoriales»).
+  const memcatOf = (b, t) => { const id = "memorial_category_id" in b ? Number(b.memorial_category_id) || null : t.memorial_category_id || null; if (id && !s.memcats.some((o) => o.id === id)) fail("Elija una categoría de memoriales válida."); return t.category === "Memorial" ? id : null; };
   const tplMetaOut = (t) => ({ id: t.id, name: t.name, category: t.category, description: t.description, format: t.format, filename: t.filename,
-    builtin: !!t.builtin, created_at: t.created_at, updated_at: t.updated_at, file_size: s.blobs[`tpl-${t.id}`] ? Math.round(s.blobs[`tpl-${t.id}`].length * 0.75) : null });
+    builtin: !!t.builtin, memorial_category_id: t.memorial_category_id || null, created_at: t.created_at, updated_at: t.updated_at, file_size: s.blobs[`tpl-${t.id}`] ? Math.round(s.blobs[`tpl-${t.id}`].length * 0.75) : null });
   const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
   const authorityWriter = () => ["cases.write", "mail.send", "drafts.generate"].some((p) => me().permissions.includes(p)) || fail("Su rol no tiene permiso para esta acción.");
   function authorityInput(b) {
@@ -1283,6 +1290,43 @@
     ...cobjRoutes("contract-objects", "contrato"),
     ...cobjRoutes("power-classes", "poder"),
 
+    // ----- memorial categories (2.2.65): Gerencia manages, everyone who drafts reads -----
+    ["GET", /^\/memorial-categories(?:\?(.*))?$/, (m, b, url) => {
+      need("drafts.generate");
+      const all = qs(url).all === "1" && me().role === "Gerencia";
+      return MC.sortCategories(s.memcats).filter((o) => o.is_active || all).map(memcatOut);
+    }],
+    ["POST", /^\/memorial-categories$/, (m, b) => {
+      memcatGerencia();
+      const v = MC.categoryValues(b, null, s.memcats);
+      typeof v === "string" && fail(v);
+      const o = { id: nextId(), ...v, display_order: Math.max(0, ...s.memcats.map((x) => x.display_order)) + 1, created_by: me().id, created_at: stamp(), updated_at: stamp() };
+      s.memcats.push(o);
+      return memcatOut(o);
+    }],
+    ["PUT", /^\/memorial-categories\/order$/, (m, b) => {
+      memcatGerencia();
+      const ids = Array.isArray(b.ids) ? b.ids.map(Number) : [];
+      if (!ids.length || ids.some((id) => !s.memcats.some((o) => o.id === id)) || new Set(ids).size !== ids.length) fail("La lista de orden no es válida.");
+      const rest = MC.sortCategories(s.memcats).map((o) => o.id).filter((id) => !ids.includes(id));
+      [...ids, ...rest].forEach((id, i) => { const o = s.memcats.find((x) => x.id === id); o.display_order = i + 1; o.updated_at = stamp(); });
+      return MC.sortCategories(s.memcats).map(memcatOut);
+    }],
+    ["PUT", /^\/memorial-categories\/(\d+)$/, (m, b) => {
+      memcatGerencia();
+      const cur = s.memcats.find((o) => o.id === +m[1]) || fail("La categoría de memoriales no existe.");
+      const v = MC.categoryValues(b, cur, s.memcats.filter((o) => o !== cur));
+      typeof v === "string" && fail(v);
+      Object.assign(cur, v, { updated_at: stamp() });
+      return memcatOut(cur);
+    }],
+    ["DELETE", /^\/memorial-categories\/(\d+)$/, (m) => {
+      memcatGerencia();
+      const cur = s.memcats.find((o) => o.id === +m[1]) || fail("La categoría de memoriales no existe.");
+      if (s.templates.some((t) => t.memorial_category_id === cur.id)) { cur.is_active = 0; cur.updated_at = stamp(); return { id: cur.id, deleted: false, deactivated: true }; }
+      s.memcats = s.memcats.filter((o) => o !== cur);
+      return { id: cur.id, deleted: true, deactivated: false };
+    }],
     // ----- document templates -----
     ["GET", /^\/templates\/meta$/, () => { need("drafts.generate"); return { categories: TPL.categories, variables: TPL.variables }; }],
     ["GET", /^\/templates$/, () => { need("drafts.generate"); return s.templates.slice().sort((a, b) => (a.category + a.name).localeCompare(b.category + b.name, "es")).map(tplMetaOut); }],
@@ -1301,6 +1345,7 @@
         b.file_base64.length > 11200000 && fail("El archivo debe pesar menos de 8 MB.");
         s.blobs[`tpl-${t.id}`] = b.file_base64;
       }
+      t.memorial_category_id = memcatOf(b, t);
       s.templates.push(t);
       return { ...tplMetaOut(t), body: t.body };
     }],
@@ -1320,6 +1365,7 @@
         t.format = "docx";
         t.body = null;
       }
+      t.memorial_category_id = memcatOf(b, t);
       t.updated_at = stamp();
       return { ...tplMetaOut(t), body: t.body };
     }],

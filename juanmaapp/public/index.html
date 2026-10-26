@@ -463,10 +463,12 @@
         </div>
         <div class="tabs" role="tablist" id="doc-tabs">
           <button role="tab" data-dtab="guiado" class="active">Contrato o poder</button>
+          <button role="tab" data-dtab="memoriales">Memoriales</button>
           <button role="tab" data-dtab="plantillas">Otras plantillas</button>
           <button role="tab" data-dtab="nomos">Redactar con NomosAI</button>
           <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Objetos del contrato</button>
           <button role="tab" data-dtab="poderes" id="dtab-poderes" hidden title="Solo Gerencia">Clases de poder</button>
+          <button role="tab" data-dtab="memcats" id="dtab-memcats" hidden title="Solo Gerencia">Categorías de memoriales</button>
         </div>
 
         <div data-dpanel="objetos" hidden>
@@ -491,9 +493,20 @@
           </section>
         </div>
 
+        <div data-dpanel="memcats" hidden>
+          <section class="panel">
+            <div class="toolbar">
+              <h3>Categorías de memoriales</h3>
+              <button type="button" class="primary" data-action="new-mcat">+ Nueva categoría</button>
+            </div>
+            <p class="hint">Son los grupos que se ven al abrir «Memoriales» (por ejemplo «Solicitud de impulso», «Solicitud de link» o «Requerimiento»). Cada categoría reúne las plantillas de Word de esa clase de memorial: para meter una plantilla en una categoría, cárguela en «Otras plantillas», elija la categoría «Memorial» y luego la categoría de memoriales. Una categoría que ya tiene plantillas no se borra: se desactiva y deja de aparecer en la lista.</p>
+            <div id="mcat-list"></div>
+          </section>
+        </div>
+
         <div data-dpanel="guiado">
           <section class="panel wz" id="wz">
-            <p class="hint">Siga los pasos en orden: cliente, expediente, contrato o poder, su tipo, los honorarios (si es contrato) y el Word. También puede llegar aquí desde el botón «Generar documento» de un expediente.</p>
+            <p class="hint" id="wz-hint">Siga los pasos en orden: cliente, expediente, contrato o poder, su tipo, los honorarios (si es contrato) y el Word. También puede llegar aquí desde el botón «Generar documento» de un expediente.</p>
             <ol class="wz-bar" id="wz-bar"></ol>
             <div class="wz-step" id="wz-s1">
               <h4><span class="step-no">1</span> Cliente</h4>
@@ -505,8 +518,9 @@
               <select id="wz-case" aria-label="Expediente"></select>
             </div>
             <div class="wz-step" id="wz-s3" hidden>
-              <h4><span class="step-no">3</span> ¿Qué documento va a generar?</h4>
-              <div class="fee-choices">
+              <h4><span class="step-no">3</span> <span id="wz-s3-title">¿Qué documento va a generar?</span></h4>
+              <div class="fee-choices" id="wz-memcats" hidden></div>
+              <div class="fee-choices" id="wz-kinds">
                 <label class="inline"><input type="radio" name="wz-kind" value="Contrato" /> Contrato</label>
                 <label class="inline"><input type="radio" name="wz-kind" value="Poder" /> Poder</label>
               </div>
@@ -1521,6 +1535,24 @@
     </form>
   </dialog>
 
+  <!-- Categoría de memoriales -->
+  <dialog id="mcat-dialog" class="wide-dialog">
+    <form method="dialog" data-form="mcat">
+      <h3 data-title>Nueva categoría de memoriales</h3>
+      <input type="hidden" name="id" />
+      <div class="grid2">
+        <label class="span2">Nombre * <input name="title" required maxlength="120" placeholder="Ej. Solicitud de impulso" /></label>
+        <label class="span2">Descripción <input name="description" maxlength="300" placeholder="Ej. Pedir al despacho que impulse el proceso" /></label>
+        <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activa (aparece al abrir «Memoriales»)</label>
+      </div>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Dónde van las clases de poder -->
   <dialog id="pmark-dialog" class="wide-dialog">
     <form method="dialog" data-form="pmark">
@@ -1564,6 +1596,7 @@
       <div class="grid2">
         <label>Nombre * <input name="name" required /></label>
         <label>Categoría * <select name="category" required></select></label>
+        <label id="tpl-mcat-label" hidden>Categoría de memorial <select name="memorial_category_id"></select></label>
         <label class="span2">Descripción <input name="description" /></label>
       </div>
       <p class="hint" data-word-note hidden>Es una minuta de Word: aquí cambia el nombre, la categoría y la descripción. Para ajustar el texto, use «Descargar», edítela en Word y súbala con «Reemplazar»; los {{marcadores}} que deje en el Word se llenan con los datos del expediente.</p>

@@ -18,6 +18,7 @@ import { agendaRouter } from "./agenda-routes.js";
 import { monitorRouter } from "./monitor-routes.js";
 import { templatesRouter } from "./templates.js";
 import { contractObjectsRouter } from "./contract-objects-routes.js";
+import { memorialCategoriesRouter } from "./memorial-categories-routes.js";
 import { docNumbersRouter } from "./doc-numbers-routes.js";
 import { esignRouter, esignPublicRouter, verifyRouter } from "./esign.js";
 import { mailRouter, mailPublicRouter } from "./mailtrace.js";
@@ -134,6 +135,7 @@ export function createApp(db) {
   app.use("/api", agendaRouter(db));
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
   app.use("/api/templates", requirePerm("drafts.generate"), templatesRouter(db));
+  app.use("/api/memorial-categories", requirePerm("drafts.generate"), memorialCategoriesRouter(db)); // version 2.2.65: Gerencia manages, everyone who drafts reads
   app.use("/api/contract-objects", requirePerm("drafts.generate"), contractObjectsRouter(db)); // version 2.2.46: Gerencia manages, everyone who drafts reads
   app.use("/api/doc-numbers", requirePerm("drafts.generate"), docNumbersRouter(db)); // version 2.2.58: numbering of generated contracts and powers
   app.use("/api/power-classes", requirePerm("drafts.generate"), contractObjectsRouter(db, "poder")); // version 2.2.47: same, for the power of attorney
