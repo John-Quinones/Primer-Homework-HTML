@@ -3141,6 +3141,8 @@ document.addEventListener("click", (e) => {
       toast(r.deactivated ? "Ya tiene plantillas: quedó desactivada." : "Categoría eliminada.");
       await renderMcatAdmin();
     },
+    "wz-new-memorial": () => openTemplateDialog(null, { category: "Memorial", memorial_category_id: wz.mcat > 0 ? wz.mcat : "" }),
+    "wz-upload-memorial": () => { memorialUpload = true; $("#tpl-file").click(); },
     "new-cobj": () => openPickDialog("contrato", null),
     "edit-cobj": () => editPick("contrato", id),
     "toggle-cobj": () => togglePick("contrato", id),
@@ -4880,6 +4882,7 @@ function wzMode(mode) {
   }
   $("#wz-memcats").hidden = !memorial;
   $("#wz-kinds").hidden = memorial;
+  $("#wz-mtools").hidden = !memorial || !can("templates.manage"); // version 2.2.69: create or upload memorial templates from here
   $("#wz-s3-title").textContent = memorial ? "¿Qué memorial va a presentar?" : "¿Qué documento va a generar?";
   $("#wz-hint").textContent = memorial
     ? "Siga los pasos en orden: cliente, expediente, categoría del memorial, su plantilla y el Word. También puede llegar aquí desde el botón «Memorial» de un expediente."
@@ -4934,7 +4937,7 @@ function wzKind(kind, list = tplList.filter((t) => t.category === kind)) {
   wz.generated = false;
   $("#wz-tpl-label").hidden = false;
   $("#wz-tpl").innerHTML = (list.length === 1 ? "" : '<option value="">— Elija la plantilla —</option>') + list.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("")
-    || '<option value="">No hay plantillas de esta clase</option>';
+    || `<option value="">${wz.mode === "memorial" ? "Esta categoría aún no tiene plantillas: use «Nueva plantilla de memorial» o «Cargar Word de memorial»" : "No hay plantillas de esta clase"}</option>`;
   wzBar();
   if (list.length === 1) return openTemplate(list[0].id).then(wzBar);
   if (tplActive && !list.some((t) => t.id === tplActive.id)) $("#tpl-active").hidden = true;
@@ -5569,13 +5572,13 @@ $("#casedocs-rows").addEventListener("click", (e) => {
 
 // ----- Template editor and uploads -----
 const tplForm = $("#tpl-dialog form");
-async function openTemplateDialog(t = null) {
+async function openTemplateDialog(t = null, preset = null) {
   tplForm.elements.category.innerHTML = tplMeta.categories.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
   // Version 2.2.65: a Memorial template picks its memorial category (empty = «Otros memoriales»).
   const mcats = await api("GET", "/memorial-categories").catch(() => []);
   tplForm.elements.memorial_category_id.innerHTML = '<option value="">Otros memoriales (sin categoría)</option>' + mcats.map((c) => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
   openDialog($("#tpl-dialog"), t ? "Editar plantilla" : "Nueva plantilla", t ? { id: t.id, name: t.name, category: t.category, description: t.description, body: t.body, memorial_category_id: t.memorial_category_id || "" }
-    : { category: tplCat || "Contrato", body: "# TÍTULO DEL DOCUMENTO\n\n{{fecha.ciudad_y_fecha}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}…\n" });
+    : { category: tplCat || "Contrato", ...preset, body: "# TÍTULO DEL DOCUMENTO\n\n{{fecha.ciudad_y_fecha}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}…\n" });
   tplForm.elements.memorial_category_id.disabled = !isGerencia(); // version 2.2.67: only Gerencia assigns the memorial category
   const showMcat = () => ($("#tpl-mcat-label").hidden = tplForm.elements.category.value !== "Memorial");
   tplForm.elements.category.onchange = showMcat;
@@ -5605,7 +5608,13 @@ wireDialog($("#tpl-dialog"), async (form) => {
   toast(id ? "Plantilla actualizada." : "Plantilla creada.");
   await renderBorradores();
   if (tplActive && Number(id) === tplActive.id) await openTemplate(tplActive.id);
+  await wzRefreshMemorial();
 });
+// Version 2.2.69: after creating or loading a memorial template from «Memoriales», its category list shows it at once.
+let memorialUpload = false;
+async function wzRefreshMemorial() {
+  if (wz.mode === "memorial" && wizardOn() && wz.mcat !== null) await wzMemorial(wz.mcat);
+}
 
 // ----- Versions 2.2.46 / 2.2.47: «Objetos contractuales» and «Clases de poder» (Gerencia) — the texts offered as checkboxes -----
 async function renderPickAdmin(kind) {
@@ -5722,7 +5731,10 @@ $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
   const name = file.name.replace(/\.[^.]+$/, "");
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".doc")) throw new Error("Guarde el archivo como .docx (Word 2007 o posterior) y vuelva a cargarlo.");
-  const category = guessCategory(name);
+  const fromMemorial = memorialUpload;
+  memorialUpload = false;
+  const category = fromMemorial ? "Memorial" : guessCategory(name);
+  const mcat = fromMemorial && wz.mcat > 0 && isGerencia() ? { memorial_category_id: wz.mcat } : {}; // only Gerencia files it in a category
   let created;
   if (lower.endsWith(".docx")) {
     if (file.size > 8 * 1024 * 1024) throw new Error("El archivo debe pesar menos de 8 MB.");
@@ -5730,16 +5742,18 @@ $("#tpl-file").addEventListener("change", (e) => guarded(async () => {
     const vars = D.docxVariables(bytes);
     let bin = "";
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    created = await api("POST", "/templates", { name, category, filename: file.name, file_base64: btoa(bin),
+    created = await api("POST", "/templates", { name, category, ...mcat, filename: file.name, file_base64: btoa(bin),
       description: vars.length ? `${vars.length} variable(s)` : "Sin variables {{…}}: se descargará tal cual" });
   } else if (/\.(md|txt)$/.test(lower)) {
-    created = await api("POST", "/templates", { name, category, body: await file.text() });
+    created = await api("POST", "/templates", { name, category, ...mcat, body: await file.text() });
   } else {
     throw new Error("Use un archivo .docx, .md o .txt.");
   }
   toast(`Plantilla “${name}” cargada en ${category}. Puede cambiar la categoría con Editar.`);
   await renderBorradores();
+  await wzRefreshMemorial();
   await openTemplate(created.id);
+  if (fromMemorial && $("#wz-tpl").querySelector(`option[value="${created.id}"]`)) $("#wz-tpl").value = String(created.id);
   // A firm's own form usually has blanks instead of {{variables}}: offer to map them.
   if (tplActive?.format === "docx" && !tplActive.vars.length) await openBlanksDialog(tplActive);
 }));
