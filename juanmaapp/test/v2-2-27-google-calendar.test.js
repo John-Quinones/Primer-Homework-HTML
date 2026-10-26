@@ -13,6 +13,7 @@ const ICS = [
   "BEGIN:VEVENT", "UID:a3", "DTSTART;VALUE=DATE:20261028", "DTEND;VALUE=DATE:20261029", "SUMMARY:Viaje", "END:VEVENT",
   "BEGIN:VEVENT", "UID:a4", "DTSTART;TZID=America/Bogota:20261019T080000", "DTEND;TZID=America/Bogota:20261019T083000", "RRULE:FREQ=WEEKLY;BYDAY=MO", "EXDATE;TZID=America/Bogota:20261102T080000", "SUMMARY:Comité semanal", "END:VEVENT",
   "BEGIN:VEVENT", "UID:a5", "DTSTART:20261026T143000Z", "STATUS:CANCELLED", "SUMMARY:Cancelado", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:a6", "DTSTART:20261201T143000Z", "DTEND:20261201T153000Z", "SUMMARY:Audiencia futura", "END:VEVENT", // 09:30-10:30 Bogotá; a fixed future date, since proposals in the past are refused
   "END:VCALENDAR"].join("\r\n");
 
 before(() => { process.env.GCAL_ICAL_URLS = `Gerencia|${URL1}, https://evil.example/x.ics`; setGcalFetch(async () => ({ ok: true, text: async () => ICS })); clearGcalCache(); });
@@ -40,9 +41,9 @@ test("Mony lists Google events and flags overlaps for Gerencia only", async () =
     const gerencia = { id: 1, role: "Gerencia", permissions: ["scope.all"] };
     const list = await runTool("consultar_agenda", { desde: "2026-10-26", hasta: "2026-10-26" }, { db: srv.db, user: gerencia });
     assert.ok(list.google_calendar.eventos.some((e) => e.titulo.startsWith("Audiencia en Ibagué")));
-    const p = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2026-12-01 09:30" }, { db: srv.db, user: gerencia });
+    const p = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2026-12-02 09:30" }, { db: srv.db, user: gerencia });
     assert.equal(p.hay_cruce, false);
-    const q = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2026-10-26 09:30" }, { db: srv.db, user: gerencia });
+    const q = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2026-12-01 09:30" }, { db: srv.db, user: gerencia });
     assert.equal(q.hay_cruce, true);
     assert.match(q.cruces_en_google[0].calendario, /Google/);
     const other = { id: 2, role: "Abogado", permissions: ["scope.all"] };
