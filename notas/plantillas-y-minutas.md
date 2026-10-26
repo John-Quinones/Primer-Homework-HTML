@@ -74,3 +74,8 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Cuotas de honorarios (v2.2.52–2.2.54): marcador `{{honorarios.cuotas}}` (una cuota por renglón) dentro de `{{#honorarios.cuotas}}…{{/…}}` en su propio párrafo (paragraphLoop) y `{{^honorarios.cuotas}}` para «a la firma». Si el Word no trae el marcador, las cuotas no salen: minuta en /mnt/project-files/contrato-objetos/ «(cuotas, objetos y logos).docx». No usar `{{honorarios.numero_cuotas}}` fuera de un `{{#…}}` propio (saldría como dato faltante).
 - Minuta del contrato por género (v2.2.57): los artículos delante de PODERDANTE usan `cliente.el|al|del` (+ `|mayúsculas`/`|inicial`). La minuta vigente es la que John sube (la de 26/10 02:15 trae el bloque PARTES): trabajar siempre sobre la última, no sobre una copia anterior. `docxGenderWords` ignora palabras dentro de {{marcador}}; al aplicar todo, excluir a mano el «identificado» del abogado.
 
+
+## Numeración y pie (v2.2.58)
+- Contratos desde el No. 2.326 y poderes desde el No. 10.222 (`src/doc-numbers.js`, tabla `doc_numbers`, `POST /api/doc-numbers`); se asigna al generar (Word, PDF, guardar, correo, WhatsApp, firma), guardado o no en el expediente. Marcador `{{documento.numero}}`; la minuta debe tenerlo (ej. «No.{{documento.numero}}»).
+- Pie de todo documento generado: «Documento generado por: <usuario>» (`stampFooter` en `public/docx.js`, `finishPdf` en `public/membrete.js`).
+- Barra del asistente: cada paso verde cuando está completo (`wzBar`, `wz.generated`).

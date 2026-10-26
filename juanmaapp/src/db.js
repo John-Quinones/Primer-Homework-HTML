@@ -15,6 +15,7 @@ import { looksLikeCompany, splitFullName } from "./person.js";
 import { dbFiles, makeBackup } from "./backup.js";
 import { defaultsPlan, defaultResponsible, genderPlan } from "./record-rules.js";
 import { CONTRACT_OBJECTS_SCHEMA, addKindColumns } from "./contract-objects-routes.js";
+import { DOC_NUMBERS_SCHEMA } from "./doc-numbers-routes.js";
 
 export const MAIN_OFFICE = "Ibagué";
 
@@ -639,6 +640,12 @@ function migrate(db) {
     if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar los objetos contractuales: ${copy.error}`);
   }
   db.exec(CONTRACT_OBJECTS_SCHEMA);
+  // Version 2.2.58: numbering of generated contracts and powers. One new, empty table (nothing existing is touched); a copy first when the database holds data.
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'doc_numbers'").get() && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.2.58" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar la numeración de documentos: ${copy.error}`);
+  }
+  db.exec(DOC_NUMBERS_SCHEMA);
   // Version 2.2.47: «Clases de poder» share those tables through a `kind` column (and a description). Added only; a copy is made first
   // when the 2.2.46 tables already exist without it and the database holds data.
   if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'contract_objects'").get()

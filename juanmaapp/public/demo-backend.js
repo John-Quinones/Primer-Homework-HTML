@@ -13,6 +13,7 @@
   const AREAS = window.JuanmaPlaces.AREAS;
   const DIV = window.JUANMA_DIVIPOLA || { departamentos: [], municipios: [] };
   const CM = window.JuanmaCaseMeta;
+  const DN = window.JuanmaDocNumbers; // numbering of generated documents (src/doc-numbers.js)
   const CO = window.JuanmaContractObjects; // contract objects, same code as the server (src/contract-objects.js)
   const RR = window.JuanmaRecords; // client and case rules, same code as the server (src/record-rules.js)
   const LG = window.JuanmaLedger;
@@ -81,7 +82,7 @@
       for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
       st.info.monitorOffFromNumber = true;
     }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses", "docnums"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -1258,6 +1259,25 @@
     ["PUT", /^\/categories\/(\d+)\/fields\/order$/, (m, b) => { need("catalog.manage"); (b.field_ids || []).map(Number).forEach((id, i) => { const f = s.fields.find((x) => x.id === id && x.category_id === +m[1]); if (f) f.sort = i; }); return { ok: true }; }],
 
     // ----- contract objects (version 2.2.46) and power classes (2.2.47): same rules, told apart by `kind` -----
+    // Version 2.2.58: numbering of generated contracts and powers (same rules as src/doc-numbers-routes.js).
+    ["POST", /^\/doc-numbers$/, (m, b) => {
+      need("drafts.generate");
+      const kind = String(b.kind ?? "");
+      DN.DOC_START[kind] || fail("Solo se numeran los contratos y los poderes.");
+      const caseId = b.case_id ? +b.case_id : null;
+      if (b.case_id && !(Number.isInteger(caseId) && caseId > 0)) fail("El expediente no es válido.");
+      caseId && visibleCase(caseId);
+      const number = DN.nextDocNumber(Math.max(0, ...s.docnums.filter((x) => x.kind === kind).map((x) => x.number)), kind);
+      s.docnums.push({ id: nextId(), kind, number, case_id: caseId, template_id: Number(b.template_id) || null, template_name: String(b.template_name ?? "").slice(0, 160),
+        action: ["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(b.action) ? b.action : "", user_id: me().id, user_name: me().name || "", created_at: stamp() });
+      return { kind, name: DN.DOC_KIND_NAME[kind], number, label: DN.formatDocNumber(number) };
+    }],
+    ["GET", /^\/doc-numbers(?:\?(.*))?$/, (m, b, url) => {
+      need("drafts.generate");
+      const caseId = qs(url).case_id ? +qs(url).case_id : null;
+      if (caseId) visibleCase(caseId); else me().role === "Gerencia" || fail("Su rol no tiene permiso para ver toda la numeración (solo Gerencia).");
+      return clone(s.docnums.filter((x) => !caseId || x.case_id === caseId)).reverse().slice(0, 200).map((x) => ({ ...x, label: DN.formatDocNumber(x.number) }));
+    }],
     ...cobjRoutes("contract-objects", "contrato"),
     ...cobjRoutes("power-classes", "poder"),
 
