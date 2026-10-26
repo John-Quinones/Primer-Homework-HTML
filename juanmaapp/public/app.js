@@ -2609,6 +2609,18 @@ async function openCaseDialog(k = null, clientId = null) {
   for (const el of $$("[data-pick-list]", partyBox)) el.hidden = true;
   $("#party-clients").innerHTML = clientsByFolder(activeClients(state.clients)).map((c) => `<option value="${escapeHtml(c.full_name)}">${escapeHtml([c.id_type, c.id_number].filter(Boolean).join(" "))}</option>`).join("");
   renderParties();
+  fillCounterpartyList().catch(() => {});
+}
+// Version 2.2.55: «Contraparte / entidad» can be typed or picked from what the system already has: counterparties
+// of other cases, party names (ours or not), clients and the entities of the authorities directory. Only suggests.
+async function fillCounterpartyList() {
+  const names = [];
+  for (const k of state.cases) { names.push(k.counterparty); for (const p of k.parties || []) names.push(p.name); }
+  for (const c of state.clients) names.push(c.full_name);
+  try { names.push(...(await loadAuthorities()).map((a) => a.entity)); } catch { /* sin permiso o sin red: quedan las demás */ }
+  const seen = new Set();
+  const opts = names.map((n) => String(n || "").trim()).filter((n) => { const key = plainText(n); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+  $("#counterparty-list").innerHTML = opts.sort((a, b) => a.localeCompare(b, "es")).slice(0, 1500).map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
 }
 
 wireDialog($("#case-dialog"), async (form) => {
