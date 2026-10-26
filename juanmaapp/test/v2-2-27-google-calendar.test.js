@@ -12,6 +12,7 @@ const ICS = [
   "BEGIN:VEVENT", "UID:a2", "DTSTART;TZID=America/Bogota:20261027T153000", "DTEND;TZID=America/Bogota:20261027T163000", "SUMMARY:Reunión", "END:VEVENT",
   "BEGIN:VEVENT", "UID:a3", "DTSTART;VALUE=DATE:20261028", "DTEND;VALUE=DATE:20261029", "SUMMARY:Viaje", "END:VEVENT",
   "BEGIN:VEVENT", "UID:a4", "DTSTART;TZID=America/Bogota:20261019T080000", "DTEND;TZID=America/Bogota:20261019T083000", "RRULE:FREQ=WEEKLY;BYDAY=MO", "EXDATE;TZID=America/Bogota:20261102T080000", "SUMMARY:Comité semanal", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:a6", "DTSTART:20271201T140000Z", "DTEND:20271201T150000Z", "SUMMARY:Audiencia futura", "END:VEVENT", // 09:00-10:00 Bogotá; far ahead so the overlap check never meets a past date
   "BEGIN:VEVENT", "UID:a5", "DTSTART:20261026T143000Z", "STATUS:CANCELLED", "SUMMARY:Cancelado", "END:VEVENT",
   "END:VCALENDAR"].join("\r\n");
 
@@ -42,7 +43,7 @@ test("Mony lists Google events and flags overlaps for Gerencia only", async () =
     assert.ok(list.google_calendar.eventos.some((e) => e.titulo.startsWith("Audiencia en Ibagué")));
     const p = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2026-12-01 09:30" }, { db: srv.db, user: gerencia });
     assert.equal(p.hay_cruce, false);
-    const q = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2026-10-26 09:30" }, { db: srv.db, user: gerencia });
+    const q = await runTool("proponer_cambio_agenda", { accion: "crear", caso_id: caseId, titulo: "Audiencia", fecha_hora: "2027-12-01 09:30" }, { db: srv.db, user: gerencia });
     assert.equal(q.hay_cruce, true);
     assert.match(q.cruces_en_google[0].calendario, /Google/);
     const other = { id: 2, role: "Abogado", permissions: ["scope.all"] };
