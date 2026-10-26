@@ -312,14 +312,26 @@ export function sideRoles(category, type = "") {
  * "Colpensiones (NIT 900.336.004-7) y Juan Pérez (C.C. 123)". Without parties on that side, the case's counterparty text.
  */
 export function counterpartyText(parties, counterparty = "") {
+  const names = counterpartyList(parties);
+  if (!names.length) return String(counterparty || "").trim();
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+function counterpartyList(parties) {
   let list = parties;
   if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
-  const names = (Array.isArray(list) ? list : []).filter((p) => p && p.side === "pasiva" && !p.ours && String(p.name || "").trim()).map((p) => {
+  return (Array.isArray(list) ? list : []).filter((p) => p && p.side === "pasiva" && !p.ours && String(p.name || "").trim()).map((p) => {
     const id = String(p.id_number || "").trim();
     return id ? `${p.name.trim()} (${[String(p.id_type || "").trim(), id].filter(Boolean).join(" ")})` : p.name.trim();
   });
-  if (!names.length) return String(counterparty || "").trim();
-  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+/**
+ * Text for {{expediente.demandados|líneas}} (version 2.2.60): each defendant entity with its document, separated by «;» so the
+ * `líneas` format prints one per line (the addressee of a poder: «Señores / Colpensiones (NIT …) / Empresa S.A.S. (NIT …)»).
+ * Without parties on that side, the case's counterparty text.
+ */
+export function counterpartyLines(parties, counterparty = "") {
+  const names = counterpartyList(parties);
+  return names.length ? names.map((n) => n.replace(/;/g, ",")).join(";") : String(counterparty || "").trim();
 }
 /** Validated list of parties; returns { parties } or { error }. */
 export function cleanParties(list) {

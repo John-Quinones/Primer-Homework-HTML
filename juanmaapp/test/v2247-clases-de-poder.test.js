@@ -195,3 +195,13 @@ test("a Poder Word without the marker: the marker goes in a new paragraph after 
   assert.ok(out.xml.includes("Century Gothic"));
   assert.throws(() => D.docxInsertParagraph(plain, 9, "CLASES_DE_PODER"));
 });
+
+test("{{expediente.demandados|líneas}}: each defendant entity with its document on its own line", async () => {
+  const { counterpartyLines } = await import("../src/case-meta.js");
+  const P = (side, name, id_type = "", id_number = "", ours = false) => ({ side, name, id_type, id_number, ours });
+  assert.equal(counterpartyLines([P("activa", "Ana"), P("pasiva", "Colpensiones", "NIT", "900.336.004-7"), P("pasiva", "Empresa; S.A.S."), P("pasiva", "Nuestro", "", "", true)], "otro"), "Colpensiones (NIT 900.336.004-7);Empresa, S.A.S.");
+  assert.equal(counterpartyLines([], " Entidad X "), "Entidad X");
+  const tplw = word(["Señores", "{{expediente.demandados|líneas}}", "Ciudad."]);
+  const out = await filled(tplw, { "expediente.demandados": counterpartyLines([P("pasiva", "Colpensiones", "NIT", "900.336.004-7"), P("pasiva", "Empresa S.A.S.", "NIT", "800.1")]) });
+  assert.match(out.lines[1], /^Colpensiones \(NIT 900\.336\.004-7\)\s*\nEmpresa S\.A\.S\. \(NIT 800\.1\)$/);
+});
