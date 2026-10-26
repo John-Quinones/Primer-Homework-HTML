@@ -1126,7 +1126,7 @@ async function renderExpedienteFicha(id) {
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
       <span class="chip-stat">Cliente <strong>${clientName(k.client_id, k.client_name)}</strong></span>
-      ${k.radicado ? `<span class="chip-stat">Expediente <strong class="mono">${escapeHtml(formatRadicado(k.radicado))}</strong></span>` : ""}
+      ${k.radicado ? `<span class="chip-stat">Radicado No. <strong class="mono">${escapeHtml(formatRadicado(k.radicado))}</strong></span>` : ""}
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <button type="button" class="chip-stat" data-action="goto-sec" data-sec="responsable" title="Ver o cambiar el funcionario responsable">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></button>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
