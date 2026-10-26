@@ -28,6 +28,8 @@ export const VARIABLES = [
   ["cliente.senor", "«señor» o «señora» según el género", "Género del cliente"],
   ["cliente.el_senor", "«el señor» o «la señora» según el género", "Género del cliente"],
   ["cliente.del_senor", "«del señor» o «de la señora» según el género", "Género del cliente"],
+  ["cliente.al", "«al» o «a la» según el género (al PODERDANTE / a la PODERDANTE)", "Género del cliente"],
+  ["cliente.del", "«del» o «de la» según el género (del PODERDANTE / de la PODERDANTE)", "Género del cliente"],
   ["parte.activa", "«el demandante», «la demandante», «los demandantes»… (lado que demanda, según género y número; en ejecutivos ejecutante, etc.)", "Género del cliente"],
   ["parte.pasiva", "«el demandado», «la demandada», «los demandados»… (lado demandado, según género y número)", "Género del cliente"],
   ["cliente.calidad", "La calidad del cliente en el proceso: «la demandante», «el demandado», «los demandantes»…", "Género del cliente"],

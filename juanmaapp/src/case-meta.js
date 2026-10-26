@@ -614,7 +614,7 @@ export function partyWords(ctx, gender) {
 export const PARTY_WORD_KEYS = ["parte.activa", "parte.pasiva", "cliente.calidad", "contraparte.calidad"].flatMap((k) => [k, `${k}_sola`, `${k}_titulo`]);
 export const GENDER_LABEL = { hombre: "Hombre", mujer: "Mujer" };
 /** Marker keys that change with the client's gender; the document form asks only «Género del cliente». */
-export const GENDER_KEYS = ["cliente.suscrito", "cliente.suscrito_solo", "cliente.identificado", "cliente.domiciliado", "cliente.el", "cliente.senor", "cliente.el_senor", "cliente.del_senor"];
+export const GENDER_KEYS = ["cliente.suscrito", "cliente.suscrito_solo", "cliente.identificado", "cliente.domiciliado", "cliente.el", "cliente.senor", "cliente.el_senor", "cliente.del_senor", "cliente.al", "cliente.del"];
 /** Markers that depend on the client's gender (the gendered words and the role words); the form asks only «Género del cliente» for them. */
 export const dependsOnGender = (k) => GENDER_KEYS.includes(k) || PARTY_WORD_KEYS.includes(k);
 /** The gendered words for a client, or {} while the gender is unknown (the document then shows [FILL: …]). */
@@ -632,6 +632,8 @@ export function genderWords(v) {
     "cliente.senor": m ? "señor" : "señora",
     "cliente.el_senor": m ? "el señor" : "la señora",
     "cliente.del_senor": m ? "del señor" : "de la señora",
+    "cliente.al": m ? "al" : "a la",
+    "cliente.del": m ? "del" : "de la",
   };
 }
 /** Where the client's ID card was issued (version 2.56): «Ibagué (Tolima)»; Bogotá alone, since its department has the same name. */
