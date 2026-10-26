@@ -161,14 +161,15 @@ export function applyBoldEvent(db, ev, req) {
   } catch (err) { db.exec("ROLLBACK"); throw err; }
 }
 
-/** Express handler; mount it with express.raw() so the signature is checked over the exact bytes Bold sent. */
+/** Express handlers; the POST is mounted with express.raw() so the signature is checked over the exact bytes Bold sent.
+ *  In test mode (BOLD_WEBHOOK_TEST=1) Bold's sandbox signs with an empty key, so both that and the real secret are accepted. */
 export function boldWebhookHandler(db) {
   return (req, res) => {
     try {
-      const secret = env.BOLD_WEBHOOK_SECRET ?? (env.BOLD_WEBHOOK_TEST === "1" ? "" : null); // Bold's test mode signs with an empty key
-      if (secret === null) return res.status(503).json({ error: "Webhook de Bold sin configurar." });
+      const secrets = [env.BOLD_WEBHOOK_SECRET, env.BOLD_WEBHOOK_TEST === "1" ? "" : undefined].filter((x) => x !== undefined);
+      if (!secrets.length) return res.status(503).json({ error: "Webhook de Bold sin configurar." });
       const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
-      if (!validBoldSignature(raw, req.get("x-bold-signature"), secret)) return res.status(400).json({ error: "Firma no válida." });
+      if (!secrets.some((sec) => validBoldSignature(raw, req.get("x-bold-signature"), sec))) return res.status(400).json({ error: "Firma no válida." });
       let ev;
       try { ev = JSON.parse(raw.toString("utf8")); } catch { return res.status(400).json({ error: "Cuerpo no válido." }); }
       if (!ev || typeof ev !== "object" || !ev.data) return res.status(400).json({ error: "Evento no válido." });
@@ -181,6 +182,10 @@ export function boldWebhookHandler(db) {
     }
   };
 }
+
+/** GET on the same URL: tells whether the server is ready (never shows a key), so the address can be checked from a browser. */
+export const boldStatusHandler = () => (_req, res) => res.json({ webhook: "tecjuridicos-bold", api_key: !!env.BOLD_API_KEY,
+  webhook_secret: env.BOLD_WEBHOOK_SECRET !== undefined, test_mode: env.BOLD_WEBHOOK_TEST === "1" });
 
 /** E-mail to the client with the receipt number (the Word/PDF receipt is made from Pagos → Recibos). */
 async function confirmPayment(db, out) {

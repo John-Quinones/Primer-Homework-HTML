@@ -23,7 +23,7 @@ import { docNumbersRouter } from "./doc-numbers-routes.js";
 import { esignRouter, esignPublicRouter, verifyRouter } from "./esign.js";
 import { mailRouter, mailPublicRouter } from "./mailtrace.js";
 import { paymentsRouter } from "./payments.js";
-import { boldWebhookHandler } from "./bold.js";
+import { boldWebhookHandler, boldStatusHandler } from "./bold.js";
 import { microsoftRouter } from "./microsoft.js";
 import { consentRouter, consentPublicRouter } from "./consents.js";
 import { pdfjsClassic } from "./pdfjs-classic.js";
@@ -79,6 +79,7 @@ export function createApp(db) {
     next();
   });
   // Version 2.2.72: Bold calls this with no session; its signature is checked over the raw bytes, so it comes before the JSON parsers.
+  app.get("/api/webhooks/bold", boldStatusHandler());
   app.post("/api/webhooks/bold", express.raw({ type: "*/*", limit: "256kb" }), boldWebhookHandler(db));
   // Sign-in and public pages accept small bodies; 12 MB only where files are uploaded (audit A06-002).
   app.use("/api/auth", express.json({ limit: "32kb" }));

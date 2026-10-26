@@ -273,6 +273,12 @@ export function paymentsRouter(db) {
     return { pay_link: await ensureBoldLink(db, raw, c.balance, { force: !!req.body?.renew }) };
   }));
 
+  // Version 2.2.72: what Bold has reported (reconciled, rejected, voided, unmatched), newest first, for Gerencia while the integration is tested.
+  r.get("/bold-events", h((req) => {
+    if (req.user.role !== "Gerencia") throw new HttpError(403, "Solo Gerencia puede ver los eventos de Bold.");
+    return db.prepare("SELECT payment_id, type, reference, bold_code, amount, method, outcome, detail, receipt_id, received_at FROM bold_events ORDER BY rowid DESC LIMIT 200").all().map((x) => ({ ...x }));
+  }));
+
   r.get("/receipts", h((req) => {
     const w = [officeSql(req.user, "r.office_id")], p = [];
     if (req.query.clientId) { w.push("r.client_id = ?"); p.push(Number(req.query.clientId)); }

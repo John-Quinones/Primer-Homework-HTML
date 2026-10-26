@@ -10,5 +10,7 @@ Pedido de John (26/10/2026, hilo «Integrar cobro automático con Bold»): link 
 - Tablas nuevas: `bold_links`, `bold_events` (no tocan datos existentes). Pruebas: `test/v2-2-72-bold.test.js`.
 - Solo el servidor (Azure) recibe webhooks; el enlace de pruebas no.
 
+- **Pruebas (26/10/2026, v2.2.73):** John ya configuró API y webhook de prueba en Azure. `BOLD_WEBHOOK_TEST=1` acepta la firma del sandbox (clave vacía); abrir `/api/webhooks/bold` en el navegador muestra el estado (sin llaves); `GET /api/payments/bold-events` (Gerencia) lista lo reportado. Al fijar las llaves definitivas, quitar `BOLD_WEBHOOK_TEST`.
+
 ## Pendiente de John
 URL pública del webhook (Azure: `https://<app>/api/webhooks/bold`), registrarla en Bold con eventos Venta aprobada/rechazada (y anulación), y cargar las dos llaves en Azure.

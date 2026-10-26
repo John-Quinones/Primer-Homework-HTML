@@ -108,3 +108,18 @@ test("el recordatorio por correo usa la plantilla y el link de Bold", async () =
   const m = mails.at(-1);
   assert.ok(m.html.includes("PAGAR EN LÍNEA") && m.html.includes("https://checkout.bold.co/LNK_TEST1") && m.html.includes("Cuota extra"));
 });
+
+test("modo de pruebas: acepta la firma con clave vacía de Bold, y el GET informa el estado sin mostrar llaves", async () => {
+  const url = srv.base.replace("/api", "") + "/api/webhooks/bold";
+  const raw = JSON.stringify(event("SALE_REJECTED", { payment_id: "PAY-T" }));
+  const send = () => fetch(url, { method: "POST", body: raw, headers: { "x-bold-signature": boldSignature(raw, "") } }).then((r) => r.status);
+  assert.equal(await send(), 400);
+  process.env.BOLD_WEBHOOK_TEST = "1";
+  assert.equal(await send(), 200);
+  delete process.env.BOLD_WEBHOOK_TEST;
+  const st = await (await fetch(url)).json();
+  assert.deepEqual([st.api_key, st.webhook_secret, st.test_mode], [true, true, false]);
+  assert.ok(!JSON.stringify(st).includes("llave-"));
+  const ev = (await call("GET", "/payments/bold-events")).body;
+  assert.ok(ev.some((x) => x.outcome === "conciliado") && ev.some((x) => x.outcome === "sin_conciliar"));
+});
