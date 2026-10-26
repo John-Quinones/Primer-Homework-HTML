@@ -7303,7 +7303,8 @@ async function renderPayTab() {
       <td><span class="pay-state ${c.state}">${escapeHtml(c.state_label)}${c.days_overdue ? ` · ${c.days_overdue} d` : ""}</span>${c.last_reminder_at ? `<br><span class="muted">Recordado ${escapeHtml(c.last_reminder_at.slice(0, 10))}</span>` : ""}</td>
       <td class="row-actions">${c.balance > 0 ? `
         <button class="mini primary" data-action="new-receipt" data-client="${c.client_id}" data-charge="${c.id}">Registrar pago</button>
-        <button class="mini" data-action="pay-remind" data-id="${c.id}">Recordar</button>` : ""}
+        <button class="mini" data-action="pay-remind" data-id="${c.id}">Recordar</button>
+        ${payMeta?.channels?.bold ? `<button class="mini" data-action="bold-link" data-id="${c.id}" title="Crea el link de pago de Bold por el saldo; el pago se concilia solo">${c.pay_link ? "Renovar link Bold" : "Link Bold"}</button>` : ""}` : ""}
         ${c.state !== "anulado" ? `<button class="mini" data-action="edit-charge" data-id="${c.id}">Editar</button>
         <button class="mini danger" data-action="void-charge" data-id="${c.id}">Anular</button>` : `<span class="muted">${escapeHtml(c.void_reason)}</span>`}
         ${isGerencia() ? `<button class="mini danger" data-action="delete-charge" data-id="${c.id}" title="Solo Gerencia; se hace una copia de respaldo antes">Eliminar</button>` : ""}
@@ -7666,6 +7667,12 @@ const PAY_ACTIONS = {
   "pay-settings": () => openPaySettings(),
   "edit-charge": async (b) => openChargeDialog(payChargesCache.find((c) => c.id === Number(b.dataset.id))),
   "pay-remind": (b) => openRemindDialog(Number(b.dataset.id)),
+  "bold-link": async (b) => {
+    const c = payChargesCache.find((x) => x.id === Number(b.dataset.id));
+    const out = await api("POST", `/payments/charges/${c.id}/bold-link`, { renew: !!c.pay_link });
+    try { await navigator.clipboard.writeText(out.pay_link); toast("Link de Bold creado y copiado."); } catch { toast("Link de Bold creado: " + out.pay_link); }
+    await renderPagos();
+  },
   "pay-client-charges": async (b) => { $("#pay-client").value = b.dataset.id; payTab = "cobros"; await renderPagos(); },
   "pay-statement": (b) => downloadStatement(Number(b.dataset.id)),
   "receipt-pdf": (b) => downloadReceipt(payReceiptsCache.find((r) => r.id === Number(b.dataset.id)), "pdf"),

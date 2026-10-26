@@ -20,6 +20,7 @@ export function channelsStatus() {
     email_via: graphMail() ? "Microsoft 365 (Graph)" : env.SMTP_HOST ? `SMTP ${env.SMTP_HOST}` : "",
     whatsapp_otp: !!(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_ID && env.WHATSAPP_TEMPLATE_OTP),
     whatsapp: !!(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_ID && env.WHATSAPP_TEMPLATE),
+    bold: !!env.BOLD_API_KEY,
     sms: !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM),
   };
 }

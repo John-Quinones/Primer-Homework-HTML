@@ -1,6 +1,7 @@
 // Persistence for clients, the process catalog and cases. Uses Node's built-in
 // SQLite (node:sqlite), so there is no native dependency to install.
 import { AUDIT_SCHEMA } from "./audit.js";
+import { BOLD_SCHEMA } from "./bold.js";
 import { CONSENT_SCHEMA } from "./consents.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
@@ -520,6 +521,7 @@ function migrate(db) {
     if (!new Set(db.prepare("PRAGMA table_info(tasks)").all().map((c) => c.name)).has(col)) db.exec(`ALTER TABLE tasks ADD COLUMN ${col} ${def}`);
   }
   db.exec(AUDIT_SCHEMA); // change 50
+  db.exec(BOLD_SCHEMA); // version 2.2.72: Bold payment links and webhook events (new tables; nothing existing changes)
   // Version 2.18: history of every task (who did what, when). Rows are only added, never changed or removed.
   db.exec(`CREATE TABLE IF NOT EXISTS task_log (
     id INTEGER PRIMARY KEY, at TEXT NOT NULL DEFAULT (datetime('now')), task_id INTEGER NOT NULL, case_id INTEGER NOT NULL,
