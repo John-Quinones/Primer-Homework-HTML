@@ -401,6 +401,10 @@
   // Version 2.2.53: the sides of the case written as «el demandante», «la demandada», «los ejecutados»… → {{parte.activa}} / {{parte.pasiva}}.
   const ACTIVE_WORD = /^(demandante|ejecutante|convocante|querellante|denunciante|reclamante|peticionari[oa]|v[ií]ctima)s?$/i;
   const PARTY_RE = /(?:\b(el|la|los|las)\s+)?\b(demandantes?|ejecutantes?|convocantes?|querellantes?|denunciantes?|reclamantes?|peticionari[oa]s?|v[ií]ctimas?|demandad[oa]s?|ejecutad[oa]s?|convocad[oa]s?|denunciad[oa]s?|indiciad[oa]s?|acusad[oa]s?|procesad[oa]s?|querellad[oa]s?)\b/gi;
+  // Version 2.2.56: «el / al / del PODERDANTE» of the services contract follows the client's gender («la / a la / de la PODERDANTE»).
+  const PODERDANTE_RE = /\b(el|al|del)(?=\s+poderdante\b)/gi;
+  // A word that is already part of a {{marker}} (e.g. {{cliente.identificado}}) is not offered again.
+  const inMarker = (text, at) => text.lastIndexOf("{{", at) > text.lastIndexOf("}}", at);
   const NOT_CLIENT = /\b(dr|dra|doctor|doctora|abogad[oa]|apoderad[oa]|funcionari[oa]|contratista|receptor)\b/i;
   /**
    * The gendered words of the Word, one entry per appearance, in reading order. «client» says whether the words look
@@ -413,6 +417,7 @@
         const text = paragraphText(pm[0]);
         for (const m of text.matchAll(GENDER_RE)) {
           const start = m.index, end = start + m[0].length, shown = m[0];
+          if (inMarker(text, start)) continue;
           // «señor/señora» is the client's only right after «mi poderdante,» or right before the client's name
           if (m[7] && !(/poderdante,?\s+$/i.test(text.slice(0, start)) || /^\s*\{\{\s*cliente\.nombre/.test(text.slice(end)))) continue;
           const key = m[7] ? (m[5] ? "cliente.del_senor" : m[6] ? "cliente.el_senor" : "cliente.senor") : m[2] ? (m[1] ? "cliente.suscrito" : "cliente.suscrito_solo") : m[3].toLowerCase() === "identificad" ? "cliente.identificado" : "cliente.domiciliado";
@@ -423,8 +428,17 @@
             client: !NOT_CLIENT.test(before) && !who.some((n) => fold(before).includes(n)),
             context: `${start > 50 ? "…" : ""}${text.slice(Math.max(0, start - 50), start)}[[${shown}]]${text.slice(end, end + 40)}${end + 40 < text.length ? "…" : ""}` });
         }
+        for (const m of text.matchAll(PODERDANTE_RE)) {
+          const start = m.index, end = start + m[0].length, shown = m[0];
+          if (inMarker(text, start)) continue;
+          const letters = shown.replace(/[^\p{L}]/gu, "");
+          const fmt = /^\p{Lu}{2}/u.test(shown) ? "|mayúsculas" : /^\p{Lu}/u.test(shown) ? "|inicial" : "";
+          out.push({ id: out.length, part, para, start, end, text: shown, marker: `cliente.${shown.toLowerCase()}${fmt}`, client: true,
+            context: `${start > 50 ? "…" : ""}${text.slice(Math.max(0, start - 50), start)}[[${shown}]]${text.slice(end, end + 40)}${end + 40 < text.length ? "…" : ""}` });
+        }
         for (const m of text.matchAll(PARTY_RE)) {
           const start = m.index, end = start + m[0].length, shown = m[0];
+          if (inMarker(text, start)) continue;
           const side = ACTIVE_WORD.test(m[2]) ? "parte.activa" : "parte.pasiva";
           const letters = shown.replace(/[^\p{L}]/gu, "");
           const fmt = letters.length > 2 && letters === letters.toLocaleUpperCase("es-CO") ? "|mayúsculas" : /^\p{Lu}/u.test(shown) ? "|inicial" : "";
