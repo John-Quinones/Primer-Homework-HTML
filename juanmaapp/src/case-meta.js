@@ -333,6 +333,31 @@ export function counterpartyLines(parties, counterparty = "") {
   const names = counterpartyList(parties);
   return names.length ? names.map((n) => n.replace(/;/g, ",")).join(";") : String(counterparty || "").trim();
 }
+/** Names of the plaintiff side («activa») in one line: «Ana Pérez», «Ana Pérez y Luis Gómez», «Ana Pérez y otros». Empty without parties. */
+export function plaintiffNames(parties) {
+  let list = parties;
+  if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+  const names = (Array.isArray(list) ? list : []).filter((p) => p && p.side === "activa" && String(p.name || "").trim()).map((p) => p.name.trim());
+  return names.length > 2 ? `${names[0]} y otros` : names.join(" y ");
+}
+/**
+ * Version 2.2.64: the last actuación saved from Rama Judicial, for the impulso procesal and any other memorial that cites it.
+ * `acts` = rows {fecha, actuacion, anotacion, id}; the newest by date wins (ties: the last saved). {} without actuaciones,
+ * so the document shows [FILL: …] instead of inventing one.
+ */
+export function lastActuacionVariables(acts) {
+  const rows = (Array.isArray(acts) ? acts : []).filter((a) => a && String(a.actuacion || "").trim());
+  if (!rows.length) return {};
+  const key = (a) => String(a.fecha || "").slice(0, 10);
+  const last = rows.reduce((m, a) => (key(a) > key(m) || (key(a) === key(m) && (a.id ?? 0) >= (m.id ?? 0)) ? a : m));
+  const d = key(last).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const fecha = d ? `${Number(d[3])} de ${FIELD_MONTHS[Number(d[2]) - 1]} de ${d[1]}` : "";
+  const actuacion = String(last.actuacion).trim(), anotacion = String(last.anotacion || "").trim();
+  return {
+    "actuacion.ultima": actuacion, "actuacion.ultima_fecha": fecha, "actuacion.ultima_anotacion": anotacion,
+    "actuacion.ultima_linea": `${actuacion}${anotacion ? ` (${anotacion})` : ""}${fecha ? `, de fecha ${fecha}` : ""}`,
+  };
+}
 /** Validated list of parties; returns { parties } or { error }. */
 export function cleanParties(list) {
   if (list == null) return { parties: [] };
