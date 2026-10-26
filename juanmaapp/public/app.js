@@ -4928,7 +4928,7 @@ async function openTemplate(id) {
     t.lines = [];
   }
   // Version 2.50: «el suscrito / identificada…» all depend on one datum, the client's gender.
-  t.vars = [...new Set(t.vars.map((k) => (CMETA.GENDER_KEYS.includes(k) ? "cliente.genero" : k)))];
+  t.vars = [...new Set(t.vars.map((k) => (CMETA.dependsOnGender(k) ? "cliente.genero" : k)))];
   tplActive = t;
   tplOverrides = {};
   for (const kind of Object.keys(PICK)) pickState[kind] = { list: PICK[kind].keys.some((k) => t.vars.includes(k)) ? await api("GET", PICK[kind].api) : [], picked: new Set() };
@@ -5020,10 +5020,12 @@ tplRecipient.addEventListener("recipientchange", () => {
 const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
 // Version 2.46: a datum that opens an optional passage ({{#…}}) may stay empty; the passage is then left out.
 const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
+// Role words (el demandante / la demandada / los demandados) follow the gender chosen in the form.
+const partyWordsOf = (v) => { try { return CMETA.partyWords(JSON.parse(v._partes), v["cliente.genero"]); } catch { return {}; } };
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
-  const all = { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
+  const all = { ...v, ...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
   // Versions 2.2.46 / 2.2.47: the clauses of the ticked objects / power classes go where the Word has the kind's marker.
   for (const kind of Object.keys(PICK)) {
     if (!usesPick(kind)) continue;
@@ -5099,7 +5101,7 @@ const feeShown = (key, text) => {
 // Data the document still lacks (an optional passage never counts).
 // Version 2.2.47: data written inside a ticked clause ({{cliente.nombre}}, {{campo.Deudor}}) is asked for like the Word's own data.
 const clauseVars = () => [...new Set(Object.keys(PICK).flatMap((kind) => tickedOf(kind).flatMap((o) => [...o.clause.matchAll(/\{\{\s*([^{}|#/]+?)\s*\}\}/g)].map((m) => m[1]))))]
-  .filter((k) => !tplActive.vars.includes(k)).map((k) => (CMETA.GENDER_KEYS.includes(k) ? "cliente.genero" : k)).filter((k, i, a) => a.indexOf(k) === i && !tplActive.vars.includes(k));
+  .filter((k) => !tplActive.vars.includes(k)).map((k) => (CMETA.dependsOnGender(k) ? "cliente.genero" : k)).filter((k, i, a) => a.indexOf(k) === i && !tplActive.vars.includes(k));
 const allVars = () => [...tplActive.vars, ...clauseVars()];
 const tplMissing = () => { const vals = tplValues(); return allVars().filter((k) => !vals[k] && !isOptionalVar(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))); };
 // Version 2.50: «Género del cliente» picks the words (el suscrito / la suscrita…); a name-based suggestion is only a hint.
@@ -5264,7 +5266,7 @@ const currentText = () => ($("#tpl-edit-mode").checked ? $("#tpl-text").value : 
 
 // Version 2.47 (user's rule): the document keeps the minuta's layout; before it goes out, the user is told
 // which data are missing, and whatever stays missing comes out as [FILL: …] highlighted in yellow.
-const tplLabels = () => ({ ...Object.fromEntries(CMETA.GENDER_KEYS.map((k) => [k, varLabel("cliente.genero")])), ...Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)])) });
+const tplLabels = () => ({ ...Object.fromEntries([...CMETA.GENDER_KEYS, ...CMETA.PARTY_WORD_KEYS].map((k) => [k, varLabel("cliente.genero")])), ...Object.fromEntries(tplActive.vars.map((k) => [k, varLabel(k)])) });
 async function missingOk() {
   const missing = tplMissing();
   if (!missing.length) return true;

@@ -66,3 +66,9 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 
 ## Valores en vivo (v2.2.49, John 26/10/2026)
 - Pedido: «los valores números deben ir mostrando unidades, decenas, centenas». Al escribir en las casillas de honorarios (`[data-fee-money]`) el evento `input` de `#tpl-vars` (public/app.js) pone los puntos de miles, conserva el cursor y actualiza sin redibujar el panel la frase «En el contrato: …» y el desglose `L.placeValues` (src/ledger.js, p. ej. «2 unidades de millón · 5 centenas de mil»). Porcentajes: solo letras. El `change` de siempre sigue dando el formato final al salir de la casilla. Prueba: `test/v2249-valores-en-vivo.test.js`.
+
+## Calidad de las partes según género y número (v2.2.53)
+- `partyContext`/`partyWords`/`roleWords` en `src/case-meta.js`; `templateData` (servidor y enlace) da `parte.activa|pasiva`, `cliente.calidad`, `contraparte.calidad` (+ `_sola`, `_titulo`) y `_partes` (contexto en JSON para que la app rehaga las palabras cuando se cambia «Género del cliente»; `partyWordsOf` en `public/app.js`).
+- Regla de John (26/10/2026): mujer = «la demandante / la demandada», hombre = «el demandante / el demandado», varios = «los demandantes / los demandados». Persona jurídica = femenino; contraparte sin género = masculino.
+- `docxGenderWords` (docx.js) también detecta esas palabras en el Word (`PARTY_RE`). Las plantillas iniciales de texto no se cambiaron (llevan «Demandante:»/«Demandado:» fijos).
+

@@ -395,9 +395,12 @@
    * the value as saved, in capitals, and a document number with dots (65.760.174).
    * `data` = the case's template values; `skip` = keys too general to look for (a city appears everywhere).
    */
-  const FIND_SKIP = /^(cliente\.(ciudad|departamento|tipo_documento)|expediente\.(ciudad|departamento|tipo_proceso|subproceso|area|hechos)|oficina\.(ciudad|nombre)|destinatario\.(tratamiento|bloque)|honorarios\.cuotas|fecha\.)/;
+  const FIND_SKIP = /^(cliente\.(ciudad|departamento|tipo_documento)|expediente\.(ciudad|departamento|tipo_proceso|subproceso|area|hechos)|oficina\.(ciudad|nombre)|destinatario\.(tratamiento|bloque)|honorarios\.cuotas|fecha\.|_partes)/;
   // ----- Gender words (version 2.50): «identificada», «la suscrita», «domiciliado» → {{cliente.…}} -----
   const GENDER_RE = /(?:\b(el|la)\s+)?\bsuscrit([oa])\b(?:\s*(?:\([ao]\)|\/[ao]))?|\b(identificad|domiciliad)([oa])\b(?:\s*(?:\([ao]\)|\/[ao]))?|(?:\b(de\s+)?(el|la)\s+)?\b(se[ñn]or)(a)?\b(?:\s*(?:\([ao]\)|\/[ao]))?/gi;
+  // Version 2.2.53: the sides of the case written as «el demandante», «la demandada», «los ejecutados»… → {{parte.activa}} / {{parte.pasiva}}.
+  const ACTIVE_WORD = /^(demandante|ejecutante|convocante|querellante|denunciante|reclamante|peticionari[oa]|v[ií]ctima)s?$/i;
+  const PARTY_RE = /(?:\b(el|la|los|las)\s+)?\b(demandantes?|ejecutantes?|convocantes?|querellantes?|denunciantes?|reclamantes?|peticionari[oa]s?|v[ií]ctimas?|demandad[oa]s?|ejecutad[oa]s?|convocad[oa]s?|denunciad[oa]s?|indiciad[oa]s?|acusad[oa]s?|procesad[oa]s?|querellad[oa]s?)\b/gi;
   const NOT_CLIENT = /\b(dr|dra|doctor|doctora|abogad[oa]|apoderad[oa]|funcionari[oa]|contratista|receptor)\b/i;
   /**
    * The gendered words of the Word, one entry per appearance, in reading order. «client» says whether the words look
@@ -418,6 +421,14 @@
           const before = text.slice(Math.max(0, start - 45), start);
           out.push({ id: out.length, part, para, start, end, text: shown, marker: key + fmt,
             client: !NOT_CLIENT.test(before) && !who.some((n) => fold(before).includes(n)),
+            context: `${start > 50 ? "…" : ""}${text.slice(Math.max(0, start - 50), start)}[[${shown}]]${text.slice(end, end + 40)}${end + 40 < text.length ? "…" : ""}` });
+        }
+        for (const m of text.matchAll(PARTY_RE)) {
+          const start = m.index, end = start + m[0].length, shown = m[0];
+          const side = ACTIVE_WORD.test(m[2]) ? "parte.activa" : "parte.pasiva";
+          const letters = shown.replace(/[^\p{L}]/gu, "");
+          const fmt = letters.length > 2 && letters === letters.toLocaleUpperCase("es-CO") ? "|mayúsculas" : /^\p{Lu}/u.test(shown) ? "|inicial" : "";
+          out.push({ id: out.length, part, para, start, end, text: shown, marker: side + (m[1] ? "" : "_sola") + fmt, client: true,
             context: `${start > 50 ? "…" : ""}${text.slice(Math.max(0, start - 50), start)}[[${shown}]]${text.slice(end, end + 40)}${end + 40 < text.length ? "…" : ""}` });
         }
       });

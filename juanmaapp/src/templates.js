@@ -6,7 +6,7 @@ import { formatRadicado } from "./portals.js";
 import { can, scopeOf, loadUser, ASSISTANT } from "./auth.js";
 import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
-import { counterpartyText, isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables } from "./case-meta.js";
+import { counterpartyText, partyContext, partyWords, isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
 import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES } from "./templates-seed.js";
 
@@ -49,10 +49,12 @@ export function templateData(db, user, caseId) {
     const sc = scopeOf(user);
     if (!k || (sc !== null && !sc.includes(k.office_id))) return null;
     const c = db.prepare("SELECT * FROM clients WHERE id = ?").get(k.client_id);
+    const party = partyContext(k, k.category_name, k.type_name, c, (id) => db.prepare("SELECT gender, person_type FROM clients WHERE id = ?").get(id));
     Object.assign(v, {
       "cliente.nombre": c.full_name, "cliente.tipo_documento": c.id_type, "cliente.documento": c.id_number,
       "cliente.correo": c.email, "cliente.telefono": c.phone, "cliente.direccion": c.address,
       "cliente.ciudad": c.city, "cliente.departamento": c.department, ...idPlaceVariables(c), ...genderWords(c.person_type === "juridica" ? "" : c.gender),
+      ...partyWords(party, c.gender), _partes: JSON.stringify(party),
       "expediente.radicado": formatRadicado(k.radicado), "expediente.tipo_proceso": k.category_name, "expediente.subproceso": k.type_name,
       "expediente.asunto": k.title, "expediente.contraparte": counterpartyText(k.parties, k.counterparty), "expediente.hechos": k.facts,
       "expediente.despacho": k.court_name, "expediente.juez": k.judge_name || "", "expediente.numero": (k.radicado ? formatRadicado(k.radicado) : k.case_number) || "", "expediente.correo_despacho": k.court_email, "expediente.area": k.area,
