@@ -40,3 +40,13 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Las plantillas Word cargadas por Gerencia en Documentos conservan su propio membrete (no se sobrescriben).
 - El pie del recibo ya no dice ojani0722@hotmail.com: ahora gerencia@tecjuridicos.com (el de la plantilla nueva).
 - La letra de los PDF es la estándar de jsPDF (no hay Century Gothic para PDF); los Word usan Century Gothic.
+
+## Objetos contractuales (v2.2.46, 26/10/2026, hilo «Objetos contractuales configurables en contrato»)
+- Pedido de John: en la Plantilla de Contrato, el administrador crea y modifica a gusto varios «Objetos contractuales» (título + cláusula); al hacer el contrato el usuario marca casillas y la cláusula de cada una se imprime en el contrato.
+- Marcador del Word: `{{OBJETOS_CONTRACTUALES}}` (antes el ejemplo de John usaba `{{campo.Objeto del contrato}}`). Word ya ajustado: /mnt/project-files/contrato-objetos/. Sin casillas marcadas sale `[FILL: Objetos contractuales]` resaltado.
+- Lógica compartida: `src/contract-objects.js` (`JuanmaContractObjects`: `objectValues` valida, `mergeObjects` une). Una cláusula sale tal cual; varias salen «A) … B) …» separadas por línea en blanco, dentro del mismo párrafo (saltos de línea), así conservan la letra y el formato del Word. La cláusula admite `{{cliente.nombre}}` y similares (dato faltante = resaltado).
+- Servidor: `src/contract-objects-routes.js` (`/api/contract-objects`: GET lista activos o `?all=1` para Gerencia, POST, PUT `/:id`, PUT `/order {ids}`, DELETE, POST `/uses`, GET `/uses?case_id=`); enlace: mismas rutas en `public/demo-backend.js` (`s.cobjects`, `s.cobjuses`). Solo Gerencia crea/edita/ordena/elimina (no basta `templates.manage`: el Director Jurídico solo lee la lista activa).
+- Tablas nuevas `contract_objects` y `contract_object_uses` (título copiado, sin llave foránea): solo se agregan, con copia previa `antes-v2.2.46`. Eliminar un objeto ya usado solo lo desactiva.
+- Pantalla: pestaña «Objetos del contrato» (`renderCobjAdmin`, `#cobj-dialog`) y casillas en «Datos del documento» (`objectsChecklist`, `tplObjects`). Se registra el uso al descargar, guardar, enviar por correo o WhatsApp.
+- Interpretaciones: objetos globales de la categoría Contrato (sirven a cualquier Word con el marcador); texto simple, sin editor enriquecido (el formato lo da el Word). Pruebas: `test/v2246-objetos-contractuales.test.js`.
+

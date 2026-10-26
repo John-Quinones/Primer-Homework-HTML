@@ -1424,3 +1424,10 @@ dialog:not([open]) { pointer-events: none; }
 .party-pick-list { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); display: grid; gap: 2px; }
 .party-pick-list button { width: 100%; text-align: left; background: none; border: 0; padding: 6px 8px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit; }
 .party-pick-list button:hover, .party-pick-list button:focus-visible { background: var(--surface-muted); }
+
+/* Version 2.2.46: objetos contractuales */
+.cobj-item { margin: 8px 0; }
+.cobj-item.off { opacity: .65; }
+.cobj-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cobj-clause { white-space: pre-wrap; margin: 6px 0; color: var(--muted, inherit); }
+.cobj-preview { white-space: pre-wrap; font: inherit; margin: 4px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, .04); }

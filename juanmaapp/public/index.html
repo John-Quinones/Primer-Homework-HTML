@@ -464,6 +464,18 @@
         <div class="tabs" role="tablist" id="doc-tabs">
           <button role="tab" data-dtab="plantillas" class="active">Plantillas</button>
           <button role="tab" data-dtab="nomos">Redactar con NomosAI</button>
+          <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Objetos del contrato</button>
+        </div>
+
+        <div data-dpanel="objetos" hidden>
+          <section class="panel">
+            <div class="toolbar">
+              <h3>Objetos contractuales · Plantilla de Contrato</h3>
+              <button type="button" class="primary" data-action="new-cobj">+ Nuevo objeto contractual</button>
+            </div>
+            <p class="hint">Cada objeto es una cláusula lista para el contrato (por ejemplo «Reintegro laboral» o «Proceso ejecutivo»). Al hacer un contrato, el usuario marca una o varias casillas y la cláusula de cada una se imprime donde el Word tiene el marcador <code>{{OBJETOS_CONTRACTUALES}}</code>. Si marca varias, salen como A), B), C… en el orden de esta lista. En la cláusula puede usar datos como <code>{{cliente.nombre}}</code>. Un objeto que ya se usó en algún contrato no se borra: se desactiva y deja de aparecer en la lista de casillas.</p>
+            <div id="cobj-list"></div>
+          </section>
         </div>
 
         <div data-dpanel="plantillas">
@@ -1450,6 +1462,25 @@
     </form>
   </dialog>
   <datalist id="authority-list"></datalist>
+
+  <!-- Objeto contractual -->
+  <dialog id="cobj-dialog" class="wide-dialog">
+    <form method="dialog" data-form="cobj">
+      <h3 data-title>Nuevo objeto contractual</h3>
+      <input type="hidden" name="id" />
+      <div class="grid2">
+        <label class="span2">Título de la casilla * <input name="title" required maxlength="120" placeholder="Ej. Reintegro laboral" /></label>
+        <label class="span2">Cláusula que se imprime en el contrato * <textarea name="clause" rows="10" required maxlength="8000" placeholder="Ej. Representar al PODERDANTE en el proceso ordinario laboral de reintegro contra {{expediente.contraparte}}…"></textarea></label>
+        <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activo (aparece como casilla al hacer el contrato)</label>
+      </div>
+      <p class="hint">Texto simple: una línea en blanco separa párrafos. La letra, el tamaño y el formato los pone el Word de la plantilla.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Plantilla -->
   <dialog id="tpl-dialog" class="wide-dialog">
