@@ -22,11 +22,11 @@ test("«Honorarios» gives only the fixed fee, in number and words", () => {
     "honorarios.fijo": "$2.000 (dos mil pesos m/cte.)", "honorarios.modalidad": "honorarios fijos" });
 });
 
-test("«Cuota de litis» gives a value or a percentage, never the fixed fee", () => {
-  assert.deepEqual(feeTerms("Cuota de litis", "2000", "$5000000"), {
-    "honorarios.litis_valor": "$5.000.000 (cinco millones de pesos m/cte.)", "honorarios.modalidad": "cuota de litis" });
-  assert.deepEqual(feeTerms("Cuota de litis", "", "35%"), {
-    "honorarios.litis_porcentaje": "treinta y cinco por ciento (35 %)", "honorarios.modalidad": "cuota de litis" });
+test("«Cuota de litis» is always a percentage (version 2.2.51), never pesos or the fixed fee", () => {
+  const ok = { "honorarios.litis_porcentaje": "treinta y cinco por ciento (35 %)", "honorarios.modalidad": "cuota de litis" };
+  for (const typed of ["35%", "35", "35 por ciento", " 35 % "]) assert.deepEqual(feeTerms("Cuota de litis", "2000", typed), ok, typed);
+  assert.deepEqual(feeTerms("Cuota de litis", "", "$5000000"), {});
+  assert.deepEqual(feeTerms("Cuota de litis", "", "$40"), {});
 });
 
 test("«Mixto» needs both amounts; with one missing nothing says the modality (the Word shows it as missing)", () => {
