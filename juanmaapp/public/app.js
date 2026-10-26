@@ -5098,7 +5098,8 @@ function installmentsBlock(vals, visible) {
   return `<div class="fee-inst" data-inst-block ${visible ? "" : "hidden"}>
     <label class="inline"><input type="checkbox" data-inst-on ${on ? "checked" : ""} /> Pagar los honorarios en cuotas</label>
     ${on ? `<div class="fee-inst-fields"><label>Número de cuotas <input type="number" min="1" max="${L.MAX_INSTALLMENTS}" data-inst-n value="${st.n || ""}" placeholder="Ej. 3" /></label>
-      <label>Valor de cada cuota <input data-inst-value inputmode="numeric" value="${st.value ? escapeHtml(L.fmtPesos(st.value)) : ""}" placeholder="Ej. 1000000" /></label>
+      <label>Valor de cada cuota <input data-inst-value inputmode="numeric" value="${st.value ? escapeHtml(L.fmtPesos(st.value)) : ""}" placeholder="Ej. 1000000" />
+        <span class="muted" data-inst-places>${escapeHtml(L.placeValues(st.value))}</span></label>
       <p class="muted">${escapeHtml(note)}</p>${rows}</div>` : ""}
   </div>`;
 }
@@ -5189,6 +5190,18 @@ $("#tpl-vars").addEventListener("input", (e) => {
   $(`[data-fee-places="${kind}"]`, $("#tpl-vars")).textContent = percent ? "" : L.placeValues(L.pesosFromText(money.value));
   money.classList.toggle("missing", !(percent ? t["honorarios.litis_porcentaje"] : L.pesosFromText(money.value)));
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
+});
+// Version 2.2.55 (John): the value of each installment also shows thousands dots and its place values while it is typed.
+$("#tpl-vars").addEventListener("input", (e) => {
+  const box = e.target.closest("[data-inst-value]");
+  if (!box) return;
+  const caret = box.selectionStart ?? box.value.length, digitsBefore = box.value.slice(0, caret).replace(/\D/g, "").length;
+  const digits = box.value.replace(/\D/g, "");
+  box.value = digits ? "$" + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "";
+  let at = 0, seen = 0;
+  while (at < box.value.length && seen < digitsBefore) if (/\d/.test(box.value[at++])) seen++;
+  box.setSelectionRange(at, at);
+  $("[data-inst-places]", box.closest("[data-inst-block]")).textContent = L.placeValues(L.pesosFromText(box.value));
 });
 $("#tpl-vars").addEventListener("change", (e) => {
   const obj = e.target.closest("[data-pick]");
