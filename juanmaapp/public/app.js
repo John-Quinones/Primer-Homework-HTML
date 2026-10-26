@@ -5067,7 +5067,7 @@ const partyWordsOf = (v) => { try { return CMETA.partyWords(JSON.parse(v._partes
 const tplValues = () => {
   const v = { ...tplData, ...Object.fromEntries(Object.entries(tplOverrides).filter(([, x]) => x !== "")) };
   // The gendered words follow the chosen gender; the fee terms (version 2.67) follow the contract's checklist.
-  const all = { ...v, "documento.numero": docNum?.label || "(se asigna al generar)", ...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
+  const all = { ...v, "documento.numero": docNum?.label || "(se asigna al generar)", "documento.clase": tplActive?.category === "Poder" ? "Poder" : tplActive?.category === "Contrato" ? "Contrato" : "",...CMETA.genderWords(v["cliente.genero"]), ...partyWordsOf(v), ...L.feeTerms(v[FEE.tipo], v[FEE.fijo], v[FEE.litis], v[FEE.cuotas]) };
   // Versions 2.2.46 / 2.2.47: the clauses of the ticked objects / power classes go where the Word has the kind's marker.
   for (const kind of Object.keys(PICK)) {
     if (!usesPick(kind)) continue;

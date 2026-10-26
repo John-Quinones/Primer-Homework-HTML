@@ -83,3 +83,20 @@ test("no user name: the document comes out as before", async () => {
   const z = await files(load("").fillDocx(word({ footer: true }), { "documento.numero": "1" }));
   assert.ok(!/generado por/.test(z.file("word/footer1.xml").asText()));
 });
+
+// Version 2.2.60: a minuta without the marker still shows the number at the top.
+function plain() {
+  const zip = new PizZip();
+  zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file("word/document.xml", `<w:document ${W}><w:body><w:p><w:r><w:t>Texto</w:t></w:r></w:p></w:body></w:document>`);
+  return zip.generate({ type: "uint8array" });
+}
+test("a minuta without {{documento.numero}} gets «Contrato No. 2.326» at the top; with the marker it is not repeated", async () => {
+  const D = load("Ana Torres");
+  const a = (await files(D.fillDocx(plain(), { "documento.numero": "2.326", "documento.clase": "Contrato" }))).file("word/document.xml").asText();
+  assert.match(a, /<w:body><w:p>.*Contrato No\. 2\.326/);
+  const b = (await files(D.fillDocx(word({ footer: false }), { "documento.numero": "2.326", "documento.clase": "Contrato" }))).file("word/document.xml").asText();
+  assert.equal(b.split("2.326").length - 1, 1);
+  const c = (await files(D.fillDocx(plain(), { "documento.numero": "(se asigna al generar)" }))).file("word/document.xml").asText();
+  assert.ok(!/No\. /.test(c));
+});

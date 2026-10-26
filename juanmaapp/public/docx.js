@@ -132,6 +132,15 @@
       const x = out.file(name).asText();
       if (x.includes(MISS)) out.file(name, markMissing(x));
     }
+    // Version 2.2.60 (John: «no está arrojando la numeración»): a minuta without {{documento.numero}} still shows its number,
+    // in bold at the top right of the first page; with the marker, the number goes where the marker is.
+    const num = String(data["documento.numero"] ?? "");
+    if (/^\d/.test(num) && !docxVariables(bytes).includes("documento.numero")) {
+      const kind = String(data["documento.clase"] || "");
+      const p = `<w:p><w:pPr><w:jc w:val="right"/><w:spacing w:after="120"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Century Gothic" w:hAnsi="Century Gothic"/><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${xml(`${kind ? kind + " " : ""}No. ${num}`)}</w:t></w:r></w:p>`;
+      const doc = out.file("word/document.xml").asText();
+      out.file("word/document.xml", doc.replace(/<w:body>/, () => `<w:body>${p}`));
+    }
     stampFooter(out);
     return out.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   }
