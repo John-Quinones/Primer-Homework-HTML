@@ -1521,6 +1521,21 @@
     </form>
   </dialog>
 
+  <!-- Dónde van las clases de poder -->
+  <dialog id="pmark-dialog" class="wide-dialog">
+    <form method="dialog" data-form="pmark">
+      <h3 data-title>¿Dónde van las clases de poder?</h3>
+      <label>Las clases se imprimen en un párrafo nuevo, justo después de este párrafo del poder:
+        <select name="para"></select></label>
+      <p class="hint">Se agrega <code>{{CLASES_DE_PODER}}</code> con la letra y el formato de ese párrafo; el resto del Word no cambia. Luego puede mover el marcador en Word si lo prefiere.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Agregar al Word</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Clase de poder -->
   <dialog id="pcls-dialog" class="wide-dialog">
     <form method="dialog" data-form="pcls">

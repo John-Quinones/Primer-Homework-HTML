@@ -183,3 +183,15 @@ test("merge: one class as written; several as A), B), C) in order; none leaves t
   const missing = await filled(tpl, { CLASES_DE_PODER: CO.mergeObjects([A]) });
   assert.ok(missing.xml.includes('w:highlight w:val="yellow"'), "a datum missing inside a class is highlighted");
 });
+
+test("a Poder Word without the marker: the marker goes in a new paragraph after the chosen one, with that paragraph's format", async () => {
+  const plain = word(["Señores", "…Abogado en ejercicio, para que promueva el recurso.", "Respetuosamente,"]);
+  assert.deepEqual([...D.docxParagraphs(plain).map((p) => p.index)], [0, 1, 2]);
+  assert.deepEqual([...D.docxVariables(plain)], []);
+  const withMarker = D.docxInsertParagraph(plain, 1, "CLASES_DE_PODER");
+  assert.deepEqual([...D.docxVariables(withMarker)], ["CLASES_DE_PODER"]);
+  const out = await filled(withMarker, { CLASES_DE_PODER: CO.mergeObjects([B]) });
+  assert.deepEqual(out.lines, ["Señores", "…Abogado en ejercicio, para que promueva el recurso.", "para que adelante proceso laboral.", "Respetuosamente,"]);
+  assert.ok(out.xml.includes("Century Gothic"));
+  assert.throws(() => D.docxInsertParagraph(plain, 9, "CLASES_DE_PODER"));
+});
