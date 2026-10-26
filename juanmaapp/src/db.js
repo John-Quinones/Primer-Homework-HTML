@@ -15,6 +15,8 @@ import { looksLikeCompany, splitFullName } from "./person.js";
 import { dbFiles, makeBackup } from "./backup.js";
 import { defaultsPlan, defaultResponsible, genderPlan } from "./record-rules.js";
 import { CONTRACT_OBJECTS_SCHEMA, addKindColumns } from "./contract-objects-routes.js";
+import { MEMORIAL_CATEGORIES_SCHEMA, addMemorialColumn } from "./memorial-categories-routes.js";
+import { DEFAULT_TITLES as MEMORIAL_DEFAULTS } from "./memorial-categories.js";
 import { DOC_NUMBERS_SCHEMA } from "./doc-numbers-routes.js";
 
 export const MAIN_OFFICE = "Ibagué";
@@ -654,6 +656,21 @@ function migrate(db) {
     if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar las clases de poder: ${copy.error}`);
   }
   addKindColumns(db);
+  // Version 2.2.65: memorial categories. One new table and one new column on the templates (nothing existing is changed); a copy first when the
+  // database holds data. The three starter categories are created once, only if the firm has none.
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memorial_categories'").get() && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.2.65" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar las categorías de memoriales: ${copy.error}`);
+  }
+  db.exec(MEMORIAL_CATEGORIES_SCHEMA);
+  addMemorialColumn(db);
+  if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'memorial-categories-v1'").get()) {
+    if (!db.prepare("SELECT 1 FROM memorial_categories LIMIT 1").get()) {
+      const ins = db.prepare("INSERT INTO memorial_categories (title, display_order) VALUES (?, ?)");
+      MEMORIAL_DEFAULTS.forEach((t, i) => ins.run(t, i + 1));
+    }
+    db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('memorial-categories-v1')").run();
+  }
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'radicado-from-number'").get()) {
     const all = db.prepare("SELECT id, radicado, case_number, department, city FROM cases").all();
     const byId = new Map(all.map((k) => [k.id, k]));

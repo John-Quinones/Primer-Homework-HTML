@@ -95,7 +95,7 @@ export function templateData(db, user, caseId) {
 export function templatesRouter(db) {
   const r = express.Router();
   const manage = (req, res, next) => (can(req, "templates.manage") ? next() : res.status(403).json({ error: "Su rol no tiene permiso para gestionar plantillas." }));
-  const META = "id, name, category, description, format, filename, builtin, created_at, updated_at, length(file) AS file_size";
+  const META = "id, name, category, description, format, filename, builtin, memorial_category_id, created_at, updated_at, length(file) AS file_size";
   const out = (t) => ({ ...t, builtin: !!t.builtin });
 
   r.get("/meta", (req, res) => res.json({ categories: DOC_CATEGORIES, variables: VARIABLES }));
@@ -130,6 +130,10 @@ export function templatesRouter(db) {
     };
     if (!v.name) return "Escriba el nombre de la plantilla.";
     if (!DOC_CATEGORIES.includes(v.category)) return "Categoría no válida.";
+    // Version 2.2.64: only a Memorial template belongs to a memorial category (empty = «Otros memoriales»).
+    const mc = "memorial_category_id" in b ? Number(b.memorial_category_id) || null : cur.memorial_category_id || null;
+    v.memorial_category_id = v.category === "Memorial" ? mc : null;
+    if (v.memorial_category_id && !db.prepare("SELECT 1 FROM memorial_categories WHERE id = ?").get(v.memorial_category_id)) return "Elija una categoría de memoriales válida.";
     return v;
   }
 
@@ -141,15 +145,15 @@ export function templatesRouter(db) {
       const file = Buffer.from(String(b.file_base64), "base64");
       if (!file.length || file.length > MAX_FILE) return res.status(400).json({ error: "El archivo debe pesar menos de 8 MB." });
       if (file.subarray(0, 2).toString("latin1") !== "PK") return res.status(400).json({ error: "El archivo no es un documento de Word (.docx) válido." });
-      const id = db.prepare(`INSERT INTO document_templates (name, category, description, format, filename, file, created_by)
-        VALUES (?, ?, ?, 'docx', ?, ?, ?)`).run(v.name, v.category, v.description, str(b.filename) || "plantilla.docx", file, req.user.id).lastInsertRowid;
+      const id = db.prepare(`INSERT INTO document_templates (name, category, description, format, filename, file, created_by, memorial_category_id)
+        VALUES (?, ?, ?, 'docx', ?, ?, ?, ?)`).run(v.name, v.category, v.description, str(b.filename) || "plantilla.docx", file, req.user.id, v.memorial_category_id).lastInsertRowid;
       return res.status(201).json(out(db.prepare(`SELECT ${META} FROM document_templates WHERE id = ?`).get(id)));
     }
     const body = String(b.body ?? "");
     if (!body.trim()) return res.status(400).json({ error: "La plantilla está vacía." });
     if (body.length > 400000) return res.status(400).json({ error: "La plantilla es demasiado larga." });
-    const id = db.prepare(`INSERT INTO document_templates (name, category, description, format, body, created_by)
-      VALUES (?, ?, ?, 'markdown', ?, ?)`).run(v.name, v.category, v.description, body, req.user.id).lastInsertRowid;
+    const id = db.prepare(`INSERT INTO document_templates (name, category, description, format, body, created_by, memorial_category_id)
+      VALUES (?, ?, ?, 'markdown', ?, ?, ?)`).run(v.name, v.category, v.description, body, req.user.id, v.memorial_category_id).lastInsertRowid;
     res.status(201).json(out(db.prepare(`SELECT ${META}, body FROM document_templates WHERE id = ?`).get(id)));
   });
 
@@ -170,8 +174,8 @@ export function templatesRouter(db) {
       body = null;
     } else if (cur.format === "markdown" && "body" in (req.body ?? {})) body = String(req.body.body);
     if (format === "markdown" && !String(body || "").trim()) return res.status(400).json({ error: "La plantilla está vacía." });
-    db.prepare("UPDATE document_templates SET name = ?, category = ?, description = ?, format = ?, filename = ?, body = ?, file = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(v.name, v.category, v.description, format, filename, body, file, cur.id);
+    db.prepare("UPDATE document_templates SET name = ?, category = ?, description = ?, memorial_category_id = ?, format = ?, filename = ?, body = ?, file = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(v.name, v.category, v.description, v.memorial_category_id, format, filename, body, file, cur.id);
     res.json(out(db.prepare(`SELECT ${META}, body FROM document_templates WHERE id = ?`).get(cur.id)));
   });
 

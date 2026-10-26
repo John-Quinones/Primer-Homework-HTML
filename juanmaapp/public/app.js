@@ -213,6 +213,7 @@ function applyPermissions() {
   $("#tpl-manage-bar").hidden = !can("templates.manage");
   $("#dtab-objetos").hidden = !isGerencia(); // version 2.2.46: contract objects are Gerencia's
   $("#dtab-poderes").hidden = !isGerencia(); // version 2.2.47: so are the power classes
+  $("#dtab-memcats").hidden = !isGerencia(); // version 2.2.65: and the memorial categories
   $("#tpl-drop").hidden = !can("templates.manage");
   $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
   $$('[data-tpl-out="mail"]').forEach((b) => (b.hidden = !can("mail.send")));
@@ -1117,7 +1118,7 @@ async function renderExpedienteFicha(id) {
         <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
         <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
         ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
-        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""}
+        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button><button data-action="memorial-case" data-id="${k.id}">Memorial</button>` : ""}
       </div>
     </div>
     <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
@@ -3118,6 +3119,28 @@ document.addEventListener("click", (e) => {
       $("#tpl-case").value = String(id);
       location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
     },
+    "memorial-case": () => {
+      pendingDraftCase = id;
+      pendingDraftMode = "memoriales";
+      $("#tpl-case").value = String(id);
+      location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
+    },
+    "new-mcat": () => openMcatDialog(null),
+    "edit-mcat": async () => openMcatDialog((await api("GET", "/memorial-categories?all=1")).find((o) => o.id === id)),
+    "toggle-mcat": async () => {
+      const o = (await api("GET", "/memorial-categories?all=1")).find((x) => x.id === id);
+      await api("PUT", `/memorial-categories/${id}`, { is_active: !o.is_active });
+      toast(o.is_active ? "Desactivada: ya no aparece en «Memoriales»." : "Activada: ya aparece en «Memoriales».");
+      await renderMcatAdmin();
+    },
+    "up-mcat": () => mcatMove(id, -1),
+    "down-mcat": () => mcatMove(id, 1),
+    "delete-mcat": async () => {
+      if (!(await confirmAsk("Eliminar categoría de memoriales", "Si ya tiene plantillas solo se desactiva (sus plantillas la conservan); si está vacía, se elimina.", "Eliminar"))) return;
+      const r = await api("DELETE", `/memorial-categories/${id}`);
+      toast(r.deactivated ? "Ya tiene plantillas: quedó desactivada." : "Categoría eliminada.");
+      await renderMcatAdmin();
+    },
     "new-cobj": () => openPickDialog("contrato", null),
     "edit-cobj": () => editPick("contrato", id),
     "toggle-cobj": () => togglePick("contrato", id),
@@ -3203,6 +3226,7 @@ document.addEventListener("click", (e) => {
 // ---------- Borradores ----------
 const draftForm = $("#draft-form");
 let pendingDraftCase = null;
+let pendingDraftMode = "guiado"; // version 2.2.65: «Memorial» of a case opens the Memoriales tab
 let lastResult = null;
 
 draftForm.paymentRequired.addEventListener("change", (e) => (draftForm.paymentItems.disabled = !e.target.checked));
@@ -4809,7 +4833,7 @@ const pickState = { contrato: { list: [], picked: new Set() }, poder: { list: []
 // Steps 4–6 are the existing document panel (#tpl-active), moved into the assistant while its tab is open.
 const wizardOn = () => !$("[data-dpanel=guiado]").hidden;
 const stepTag = (n) => (wizardOn() ? `${n}. ` : "");
-const wz = { clients: [], cases: [], kind: "", generated: false };
+const wz = { clients: [], cases: [], kind: "", generated: false, mode: "doc", mcats: [], mcat: null };
 function wzDock() {
   const act = $("#tpl-active"), on = wizardOn();
   (on ? $("#wz-host") : $(".tpl-work")).append(act);
@@ -4820,7 +4844,13 @@ const wzNorm = (t) => window.JuanmaCombo.norm(String(t ?? "")).replace(/[.\s]/g,
 function wzBar() {
   const tplOk = !!tplActive && !!wz.kind && tplActive.category === wz.kind && !$("#tpl-active").hidden;
   const kinds = tplOk ? Object.keys(PICK).filter(usesPick) : [];
-  const steps = [
+  const steps = wz.mode === "memorial" ? [
+    ["Cliente", !!$("#wz-client").value],
+    ["Expediente", !$("#wz-s2").hidden && $("#wz-case").value !== "-"],
+    ["Categoría", wz.mcat !== null],
+    ["Plantilla", tplOk],
+    ["Word", wz.generated],
+  ] : [
     ["Cliente", !!$("#wz-client").value],
     ["Expediente", !$("#wz-s2").hidden && $("#wz-case").value !== "-"],
     ["Contrato o poder", tplOk],
@@ -4838,11 +4868,36 @@ function wzClients() {
     || '<option disabled>Ningún cliente coincide</option>';
   if (cur && list.some((c) => String(c.id) === cur)) $("#wz-client").value = cur;
 }
+// Version 2.2.65: the same assistant serves «Memoriales»: step 3 offers the memorial categories (Gerencia sets them up) instead of Contrato / Poder.
+function wzMode(mode) {
+  const memorial = mode === "memorial";
+  if (wz.mode !== mode) {
+    wz.mode = mode; wz.kind = ""; wz.mcat = null; wz.generated = false;
+    $$("[name=wz-kind]").forEach((r) => (r.checked = false));
+    $("#wz-tpl-label").hidden = true;
+    if (tplActive) $("#tpl-active").hidden = true;
+  }
+  $("#wz-memcats").hidden = !memorial;
+  $("#wz-kinds").hidden = memorial;
+  $("#wz-s3-title").textContent = memorial ? "¿Qué memorial va a presentar?" : "¿Qué documento va a generar?";
+  $("#wz-hint").textContent = memorial
+    ? "Siga los pasos en orden: cliente, expediente, categoría del memorial, su plantilla y el Word. También puede llegar aquí desde el botón «Memorial» de un expediente."
+    : "Siga los pasos en orden: cliente, expediente, contrato o poder, su tipo, los honorarios (si es contrato) y el Word. También puede llegar aquí desde el botón «Generar documento» de un expediente.";
+}
+async function renderMemcats() {
+  wz.mcats = await api("GET", "/memorial-categories");
+  const loose = tplList.filter((t) => t.category === "Memorial" && !t.memorial_category_id).length;
+  const n = (id) => tplList.filter((t) => t.category === "Memorial" && (t.memorial_category_id || 0) === id).length;
+  $("#wz-memcats").innerHTML = [...wz.mcats.map((c) => [c.id, c.title, c.description, n(c.id)]), ...(loose ? [[0, "Otros memoriales", "Plantillas de memorial sin categoría", loose]] : [])]
+    .map(([id, title, desc, count]) => `<label class="inline" title="${escapeHtml(desc || "")}"><input type="radio" name="wz-mcat" value="${id}" ${wz.mcat === id ? "checked" : ""} /> ${escapeHtml(title)} <span class="muted">(${count})</span></label>`).join("")
+    || '<p class="muted">Gerencia aún no ha creado categorías de memoriales.</p>';
+}
 async function renderWizard() {
   if (!tplMeta) tplMeta = await api("GET", "/templates/meta");
-  if (!tplList.length) tplList = await api("GET", "/templates");
+  tplList = await api("GET", "/templates");
   wz.clients = await api("GET", "/clients");
   wzClients();
+  if (wz.mode === "memorial") await renderMemcats();
   wzBar();
 }
 async function wzPickClient(clientId, keepCase) {
@@ -4873,34 +4928,39 @@ async function wzPreselect(caseId) {
   wzClients();
   await wzPickClient(k.client_id, caseId);
 }
-function wzKind(kind) {
+function wzKind(kind, list = tplList.filter((t) => t.category === kind)) {
   wz.kind = kind;
   wz.generated = false;
-  const list = tplList.filter((t) => t.category === kind);
   $("#wz-tpl-label").hidden = false;
   $("#wz-tpl").innerHTML = (list.length === 1 ? "" : '<option value="">— Elija la plantilla —</option>') + list.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("")
     || '<option value="">No hay plantillas de esta clase</option>';
   wzBar();
   if (list.length === 1) return openTemplate(list[0].id).then(wzBar);
-  if (tplActive && tplActive.category !== kind) $("#tpl-active").hidden = true;
+  if (tplActive && !list.some((t) => t.id === tplActive.id)) $("#tpl-active").hidden = true;
 }
+const wzMemorial = (catId) => { wz.mcat = catId; return wzKind("Memorial", tplList.filter((t) => t.category === "Memorial" && (t.memorial_category_id || 0) === catId)); };
 $("#wz-client-q").addEventListener("input", wzClients);
 $("#wz-client").addEventListener("change", () => guarded(() => wzPickClient(Number($("#wz-client").value) || null)));
 $("#wz-case").addEventListener("change", wzCaseChosen);
 $$("[name=wz-kind]").forEach((r) => r.addEventListener("change", () => guarded(() => wzKind(r.value))));
+$("#wz-memcats").addEventListener("change", (e) => { if (e.target.name === "wz-mcat") guarded(() => wzMemorial(Number(e.target.value))); });
 $("#wz-tpl").addEventListener("change", () => guarded(async () => { const id = Number($("#wz-tpl").value); wz.generated = false; if (id) await openTemplate(id); wzBar(); }));
 
 function showDTab(name) {
+  const panel = name === "memoriales" ? "guiado" : name; // «Memoriales» is the same assistant in another mode
+  if (panel === "guiado") wzMode(name === "memoriales" ? "memorial" : "doc");
   $$("[data-dtab]").forEach((b) => b.classList.toggle("active", b.dataset.dtab === name));
-  $$("[data-dpanel]").forEach((p) => (p.hidden = p.dataset.dpanel !== name));
+  $$("[data-dpanel]").forEach((p) => (p.hidden = p.dataset.dpanel !== panel));
   wzDock();
 }
 $("#doc-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("[data-dtab]");
   if (!b) return;
+  if (b.dataset.dtab === "guiado" || b.dataset.dtab === "memoriales") wzMode(b.dataset.dtab === "memoriales" ? "memorial" : "doc"); // before the draw below reads the mode
   crossfade(() => showDTab(b.dataset.dtab));
   if (b.dataset.dtab === "nomos") guarded(renderNomos);
-  if (b.dataset.dtab === "guiado") guarded(renderWizard);
+  if (b.dataset.dtab === "guiado" || b.dataset.dtab === "memoriales") guarded(renderWizard);
+  if (b.dataset.dtab === "memcats") guarded(renderMcatAdmin);
   if (b.dataset.dtab === "objetos") guarded(() => renderPickAdmin("contrato"));
   if (b.dataset.dtab === "poderes") guarded(() => renderPickAdmin("poder"));
 });
@@ -4919,7 +4979,7 @@ async function renderBorradores() {
     `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
   sel.value = cur ? String(cur) : "";
   // Version 2.2.48: «Generar documento» from a case opens the step-by-step assistant with client and case already chosen.
-  if (pendingDraftCase) { const id = pendingDraftCase; pendingDraftCase = null; showDTab("guiado"); await renderWizard(); await wzPreselect(id); }
+  if (pendingDraftCase) { const id = pendingDraftCase, tab = pendingDraftMode; pendingDraftCase = null; pendingDraftMode = "guiado"; showDTab(tab); await renderWizard(); await wzPreselect(id); }
   else if (!$("[data-dpanel=guiado]").hidden) await renderWizard();
   wzDock();
   if (!$("[data-dpanel=nomos]").hidden) await renderNomos();
@@ -5496,10 +5556,16 @@ $("#casedocs-rows").addEventListener("click", (e) => {
 
 // ----- Template editor and uploads -----
 const tplForm = $("#tpl-dialog form");
-function openTemplateDialog(t = null) {
+async function openTemplateDialog(t = null) {
   tplForm.elements.category.innerHTML = tplMeta.categories.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
-  openDialog($("#tpl-dialog"), t ? "Editar plantilla" : "Nueva plantilla", t ? { id: t.id, name: t.name, category: t.category, description: t.description, body: t.body }
+  // Version 2.2.65: a Memorial template picks its memorial category (empty = «Otros memoriales»).
+  const mcats = await api("GET", "/memorial-categories").catch(() => []);
+  tplForm.elements.memorial_category_id.innerHTML = '<option value="">Otros memoriales (sin categoría)</option>' + mcats.map((c) => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
+  openDialog($("#tpl-dialog"), t ? "Editar plantilla" : "Nueva plantilla", t ? { id: t.id, name: t.name, category: t.category, description: t.description, body: t.body, memorial_category_id: t.memorial_category_id || "" }
     : { category: tplCat || "Contrato", body: "# TÍTULO DEL DOCUMENTO\n\n{{fecha.ciudad_y_fecha}}\n\n**{{cliente.nombre}}**, identificado(a) con {{cliente.tipo_documento}} No. {{cliente.documento}}…\n" });
+  const showMcat = () => ($("#tpl-mcat-label").hidden = tplForm.elements.category.value !== "Memorial");
+  tplForm.elements.category.onchange = showMcat;
+  showMcat();
   // A Word template (version 2.44) edits its name, category and description here; its content in Word.
   const word = t?.format === "docx";
   $(".tpl-editor", tplForm).hidden = word;
@@ -5573,6 +5639,42 @@ for (const kind of Object.keys(PICK)) {
     await renderPickAdmin(kind);
   });
 }
+// ----- Version 2.2.65: categories of «Memoriales» (Gerencia) -----
+async function renderMcatAdmin() {
+  const list = await api("GET", "/memorial-categories?all=1");
+  $("#mcat-list").innerHTML = list.map((o, i) => `<article class="panel cobj-item ${o.is_active ? "" : "off"}">
+    <div class="cobj-head"><strong>${escapeHtml(o.title)}</strong>
+      <span class="badge ${o.is_active ? "ok" : "warn"}">${o.is_active ? "Activa" : "Desactivada"}</span><span class="muted">· ${o.templates} plantilla(s)</span></div>
+    ${o.description ? `<p class="muted">${escapeHtml(o.description)}</p>` : ""}
+    <div class="toolbar">
+      <button type="button" class="mini" data-action="up-mcat" data-id="${o.id}" ${i ? "" : "disabled"} aria-label="Subir">↑ Subir</button>
+      <button type="button" class="mini" data-action="down-mcat" data-id="${o.id}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Bajar">↓ Bajar</button>
+      <button type="button" class="mini" data-action="edit-mcat" data-id="${o.id}">Editar</button>
+      <button type="button" class="mini" data-action="toggle-mcat" data-id="${o.id}">${o.is_active ? "Desactivar" : "Activar"}</button>
+      <button type="button" class="mini danger" data-action="delete-mcat" data-id="${o.id}">Eliminar</button>
+    </div></article>`).join("") || '<p class="empty">Todavía no hay categorías. Cree la primera con «+ Nueva categoría».</p>';
+  return list;
+}
+function openMcatDialog(o = null) {
+  const dlg = $("#mcat-dialog");
+  openDialog(dlg, o ? "Editar categoría de memoriales" : "Nueva categoría de memoriales", o ? { id: o.id, title: o.title, description: o.description || "" } : {});
+  dlg.querySelector("form").elements.is_active.checked = o ? !!o.is_active : true;
+}
+wireDialog($("#mcat-dialog"), async (form) => {
+  const { id, ...d } = formData(form);
+  d.is_active = form.elements.is_active.checked;
+  if (id) await api("PUT", `/memorial-categories/${id}`, d); else await api("POST", "/memorial-categories", d);
+  toast(`Categoría ${id ? "actualizada" : "creada"}.`);
+  await renderMcatAdmin();
+});
+const mcatMove = async (id, delta) => {
+  const ids = (await renderMcatAdmin()).map((o) => o.id);
+  const at = ids.indexOf(id), to = at + delta;
+  if (at < 0 || to < 0 || to >= ids.length) return;
+  [ids[at], ids[to]] = [ids[to], ids[at]];
+  await api("PUT", "/memorial-categories/order", { ids });
+  await renderMcatAdmin();
+};
 // Version 2.2.48: a Poder Word without {{CLASES_DE_PODER}}: the user picks the paragraph after which the marker goes (a new paragraph
 // with that paragraph's own format) and the template is saved with it.
 const markerDialog = $("#pmark-dialog");
