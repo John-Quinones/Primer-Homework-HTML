@@ -1451,3 +1451,9 @@ dialog:not([open]) { pointer-events: none; }
 .fee-inst { margin: .5rem 0; }
 .fee-inst-fields { display: grid; gap: .5rem; margin-top: .5rem; padding-left: .75rem; border-left: 3px solid var(--select-tint, #c4c8cb); }
 .fee-inst .inst-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+
+/* Inicio: audiencias y vencimientos que abren su expediente (version 2.2.77) */
+.recent li.linked { cursor: pointer; transition: background .15s, transform .15s; }
+.recent li.linked:hover, .recent li.linked:focus-visible { background: var(--surface-hover, rgba(2, 124, 198, .12)); transform: translateX(2px); outline: none; }
+.recent li.linked:focus-visible { box-shadow: 0 0 0 2px var(--accent, #027cc6); }
+.recent li.linked.late:hover, .recent li.linked.late:focus-visible { box-shadow: inset 3px 0 0 var(--error); }
