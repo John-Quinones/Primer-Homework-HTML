@@ -1227,6 +1227,12 @@
       <span><button type="button" class="mini" id="chat-dock-full" title="Abrir el chat en pantalla completa">⤢ Ampliar</button>
       <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button></span></div>
   </div>
+  <!-- Aviso de mensaje nuevo o videollamada entrante (versión 2.2.84) -->
+  <div id="chat-alert" class="chat-alert" role="alert" hidden>
+    <div class="chat-alert-t"><strong id="chat-alert-title"></strong><button type="button" class="chat-x" id="chat-alert-x" aria-label="Cerrar el aviso">✕</button></div>
+    <p id="chat-alert-text"></p>
+    <button type="button" class="primary mini" id="chat-alert-go">Abrir</button>
+  </div>
   <div id="chat-dock" class="chat-dock" hidden>
     <div id="chat-dock-mini" class="chat-dock-mini">
       <div id="chat-mini-log" class="chat-mini-log" role="button" tabindex="0" title="Toque para abrir el chat"></div>
