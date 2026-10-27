@@ -15,6 +15,7 @@
   const CM = window.JuanmaCaseMeta;
   const DN = window.JuanmaDocNumbers; // numbering of generated documents (src/doc-numbers.js)
   const MC = window.JuanmaMemorialCategories; // memorial categories, same code as the server (src/memorial-categories.js)
+  const PC = window.JuanmaPartyCategories; // party categories, same code as the server (src/party-categories.js)
   const CO = window.JuanmaContractObjects; // contract objects, same code as the server (src/contract-objects.js)
   const RR = window.JuanmaRecords; // client and case rules, same code as the server (src/record-rules.js)
   const LG = window.JuanmaLedger;
@@ -84,9 +85,21 @@
       for (const k of st.cases) if (k.monitor && k.case_number && k.radicado === k.case_number + "00") k.monitor = 0;
       st.info.monitorOffFromNumber = true;
     }
-    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses", "docnums", "memcats"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
+    for (const k of ["charges", "receipts", "reminders", "casedocs", "audit", "consents", "tasklog", "receiptTrash", "deleteTrash", "cobjects", "cobjuses", "docnums", "memcats", "pcats"]) st[k] ||= []; // 2.2.46: contract objects and their uses (new lists, nothing existing is touched)
     // 2.2.65: the three starter memorial categories, once and only if there are none (the firm renames or deletes them freely).
     if (!st.info.memorialCats) { if (!st.memcats.length) MC.DEFAULT_TITLES.forEach((t, n) => st.memcats.push({ id: nextId(), title: t, description: "", is_active: 1, display_order: n + 1, created_at: stamp(), updated_at: stamp() })); st.info = { ...st.info, memorialCats: true }; }
+    // 2.2.89: the starter party categories, once and only if there are none; the cases keep their marks (nothing is rewritten).
+    if (!st.info.partyCats) {
+      if (!st.pcats.length) {
+        const row = (title, plural, side, kind, flag, active, n) => ({ id: nextId(), title, plural, side, kind, flag, pair_id: null, is_active: active, display_order: n, created_at: stamp(), updated_at: stamp() });
+        let n = 0;
+        for (const [t, p, side] of PC.DEFAULT_ROLES) st.pcats.push(row(t, p, side, "rol", "", 1, ++n));
+        for (const [t, p, side] of PC.LEGACY_ROLES) st.pcats.push(row(t, p, side, "rol", "", 0, ++n));
+        for (const [t, p, flag] of PC.DEFAULT_CONDITIONS) st.pcats.push(row(t, p, "", "condicion", flag, 1, ++n));
+        for (const [t, , , other] of PC.DEFAULT_ROLES) if (other) st.pcats.find((x) => x.title === t).pair_id = st.pcats.find((x) => x.title === other).id;
+      }
+      st.info = { ...st.info, partyCats: true };
+    }
     delete st.consentTexts; // version 2.4: the texts are kept as stored files (ctext-SHA256)
     // Clients with a single name (before change 19): guess natural or legal entity, split natural names.
     for (const c of st.clients) {
@@ -178,6 +191,7 @@
   }
 
   let s = null;
+  const syncPcats = () => CM.setPartyCategories(PC.sortCategories(s.pcats || []));
   let saving = Promise.resolve();
   // One save at a time, in order.
   const save = () => (saving = saving.catch(() => {}).then(() => window.JuanmaStore.save(s)));
@@ -187,6 +201,7 @@
   const READY = (async () => {
     const loaded = await window.JuanmaStore.load();
     s = migrate(loaded || rescueOld() || fresh());
+    syncPcats();
     await save();
   })();
   // Who is signed in is per viewer, never shared.
@@ -447,6 +462,8 @@
   };
   const qs = (url) => Object.fromEntries(new URLSearchParams(url.split("?")[1] || ""));
   const memcatOut = (o) => ({ clause: "", ...clone(o), is_active: !!o.is_active, templates: s.templates.filter((t) => t.memorial_category_id === o.id).length });
+  const pcatOut = (o) => ({ ...clone(o), is_active: !!o.is_active, uses: o.kind === "condicion" ? s.cases.filter((k) => k[o.flag]).length : PC.categoryUses(o.title, s.cases) });
+  const pcatGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar las categorías de partes (solo Gerencia)."); };
   const memcatGerencia = () => { if (me().role !== "Gerencia") fail("Su rol no tiene permiso para administrar las categorías de memoriales (solo Gerencia)."); };
   // A template belongs to a memorial category only when its own category is «Memorial» (empty = «Otros memoriales»).
   const memcatOf = (b, t) => {
@@ -1389,6 +1406,45 @@
       const cur = s.memcats.find((o) => o.id === +m[1]) || fail("La categoría de memoriales no existe.");
       if (s.templates.some((t) => t.memorial_category_id === cur.id)) { cur.is_active = 0; cur.updated_at = stamp(); return { id: cur.id, deleted: false, deactivated: true }; }
       s.memcats = s.memcats.filter((o) => o !== cur);
+      return { id: cur.id, deleted: true, deactivated: false };
+    }],
+    // ----- party categories (2.2.89): Gerencia manages, everyone who opens a case reads -----
+    ["GET", /^\/party-categories(?:\?(.*))?$/, (m, b, url) => {
+      syncPcats();
+      const all = qs(url).all === "1";
+      return PC.sortCategories(s.pcats).filter((o) => o.is_active || all).map(pcatOut);
+    }],
+    ["POST", /^\/party-categories$/, (m, b) => {
+      pcatGerencia();
+      const v = PC.categoryValues({ ...b, kind: undefined }, null, s.pcats);
+      typeof v === "string" && fail(v);
+      const o = { id: nextId(), ...v, kind: "rol", flag: "", display_order: Math.max(0, ...s.pcats.map((x) => x.display_order)) + 1, created_by: me().id, created_at: stamp(), updated_at: stamp() };
+      s.pcats.push(o); syncPcats();
+      return pcatOut(o);
+    }],
+    ["PUT", /^\/party-categories\/order$/, (m, b) => {
+      pcatGerencia();
+      const ids = Array.isArray(b.ids) ? b.ids.map(Number) : [];
+      if (!ids.length || ids.some((id) => !s.pcats.some((o) => o.id === id)) || new Set(ids).size !== ids.length) fail("La lista de orden no es válida.");
+      const rest = PC.sortCategories(s.pcats).map((o) => o.id).filter((id) => !ids.includes(id));
+      [...ids, ...rest].forEach((id, i) => { const o = s.pcats.find((x) => x.id === id); o.display_order = i + 1; o.updated_at = stamp(); });
+      syncPcats();
+      return PC.sortCategories(s.pcats).map(pcatOut);
+    }],
+    ["PUT", /^\/party-categories\/(\d+)$/, (m, b) => {
+      pcatGerencia();
+      const cur = s.pcats.find((o) => o.id === +m[1]) || fail("La categoría de partes no existe.");
+      const v = PC.categoryValues(b, cur, s.pcats.filter((o) => o !== cur), pcatOut(cur).uses);
+      typeof v === "string" && fail(v);
+      Object.assign(cur, v, { updated_at: stamp() }); syncPcats();
+      return pcatOut(cur);
+    }],
+    ["DELETE", /^\/party-categories\/(\d+)$/, (m) => {
+      pcatGerencia();
+      const cur = s.pcats.find((o) => o.id === +m[1]) || fail("La categoría de partes no existe.");
+      if (cur.kind === "condicion" || pcatOut(cur).uses) { cur.is_active = 0; cur.updated_at = stamp(); syncPcats(); return { id: cur.id, deleted: false, deactivated: true }; }
+      for (const o of s.pcats) if (o.pair_id === cur.id) o.pair_id = null;
+      s.pcats = s.pcats.filter((o) => o !== cur); syncPcats();
       return { id: cur.id, deleted: true, deactivated: false };
     }],
     // ----- document templates -----

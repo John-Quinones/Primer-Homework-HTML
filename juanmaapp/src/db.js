@@ -18,6 +18,7 @@ import { defaultsPlan, defaultResponsible, genderPlan } from "./record-rules.js"
 import { CONTRACT_OBJECTS_SCHEMA, addKindColumns } from "./contract-objects-routes.js";
 import { MEMORIAL_CATEGORIES_SCHEMA, addMemorialColumn } from "./memorial-categories-routes.js";
 import { DEFAULT_TITLES as MEMORIAL_DEFAULTS } from "./memorial-categories.js";
+import { PARTY_CATEGORIES_SCHEMA, seedPartyCategories } from "./party-categories-routes.js";
 import { DOC_NUMBERS_SCHEMA } from "./doc-numbers-routes.js";
 
 export const MAIN_OFFICE = "Ibagué";
@@ -766,6 +767,17 @@ function migrate(db) {
   }
   db.exec(MEMORIAL_CATEGORIES_SCHEMA);
   addMemorialColumn(db);
+  // Version 2.2.89: party categories (roles and conditions of «Partes del proceso»). One new table, nothing existing is changed (the cases keep
+  // their client_role / affiliated / ad_litem / parties as they are); a copy first when the database holds data. Starter list once.
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'party_categories'").get() && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
+    const copy = makeBackup(db, { trigger: "antes-v2.2.89" });
+    if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar las categorías de partes: ${copy.error}`);
+  }
+  db.exec(PARTY_CATEGORIES_SCHEMA);
+  if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'party-categories-v1'").get()) {
+    seedPartyCategories(db);
+    db.prepare("INSERT OR IGNORE INTO app_flags (key) VALUES ('party-categories-v1')").run();
+  }
   if (!db.prepare("SELECT 1 FROM app_flags WHERE key = 'memorial-categories-v1'").get()) {
     if (!db.prepare("SELECT 1 FROM memorial_categories LIMIT 1").get()) {
       const ins = db.prepare("INSERT INTO memorial_categories (title, display_order) VALUES (?, ?)");

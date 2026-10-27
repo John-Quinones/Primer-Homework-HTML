@@ -38,6 +38,20 @@ export const PARTY_ROLES = {
 const LEGACY_PARTY_ROLES = ["Querellante", "Querellado", "Defendido"];
 export const ALL_PARTY_ROLES = [...new Set([...Object.values(PARTY_ROLES).flat(), ...LEGACY_PARTY_ROLES])];
 
+// Version 2.2.89: the categories Gerencia keeps (party_categories). The server and the page register them here; while the list
+// is empty the built-in roles above are used, so nothing depends on the registry being loaded.
+let PARTY_CATS = [];
+export function setPartyCategories(list) { PARTY_CATS = Array.isArray(list) ? list.map((x) => ({ ...x })) : []; }
+const roleCats = () => PARTY_CATS.filter((x) => x.kind !== "condicion");
+export const partyCategoryOf = (role) => roleCats().find((x) => x.title === role) || null;
+/** Every role name accepted: the built-in ones and those Gerencia added. */
+export const allPartyRoles = () => [...new Set([...ALL_PARTY_ROLES, ...roleCats().map((x) => x.title)])];
+/** Active roles by side, in the order Gerencia chose (built-in roles, not legacy, while there is no registry). */
+export function roleGroups() {
+  const reg = roleCats().filter((x) => x.is_active !== 0 && x.is_active !== false);
+  const list = reg.length ? reg.map((x) => ({ title: x.title, side: x.side })) : ALL_PARTY_ROLES.filter((r) => !LEGACY_PARTY_ROLES.includes(r)).map((r) => ({ title: r, side: sideOfRole(r) }));
+  return { activa: list.filter((x) => x.side === "activa").map((x) => x.title), pasiva: list.filter((x) => x.side === "pasiva").map((x) => x.title) };
+}
 /** Roles offered for a category and sub-process (e.g. "Laboral", "Ejecutivo Laboral"). */
 export function partyRolesFor(category, type = "") {
   const c = nrm(category), t = nrm(type);
@@ -53,7 +67,8 @@ export function partyRolesFor(category, type = "") {
 export function normPartyRole(x) {
   const n = nrm(x);
   if (!n) return "";
-  return ALL_PARTY_ROLES.find((r) => nrm(r) === n) || ALL_PARTY_ROLES.find((r) => n.startsWith(nrm(r).slice(0, -1))) || null;
+  const all = allPartyRoles();
+  return all.find((r) => nrm(r) === n) || all.find((r) => n.startsWith(nrm(r).slice(0, -1))) || null;
 }
 
 // ----- Court directory segmentation (department → city/circuit → area) -----
@@ -293,19 +308,46 @@ export const LEGAL_TERMS = [
 // ----- Parties of the case (change 49): several plaintiffs / defendants, marking which are our clients -----
 const ACTIVE_ROLES = ["Demandante", "Ejecutante", "Convocante", "Querellante", "Denunciante", "Víctima", "Peticionario", "Reclamante"];
 /** "activa" for the side that sues (demandante, ejecutante…), "pasiva" for the other; "" when unknown. */
-export const sideOfRole = (role) => (!role ? "" : ACTIVE_ROLES.includes(role) ? "activa" : "pasiva");
-/** Plural names of each side for a process: { activa: "Demandantes", pasiva: "Demandados" }. */
-export function sideLabels(category, type = "") {
+export const sideOfRole = (role) => (!role ? "" : partyCategoryOf(role)?.side || (ACTIVE_ROLES.includes(role) ? "activa" : "pasiva"));
+/**
+ * Plural names of each side for a process: { activa: "Demandantes", pasiva: "Demandados" }.
+ * With the client's role (version 2.2.89) the titles follow the chosen category: Ejecutante → «Ejecutantes» / «Ejecutados».
+ */
+export function sideLabels(category, type = "", clientRole = "") {
   const roles = partyRolesFor(category, type);
-  if (roles === PARTY_ROLES.penal) return { activa: "Denunciantes o víctimas", pasiva: "Denunciados, indiciados o procesados" };
-  if (roles.length < 2) return { activa: `${roles[0]}s`, pasiva: "Entidades o contrapartes" };
-  return { activa: `${roles[0]}s`, pasiva: `${roles[1]}s` };
+  const base = roles === PARTY_ROLES.penal ? { activa: "Denunciantes o víctimas", pasiva: "Denunciados, indiciados o procesados" }
+    : roles.length < 2 ? { activa: `${roles[0]}s`, pasiva: "Entidades o contrapartes" } : { activa: `${roles[0]}s`, pasiva: `${roles[1]}s` };
+  const cat = clientRole ? partyCategoryOf(clientRole) : null;
+  const plural = (c) => c.plural || `${c.title}s`;
+  if (!clientRole) return base;
+  const mine = cat?.side || sideOfRole(clientRole), other = mine === "activa" ? "pasiva" : "activa";
+  const pair = cat && (PARTY_CATS.find((x) => x.id === cat.pair_id) || PARTY_CATS.find((x) => x.pair_id && x.pair_id === cat.id));
+  const pairOk = pair && pair.side === other;
+  // Built-in roles without a registry keep their pairs (Ejecutante ↔ Ejecutado, …).
+  const builtin = !cat ? Object.values(PARTY_ROLES).find((r) => r.includes(clientRole) && r.length > 1) : null;
+  const builtinPair = builtin && builtin.find((r) => r !== clientRole && sideOfRole(r) === other);
+  return { ...base, [mine]: cat ? plural(cat) : `${clientRole}s`,
+    ...(pairOk ? { [other]: plural(pair) } : builtinPair ? { [other]: `${builtinPair}s` } : {}) };
+}
+/**
+ * Role a new party starts with on a side (version 2.2.89): the client's own category on the client's side, its pair on the other side
+ * (Ejecutante → Ejecutado), else the first role the process offers for that side.
+ */
+export function defaultRole(side, category, type = "", clientRole = "") {
+  if (clientRole) {
+    const mine = sideOfRole(clientRole);
+    if (mine === side) return clientRole;
+    const cat = partyCategoryOf(clientRole);
+    const pair = cat && (PARTY_CATS.find((x) => x.id === cat.pair_id) || PARTY_CATS.find((x) => x.pair_id && x.pair_id === cat.id));
+    if (pair && pair.side === side) return pair.title;
+  }
+  return sideRoles(category, type)[side][0] || "";
 }
 /** Roles of each side for a process, the process's own first: { activa: [...], pasiva: [...], others: [...] }. */
 export function sideRoles(category, type = "") {
   const own = partyRolesFor(category, type);
   return { activa: own.filter((r) => sideOfRole(r) === "activa"), pasiva: own.filter((r) => sideOfRole(r) === "pasiva"),
-    others: ALL_PARTY_ROLES.filter((r) => !own.includes(r)) };
+    others: allPartyRoles().filter((r) => !own.includes(r)) };
 }
 /**
  * Text for {{expediente.contraparte}} (version 2.2.50): the defendant side of the case with each one's document,
@@ -636,7 +678,7 @@ export function partyContext(k, categoryName, typeName, client, lookup = () => n
   if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
   list = Array.isArray(list) ? list : [];
   const mine = sideOfRole(k?.client_role) || "activa";
-  const roleOf = (side) => (sideOfRole(k?.client_role) === side ? k.client_role : list.find((p) => p.side === side && p.role)?.role) || sides[side][0] || "";
+  const roleOf = (side) => (sideOfRole(k?.client_role) === side ? k.client_role : list.find((p) => p.side === side && p.role)?.role) || defaultRole(side, categoryName, typeName, k?.client_role) || sides[side][0] || "";
   const others = list.filter((p) => p.side === mine && p.ours && p.client_id !== client?.id);
   const genderOf = (p) => { const c = p.client_id ? lookup(p.client_id) : null; return c ? (c.person_type === "juridica" ? "mujer" : normGender(c.gender) || "hombre") : "hombre"; };
   const theirs = list.filter((p) => p.side !== mine && String(p.name || "").trim()).length;
