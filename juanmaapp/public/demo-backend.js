@@ -42,7 +42,8 @@
   // Bring stored data up to the current structure without losing anything.
   function migrate(st) {
     st = JSON.parse(JSON.stringify(st)); // never change the loaded objects in place (they can be read-only)
-    for (const k of ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks", "notes", "acts", "checks", "log", "templates", "signs", "authorities"]) st[k] ||= [];
+    for (const k of ["offices", "users", "clients", "categories", "types", "fields", "cases", "saved", "courts", "tasks", "notes", "acts", "checks", "log", "templates", "signs", "authorities", "court_areas"]) st[k] ||= [];
+    window.JuanmaPlaces.registerAreas(st.court_areas); // areas added by Gerencia join the shared list
     st.prefs ||= {}; st.blobs ||= {}; st.info ||= {};
     st.matrix ||= JSON.parse(JSON.stringify(AUTH.matrix));
     st.roles ||= AUTH.roles.map((name) => ({ name, builtin: true }));
@@ -222,6 +223,19 @@
   const PL = window.JuanmaPlaces;
   const { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad, cityFromText } = PL.makePlaces(DIV, window.JuanmaPerson.properName);
   const inferArea = PL.inferArea;
+  function courtInput(b) {
+    const name = str(b.name).replace(/\s+/g, " "), department = canonDep(b.department);
+    !name && fail("Escriba el nombre del despacho.");
+    !department && fail("Elija el departamento del despacho.");
+    const city = canonCity(str(b.city) || cityFromText(b.department, department), department);
+    !city && fail("Elija la ciudad del despacho.");
+    const area = str(b.area);
+    !area && fail("Elija el área del despacho.");
+    !AREAS.includes(area) && fail("Área no válida. Agréguela primero con «+ Nueva área».");
+    const email = str(b.email).toLowerCase();
+    email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && fail("El correo no es válido.");
+    return { code: str(b.code), name, department, city, city_code: "", circuit: CM.courtCircuit(name, b.circuit), area, email, phone: str(b.phone), address: str(b.address), judge: str(b.judge).replace(/\s+/g, " ") };
+  }
   const bogotaNow = (d = new Date()) => new Date(d.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   const bogotaMs = (local) => Date.parse(String(local).replace(" ", "T") + ":00-05:00");
   // Version 2.11, same as the server: a hidden user reads "Asistente"; only the hidden-users
@@ -901,13 +915,50 @@
     }],
 
     // ----- courts -----
-    ["GET", /^\/courts\/meta$/, () => ({ areas: AREAS, total: s.courts.length, updated: s.courts.map((c) => c.updated_at).sort().at(-1) || null })],
+    ["GET", /^\/courts\/meta$/, () => ({ areas: AREAS, total: s.courts.length, updated: s.courts.map((c) => c.updated_at).sort().at(-1) || null, custom: s.courts.filter((c) => c.custom).length })],
     ["GET", /^\/courts(?:\?(.*))?$/, (m, b, url) => {
       const q = qs(url);
       const text = nrm(q.q || "");
-      return CM.filterCourts(s.courts.filter((c) => !text || nrm(c.name + " " + c.email + " " + c.code).includes(text)),
+      return CM.filterCourts(s.courts.filter((c) => (q.all === "1" || c.active !== 0) && (!text || nrm(c.name + " " + c.email + " " + c.code).includes(text))),
         { department: q.department, city: q.city, area: q.area })
         .sort((a, b) => (a.department + a.city + a.area + a.name).localeCompare(b.department + b.city + b.area + b.name, "es")).slice(0, Number(q.limit) || 500).map(clone);
+    }],
+    // Courts created by hand by Gerencia (same rules as src/courts.js).
+    ["POST", /^\/courts\/areas$/, (m, b) => {
+      need("catalog.manage");
+      const name = str(b.name).replace(/\s+/g, " ");
+      !name && fail("Escriba el nombre del área.");
+      name.length > 80 && fail("El nombre del área es muy largo.");
+      const same = AREAS.find((a) => a.toLowerCase() === name.toLowerCase());
+      if (same) return { name: same, created: false, areas: AREAS };
+      s.court_areas.push(name);
+      window.JuanmaPlaces.registerAreas([name]);
+      return { name, created: true, areas: AREAS };
+    }],
+    ["POST", /^\/courts$/, (m, b) => {
+      need("catalog.manage");
+      const v = courtInput(b);
+      s.courts.some((c) => c.name === v.name && c.city === v.city) && fail("Ya existe un despacho con ese nombre en esa ciudad.");
+      const row = { id: nextId(), ...v, custom: 1, active: 1, updated_at: stamp() };
+      s.courts.push(row);
+      return clone(row);
+    }],
+    ["PUT", /^\/courts\/(\d+)\/active$/, (m, b) => {
+      need("catalog.manage");
+      const row = s.courts.find((c) => c.id === +m[1]) || fail("No existe el despacho.");
+      !row.custom && fail("Solo se desactivan los despachos creados a mano.");
+      row.active = b.active ? 1 : 0;
+      return { id: row.id, active: row.active };
+    }],
+    ["PUT", /^\/courts\/(\d+)$/, (m, b) => {
+      need("catalog.manage");
+      const row = s.courts.find((c) => c.id === +m[1]) || fail("No existe el despacho.");
+      !row.custom && fail("Los despachos del directorio oficial no se editan aquí; se actualizan cargando el Excel.");
+      const v = courtInput(b);
+      s.courts.some((c) => c.id !== row.id && c.name === v.name && c.city === v.city) && fail("Ya existe un despacho con ese nombre en esa ciudad.");
+      if (row.name !== v.name) for (const k of s.cases) if (k.court_id === row.id) k.court_name = v.name;
+      Object.assign(row, v, { updated_at: stamp() });
+      return clone(row);
     }],
     // Version 2.27: the link cannot open the Rama Judicial's site; the directory and other cases still suggest a name.
     ["GET", /^\/courts\/judge(?:\?(.*))?$/, (m, b, url) => {
@@ -929,7 +980,8 @@
         const city = canonCity(str(row.city) || cityFromText(row.department, department), department);
         const v = { code: str(row.code), name, department, city, circuit: CM.courtCircuit(name, row.circuit), area: inferArea(name, row.area), email: str(row.email).toLowerCase(), phone: str(row.phone), address: str(row.address), judge: str(row.judge).replace(/\s+/g, " "), updated_at: stamp() };
         const hit = s.courts.find((c) => c.name === name && c.city === city) || s.courts.find((c) => c.name === name && c.city === window.JuanmaPerson.properName(str(row.city)));
-        if (hit) { Object.assign(hit, { ...v, email: v.email || hit.email || "", phone: v.phone || hit.phone || "", address: v.address || hit.address || "", judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
+        if (hit && hit.custom) { for (const f of ["email", "phone", "address", "judge"]) hit[f] ||= v[f]; out.updated++; }
+        else if (hit) { Object.assign(hit, { ...v, email: v.email || hit.email || "", phone: v.phone || hit.phone || "", address: v.address || hit.address || "", judge: v.judge || hit.judge || "" }); out.updated++; } else { s.courts.push({ id: nextId(), city_code: "", ...v }); out.created++; }
       });
       return out;
     }],
