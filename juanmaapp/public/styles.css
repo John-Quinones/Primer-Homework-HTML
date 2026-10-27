@@ -1569,14 +1569,27 @@ dialog.chat-call[open] { display: flex; }
   dialog.chat-call { width: 100vw; height: 100dvh; border-radius: 0; }
 }
 
-/* Chat docked at the bottom of every screen (version 2.2.82) */
-.chat-dock { position: fixed; right: 130px; bottom: 0; z-index: 30; width: min(380px, calc(100vw - 150px)); display: flex; flex-direction: column; }
-.chat-dock[hidden] { display: none; }
-.chat-dock-bar { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 12px 12px 0 0; border: 1px solid var(--border); border-bottom: 0; background: var(--surface); color: var(--text); font-weight: 600; cursor: pointer; box-shadow: 0 -4px 18px rgba(0, 0, 0, .25); }
+/* Chat docked at the bottom of every screen (version 2.2.82): a fixed horizontal bar, and a resizable window above it */
+:root { --dock-left: 210px; --dock-pad: 0px; --dock-w: 420px; --dock-h: 520px; }
+.has-chat-dock main { padding-bottom: calc(var(--dock-pad) + 12px); }
+.has-chat-dock .page-nav { bottom: var(--dock-pad); }
+.chat-dock { position: fixed; left: var(--dock-left); right: 0; bottom: 0; z-index: 30; display: flex; flex-direction: column; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 18px rgba(0, 0, 0, .3); padding-right: 100px; }
+.chat-dock[hidden], .chat-dock-body[hidden] { display: none; }
+.chat-dock-mini { display: flex; flex-direction: column; gap: 6px; padding: 8px 14px 6px; }
+.chat-dock.open .chat-dock-mini { display: none; }
+.chat-mini-log { display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-height: 40px; font-size: .86rem; }
+.chat-mini-log p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-mini-log p b { color: var(--brand-blue); }
+.chat-mini-log p small { color: var(--text-muted); margin-left: 6px; }
+.chat-mini-log .hint { margin: 0; }
+.chat-mini-form { display: flex; gap: 6px; }
+.chat-mini-form input { flex: 1; min-width: 0; }
+.chat-dock-bar { display: flex; align-items: center; justify-content: center; gap: 8px; height: 34px; border: 0; border-radius: 0; background: transparent; color: var(--text); font-weight: 600; cursor: pointer; box-shadow: none; }
 .chat-dock-bar:hover { background: var(--surface-muted); }
-.chat-dock-body { height: min(520px, calc(100vh - 140px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .35); overflow: hidden; margin-bottom: -1px; }
-.chat-dock-body[hidden] { display: none; }
-.chat-dock-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.chat-dock-body { position: fixed; right: 110px; bottom: var(--dock-pad); z-index: 31; width: min(var(--dock-w), calc(100vw - 24px)); height: min(var(--dock-h), calc(100vh - 100px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px 12px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .4); overflow: hidden; }
+.chat-dock-grip { position: absolute; left: 0; top: 0; width: 28px; height: 28px; cursor: nwse-resize; touch-action: none; z-index: 2; background: linear-gradient(135deg, var(--brand-blue) 0 3px, transparent 3px 6px, var(--brand-blue) 6px 9px, transparent 9px); opacity: .7; border-radius: 12px 0 0 0; }
+.chat-dock-grip:hover { opacity: 1; }
+.chat-dock-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px 8px 34px; border-bottom: 1px solid var(--border); }
 .chat-dock-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-app.chat-docked { display: flex; flex: 1; min-height: 0; height: auto; gap: 0; }
 .chat-app.chat-docked > * { border: 0; border-radius: 0; flex: 1; min-width: 0; }
@@ -1590,8 +1603,9 @@ dialog.chat-call[open] { display: flex; }
 .chat-app.chat-docked .chat-form { padding: 8px; }
 .chat-app.chat-docked .chat-msg { max-width: 94%; }
 @media (max-width: 760px) {
-  .chat-dock { left: 8px; right: 90px; width: auto; bottom: 62px; }
-  .chat-dock-body { height: min(470px, calc(100vh - 220px)); }
+  :root { --dock-left: 0px; }
+  .chat-dock { padding-right: 96px; }
+  .chat-dock-body { right: 8px; }
 }
 .chat-app.chat-docked .chat-head-t { display: none; }
 .chat-app.chat-docked .chat-head { justify-content: space-between; }

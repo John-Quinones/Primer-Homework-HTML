@@ -1207,12 +1207,20 @@
   </dialog>
 
   <!-- Cámara para la foto del cliente (versión 2.22) -->
-  <!-- Chat acoplado abajo (versión 2.2.82): el mismo chat, en una ventana que se despliega sobre cualquier pantalla -->
+  <!-- Chat acoplado abajo (versión 2.2.82): barra fija con los dos últimos mensajes y la línea para escribir; al tocarla se abre una ventana que se puede agrandar o achicar -->
+  <div id="chat-dock-body" class="chat-dock-body" hidden>
+    <div class="chat-dock-grip" id="chat-dock-grip" title="Arrastre para cambiar el tamaño de la ventana" aria-hidden="true"></div>
+    <div class="chat-dock-head"><strong id="chat-dock-title">Chat</strong>
+      <span><button type="button" class="mini" id="chat-dock-full" title="Abrir el chat en pantalla completa">⤢ Ampliar</button>
+      <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button></span></div>
+  </div>
   <div id="chat-dock" class="chat-dock" hidden>
-    <div id="chat-dock-body" class="chat-dock-body" hidden>
-      <div class="chat-dock-head"><strong id="chat-dock-title">Chat</strong>
-        <span><button type="button" class="mini" id="chat-dock-full" title="Abrir el chat en pantalla completa">⤢ Ampliar</button>
-        <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button></span></div>
+    <div id="chat-dock-mini" class="chat-dock-mini">
+      <div id="chat-mini-log" class="chat-mini-log" role="button" tabindex="0" title="Toque para abrir el chat"></div>
+      <form id="chat-mini-form" class="chat-mini-form" autocomplete="off">
+        <input id="chat-mini-input" maxlength="4000" placeholder="Escriba un mensaje…" aria-label="Escribir un mensaje rápido" />
+        <button type="submit" class="primary mini" id="chat-mini-send">Enviar</button>
+      </form>
     </div>
     <button type="button" class="chat-dock-bar" id="chat-dock-bar" aria-expanded="false" title="Abrir o plegar el chat">💬 <span>Chat</span> <b id="chat-dock-badge" class="nav-badge" hidden></b></button>
   </div>

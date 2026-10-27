@@ -56,14 +56,79 @@
     const dock = $("#chat-dock");
     const show = !SERVER_ONLY && !!me && !inChat();
     dock.hidden = !show;
+    document.body.classList.toggle("has-chat-dock", show);
+    const root = document.documentElement.style;
+    root.setProperty("--dock-left", (innerWidth > 760 ? ($(".sidenav")?.offsetWidth || 210) : 0) + "px");
+    root.setProperty("--dock-pad", (show ? dock.offsetHeight : 0) + "px");
     const open = show && dockOpen;
     $("#chat-dock-body").hidden = !open;
+    $("#chat-dock-bar").setAttribute("aria-expanded", String(open));
     dock.classList.toggle("open", open);
     const app = $("#chat-app");
     const wantDock = show && dockOpen;
     if (wantDock && app.parentElement !== $("#chat-dock-body")) { $("#chat-dock-body").append(app); app.classList.add("chat-docked"); dockLoad(); }
     if (!wantDock && app.parentElement === $("#chat-dock-body")) { home.after(app); app.classList.remove("chat-docked"); }
     $("#chat-dock-title").textContent = open && S.cur && app.classList.contains("show-main") ? S.cur.title : "Chat";
+    if (show && !open && !miniTimer) { miniRefresh(); miniTimer = setInterval(miniRefresh, 6000); }
+    if ((!show || open) && miniTimer) { clearInterval(miniTimer); miniTimer = 0; }
+  }
+
+  // The fixed bar: the last two messages of the conversation that matters (unread first, else the latest) and a line to answer.
+  let miniTimer = 0, mini = null;
+  const pickMini = () => {
+    const withMsgs = S.convs.filter((c) => c.last_preview);
+    const unread = withMsgs.filter((c) => c.unread).sort((a, b) => String(b.last_at).localeCompare(String(a.last_at)))[0];
+    return unread || withMsgs.filter((c) => c.kind !== "general").sort((a, b) => String(b.last_at).localeCompare(String(a.last_at)))[0] || S.convs.find((c) => c.kind === "general") || null;
+  };
+  const miniLine = (m) => {
+    const text = m.retracted ? "Mensaje eliminado" : m.kind === "call" ? "📹 inició una videollamada" : m.body || (m.file ? "📎 " + m.file.name : m.link ? "🔗 " + m.link.label : "");
+    return `<p><b>${escapeHtml(m.mine ? "Usted" : m.user_name.split(" ")[0])}</b>: ${escapeHtml(text)}<small>${hhmm(m.created_at)}</small></p>`;
+  };
+  async function miniRefresh(markRead = false) {
+    if (SERVER_ONLY || !me || dockOpen || inChat() || document.hidden) return;
+    if (markRead !== true) markRead = false;
+    try {
+      await loadConvs();
+      mini = pickMini();
+      const bar = $("#chat-dock-bar span");
+      bar.textContent = mini ? `Chat · ${mini.title}` : "Chat";
+      if (!mini) { $("#chat-mini-log").innerHTML = '<p class="hint">Sin conversaciones todavía. Toque para empezar.</p>'; return; }
+      const r = await api("GET", `/chat/conversations/${mini.id}/messages?limit=2${markRead ? "" : "&read=0"}`);
+      $("#chat-mini-log").innerHTML = r.messages.map(miniLine).join("") || '<p class="hint">Sin mensajes. Escriba el primero.</p>';
+      syncDock();
+    } catch { /* the next tick retries */ }
+  }
+  async function miniSend(e) {
+    e.preventDefault();
+    const input = $("#chat-mini-input"), body = input.value.trim();
+    if (!body) return;
+    if (!mini) { mini = pickMini(); if (!mini) return; }
+    $("#chat-mini-send").disabled = true;
+    try {
+      await api("POST", `/chat/conversations/${mini.id}/messages`, { body });
+      input.value = "";
+      await miniRefresh(true);
+    } catch (err) { toast(err.message, true); } finally { $("#chat-mini-send").disabled = false; input.focus(); }
+  }
+  // Resize the open window by its top-left corner; the size is remembered for the session.
+  function dockResize() {
+    try { const z = JSON.parse(sessionStorage.getItem("jm_chat_dock_size") || "null"); if (z) { document.documentElement.style.setProperty("--dock-w", z.w + "px"); document.documentElement.style.setProperty("--dock-h", z.h + "px"); } } catch { /* ignore */ }
+    const grip = $("#chat-dock-grip"), box = $("#chat-dock-body");
+    grip.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const r = box.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+      grip.setPointerCapture(e.pointerId);
+      const move = (ev) => {
+        const w = Math.max(300, Math.min(innerWidth - 24, r.width + (x0 - ev.clientX))), h = Math.max(240, Math.min(innerHeight - 100, r.height + (y0 - ev.clientY)));
+        document.documentElement.style.setProperty("--dock-w", w + "px"); document.documentElement.style.setProperty("--dock-h", h + "px");
+      };
+      const up = () => {
+        grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up);
+        const b = box.getBoundingClientRect();
+        try { sessionStorage.setItem("jm_chat_dock_size", JSON.stringify({ w: Math.round(b.width), h: Math.round(b.height) })); } catch { /* ignore */ }
+      };
+      grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up);
+    });
   }
   let dockLoaded = false;
   async function dockLoad() {
@@ -71,8 +136,10 @@
     dockLoaded = true;
     $("#chat-app").hidden = false;
     await Promise.all([loadPeople(), loadConvs()]).catch(() => {});
-    if (!S.cur) showEmpty(true);
+    if (pendingOpen) { const id = pendingOpen; pendingOpen = 0; await openConv(id); }
+    else if (!S.cur) showEmpty(true);
   }
+  let pendingOpen = 0;
   function setDock(on) {
     dockOpen = on;
     try { sessionStorage.setItem("jm_chat_dock", on ? "1" : "0"); } catch { /* ignore */ }
@@ -573,6 +640,13 @@
       });
     });
     $("#chat-dock-bar").addEventListener("click", () => setDock(!dockOpen));
+    $("#chat-mini-form").addEventListener("submit", miniSend);
+    $("#chat-mini-input").addEventListener("focus", () => { if (mini?.unread) miniRefresh(true); });
+    const openFromMini = () => { pendingOpen = mini?.id || 0; setDock(true); };
+    $("#chat-mini-log").addEventListener("click", openFromMini);
+    $("#chat-mini-log").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFromMini(); } });
+    dockResize();
+    new ResizeObserver(() => syncDock()).observe($("#chat-dock"));
     $("#chat-dock-min").addEventListener("click", () => setDock(false));
     $("#chat-dock-full").addEventListener("click", () => { const id = S.cur?.id; setDock(false); location.hash = id ? `#chat-${id}` : "#chat"; });
     window.addEventListener("hashchange", syncDock);
