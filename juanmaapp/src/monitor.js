@@ -9,8 +9,27 @@ import { paymentReminders } from "./payments.js";
 import { withDecisions } from "./decision.js";
 import { formatRadicado } from "./portals.js";
 import { backupIfDue } from "./backup.js";
+import { checkPublicaciones } from "./publicaciones.js";
 
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
+
+// ---------- Schedule (Gerencia) ----------
+// Version 2.2.83: Gerencia chooses the hours of the automatic consultation (default 7:00 and 16:00).
+export const DEFAULT_SCHEDULE = { enabled: true, hours: ["07:00", "16:00"] };
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export function getSchedule(db) {
+  try {
+    const v = JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'rama_schedule'").get()?.value ?? "null");
+    if (v && Array.isArray(v.hours)) return { enabled: v.enabled !== false, hours: [...new Set(v.hours.filter((h) => HHMM.test(h)))].sort() };
+  } catch { /* unreadable value: use the default */ }
+  return { ...DEFAULT_SCHEDULE };
+}
+export function setSchedule(db, { enabled, hours }) {
+  const clean = [...new Set((Array.isArray(hours) ? hours : []).map(String).filter((h) => HHMM.test(h)))].sort().slice(0, 8);
+  const v = { enabled: enabled !== false, hours: clean };
+  db.prepare("INSERT INTO settings (key, value) VALUES ('rama_schedule', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(v));
+  return v;
+}
 const OPEN = LIVE_STATUSES;
 
 /** 'YYYY-MM-DD HH:MM' in Bogotá for a Date (default now). */
@@ -84,7 +103,7 @@ const prefsOf = (db, userId) => {
   const u = db.prepare("SELECT email, phone FROM users WHERE id = ?").get(userId);
   return p
     ? { ...p, hours: JSON.parse(p.hours), by_email: !!p.by_email, by_whatsapp: !!p.by_whatsapp, email: p.email || u.email }
-    : { user_id: userId, hours: ["07:00"], by_email: true, email: u.email, by_whatsapp: false, whatsapp: u.phone, scope: "mine" };
+    : { user_id: userId, hours: ["07:00"], by_email: true, email: u.email, by_whatsapp: false, whatsapp: u.phone, scope: loadUser(db, userId)?.role === "Gerencia" ? "office" : "mine" };
 };
 export { prefsOf };
 
@@ -124,6 +143,10 @@ export function buildReport(db, userId, now = new Date()) {
     for (const a of withDecisions(db.prepare("SELECT * FROM actuaciones WHERE case_id = ?").all(caseId).map((x) => ({ ...x })))) decided.set(a.id, a);
   }
   for (const a of news) Object.assign(a, { decision: decided.get(a.id)?.decision || "", decision_kind: decided.get(a.id)?.decision_kind || "" });
+  const publicaciones = db.prepare(`
+    SELECT p.*, k.radicado, c.full_name AS client FROM publicaciones p JOIN cases k ON k.id = p.case_id JOIN clients c ON c.id = k.client_id
+    WHERE p.case_id IN (${idList}) AND p.found_at > ? ORDER BY p.fecha DESC, p.id DESC`).all(last);
+  for (const x of publicaciones) x.radicado = formatRadicado(x.radicado);
   const errors = db.prepare(`
     SELECT k.radicado, pc.error FROM cases k JOIN process_checks pc ON pc.id = (
       SELECT id FROM process_checks WHERE case_id = k.id ORDER BY id DESC LIMIT 1)
@@ -147,6 +170,10 @@ export function buildReport(db, userId, now = new Date()) {
     lines.push("", "ACTUACIONES NUEVAS");
     for (const a of news) lines.push(`• ${a.radicado} (${a.client}) · ${a.fecha} · ${a.actuacion}${a.anotacion ? " — " + a.anotacion : ""}${a.decision ? `\n  ${a.decision_kind} notificado: ${a.decision}` : ""}`);
   }
+  if (publicaciones.length) {
+    lines.push("", "PUBLICACIONES PROCESALES");
+    for (const x of publicaciones) lines.push(`• ${x.radicado} (${x.client}) · ${x.fecha} · ${x.title || "Publicación"}\n  …${x.snippet}…\n  ${x.url}`);
+  }
   if (agenda.length) {
     lines.push("", "PRÓXIMOS 7 DÍAS");
     for (const t of agenda) lines.push(`• ${t.due_at} · ${KIND[t.kind]}: ${t.title} (${t.client})`);
@@ -159,15 +186,16 @@ export function buildReport(db, userId, now = new Date()) {
   const esc = (x) => String(x).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
   const html = `<div style="font-family:Arial,sans-serif;color:#101010">
     <h2 style="color:#002b6a;margin:0 0 4px">Reporte de procesos</h2>
-    <p style="color:#555;margin:0 0 16px">${esc(bogota(now))} (hora Colombia) · ${ids.length} procesos · ${news.length} actuaciones nuevas</p>
+    <p style="color:#555;margin:0 0 16px">${esc(bogota(now))} (hora Colombia) · ${ids.length} procesos · ${news.length} actuaciones nuevas${publicaciones.length ? ` · ${publicaciones.length} publicaciones` : ""}</p>
     ${news.length ? `<h3 style="color:#002b6a">Actuaciones nuevas</h3><table cellpadding="6" style="border-collapse:collapse;font-size:13px">
       <tr style="background:#002b6a;color:#fff"><th align="left">Radicado</th><th align="left">Cliente</th><th align="left">Fecha</th><th align="left">Actuación</th></tr>
       ${news.map((a) => `<tr style="border-bottom:1px solid #ddd"><td>${esc(a.radicado)}</td><td>${esc(a.client)}</td><td>${esc(a.fecha)}</td>
         <td><strong>${esc(a.actuacion)}</strong>${a.anotacion ? "<br>" + esc(a.anotacion) : ""}${a.decision ? `<br><span style="color:#002b6a">${esc(a.decision_kind)} notificado: ${esc(a.decision)}</span>` : ""}</td></tr>`).join("")}</table>` : "<p>Sin actuaciones nuevas.</p>"}
+    ${publicaciones.length ? `<h3 style="color:#002b6a">Publicaciones Procesales</h3><ul>${publicaciones.map((x) => `<li><strong>${esc(x.radicado)}</strong> (${esc(x.client)}) · ${esc(x.fecha)} · <a href="${esc(x.url)}">${esc(x.title || "Ver publicación")}</a><br><span style="color:#555">…${esc(x.snippet)}…</span></li>`).join("")}</ul>` : ""}
     ${agenda.length ? `<h3 style="color:#002b6a">Próximos 7 días</h3><ul>${agenda.map((t) => `<li>${esc(t.due_at)} · ${KIND[t.kind]}: ${esc(t.title)} (${esc(t.client)})</li>`).join("")}</ul>` : ""}
     ${errors.length ? `<h3 style="color:#b3261e">No se pudieron consultar</h3><ul>${errors.map((e) => `<li>${esc(e.radicado)}: ${esc(e.error)}</li>`).join("")}</ul>` : ""}
     <p style="color:#888;font-size:12px">Fuente: Consulta Nacional Unificada de Procesos, Rama Judicial. Verifique en el despacho antes de actuar.</p></div>`;
-  return { text, html, caseCount: ids.length, newCount: news.length, agendaCount: agenda.length };
+  return { text, html, caseCount: ids.length, newCount: news.length, agendaCount: agenda.length, publicacionesCount: publicaciones.length };
 }
 
 /** Build and deliver one user's report; logs it and leaves an in-app copy. */
@@ -181,7 +209,7 @@ export async function deliverReport(db, userId, trigger, now = new Date()) {
   db.prepare("INSERT INTO report_log (user_id, trigger, channels, summary) VALUES (?, ?, ?, ?)")
     .run(userId, trigger, JSON.stringify(results), r.text);
   notify(db, userId, "reporte", `Reporte de procesos (${trigger === "manual" ? "manual" : trigger})`,
-    `${r.caseCount} procesos · ${r.newCount} actuaciones nuevas`, "#consulta", null);
+    `${r.caseCount} procesos · ${r.newCount} actuaciones nuevas${r.publicacionesCount ? ` · ${r.publicacionesCount} publicaciones` : ""}`, "#consulta", null);
   return { ...r, channels: results };
 }
 
@@ -212,6 +240,43 @@ export function taskReminders(db, now = new Date()) {
   return created;
 }
 
+// ---------- Automatic cycle ----------
+
+/** Who gets the automatic report: Gerencia, and each responsable of a monitored case. */
+export function reportRecipients(db) {
+  const responsables = new Set(db.prepare("SELECT DISTINCT assigned_user_id AS id FROM cases WHERE monitor = 1 AND radicado != '' AND assigned_user_id IS NOT NULL").all().map((r) => r.id));
+  return db.prepare("SELECT id, role FROM users WHERE active = 1").all()
+    .filter((u) => u.role === "Gerencia" || responsables.has(u.id))
+    .filter((u) => loadUser(db, u.id)?.permissions.includes("processes.consult"))
+    .map((u) => u.id);
+}
+
+let running = null;
+/** State of the cycle for the settings panel. */
+export const cycleState = () => ({ running: !!running, last: lastRun });
+let lastRun = null;
+
+/**
+ * Consult every monitored case (Rama Judicial + Publicaciones Procesales) and deliver each recipient's report.
+ * trigger = the hour («07:00») or «manual» (Gerencia's «Consultar ahora»). Only one cycle at a time.
+ */
+export function runCycle(db, trigger, at = new Date()) {
+  if (running) return running;
+  running = (async () => {
+    const started = bogota(at);
+    const users = reportRecipients(db);
+    const caseIds = [...new Set(users.flatMap((u) => reportCaseIds(db, u)))];
+    const checks = await checkCases(db, caseIds);
+    let pub = { enabled: false, docs: 0, found: 0, errors: [] };
+    try { pub = await checkPublicaciones(db, caseIds); } catch (err) { pub.errors.push({ despacho: "", error: err.message }); }
+    for (const u of users) { try { await deliverReport(db, u, trigger, at); } catch (err) { console.error("report:", err); } }
+    lastRun = { trigger, at: started, cases: caseIds.length, ok: checks.filter((c) => c.ok).length, newCount: checks.reduce((n, c) => n + c.newCount, 0),
+      users: users.length, publicaciones: { enabled: pub.enabled, docs: pub.docs, found: pub.found, errors: pub.errors.length } };
+    return lastRun;
+  })().finally(() => { running = null; });
+  return running;
+}
+
 // ---------- Scheduler ----------
 
 /** Runs every minute: reminders always; checks + reports at the users' chosen hours. */
@@ -229,15 +294,10 @@ export function startScheduler(db, { intervalMs = 60000 } = {}) {
       const hhmm = now.slice(11, 16);
       // Payment reminders once a day at 8:00 (Colombia).
       if (hhmm === "08:00" && !done.has("pay " + now)) { done.add("pay " + now); await paymentReminders(db, at); }
-      if (!REPORT_HOURS.includes(hhmm) || done.has(now)) return;
+      const sched = getSchedule(db);
+      if (!sched.enabled || !sched.hours.includes(hhmm) || done.has(now)) return;
       done.add(now);
-      const users = db.prepare("SELECT user_id, hours FROM report_prefs").all()
-        .filter((p) => JSON.parse(p.hours).includes(hhmm))
-        .map((p) => p.user_id)
-        .filter((id) => loadUser(db, id)?.active && loadUser(db, id).permissions.includes("processes.consult"));
-      const caseIds = [...new Set(users.flatMap((u) => reportCaseIds(db, u)))];
-      await checkCases(db, caseIds);
-      for (const u of users) await deliverReport(db, u, hhmm, at);
+      await runCycle(db, hhmm, at);
     } catch (err) {
       console.error("scheduler:", err);
     }

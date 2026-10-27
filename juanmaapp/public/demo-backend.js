@@ -1071,6 +1071,9 @@
     ["POST", /^\/monitor\/cases\/(\d+)\/check-all$/, () => { need("processes.consult"); fail(NEEDS_SERVER.rama); }],
     ["POST", /^\/monitor\/cases\/(\d+)\/rama$/, () => { need("processes.consult"); fail(NEEDS_SERVER.rama); }],
     ["GET", /^\/monitor\/portal-probe$/, () => fail("La prueba de conexión con los portales se hace desde la app en Azure (este enlace no se conecta a sitios externos).")],
+    ["GET", /^\/monitor\/schedule$/, () => ({ enabled: true, hours: ["07:00", "16:00"], running: false, last: null, publicaciones: false })],
+    ["PUT", /^\/monitor\/schedule$/, () => fail("La consulta automática se configura en la app de Azure (este enlace no se conecta a la Rama Judicial).")],
+    ["POST", /^\/monitor\/run-now$/, () => fail(NEEDS_SERVER.rama)],
     ["GET", /^\/monitor\/prefs$/, () => { need("processes.consult"); return prefsOf(me().id); }],
     ["PUT", /^\/monitor\/prefs$/, (m, b) => {
       need("processes.consult");

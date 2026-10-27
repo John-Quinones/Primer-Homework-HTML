@@ -1103,6 +1103,19 @@
           <ul id="gcal-list" class="channel-list"></ul>
           <div class="toolbar"><button type="button" data-action="gcal-connect">Conectar una cuenta de Google</button></div>
         </div>
+        <div class="panel" id="schedule-panel" hidden>
+          <h3 class="panel-title">Consulta automática de expedientes</h3>
+          <p class="hint" id="schedule-summary"></p>
+          <form id="schedule-form" class="toolbar">
+            <label><input type="checkbox" name="enabled"> Activada</label>
+            <label>Hora 1 <input type="time" name="h1"></label>
+            <label>Hora 2 <input type="time" name="h2"></label>
+            <label>Hora 3 <input type="time" name="h3"></label>
+            <button type="submit">Guardar horas</button>
+            <button type="button" data-action="run-now">Consultar ahora</button>
+          </form>
+          <p class="hint" id="schedule-last"></p>
+        </div>
         <div class="panel" id="backups-panel" hidden>
           <h3 class="panel-title">Copias de seguridad</h3>
           <p class="hint" id="backups-summary"></p>
