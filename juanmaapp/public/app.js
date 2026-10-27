@@ -1155,7 +1155,7 @@ async function renderExpedienteFicha(id) {
         ${btnGroup("Editar", [can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar expediente</button>` : "", folderButton(k, ""), radicadoButton(k, "")])}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}">Eliminar</button>` : ""}
         ${btnGroup("⚖ Consultar en Rama Judicial", [`<button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>`, `<button data-action="go-sec" data-sec="portales">Portales de consulta</button>`, can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""])}
-        ${btnGroup("Generar documento", [can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Generar documento</button>` : "", can("drafts.generate") ? `<button data-action="memorial-case" data-id="${k.id}">Memorial</button>` : ""], "primary")}
+        ${btnGroup("Generar documento", [can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Generar documento</button>` : "", can("drafts.generate") ? `<button data-action="memorial-case" data-id="${k.id}">Memorial</button>` : "", can("mail.send") ? `<button data-action="slink-case" data-id="${k.id}" title="Pide al juzgado del expediente el link del expediente digital, por correo">Solicitar link de expediente</button>` : ""], "primary")}
       </div>
     </div>
     <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
@@ -1641,6 +1641,40 @@ function wireDialog(dialog, onSave) {
 }
 
 const formData = (form) => Object.fromEntries(new FormData(form).entries());
+
+// ----- Version 2.2.83: «Solicitar link de expediente» — a short HTML letter e-mailed to the case's court with one click -----
+const SL = window.JuanmaSolicitudLink;
+const slForm = $("#slink-dialog form");
+let slCase = null;
+async function openSlink(caseId) {
+  const data = await api("GET", `/templates/data?caseId=${caseId}`);
+  slCase = caseId;
+  openDialog($("#slink-dialog"), "Solicitar link del expediente", { to: data["destinatario.correo"] || data["expediente.correo_despacho"] || "", ...SL.letterFields(data) });
+  $("#slink-send").hidden = WEB;
+  $("#slink-mailto").hidden = !WEB;
+  $("#slink-web-note").hidden = !WEB;
+  $("#slink-data").open = false;
+  renderSlink();
+}
+const slFields = () => { const d = formData(slForm); return { ...Object.fromEntries(SL.LETTER_KEYS.map((k) => [k, d[k] || ""])), correo_juzgado: (d.to || "").trim() }; };
+function renderSlink() {
+  const f = slFields(), to = slForm.elements.to.value.trim();
+  const miss = SL.letterMissing(f);
+  const L = SL.buildLetter(f, { imgSrc: `${WEB ? SERVER_URL : ""}/firma-john.png` });
+  $("#slink-preview").innerHTML = DOMPurify.sanitize(L.html);
+  $("#slink-missing").textContent = miss.length ? `Falta: ${miss.join(", ")}.` : "";
+  $("#slink-missing").hidden = !miss.length;
+  $("#slink-send").disabled = !!miss.length;
+  const a = $("#slink-mailto");
+  a.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(L.subject)}&body=${encodeURIComponent(L.text)}`;
+  a.classList.toggle("disabled", !!miss.length);
+}
+slForm.addEventListener("input", renderSlink);
+wireDialog($("#slink-dialog"), async (form) => {
+  const d = formData(form), fields = slFields();
+  const m = await api("POST", "/mail", { to: d.to.trim(), case_id: slCase, letter: { kind: "solicitud_link", fields } });
+  toast(`Solicitud enviada a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
+});
 
 const clientForm = $("#client-dialog form");
 // Natural person: first and last names + document. Legal entity: business name + NIT.
@@ -3201,6 +3235,7 @@ document.addEventListener("click", (e) => {
       $("#tpl-case").value = String(id);
       location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
     },
+    "slink-case": () => openSlink(id),
     "new-mcat": () => openMcatDialog(null),
     "edit-mcat": async () => openMcatDialog((await api("GET", "/memorial-categories?all=1")).find((o) => o.id === id)),
     "toggle-mcat": async () => {
