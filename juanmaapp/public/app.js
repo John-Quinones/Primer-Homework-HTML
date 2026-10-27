@@ -3955,8 +3955,9 @@ async function renderInicio() {
   $("#kpi-news-tile").hidden = !monitored;
   if (monitored) $("#kpi-news").textContent = monitored.reduce((a, k) => a + k.new_7d, 0);
 
+  const agendaCanOpen = (t) => t.case_id && (can("scope.all") || myOfficeIds().includes(t.office_id)); // version 2.2.77: click opens the case at its tasks
   $("#dash-agenda").innerHTML = tasks.slice(0, 7).map((t) => `
-    <li class="${t.due_at < now ? "late" : ""}">
+    <li class="${t.due_at < now ? "late" : ""}${agendaCanOpen(t) ? " linked" : ""}"${agendaCanOpen(t) ? ` data-action="go" data-to="#expediente-${t.case_id}-tareas" role="link" tabindex="0" title="Abrir el expediente para completar la tarea"` : ""}>
       <span class="badge ${t.kind === "audiencia" ? "ok" : t.kind === "termino" ? "warn" : ""}">${KIND_LABEL[t.kind]}</span>
       <div><strong>${escapeHtml(t.title)}</strong><span>${escapeHtml(t.client_name)} · ${escapeHtml(t.due_at < now ? "Vencida " + t.due_at : dayLabel(t.due_at.slice(0, 10)) + " " + t.due_at.slice(11))}</span></div>
     </li>`).join("") || '<li class="empty">Sin audiencias ni vencimientos en los próximos 14 días.</li>';
@@ -8195,3 +8196,9 @@ const RENDER = {
 };
 
 guarded(boot);
+
+// Inicio: Enter or Space on a focused agenda row opens its case (version 2.2.77).
+document.addEventListener("keydown", (e) => {
+  const li = e.target.closest?.("#dash-agenda li.linked");
+  if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); li.click(); }
+});
