@@ -159,11 +159,17 @@ export function agendaRouter(db) {
   r.put("/tasks/:id", async (req, res) => {
     const cur = visible(req, Number(req.params.id));
     if (!cur) return err(res, 404, "La tarea no existe.");
-    // The assignee may always say whether it was fulfilled; the rest needs the role and the case's office.
+    // The person a task is assigned to may also edit it (title, notes, date, place, reminders, term, answer),
+    // but not move it to another person or case, nor notify; that stays with the role and the case's office.
     const full = can(req, "cases.write") && !!caseVisible(req, cur.case_id);
-    const onlyClosing = Object.keys(req.body ?? {}).every((x) => ["status", "done_notes"].includes(x));
-    if (!full && !(cur.assigned_user_id === req.user.id && onlyClosing)) return err(res, 403, "Su rol no tiene permiso para esta acción.");
-    const v = values(req, req.body ?? {}, out(cur), cur.office_id);
+    const body = req.body ?? {};
+    if (!full) {
+      if (cur.assigned_user_id !== req.user.id) return err(res, 403, "Su rol no tiene permiso para esta acción.");
+      if ("assigned_user_id" in body && (Number(body.assigned_user_id) || null) !== cur.assigned_user_id) return err(res, 403, "Solo quien tiene permiso sobre el expediente puede reasignar la tarea.");
+      if ("case_id" in body && Number(body.case_id) !== cur.case_id) return err(res, 403, "Su rol no tiene permiso para esta acción.");
+      delete body.notify;
+    }
+    const v = values(req, body, out(cur), cur.office_id);
     if (typeof v === "string") return err(res, 400, v);
     db.prepare(`UPDATE tasks SET kind = ?, title = ?, notes = ?, due_at = ?, location = ?, assigned_user_id = ?, remind_days = ?, status = ?,
       done_at = CASE WHEN ? = 'hecha' AND status != 'hecha' THEN datetime('now') WHEN ? != 'hecha' THEN NULL ELSE done_at END,
