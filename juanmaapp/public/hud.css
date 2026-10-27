@@ -48,6 +48,8 @@ body::before {
   background-size: 34px 34px;
 }
 .topbar, .shell { position: relative; z-index: 1; }
+/* La barra superior (campana y menú de usuario) debe quedar por encima de los módulos: cada uno crea su propio contexto de apilamiento. */
+.topbar { z-index: 50; }
 
 /* ---- Barra superior ---- */
 .topbar { background: rgba(3, 10, 26, .82); border-bottom: 1px solid var(--hud-line-soft); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 1px 18px rgba(0, 240, 255, .08); }
