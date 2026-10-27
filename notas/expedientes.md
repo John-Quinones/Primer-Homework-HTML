@@ -39,4 +39,4 @@ Leer primero; mapa para no releer todo (regla de John, 19/10/2026).
 
 - v2.2.79 (pedido de John 27/10/2026): en la cabecera de la ficha del expediente (`public/app.js`, junto a `folderButton`) `btnGroup(label, items, cls)` agrupa botones en un `<details class="btn-group">`: Editar (expediente, carpeta, número), Consultar en Rama Judicial (Rama, Portales, todas las plataformas) y Generar documento (documento, Memorial); Eliminar queda aparte. Cierra al elegir una opción (listener global de clics). Estilos `.btn-group` al final de `styles.css`. Solo visual.
 
-- v2.2.81 (pedido de John 27/10/2026): icono de copiar sin texto, `.copy-ico` (`data-action="copy-radicado"`, `public/app.js`) junto al chip «Radicado No.» de la ficha; copia solo los dígitos con `copyText`. No toca datos.
+- v2.2.80 (pedido de John 27/10/2026): icono de copiar pequeño y sin texto en la esquina superior derecha del chip, `.copy-ico` (`data-action="copy-radicado"`, `public/app.js`) junto al chip «Radicado No.» de la ficha; copia solo los dígitos con `copyText`. No toca datos.
