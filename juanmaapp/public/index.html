@@ -164,6 +164,7 @@
       <a href="#clientes" data-view="clientes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-3.5 3.2-5.5 6.5-5.5s6 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.3 2.5 3.5 5.2"/></svg><span>Clientes</span></a>
       <a href="#expedientes" data-view="expedientes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Expedientes</span></a>
       <a href="#agenda" data-view="agenda"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3v3H8z"/></svg><span>Agenda</span></a>
+      <a href="#chat" data-view="chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4z"/><path d="M8 8.5h8M8 11.5h5"/></svg><span>Chat</span><b id="chat-badge" class="nav-badge" hidden></b></a>
       <a href="#consulta" data-view="consulta"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5L20 20"/><path d="M8 10h4M10 8v4"/></svg><span>Consulta de procesos</span></a>
       <a href="#despachos" data-view="despachos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V10M19 21V10M9 21v-6h6v6M2 10l10-6 10 6"/></svg><span>Despachos</span></a>
       <a href="#borradores" data-view="borradores"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span>Documentos</span></a>
@@ -759,6 +760,45 @@
       </section>
 
       <dialog id="mony-zoom" class="mony-zoom" aria-label="Mony"><img src="mony-avatar.webp" alt="Mony, asistente jurídico" /><p>Mony · asistente jurídico</p><button type="button" class="mini" id="mony-zoom-close">Cerrar</button></dialog>
+      <!-- ============ CHAT entre usuarios (versión 2.2.82) ============ -->
+      <section id="view-chat" class="view" hidden>
+        <div class="view-head"><h2>Chat del despacho</h2><span class="hint" id="chat-hint">Conversaciones privadas, grupos y videollamada entre los usuarios de la App.</span></div>
+        <div id="chat-server" class="panel server-note" hidden></div>
+        <div id="chat-app" class="chat-app">
+          <aside class="chat-side" aria-label="Conversaciones">
+            <div class="chat-side-top">
+              <input id="chat-search" type="search" placeholder="Buscar mensajes o personas…" autocomplete="off" aria-label="Buscar en el chat" />
+              <button type="button" class="mini" id="chat-new" title="Nuevo chat o grupo">+ Nuevo</button>
+            </div>
+            <div id="chat-found" class="chat-found" hidden></div>
+            <ul id="chat-convs" class="chat-list" aria-label="Chats"></ul>
+            <h4 class="chat-sub-title">Personas</h4>
+            <ul id="chat-people" class="chat-list chat-people" aria-label="Personas del despacho"></ul>
+          </aside>
+          <div class="chat-main" id="chat-main" hidden>
+            <header class="chat-head">
+              <button type="button" class="mini chat-list-btn" id="chat-to-list">‹ Chats</button>
+              <div class="chat-head-t"><strong id="chat-title"></strong><small id="chat-sub"></small></div>
+              <div class="chat-head-b">
+                <button type="button" class="mini" id="chat-members" hidden>Integrantes</button>
+                <button type="button" class="primary mini" id="chat-call" title="Iniciar o unirse a la videollamada">📹 Videollamada</button>
+              </div>
+            </header>
+            <div id="chat-banner" class="chat-banner" hidden></div>
+            <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
+            <div id="chat-chips" class="chat-chips" hidden></div>
+            <form id="chat-form" class="chat-form" autocomplete="off">
+              <div id="chat-mention" class="chat-mention" hidden></div>
+              <button type="button" class="mini" id="chat-attach" title="Adjuntar un archivo (hasta 5 MB)" aria-label="Adjuntar archivo">📎</button>
+              <button type="button" class="mini" id="chat-link" title="Enlazar un cliente o expediente" aria-label="Enlazar cliente o expediente">🔗</button>
+              <input type="file" id="chat-file" hidden />
+              <textarea id="chat-input" rows="1" maxlength="4000" placeholder="Escriba un mensaje… (@ para mencionar)" enterkeyhint="send"></textarea>
+              <button type="submit" class="primary" id="chat-send">Enviar</button>
+            </form>
+          </div>
+          <div class="chat-empty" id="chat-empty"><p>Elija una conversación o una persona para empezar.</p></div>
+        </div>
+      </section>
       <!-- ============ MONY (asistente jurídico) ============ -->
       <section id="view-mony" class="view" hidden>
         <div class="view-head"><h2>Mony, asistente jurídico</h2><button type="button" class="mini" id="mony-clear">Nueva conversación</button></div>
@@ -1167,6 +1207,43 @@
   </dialog>
 
   <!-- Cámara para la foto del cliente (versión 2.22) -->
+  <!-- Chat (versión 2.2.82): nuevo chat o grupo, enlazar cliente/expediente, videollamada -->
+  <dialog id="chat-new-dialog">
+    <form method="dialog" id="chat-new-form">
+      <h3>Nuevo chat</h3>
+      <label>Nombre del grupo (déjelo vacío para un chat con una sola persona)<input id="chat-new-name" maxlength="80" placeholder="Ej.: Equipo laboral" /></label>
+      <fieldset class="chat-pick"><legend>Personas</legend><div id="chat-new-people"></div></fieldset>
+      <p class="hint" id="chat-new-hint"></p>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button type="button" class="primary" id="chat-new-go">Abrir chat</button></div>
+    </form>
+  </dialog>
+  <dialog id="chat-link-dialog">
+    <form method="dialog">
+      <h3>Enlazar cliente o expediente</h3>
+      <input id="chat-link-q" type="search" placeholder="Nombre, documento, carpeta o radicado…" autocomplete="off" />
+      <ul id="chat-link-list" class="chat-list chat-link-list"></ul>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button></div>
+    </form>
+  </dialog>
+  <dialog id="chat-members-dialog">
+    <form method="dialog">
+      <h3 id="chat-members-title">Integrantes</h3>
+      <ul id="chat-members-list" class="chat-list"></ul>
+      <div id="chat-members-add" hidden><label>Agregar personas<select id="chat-members-select"></select></label><button type="button" class="mini" id="chat-members-addgo">Agregar</button></div>
+      <div class="dialog-actions"><button type="button" id="chat-leave" hidden>Salir del grupo</button><button value="close">Cerrar</button></div>
+    </form>
+  </dialog>
+  <dialog id="chat-call-dialog" class="chat-call" aria-label="Videollamada">
+    <div class="call-top"><strong id="call-title">Videollamada</strong><span id="call-status" class="hint"></span></div>
+    <div id="call-grid" class="call-grid"></div>
+    <p class="hint call-note" id="call-note"></p>
+    <div class="call-bar">
+      <button type="button" class="mini" id="call-mic" aria-pressed="false">🎤 Silenciar</button>
+      <button type="button" class="mini" id="call-cam" aria-pressed="false">📷 Apagar cámara</button>
+      <button type="button" class="mini" id="call-screen">🖥 Compartir pantalla</button>
+      <button type="button" class="danger" id="call-end">Colgar</button>
+    </div>
+  </dialog>
   <dialog id="photo-dialog">
     <form method="dialog">
       <h3>Tomar foto del cliente</h3>
@@ -2117,6 +2194,7 @@
   <script src="page-nav.js"></script>
   <script src="mony-face.js"></script>
   <script src="app.js"></script>
+  <script src="chat-page.js"></script>
   <script src="hud.js"></script>
 </body>
 </html>

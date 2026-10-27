@@ -177,6 +177,7 @@ const NAV_DESC = {
   clientes: "Datos de cada cliente y sus expedientes",
   expedientes: "Procesos: partes, despacho, tareas y estado",
   agenda: "Audiencias, términos y tareas por funcionario",
+  chat: "Mensajes y videollamada con los demás usuarios",
   consulta: "Actuaciones nuevas en la Rama Judicial",
   despachos: "Juzgados y tribunales con su correo",
   borradores: "Contratos, poderes y escritos con los datos del cliente",
@@ -560,7 +561,7 @@ async function refreshBell() {
   const c = $("#bell-count");
   c.hidden = !n.unread;
   c.textContent = n.unread > 99 ? "99+" : n.unread;
-  const ICON = { audiencia: "⚖", tarea: "✓", termino: "⏱", vencida: "!", actuacion: "•", reporte: "✉" };
+  const ICON = { audiencia: "⚖", tarea: "✓", termino: "⏱", vencida: "!", actuacion: "•", reporte: "✉", chat: "💬" };
   $("#bell-list").innerHTML = n.items.map((x) => `
     <li class="${x.read_at ? "" : "unread"}"><a href="${escapeHtml(x.link || "#inicio")}" data-note="${x.id}">
       <span class="note-ico" aria-hidden="true">${ICON[x.kind] || "•"}</span>
@@ -639,13 +640,14 @@ async function saveFile(filename, blob) {
 }
 
 // ---------- Navigation ----------
-const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "consulta", "radicados", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "mony", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
+const VIEWS = ["inicio", "clientes", "expedientes", "agenda", "chat", "consulta", "radicados", "despachos", "borradores", "firmas", "pagos", "correo", "jurisprudencia", "mony", "reportes", "importar", "configuracion", "usuarios", "bitacora"];
 // "#cliente-12" and "#expediente-34" open the client's and the case's own screens.
 const FICHAS = { cliente: "clientes", expediente: "expedientes" };
 function route() {
   const m = location.hash.match(/^#(cliente|expediente)-(\d+)(?:-([a-z]+))?$/);
   if (m) return { name: m[1], id: Number(m[2]), sec: m[3] || "" };
-  const n = location.hash.slice(1).split("?")[0]; // "#jurisprudencia?q=…" carries a search (version 2.13)
+  let n = location.hash.slice(1).split("?")[0]; // "#jurisprudencia?q=…" carries a search (version 2.13)
+  if (/^chat-\d+$/.test(n)) n = "chat"; // "#chat-12" opens conversation 12 (version 2.2.82)
   return { name: VIEWS.includes(n) ? n : "inicio" };
 }
 function showView() {

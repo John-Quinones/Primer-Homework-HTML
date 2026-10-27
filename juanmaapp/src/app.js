@@ -30,6 +30,7 @@ import { pdfjsClassic } from "./pdfjs-classic.js";
 import { asGlobal, SHARED_MODULES } from "./browser-module.js";
 import { VERSION } from "./version.js";
 import { gcalRouter } from "./gcal-oauth.js";
+import { chatRouter } from "./chat.js";
 import { runMony, NAME as MONY_NAME } from "./mony.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -137,6 +138,7 @@ export function createApp(db) {
   app.use("/api/inicio", bandaInicioRouter()); // version 2.2.7: weather and news band
   app.use("/api/authorities", authoritiesRouter(db));
   app.use("/api", agendaRouter(db));
+  app.use("/api/chat", chatRouter(db)); // version 2.2.82: chat and video calls between users
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
   app.use("/api/templates", requirePerm("drafts.generate"), templatesRouter(db));
   app.use("/api/memorial-categories", requirePerm("drafts.generate"), memorialCategoriesRouter(db)); // version 2.2.65: Gerencia manages, everyone who drafts reads

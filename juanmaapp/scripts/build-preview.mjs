@@ -83,6 +83,7 @@ window.JUANMA_TEMPLATES = ${JSON.stringify({ seed: SEED_TEMPLATES, categories: D
     `<script>${safe(read("public/web-store.js"))}</script>`,
     `<script>${safe(read("public/demo-backend.js"))}</script>`,
     `<script>${safe(read("public/app.js"))}</script>`,
+    `<script>${safe(read("public/chat-page.js"))}</script>`,
     `<script>${safe(read("public/hud.js"))}</script>`,
   ].join("\n"));
 
