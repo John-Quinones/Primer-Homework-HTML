@@ -38,7 +38,7 @@ export const PARTY_ROLES = {
 const LEGACY_PARTY_ROLES = ["Querellante", "Querellado", "Defendido"];
 export const ALL_PARTY_ROLES = [...new Set([...Object.values(PARTY_ROLES).flat(), ...LEGACY_PARTY_ROLES])];
 
-// Version 2.2.87: the categories Gerencia keeps (party_categories). The server and the page register them here; while the list
+// Version 2.2.89: the categories Gerencia keeps (party_categories). The server and the page register them here; while the list
 // is empty the built-in roles above are used, so nothing depends on the registry being loaded.
 let PARTY_CATS = [];
 export function setPartyCategories(list) { PARTY_CATS = Array.isArray(list) ? list.map((x) => ({ ...x })) : []; }
@@ -311,7 +311,7 @@ const ACTIVE_ROLES = ["Demandante", "Ejecutante", "Convocante", "Querellante", "
 export const sideOfRole = (role) => (!role ? "" : partyCategoryOf(role)?.side || (ACTIVE_ROLES.includes(role) ? "activa" : "pasiva"));
 /**
  * Plural names of each side for a process: { activa: "Demandantes", pasiva: "Demandados" }.
- * With the client's role (version 2.2.87) the titles follow the chosen category: Ejecutante → «Ejecutantes» / «Ejecutados».
+ * With the client's role (version 2.2.89) the titles follow the chosen category: Ejecutante → «Ejecutantes» / «Ejecutados».
  */
 export function sideLabels(category, type = "", clientRole = "") {
   const roles = partyRolesFor(category, type);
@@ -330,7 +330,7 @@ export function sideLabels(category, type = "", clientRole = "") {
     ...(pairOk ? { [other]: plural(pair) } : builtinPair ? { [other]: `${builtinPair}s` } : {}) };
 }
 /**
- * Role a new party starts with on a side (version 2.2.87): the client's own category on the client's side, its pair on the other side
+ * Role a new party starts with on a side (version 2.2.89): the client's own category on the client's side, its pair on the other side
  * (Ejecutante → Ejecutado), else the first role the process offers for that side.
  */
 export function defaultRole(side, category, type = "", clientRole = "") {

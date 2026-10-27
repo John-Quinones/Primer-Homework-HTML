@@ -647,6 +647,10 @@ function migrate(db) {
   add("courts", "circuit", "TEXT NOT NULL DEFAULT ''");
   // Version 2.27: the judge of a court (directory file, when it has the column) and the judge chosen on each case.
   add("courts", "judge", "TEXT NOT NULL DEFAULT ''");
+  // Version 2.2.87: courts created by hand by Gerencia (custom = 1, never touched by the official Excel) and switched off without deleting.
+  add("courts", "custom", "INTEGER NOT NULL DEFAULT 0");
+  add("courts", "active", "INTEGER NOT NULL DEFAULT 1");
+  db.exec("CREATE TABLE IF NOT EXISTS court_areas (name TEXT PRIMARY KEY)");
   // Certified e-mail evidence (change 39): the exact message sent (.eml) with several digests, attachment digests, trusted timestamp.
   for (const [col, def] of [["raw", "BLOB"], ["raw_sha1", "TEXT NOT NULL DEFAULT ''"], ["raw_sha256", "TEXT NOT NULL DEFAULT ''"], ["raw_sha512", "TEXT NOT NULL DEFAULT ''"],
     ["raw_sha3_512", "TEXT NOT NULL DEFAULT ''"], ["attach_mode", "TEXT NOT NULL DEFAULT 'adjunto'"], ["tsa_url", "TEXT NOT NULL DEFAULT ''"], ["tsa_reply", "TEXT"],
@@ -763,10 +767,10 @@ function migrate(db) {
   }
   db.exec(MEMORIAL_CATEGORIES_SCHEMA);
   addMemorialColumn(db);
-  // Version 2.2.87: party categories (roles and conditions of «Partes del proceso»). One new table, nothing existing is changed (the cases keep
+  // Version 2.2.89: party categories (roles and conditions of «Partes del proceso»). One new table, nothing existing is changed (the cases keep
   // their client_role / affiliated / ad_litem / parties as they are); a copy first when the database holds data. Starter list once.
   if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'party_categories'").get() && db.prepare("SELECT 1 FROM clients LIMIT 1").get()) {
-    const copy = makeBackup(db, { trigger: "antes-v2.2.87" });
+    const copy = makeBackup(db, { trigger: "antes-v2.2.89" });
     if (copy.ok === false && copy.error !== "Las copias están desactivadas en este servidor.") throw new Error(`No se pudo hacer la copia antes de agregar las categorías de partes: ${copy.error}`);
   }
   db.exec(PARTY_CATEGORIES_SCHEMA);

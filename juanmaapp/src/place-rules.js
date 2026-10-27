@@ -74,14 +74,21 @@ export function normalizeRadicado(r) {
 
 export const AREAS = [
   "Civil", "Laboral", "Penal", "Familia", "Administrativo", "Promiscuo", "Ejecución de Penas",
-  "Pequeñas Causas y Competencia Múltiple", "Restitución de Tierras", "Penal para Adolescentes", "Constitucional", "Comercial", "Agrario", "Tributario", "Disciplinario", "Ambiental", "Otro", "Otros",
+  "Pequeñas Causas y Competencia Múltiple", "Restitución de Tierras", "Penal para Adolescentes", "Constitucional", "Comercial", "Agrario", "Tributario", "Disciplinario", "Ambiental", "Disciplinario Interno", "Penal Militar", "Otro", "Otros",
 ];
+
+/** Areas added by the administrator (court_areas table); joins the shared list in place so every rule sees it. */
+export function registerAreas(names) {
+  for (const n of names) if (n && !AREAS.includes(n)) AREAS.splice(Math.max(0, AREAS.indexOf("Otro")), 0, n);
+}
 
 // Order matters: the most specific wording wins.
 const AREA_RULES = [
   [/ejecucion de penas/, "Ejecución de Penas"],
   [/pequenas causas|competencia multiple/, "Pequeñas Causas y Competencia Múltiple"],
   [/restitucion de tierras/, "Restitución de Tierras"],
+  [/penal militar|justicia penal militar/, "Penal Militar"],
+  [/control disciplinario interno|disciplinario interno/, "Disciplinario Interno"],
   [/adolescente/, "Penal para Adolescentes"],
   [/administrativ|contencioso/, "Administrativo"],
   [/comercial|mercantil|sociedades/, "Comercial"],

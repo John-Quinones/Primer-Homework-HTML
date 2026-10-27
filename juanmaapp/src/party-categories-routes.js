@@ -1,4 +1,4 @@
-// Party categories (version 2.2.87). Mounted under /api/party-categories.
+// Party categories (version 2.2.89). Mounted under /api/party-categories.
 // Everyone who opens a case reads the active list; only Gerencia creates, edits, orders and deletes.
 import express from "express";
 import { HttpError, toInt } from "./http.js";

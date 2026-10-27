@@ -1,4 +1,4 @@
-// Party categories (version 2.2.87): the roles a client or another party can have in a process (Demandante, Ejecutante, Peticionario,
+// Party categories (version 2.2.89): the roles a client or another party can have in a process (Demandante, Ejecutante, Peticionario,
 // Accionante, Denunciante…) and the conditions of the client (Cliente afiliado, Curador ad-litem). Gerencia sets them up; the case form
 // reads them. Each role has its singular and plural name (the column title of «Partes del proceso»), its side and, optionally, its pair on the
 // other side (Ejecutante ↔ Ejecutado). Shared by the server and the published link.

@@ -422,6 +422,7 @@
         <div class="view-head">
           <h2>Despachos judiciales</h2>
           <div class="toolbar">
+            <button type="button" data-action="new-court" data-gerencia-only title="Solo Gerencia: cree un despacho que no está en el directorio oficial (Control Disciplinario Interno, Penal Militar…)">+ Nuevo despacho</button>
             <label class="file-btn" id="courts-import-btn">Cargar directorio oficial (.xlsx o .csv)<input type="file" id="courts-file" accept=".xlsx,.csv,.txt" hidden /></label>
           </div>
         </div>
@@ -435,7 +436,7 @@
           </div>
           <p id="courts-count" class="muted"></p>
           <div class="table-scroll">
-            <table class="data-table" id="courts-table"><thead><tr><th>Despacho</th><th>Área</th><th>Ciudad</th><th>Correo</th><th>Teléfono</th></tr></thead><tbody></tbody></table>
+            <table class="data-table" id="courts-table"><thead><tr><th>Despacho</th><th>Área</th><th>Ciudad</th><th>Correo</th><th>Teléfono</th><th></th></tr></thead><tbody></tbody></table>
           </div>
         </div>
         <div class="panel" id="authorities-panel">
@@ -1662,6 +1663,29 @@
   </dialog>
 
   <!-- Funcionario de una entidad (versión 2.27) -->
+  <dialog id="court-dialog">
+    <form method="dialog" data-form="court">
+      <h3 data-title>Nuevo despacho</h3>
+      <input type="hidden" name="id" />
+      <p class="hint">Para despachos que no vienen en el directorio oficial de la Rama Judicial. Aparecerán en el campo «Despacho» del expediente. Al volver a cargar el Excel oficial no se duplican ni se cambian.</p>
+      <div class="grid2">
+        <label class="span2">Nombre del despacho * <input name="name" required autocomplete="off" placeholder="Ej. Grupo de Control Disciplinario Interno · Juzgado 12 Penal Militar de Conocimiento" /></label>
+        <label>Departamento * <input name="department" id="court-dlg-dep" class="combo" data-combo="dep" required autocomplete="off" placeholder="Escriba: T… Tolima" /></label>
+        <label>Ciudad * <input name="city" class="combo" data-combo="city" data-dep="#court-dlg-dep" required autocomplete="off" placeholder="Escriba: I… Ibagué" /></label>
+        <label>Área * <select name="area" required></select></label>
+        <label>Otra área <span class="row"><input id="court-new-area" placeholder="Ej. Control Interno" autocomplete="off" /><button type="button" class="mini" data-action="add-court-area">+ Nueva área</button></span></label>
+        <label>Correo <input name="email" type="email" placeholder="despacho@entidad.gov.co" /></label>
+        <label>Teléfono <input name="phone" placeholder="Opcional" /></label>
+        <label class="span2">Dirección <input name="address" placeholder="Opcional" /></label>
+      </div>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="authority-dialog">
     <form method="dialog" data-form="authority">
       <h3 data-title>Funcionario de la entidad</h3>
