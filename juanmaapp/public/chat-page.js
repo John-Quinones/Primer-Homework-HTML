@@ -4,7 +4,7 @@
 (() => {
   const SERVER_ONLY = !!window.JuanmaBackend; // the published link and the demo have one browser: no one to chat with
   const S = { convs: [], people: [], cur: null, msgs: [], members: [], otherRead: 0, more: false, now: "", attach: null, link: null, editing: null, focus: 0, busy: false, lastUnread: 0, calling: false };
-  const POLL_MS = 3000, LIST_MS = 10000, BADGE_MS = 15000;
+  const POLL_MS = 3000, LIST_MS = 10000, BADGE_MS = 5000;
 
   // ---------- helpers ----------
   const utc = (t) => new Date(String(t).replace(" ", "T").slice(0, 19) + "Z");
@@ -36,14 +36,83 @@
     d.hidden = b.hidden; d.textContent = b.textContent; d.classList.toggle("calling", !!u.calling);
     document.title = document.title.replace(/^\(\d+\) /, "");
     if (u.unread) document.title = `(${u.unread}) ${document.title}`;
-    if (u.unread > S.lastUnread && document.hidden && window.Notification?.permission === "granted") {
-      try { new Notification("TEC Jurídicos · Chat", { body: `Tiene ${u.unread} mensaje${u.unread === 1 ? "" : "s"} sin leer.` }); } catch { /* not allowed here */ }
-    }
-    if (u.calling && !S.calling && !callState && active()) toast("Hay una videollamada en curso: abra el chat para unirse.");
+    const newMsg = u.unread > S.lastUnread, newCall = u.calling && !S.calling;
     if (u.unread !== S.lastUnread || u.calling !== S.calling) refreshBell?.(); // mentions and calls also reach the bell
     S.lastUnread = u.unread;
     S.calling = u.calling;
+    if (!u.calling || callState) hideAlert("call");
+    if ((newMsg || newCall) && !callState) announce(newMsg, newCall);
     S.byConv = u.by_conversation;
+  }
+
+  // ---------- alerts: a message arrives, or someone starts a video call (version 2.2.84) ----------
+  let actx = null;
+  const ensureAudio = () => { try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch { /* no audio here */ } };
+  document.addEventListener("pointerdown", ensureAudio);
+  document.addEventListener("keydown", ensureAudio);
+  function tones(freqs, step = 0.16) { // plays only once the browser allows sound (after the first click on the page)
+    if (!actx || actx.state !== "running") return;
+    let t = actx.currentTime;
+    for (const f of freqs) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + step);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + step + 0.02);
+      t += step;
+    }
+  }
+  let ringTimer = 0, alertTimer = 0, alertConv = 0;
+  function hideAlert(kind) {
+    const el = $("#chat-alert");
+    if (kind && el.dataset.kind !== kind) return;
+    el.hidden = true; el.dataset.kind = "";
+    clearInterval(ringTimer); ringTimer = 0; clearTimeout(alertTimer);
+  }
+  function desktopNotice(title, body, tag) {
+    if (window.Notification?.permission !== "granted" || (!document.hidden && !document.hasFocus())) {
+      if (window.Notification?.permission !== "granted") return;
+    }
+    try { const n = new Notification(title, { body, tag, renotify: true }); n.onclick = () => { window.focus(); n.close(); }; } catch { /* not allowed here */ }
+  }
+  function showAlert(kind, conv) {
+    const el = $("#chat-alert"), call = kind === "call";
+    const who = call ? conv.call.participants.filter((p) => p.id !== me.id).map((p) => p.name).join(", ") || conv.title : conv.last_from;
+    const where = conv.kind === "direct" ? "" : ` · ${conv.title}`;
+    alertConv = conv.id;
+    el.dataset.kind = kind;
+    el.classList.toggle("call", call);
+    $("#chat-alert-title").textContent = call ? `📹 ${who} inició una videollamada${where}` : `💬 ${who}${where}`;
+    $("#chat-alert-text").textContent = call ? "Toque «Unirse» para entrar a la llamada." : conv.last_preview;
+    $("#chat-alert-go").textContent = call ? "Unirse" : "Abrir";
+    el.hidden = false;
+    clearTimeout(alertTimer); clearInterval(ringTimer);
+    if (call) {
+      let n = 0;
+      const ring = () => { tones([880, 660, 880, 660], 0.18); if (++n >= 12) { clearInterval(ringTimer); ringTimer = 0; } };
+      ring(); ringTimer = setInterval(ring, 2600);
+    } else {
+      tones([660, 880], 0.14);
+      alertTimer = setTimeout(() => hideAlert("msg"), 9000);
+    }
+    desktopNotice(call ? `Videollamada de ${who}` : `Mensaje de ${who}`, call ? "Abra el chat para unirse." : conv.last_preview, call ? "chat-call" : "chat-msg");
+  }
+  async function announce(newMsg, newCall) {
+    try { await loadConvs(); } catch { return; }
+    const call = newCall ? S.convs.find((c) => c.call && !c.call.participants.some((p) => p.id === me.id)) : null;
+    if (call) return showAlert("call", call);
+    if (!newMsg) return;
+    const seen = (c) => S.cur?.id === c.id && active() && !document.hidden && document.hasFocus();
+    const c = S.convs.filter((x) => x.unread && !seen(x)).sort((a, b) => String(b.last_at).localeCompare(String(a.last_at)))[0];
+    if (c) showAlert("msg", c);
+  }
+  async function alertGo() {
+    const id = alertConv, call = $("#chat-alert").dataset.kind === "call";
+    hideAlert();
+    if (!id) return;
+    if (!inChat()) { pendingOpen = id; setDock(true); }
+    await loadConvs();
+    await openConv(id);
+    if (call) await startCall();
   }
   const inChat = () => /^#chat(-\d+)?$/.test(location.hash);
   // The chat also lives in a window docked at the bottom of every screen (version 2.2.82): same #chat-app, moved there.
@@ -639,6 +708,9 @@
         drawLog(false);
       });
     });
+    $("#chat-alert-go").addEventListener("click", () => guarded(alertGo));
+    $("#chat-alert-x").addEventListener("click", () => hideAlert());
+    document.addEventListener("click", () => { if (window.Notification?.permission === "default") Notification.requestPermission().catch(() => {}); }, { once: true });
     $("#chat-dock-bar").addEventListener("click", () => setDock(!dockOpen));
     $("#chat-mini-form").addEventListener("submit", miniSend);
     $("#chat-mini-input").addEventListener("focus", () => { if (mini?.unread) miniRefresh(true); });
