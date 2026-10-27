@@ -154,18 +154,19 @@ test("custom roles and per-user permission checklist", async () => {
   assert.ok(roles.matrix.Abogado.includes("processes.consult"));
 });
 
-test("scheduler sends reports at the chosen hour only, once", async () => {
+test("scheduler sends reports at the hours Gerencia chose only, once", async () => {
+  assert.equal((await admin.call("PUT", "/monitor/schedule", { enabled: true, hours: ["13:00", "16:00"] })).status, 200);
   const before = (await admin.call("GET", "/monitor/log")).body.length;
   const sched = startScheduler(srv.db, { intervalMs: 3600000 });
   const at = (hhmm) => new Date(Date.parse(`2026-10-15T${hhmm}:00-05:00`));
   await sched.tick(at("12:00"));
-  assert.equal((await admin.call("GET", "/monitor/log")).body.length, before, "12:00 is not a report hour");
+  assert.equal((await admin.call("GET", "/monitor/log")).body.length, before, "12:00 is not in the schedule");
   await sched.tick(at("13:00"));
   await sched.tick(at("13:00"));
   const log = (await admin.call("GET", "/monitor/log")).body;
   assert.equal(log.length, before + 1);
   assert.equal(log[0].trigger, "13:00");
   await sched.tick(at("17:00"));
-  assert.equal((await admin.call("GET", "/monitor/log")).body.length, before + 1, "17:00 was not chosen");
+  assert.equal((await admin.call("GET", "/monitor/log")).body.length, before + 1, "17:00 is not in the schedule");
   sched.stop();
 });

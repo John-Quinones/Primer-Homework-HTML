@@ -2,7 +2,8 @@
 import express from "express";
 import { typePath } from "./sql.js";
 import { scopeOf } from "./auth.js";
-import { checkCase, checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS } from "./monitor.js";
+import { checkCase, checkCases, deliverReport, buildReport, prefsOf, REPORT_HOURS, getSchedule, setSchedule, runCycle, cycleState } from "./monitor.js";
+import { probePublicaciones, urlTemplate } from "./publicaciones.js";
 import { channelsStatus } from "./notify.js";
 import { withDecisions } from "./decision.js";
 import { checkAllPortals, probePortals } from "./portal-check.js";
@@ -89,6 +90,26 @@ export function monitorRouter(db) {
   r.get("/portal-probe", async (req, res) => {
     if (!req.user.permissions.includes("users.manage")) return res.status(403).json({ error: "Solo Gerencia." });
     res.json(await probePortals());
+  });
+
+  // Automatic consultation (version 2.2.84): hours chosen by Gerencia, «Consultar ahora», Publicaciones Procesales.
+  const gerencia = (req, res) => (req.user.permissions.includes("users.manage") ? true : (res.status(403).json({ error: "Solo Gerencia." }), false));
+  r.get("/schedule", (req, res) => res.json({ ...getSchedule(db), ...cycleState(), publicaciones: !!urlTemplate() }));
+  r.put("/schedule", (req, res) => {
+    if (!gerencia(req, res)) return;
+    const v = setSchedule(db, req.body ?? {});
+    if (v.enabled && !v.hours.length) return res.status(400).json({ error: "Indique al menos una hora." });
+    res.json({ ...v, ...cycleState(), publicaciones: !!urlTemplate() });
+  });
+  r.post("/run-now", (req, res) => {
+    if (!gerencia(req, res)) return;
+    if (cycleState().running) return res.json({ started: false, ...cycleState() });
+    runCycle(db, "manual").catch((err) => console.error("run-now:", err));
+    res.json({ started: true, ...cycleState(), running: true });
+  });
+  r.get("/publicaciones-probe", async (req, res) => {
+    if (!gerencia(req, res)) return;
+    res.json(await probePublicaciones());
   });
 
   r.get("/prefs", (req, res) => res.json(prefsOf(db, req.user.id)));

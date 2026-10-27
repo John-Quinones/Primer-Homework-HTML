@@ -2704,6 +2704,32 @@ async function renderChannels() {
   $$("[data-action=test-email], [data-action=test-whatsapp], [data-action=test-tsa], #channel-test-to").forEach((el) => (el.disabled = !!c.web));
 }
 
+// Automatic consultation (version 2.2.84): Gerencia sets the hours and can run it now.
+async function renderSchedule() {
+  const panel = $("#schedule-panel");
+  panel.hidden = !isGerencia();
+  if (panel.hidden) return;
+  const s = await api("GET", "/monitor/schedule");
+  const f = $("#schedule-form");
+  f.elements.enabled.checked = s.enabled;
+  ["h1", "h2", "h3"].forEach((n, i) => (f.elements[n].value = s.hours[i] || ""));
+  $("#schedule-summary").textContent = s.enabled
+    ? `Cada día a las ${s.hours.join(" y ")} (hora Colombia) se consultan en la Rama Judicial los expedientes con la casilla «Consulta» y se envía el reporte a Gerencia y a cada responsable.${s.publicaciones ? " También se revisa Publicaciones Procesales." : " Publicaciones Procesales: sin configurar en el servidor (PUBLICACIONES_URL)."}`
+    : "La consulta automática está desactivada.";
+  const l = s.last;
+  $("#schedule-last").textContent = s.running ? "Consultando ahora…" : l
+    ? `Última consulta (${l.trigger}): ${l.at} · ${l.cases} expedientes · ${l.newCount} actuaciones nuevas${l.publicaciones.enabled ? ` · ${l.publicaciones.found} en Publicaciones Procesales` : ""}.` : "";
+  $("[data-action=run-now]").disabled = s.running;
+}
+$("#schedule-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    await api("PUT", "/monitor/schedule", { enabled: f.elements.enabled.checked, hours: ["h1", "h2", "h3"].map((n) => f.elements[n].value).filter(Boolean) });
+    toast("Horas guardadas."); renderSchedule().catch(() => {});
+  } catch (err) { toast(err.message, true); }
+});
+
 // Database copies (version 2.42): every 3 days on the server, Gerencia sees and downloads them.
 async function renderBackups() {
   const panel = $("#backups-panel");
@@ -2768,6 +2794,7 @@ async function renderAiUsage() {
 async function renderConfiguracion() {
   renderChannels().catch(() => {});
   renderAiUsage().catch(() => {});
+  renderSchedule().catch(() => {});
   renderBackups().catch(() => {});
   renderGcal().catch(() => {});
   await loadCatalog();
@@ -2928,6 +2955,12 @@ document.addEventListener("click", (e) => {
     "gcal-disconnect": async () => {
       if (!(await confirmAsk("Desconectar Google", "Mony dejará de ver y cambiar los eventos de esta cuenta. Los eventos que ya existen en Google no se tocan."))) return;
       await api("DELETE", `/gcal/accounts/${btn.dataset.id}`); toast("Cuenta desconectada."); renderGcal().catch(() => {});
+    },
+    "run-now": async () => {
+      const r = await api("POST", "/monitor/run-now");
+      toast(r.started ? "Consultando los expedientes; el reporte llega por correo y a la campana al terminar." : "Ya hay una consulta en curso.");
+      renderSchedule().catch(() => {});
+      setTimeout(() => renderSchedule().catch(() => {}), 15000);
     },
     "backup-now": async () => {
       const r = await api("POST", "/admin/backups");

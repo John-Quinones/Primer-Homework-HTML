@@ -420,6 +420,25 @@ CREATE TABLE IF NOT EXISTS payment_reminders (
   sent_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Publicaciones Procesales (version 2.2.84): documents already read and the mentions found per case. Add-only.
+CREATE TABLE IF NOT EXISTS publicaciones_docs (
+  url      TEXT PRIMARY KEY,
+  despacho TEXT NOT NULL DEFAULT '',
+  fecha    TEXT NOT NULL DEFAULT '',
+  title    TEXT NOT NULL DEFAULT '',
+  read_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS publicaciones (
+  id       INTEGER PRIMARY KEY,
+  case_id  INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  url      TEXT NOT NULL,
+  title    TEXT NOT NULL DEFAULT '',
+  fecha    TEXT NOT NULL DEFAULT '',
+  snippet  TEXT NOT NULL DEFAULT '',
+  found_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (case_id, url)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
