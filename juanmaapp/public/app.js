@@ -812,6 +812,32 @@ async function renderClientDetail() {
 }
 
 // ---------- Client screen: data, totals and the client's cases ----------
+// Version 2.2.78 (John): fees are typed by hand, normally on the case; a client with no case gets them on the client. Every payment
+// (abono) shows on the case it belongs to and on the client, with its history. Same data as Pagos (charges and receipts), no new table.
+function feesPanel(c, charges, receipts, cases, pay) {
+  const label = (id) => { const k = cases.find((x) => x.id === id); return k ? [k.type_name, k.radicado ? formatRadicado(k.radicado) : k.title].filter(Boolean).join(" · ") : id ? "Expediente" : ""; };
+  const live = charges.filter((x) => x.state !== "anulado");
+  const billed = live.reduce((a, x) => a + x.amount, 0), balance = live.reduce((a, x) => a + x.balance, 0);
+  const paid = receipts.filter((r) => !r.voided_at).reduce((a, r) => a + r.amount, 0);
+  const chargeOf = (id) => charges.find((x) => x.id === id);
+  return `<section id="sec-pagos" class="panel ficha-wide">
+    <h3 class="panel-title">Honorarios y abonos <span class="count">${charges.length + receipts.length}</span></h3>
+    <div class="ficha-chips"><span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Abonado <strong>${cop(paid)}</strong></span>
+      <span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span></div>
+    ${charges.length ? `<table class="data-table compact"><thead><tr><th>Honorarios / cobro</th><th>Corresponde a</th><th>Vence</th><th class="num">Valor</th><th class="num">Abonado</th><th class="num">Saldo</th><th>Estado</th></tr></thead><tbody>${charges.map((x) => `<tr class="${x.state === "anulado" ? "voided" : ""}">
+      <td>${escapeHtml(x.concept)}${x.plan_label ? `<br><span class="muted">${escapeHtml(x.plan_label)}</span>` : ""}</td><td>${x.case_id ? escapeHtml(label(x.case_id)) : "Directo al cliente"}</td><td>${escapeHtml(x.due_date)}</td>
+      <td class="num">${cop(x.amount)}</td><td class="num">${cop(x.paid || 0)}</td><td class="num">${cop(x.balance)}</td><td><span class="pay-state ${x.state}">${escapeHtml(L.STATE_LABELS[x.state] || x.state)}</span></td></tr>`).join("")}</tbody></table>`
+      : '<p class="empty">Sin honorarios registrados. Use «+ Honorarios» para cargarlos al cliente (o al expediente, desde su ficha).</p>'}
+    <h4>Historial de abonos</h4>
+    ${receipts.length ? `<table class="data-table compact"><thead><tr><th>Recibo</th><th>Fecha</th><th>Corresponde a</th><th>Medio</th><th class="num">Valor</th><th></th></tr></thead><tbody>${receipts.map((r) => `<tr class="${r.voided_at ? "voided" : ""}">
+      <td><strong>${escapeHtml(receiptNo(r.number))}</strong>${r.voided_at ? '<br><span class="muted">anulado</span>' : ""}</td><td>${escapeHtml(r.paid_on)}</td>
+      <td>${escapeHtml(r.case_id ? label(r.case_id) : r.charge_id && chargeOf(r.charge_id) ? chargeOf(r.charge_id).concept : "Cuenta del cliente")}${r.concept ? `<br><span class="muted">${escapeHtml(r.concept)}</span>` : ""}</td>
+      <td>${escapeHtml(r.method)}${r.reference ? `<br><span class="muted">${escapeHtml(r.reference)}</span>` : ""}</td><td class="num">${cop(r.amount)}</td>
+      <td><button class="mini" data-action="receipt-word" data-id="${r.id}">Word</button> <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></td></tr>`).join("")}</tbody></table>`
+      : '<p class="empty">Todavía no hay abonos.</p>'}
+    <div class="toolbar"><button class="mini" data-action="new-charge" data-fees="1" data-client="${c.id}">+ Honorarios</button><button class="mini primary" data-action="new-receipt" data-client="${c.id}">Registrar abono</button></div>
+  </section>`;
+}
 const factRow = (label, v) => (v ? `<div tabindex="0"><dt>${label}</dt><dd>${escapeHtml(v)}</dd></div>` : "");
 async function renderClienteFicha(id) {
   const box = $("#ficha-cliente");
@@ -821,6 +847,10 @@ async function renderClienteFicha(id) {
   state.selectedClientId = c.id;
   if (!state.clients.some((x) => x.id === c.id)) state.clients.push(c);
   const pay = can("payments.manage") ? (await api("GET", "/payments/summary").catch(() => null))?.clients.find((r) => r.client_id === c.id) : null;
+  // Version 2.2.78: the client's fees and every payment toward them (also when the client has no case yet).
+  const [feeCharges, feeReceipts] = can("payments.manage")
+    ? await Promise.all([api("GET", `/payments/charges?clientId=${id}&state=`).catch(() => []), api("GET", `/payments/receipts?clientId=${id}`).catch(() => [])]) : [null, null];
+  if (feeReceipts) payReceiptsCache = feeReceipts;
   const active = cases.filter((k) => k.status === "Activo").length;
   box.innerHTML = `
     <nav class="crumbs"><a href="#clientes">← Clientes</a></nav>
@@ -831,7 +861,7 @@ async function renderClienteFicha(id) {
         ${can("clients.write") ? `<button data-action="edit-client" data-id="${c.id}">Editar cliente</button>` : ""}
         <button data-action="go" data-to="#cliente-${c.id}-expedientes">Ver expedientes</button>
         ${cases.length ? `<button data-action="go" data-to="#cliente-${c.id}-carpetas">Números de carpeta</button>` : ""}
-        ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-receipt" data-client="${c.id}">Registrar pago</button>` : ""}
+        ${can("payments.manage") ? `<button data-action="pay-statement" data-id="${c.id}">Ver pagos (estado de cuenta)</button><button data-action="new-charge" data-fees="1" data-client="${c.id}">+ Honorarios</button><button data-action="new-receipt" data-client="${c.id}">Registrar abono</button>` : ""}
         ${can("cases.write") ? `<button class="primary" data-action="new-case" data-client="${c.id}">+ Nuevo expediente</button>` : ""}
       </div>
     </div>
@@ -855,6 +885,7 @@ async function renderClienteFicha(id) {
           ${factRow("Residencia", residence(c) || "Sin indicar")}${factRow("Afiliado", c.affiliated ? "Sí" : "No")}${factRow("Oficina", c.office_name)}${factRow("Notas", c.notes)}
         </dl>
       </section>
+      ${feeCharges ? feesPanel(c, feeCharges, feeReceipts || [], allCases, pay) : ""}
       ${consents ? consentPanel(c, consents) : ""}
       ${cases.length ? `<section id="sec-carpetas" class="panel ficha-wide">
         <h3 class="panel-title">Números de carpeta <span class="count">${cases.filter((k) => caseFolder(k)).length} de ${cases.length}</span></h3>
@@ -1091,7 +1122,9 @@ async function renderExpedienteFicha(id) {
   ]);
   if (client && !state.clients.some((x) => x.id === client.id)) state.clients.push(client);
   if (!state.cases.some((x) => x.id === k.id)) state.cases.push(k);
-  const caseReceipts = (receipts || []).filter((r) => r.case_id === id);
+  // Version 2.2.78: a payment belongs to the case when it names it or pays one of its fees.
+  const caseChargeIds = new Set((charges || []).map((c) => c.id));
+  const caseReceipts = (receipts || []).filter((r) => r.case_id === id || caseChargeIds.has(r.charge_id));
   payReceiptsCache = caseReceipts;
   const caseSigns = (signs || []).filter((r) => r.case_id === id);
   const fields = (categoryOf(k.category_id)?.fields || []).filter((f) => String(k.field_values?.[f.id] ?? "").trim());
@@ -1164,12 +1197,12 @@ async function renderExpedienteFicha(id) {
           <button class="mini" data-fdoc="${d.id}">Descargar</button></li>`).join("")}</ul>`
         : empty("Genere un documento y use «Guardar en el expediente»."), can("drafts.generate") ? `<button class="mini" data-action="draft-case" data-id="${k.id}">Generar documento</button>` : ""))}
       ${charges ? secId("pagos", panel("Pagos", charges.length + caseReceipts.length, `
-        ${charges.length ? `<table class="data-table compact"><thead><tr><th>Cobro</th><th>Vence</th><th class="num">Valor</th><th class="num">Saldo</th><th>Estado</th></tr></thead><tbody>${charges.map((c) => `<tr class="${c.state === "anulado" ? "voided" : ""}">
+        ${charges.length ? `<table class="data-table compact"><thead><tr><th>Honorarios / cobro</th><th>Vence</th><th class="num">Valor</th><th class="num">Abonado</th><th class="num">Saldo</th><th>Estado</th></tr></thead><tbody>${charges.map((c) => `<tr class="${c.state === "anulado" ? "voided" : ""}">
           <td>${escapeHtml(c.concept)}${c.plan_label ? `<br><span class="muted">${escapeHtml(c.plan_label)}</span>` : ""}</td><td>${escapeHtml(c.due_date)}</td>
-          <td class="num">${cop(c.amount)}</td><td class="num">${cop(c.balance)}</td><td><span class="pay-state ${c.state}">${escapeHtml(L.STATE_LABELS[c.state] || c.state)}</span></td></tr>`).join("")}</tbody></table>` : empty("Sin cobros para este expediente.")}
-        ${caseReceipts.length ? `<h4>Recibos</h4><ul class="ficha-list">${caseReceipts.map((r) => `<li><strong>${escapeHtml(receiptNo(r.number))}</strong> · ${escapeHtml(r.paid_on)} · ${cop(r.amount)}${r.voided_at ? " · anulado" : ""}
+          <td class="num">${cop(c.amount)}</td><td class="num">${cop(c.paid || 0)}</td><td class="num">${cop(c.balance)}</td><td><span class="pay-state ${c.state}">${escapeHtml(L.STATE_LABELS[c.state] || c.state)}</span></td></tr>`).join("")}</tbody></table>` : empty("Sin honorarios registrados para este expediente. Use «+ Honorarios».")}
+        ${caseReceipts.length ? `<h4>Historial de abonos</h4><ul class="ficha-list">${caseReceipts.map((r) => `<li><strong>${escapeHtml(receiptNo(r.number))}</strong> · ${escapeHtml(r.paid_on)} · ${cop(r.amount)} · ${escapeHtml(r.method)}${r.voided_at ? " · anulado" : ""}
           <button class="mini" data-action="receipt-word" data-id="${r.id}">Word</button> <button class="mini" data-action="receipt-pdf" data-id="${r.id}">PDF</button></li>`).join("")}</ul>` : ""}`,
-        `<span class="toolbar"><button class="mini" data-action="new-charge" data-client="${k.client_id}" data-case="${k.id}">+ Cobro</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}" data-case="${k.id}">Registrar pago</button></span>`)) : ""}
+        `<span class="toolbar"><button class="mini" data-action="new-charge" data-fees="1" data-client="${k.client_id}" data-case="${k.id}">+ Honorarios</button><button class="mini primary" data-action="new-receipt" data-client="${k.client_id}" data-case="${k.id}">Registrar abono</button></span>`)) : ""}
       ${signs ? secId("firmas", panel("Firmas electrónicas", caseSigns.length, caseSigns.length ? `<ul class="ficha-list">${caseSigns.map((r) => `<li>
           <span class="badge ${r.status === "completada" ? "ok" : r.status === "enviada" ? "warn" : ""}">${escapeHtml(SIGN_STATUS[r.status][1])}</span> <strong>${escapeHtml(r.title)}</strong>
           <button class="mini" data-action="open-sign" data-id="${r.id}">Ver</button></li>`).join("")}</ul>` : empty("Sin documentos enviados a firma."),
@@ -7375,11 +7408,11 @@ function chargePreview() {
 chargeForm.addEventListener("input", chargePreview);
 chargeForm.elements.client_id.addEventListener("change", () => guarded(() => fillChargeCases()));
 
-async function openChargeDialog(c = null, clientId = null, caseId = null) {
+async function openChargeDialog(c = null, clientId = null, caseId = null, fees = false) {
   const dlg = $("#charge-dialog");
   await fillClientSelect(chargeForm.elements.client_id, c?.client_id ?? clientId ?? $("#pay-client").value);
-  openDialog(dlg, c ? "Editar cobro" : "Nuevo cobro o plan de cuotas", c ? { id: c.id, concept: c.concept, amount: cop(c.amount), due_date: c.due_date, pay_link: c.pay_link, notes: c.notes }
-    : { due_date: localToday(), installments: 1 });
+  openDialog(dlg, c ? "Editar cobro" : fees ? "Registrar honorarios" : "Nuevo cobro o plan de cuotas", c ? { id: c.id, concept: c.concept, amount: cop(c.amount), due_date: c.due_date, pay_link: c.pay_link, notes: c.notes }
+    : { due_date: localToday(), installments: 1, concept: fees ? "Honorarios" : "" });
   chargeForm.elements.client_id.disabled = !!c;
   $("[data-plan]", dlg).hidden = !!c;
   $("[data-amount-label]", dlg).textContent = c ? "Valor *" : "Valor total *";
@@ -7412,7 +7445,9 @@ async function fillReceiptCharges(selected) {
   const cases = await api("GET", `/cases?clientId=${receiptForm.elements.client_id.value}`);
   receiptForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
     `<option value="${k.id}">${escapeHtml(k.type_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
-  const chosen = receiptCharges.find((x) => x.id === Number(selected))?.case_id || receiptCaseWanted || (cases.length === 1 ? cases[0].id : "");
+  // Version 2.2.78: a payment toward a fee charged straight to the client (no case) stays on the client, not on its only case.
+  const picked = receiptCharges.find((x) => x.id === Number(selected));
+  const chosen = picked ? picked.case_id || receiptCaseWanted || "" : receiptCaseWanted || (cases.length === 1 ? cases[0].id : "");
   receiptForm.elements.case_id.value = String(chosen || "");
   receiptForm.elements.charge_id.innerHTML = '<option value="">Abono a cuenta (se aplica a las cuotas más antiguas)</option>' + receiptCharges.map((c) =>
     `<option value="${c.id}">${escapeHtml(c.concept)}${c.plan_label ? " · " + escapeHtml(c.plan_label) : ""} — saldo ${cop(c.balance)} — vence ${c.due_date}</option>`).join("");
@@ -7663,7 +7698,7 @@ async function downloadStatement(clientId) {
 }
 
 const PAY_ACTIONS = {
-  "new-charge": (b) => openChargeDialog(null, Number(b.dataset.client) || null, Number(b.dataset.case) || null),
+  "new-charge": (b) => openChargeDialog(null, Number(b.dataset.client) || null, Number(b.dataset.case) || null, !!b.dataset.fees),
   "new-receipt": (b) => openReceiptDialog(Number(b.dataset.client) || null, Number(b.dataset.charge) || null, Number(b.dataset.case) || null),
   "pay-settings": () => openPaySettings(),
   "edit-charge": async (b) => openChargeDialog(payChargesCache.find((c) => c.id === Number(b.dataset.id))),
