@@ -1458,7 +1458,7 @@ dialog:not([open]) { pointer-events: none; }
 .recent li.linked:focus-visible { box-shadow: 0 0 0 2px var(--accent, #027cc6); }
 .recent li.linked.late:hover, .recent li.linked.late:focus-visible { box-shadow: inset 3px 0 0 var(--error); }
 
-/* Version 2.2.78: grouped case buttons (Editar / Consultar en Rama Judicial / Generar documento) */
+/* Version 2.2.79: grouped case buttons (Editar / Consultar en Rama Judicial / Generar documento) */
 .btn-group { position: relative; }
 .btn-group > summary { list-style: none; cursor: pointer; font-size: .85rem; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-muted); color: var(--text); white-space: nowrap; user-select: none; }
 .btn-group > summary::-webkit-details-marker { display: none; }
