@@ -1457,3 +1457,14 @@ dialog:not([open]) { pointer-events: none; }
 .recent li.linked:hover, .recent li.linked:focus-visible { background: var(--surface-hover, rgba(2, 124, 198, .12)); transform: translateX(2px); outline: none; }
 .recent li.linked:focus-visible { box-shadow: 0 0 0 2px var(--accent, #027cc6); }
 .recent li.linked.late:hover, .recent li.linked.late:focus-visible { box-shadow: inset 3px 0 0 var(--error); }
+
+/* Version 2.2.79: grouped case buttons (Editar / Consultar en Rama Judicial / Generar documento) */
+.btn-group { position: relative; }
+.btn-group > summary { list-style: none; cursor: pointer; font-size: .85rem; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-muted); color: var(--text); white-space: nowrap; user-select: none; }
+.btn-group > summary::-webkit-details-marker { display: none; }
+.btn-group > summary::after { content: " ▾"; }
+.btn-group > summary.primary { background: var(--brand-primary); color: var(--brand-primary-ink); border-color: var(--brand-primary); }
+.btn-group[open] > summary { box-shadow: 0 0 0 2px var(--accent, #027cc6); }
+.btn-group-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+.btn-group-pop button { text-align: left; white-space: nowrap; }
+@media (max-width: 760px) { .btn-group-pop { max-width: calc(100vw - 32px); } .btn-group-pop button { white-space: normal; } }
