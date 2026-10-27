@@ -32,18 +32,54 @@
     b.hidden = !u.unread && !u.calling;
     b.textContent = u.calling ? "📹" : u.unread > 99 ? "99+" : u.unread;
     b.classList.toggle("calling", !!u.calling);
+    const d = $("#chat-dock-badge");
+    d.hidden = b.hidden; d.textContent = b.textContent; d.classList.toggle("calling", !!u.calling);
     document.title = document.title.replace(/^\(\d+\) /, "");
     if (u.unread) document.title = `(${u.unread}) ${document.title}`;
     if (u.unread > S.lastUnread && document.hidden && window.Notification?.permission === "granted") {
       try { new Notification("TEC Jurídicos · Chat", { body: `Tiene ${u.unread} mensaje${u.unread === 1 ? "" : "s"} sin leer.` }); } catch { /* not allowed here */ }
     }
-    if (u.calling && !S.calling && !callState && inChat()) toast("Hay una videollamada en curso: abra el chat para unirse.");
+    if (u.calling && !S.calling && !callState && active()) toast("Hay una videollamada en curso: abra el chat para unirse.");
     if (u.unread !== S.lastUnread || u.calling !== S.calling) refreshBell?.(); // mentions and calls also reach the bell
     S.lastUnread = u.unread;
     S.calling = u.calling;
     S.byConv = u.by_conversation;
   }
   const inChat = () => /^#chat(-\d+)?$/.test(location.hash);
+  // The chat also lives in a window docked at the bottom of every screen (version 2.2.82): same #chat-app, moved there.
+  let dockOpen = false;
+  try { dockOpen = sessionStorage.getItem("jm_chat_dock") === "1"; } catch { /* storage may be blocked */ }
+  const active = () => inChat() || dockOpen;
+  const home = document.createComment("chat-app-home");
+  $("#chat-app").before(home);
+  function syncDock() {
+    const dock = $("#chat-dock");
+    const show = !SERVER_ONLY && !!me && !inChat();
+    dock.hidden = !show;
+    const open = show && dockOpen;
+    $("#chat-dock-body").hidden = !open;
+    dock.classList.toggle("open", open);
+    const app = $("#chat-app");
+    const wantDock = show && dockOpen;
+    if (wantDock && app.parentElement !== $("#chat-dock-body")) { $("#chat-dock-body").append(app); app.classList.add("chat-docked"); dockLoad(); }
+    if (!wantDock && app.parentElement === $("#chat-dock-body")) { home.after(app); app.classList.remove("chat-docked"); }
+    $("#chat-dock-title").textContent = open && S.cur && app.classList.contains("show-main") ? S.cur.title : "Chat";
+  }
+  let dockLoaded = false;
+  async function dockLoad() {
+    if (dockLoaded) return;
+    dockLoaded = true;
+    $("#chat-app").hidden = false;
+    await Promise.all([loadPeople(), loadConvs()]).catch(() => {});
+    if (!S.cur) showEmpty(true);
+  }
+  function setDock(on) {
+    dockOpen = on;
+    try { sessionStorage.setItem("jm_chat_dock", on ? "1" : "0"); } catch { /* ignore */ }
+    if (on) dockLoaded = false;
+    syncDock();
+    if (on) pollBadge();
+  }
   setInterval(() => { if (me) pollBadge(); }, BADGE_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && me) pollBadge(); });
 
@@ -58,6 +94,7 @@
     }
     $("#chat-server").hidden = true;
     $("#chat-app").hidden = false;
+    syncDock();
     if (window.Notification?.permission === "default") Notification.requestPermission().catch(() => {});
     await Promise.all([loadPeople(), loadConvs()]);
     const want = Number(location.hash.match(/^#chat-(\d+)$/)?.[1]) || 0;
@@ -89,7 +126,7 @@
       <small>${c.last_preview ? escapeHtml((c.last_from && c.kind !== "direct" ? c.last_from.split(" ")[0] + ": " : "") + c.last_preview) : "Sin mensajes"}</small></span>
       ${c.unread ? `<b class="nav-badge">${c.unread > 99 ? "99+" : c.unread}</b>` : ""}</button></li>`).join("");
   }
-  const showEmpty = (on) => { $("#chat-empty").hidden = !on; $("#chat-main").hidden = on; $("#chat-app").classList.toggle("show-main", !on); };
+  const showEmpty = (on) => { $("#chat-empty").hidden = !on; $("#chat-main").hidden = on; $("#chat-app").classList.toggle("show-main", !on); if (typeof syncDock === "function") syncDock(); };
 
   function drawHead() {
     const c = S.cur;
@@ -111,7 +148,7 @@
     const c = S.convs.find((x) => x.id === id) || (await loadConvs(), S.convs.find((x) => x.id === id));
     if (!c) { toast("Esa conversación no existe o no es suya.", true); showEmpty(true); return; }
     S.cur = c; S.msgs = []; S.members = []; S.editing = null; S.attach = null; S.link = null; S.focus = focusId;
-    history.replaceState(null, "", `#chat-${id}`);
+    if (inChat()) history.replaceState(null, "", `#chat-${id}`);
     showEmpty(false);
     drawConvs(); drawHead(); drawBanner(); drawChips(); setEditing(null);
     $("#chat-input").value = "";
@@ -155,7 +192,7 @@
   }
 
   async function tick() {
-    if (SERVER_ONLY || !me || !S.cur || !inChat() || document.hidden || S.busy) return;
+    if (SERVER_ONLY || !me || !S.cur || !active() || document.hidden || S.busy) return;
     const last = S.msgs.length ? S.msgs[S.msgs.length - 1].id : 0;
     const q = `after=${last}&since=${encodeURIComponent(S.now || "")}`;
     const r = await api("GET", `/chat/conversations/${S.cur.id}/messages?${q}`).catch(() => null);
@@ -169,7 +206,7 @@
     if (S.cur.call?.id !== r.call?.id || (r.call?.participants.length || 0) !== (S.cur.call?.participants.length || 0)) { S.cur.call = r.call; drawBanner(); }
   }
   setInterval(() => tick(), POLL_MS);
-  setInterval(() => { if (me && inChat() && !document.hidden) { loadPeople().catch(() => {}); loadConvs().catch(() => {}); } }, LIST_MS);
+  setInterval(() => { if (me && active() && !document.hidden) { loadPeople().catch(() => {}); loadConvs().catch(() => {}); } }, LIST_MS);
 
   async function send(e) {
     e.preventDefault();
@@ -503,7 +540,7 @@
       if (!(await ask({ title: "¿Salir del grupo?", message: `Dejará de ver «${S.cur.title}». Los mensajes quedan para los demás.`, okLabel: "Salir", danger: true }))) return;
       await api("POST", `/chat/conversations/${S.cur.id}/leave`);
       $("#chat-members-dialog").close();
-      S.cur = null; showEmpty(true); history.replaceState(null, "", "#chat"); await loadConvs();
+      S.cur = null; showEmpty(true); if (inChat()) history.replaceState(null, "", "#chat"); await loadConvs();
     }));
     $("#chat-to-list").addEventListener("click", () => { $("#chat-app").classList.remove("show-main"); });
     $("#chat-call").addEventListener("click", () => guarded(startCall));
@@ -513,7 +550,7 @@
     $("#call-cam").addEventListener("click", () => { const t = callState?.stream.getVideoTracks()[0]; if (t) { t.enabled = !t.enabled; drawMedia(); } });
     $("#call-screen").addEventListener("click", () => guarded(toggleScreen));
     $("#chat-call-dialog").addEventListener("cancel", (e) => e.preventDefault()); // Esc does not hang up
-    $("#view-chat").addEventListener("click", (e) => {
+    $("#chat-app").addEventListener("click", (e) => {
       const conv = e.target.closest("[data-conv]"), person = e.target.closest("[data-person]"), go = e.target.closest("[data-go]");
       if (conv) { guarded(() => openConv(Number(conv.dataset.conv), Number(conv.dataset.focus) || 0)); if (conv.dataset.focus) { $("#chat-search").value = ""; search(); } return; }
       if (person) return guarded(() => openPerson(Number(person.dataset.person)));
@@ -535,6 +572,11 @@
         drawLog(false);
       });
     });
+    $("#chat-dock-bar").addEventListener("click", () => setDock(!dockOpen));
+    $("#chat-dock-min").addEventListener("click", () => setDock(false));
+    $("#chat-dock-full").addEventListener("click", () => { const id = S.cur?.id; setDock(false); location.hash = id ? `#chat-${id}` : "#chat"; });
+    window.addEventListener("hashchange", syncDock);
+    setInterval(syncDock, 1000); // sign-in and sign-out change `me`
     // Sign-in done: start counting unread messages right away.
     const wait = setInterval(() => { if (me) { clearInterval(wait); pollBadge(); } }, 800);
   }

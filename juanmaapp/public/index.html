@@ -1207,6 +1207,15 @@
   </dialog>
 
   <!-- Cámara para la foto del cliente (versión 2.22) -->
+  <!-- Chat acoplado abajo (versión 2.2.82): el mismo chat, en una ventana que se despliega sobre cualquier pantalla -->
+  <div id="chat-dock" class="chat-dock" hidden>
+    <div id="chat-dock-body" class="chat-dock-body" hidden>
+      <div class="chat-dock-head"><strong id="chat-dock-title">Chat</strong>
+        <span><button type="button" class="mini" id="chat-dock-full" title="Abrir el chat en pantalla completa">⤢ Ampliar</button>
+        <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button></span></div>
+    </div>
+    <button type="button" class="chat-dock-bar" id="chat-dock-bar" aria-expanded="false" title="Abrir o plegar el chat">💬 <span>Chat</span> <b id="chat-dock-badge" class="nav-badge" hidden></b></button>
+  </div>
   <!-- Chat (versión 2.2.82): nuevo chat o grupo, enlazar cliente/expediente, videollamada -->
   <dialog id="chat-new-dialog">
     <form method="dialog" id="chat-new-form">

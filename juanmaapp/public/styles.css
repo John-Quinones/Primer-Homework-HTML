@@ -1568,3 +1568,30 @@ dialog.chat-call[open] { display: flex; }
   .call-grid[data-n="2"], .call-grid[data-n="3"], .call-grid[data-n="4"], .call-grid[data-n="5"], .call-grid[data-n="6"] { grid-template-columns: 1fr 1fr; }
   dialog.chat-call { width: 100vw; height: 100dvh; border-radius: 0; }
 }
+
+/* Chat docked at the bottom of every screen (version 2.2.82) */
+.chat-dock { position: fixed; right: 130px; bottom: 0; z-index: 30; width: min(380px, calc(100vw - 150px)); display: flex; flex-direction: column; }
+.chat-dock[hidden] { display: none; }
+.chat-dock-bar { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 12px 12px 0 0; border: 1px solid var(--border); border-bottom: 0; background: var(--surface); color: var(--text); font-weight: 600; cursor: pointer; box-shadow: 0 -4px 18px rgba(0, 0, 0, .25); }
+.chat-dock-bar:hover { background: var(--surface-muted); }
+.chat-dock-body { height: min(520px, calc(100vh - 140px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .35); overflow: hidden; margin-bottom: -1px; }
+.chat-dock-body[hidden] { display: none; }
+.chat-dock-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.chat-dock-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-app.chat-docked { display: flex; flex: 1; min-height: 0; height: auto; gap: 0; }
+.chat-app.chat-docked > * { border: 0; border-radius: 0; flex: 1; min-width: 0; }
+.chat-app.chat-docked .chat-main, .chat-app.chat-docked .chat-empty { display: none; }
+.chat-app.chat-docked.show-main .chat-side { display: none; }
+.chat-app.chat-docked.show-main .chat-main { display: flex; }
+.chat-app.chat-docked .chat-list-btn { display: inline-flex; }
+.chat-app.chat-docked .chat-head { padding: 6px 8px; }
+.chat-app.chat-docked .chat-head-b .mini { padding: 4px 8px; }
+.chat-app.chat-docked .chat-log { padding: 10px; }
+.chat-app.chat-docked .chat-form { padding: 8px; }
+.chat-app.chat-docked .chat-msg { max-width: 94%; }
+@media (max-width: 760px) {
+  .chat-dock { left: 8px; right: 90px; width: auto; bottom: 62px; }
+  .chat-dock-body { height: min(470px, calc(100vh - 220px)); }
+}
+.chat-app.chat-docked .chat-head-t { display: none; }
+.chat-app.chat-docked .chat-head { justify-content: space-between; }
