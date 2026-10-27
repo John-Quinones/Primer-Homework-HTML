@@ -111,6 +111,11 @@ $$("[data-folder-order]").forEach((sel) => {
     if (sel.id === "client-order") renderClientList(); else renderCaseRows();
   });
 });
+/** Version 2.2.78: several related buttons behind one (a <details> menu); empty when no item is allowed. Only layout. */
+const btnGroup = (label, items, cls = "") => {
+  const list = items.filter(Boolean);
+  return list.length ? `<details class="btn-group"><summary class="${cls}">${label}</summary><div class="btn-group-pop">${list.join("")}</div></details>` : "";
+};
 /** «Asignar carpeta» / «Editar carpeta» (version 2.18), for whoever can edit cases. */
 const folderButton = (k, cls = "mini") => can("cases.write")
   ? `<button type="button" class="${cls}" data-action="edit-folder" data-id="${k.id}" data-folder="${escapeHtml(caseFolder(k))}">${caseFolder(k) ? "Editar carpeta" : "Asignar carpeta"}</button>` : "";
@@ -1111,14 +1116,10 @@ async function renderExpedienteFicha(id) {
       <div><h2>${escapeHtml(k.type_name)}</h2>
         <p class="ficha-sub">${caseFolder(k) ? `<span class="folder-tag">Carpeta ${escapeHtml(caseFolder(k))}</span> ` : ""}<span class="pill">${escapeHtml(k.category_name)}</span> <span class="status-tag">${escapeHtml(k.status)}</span>${k.title ? ` · ${escapeHtml(k.title)}` : ""}</p></div>
       <div class="toolbar">
-        ${can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar</button>` : ""}
+        ${btnGroup("Editar", [can("cases.write") ? `<button data-action="edit-case" data-id="${k.id}">Editar expediente</button>` : "", folderButton(k, ""), radicadoButton(k, "")])}
         ${can("cases.delete") ? `<button class="danger" data-action="delete-case" data-id="${k.id}">Eliminar</button>` : ""}
-        ${folderButton(k, "")}
-        ${radicadoButton(k, "")}
-        <button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>
-        <button data-action="go-sec" data-sec="portales">Portales de consulta</button>
-        ${can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""}
-        ${can("drafts.generate") ? `<button class="primary" data-action="draft-case" data-id="${k.id}">Generar documento</button><button data-action="memorial-case" data-id="${k.id}">Memorial</button>` : ""}
+        ${btnGroup("⚖ Consultar en Rama Judicial", [`<button data-action="rama-case" data-id="${k.id}" title="Consulta este proceso en la Rama Judicial (Consulta Nacional Unificada) con el radicado del expediente">⚖ Consultar en Rama Judicial</button>`, `<button data-action="go-sec" data-sec="portales">Portales de consulta</button>`, can("processes.consult") ? `<button data-action="consult-case" data-id="${k.id}" title="Consulta el proceso en todas las plataformas de una vez y trae las actuaciones nuevas">↻ Consultar en todas las plataformas</button>` : ""])}
+        ${btnGroup("Generar documento", [can("drafts.generate") ? `<button data-action="draft-case" data-id="${k.id}">Generar documento</button>` : "", can("drafts.generate") ? `<button data-action="memorial-case" data-id="${k.id}">Memorial</button>` : ""], "primary")}
       </div>
     </div>
     <nav class="sec-nav" aria-label="Secciones del expediente"><span class="muted">Ver:</span>
@@ -2875,6 +2876,7 @@ document.addEventListener("submit", (e) => {
 
 // ---------- Global button actions ----------
 document.addEventListener("click", (e) => {
+  $$("details.btn-group[open]").forEach((d) => { if (!d.contains(e.target) || e.target.closest("[data-action]")) d.open = false; });
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   const id = Number(btn.dataset.id);
