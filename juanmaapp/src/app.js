@@ -19,6 +19,7 @@ import { monitorRouter } from "./monitor-routes.js";
 import { templatesRouter } from "./templates.js";
 import { contractObjectsRouter } from "./contract-objects-routes.js";
 import { memorialCategoriesRouter } from "./memorial-categories-routes.js";
+import { partyCategoriesRouter, refreshPartyCategories } from "./party-categories-routes.js";
 import { docNumbersRouter } from "./doc-numbers-routes.js";
 import { esignRouter, esignPublicRouter, verifyRouter } from "./esign.js";
 import { mailRouter, mailPublicRouter } from "./mailtrace.js";
@@ -141,6 +142,8 @@ export function createApp(db) {
   app.use("/api/chat", chatRouter(db)); // version 2.2.82: chat and video calls between users
   app.use("/api/monitor", requirePerm("processes.consult"), monitorRouter(db));
   app.use("/api/templates", requirePerm("drafts.generate"), templatesRouter(db));
+  refreshPartyCategories(db);
+  app.use("/api/party-categories", partyCategoriesRouter(db)); // version 2.2.87: Gerencia manages, everyone who opens a case reads
   app.use("/api/memorial-categories", requirePerm("drafts.generate"), memorialCategoriesRouter(db)); // version 2.2.65: Gerencia manages, everyone who drafts reads
   app.use("/api/contract-objects", requirePerm("drafts.generate"), contractObjectsRouter(db)); // version 2.2.46: Gerencia manages, everyone who drafts reads
   app.use("/api/doc-numbers", requirePerm("drafts.generate"), docNumbersRouter(db)); // version 2.2.58: numbering of generated contracts and powers

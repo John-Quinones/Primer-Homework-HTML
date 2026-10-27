@@ -66,7 +66,12 @@ if (WEB) {
 // ---------- Shared state ----------
 const state = { catalog: [], clients: [], cases: [], selectedClientId: null };
 
-async function loadCatalog() { state.catalog = await api("GET", "/catalog"); }
+async function loadCatalog() { state.catalog = await api("GET", "/catalog"); await loadPartyCats(); }
+// Version 2.2.87: party categories (roles and conditions of «Partes del proceso»); registered in case-meta so sides and column titles follow them.
+async function loadPartyCats() {
+  state.pcats = await api("GET", "/party-categories?all=1").catch(() => state.pcats || []);
+  CMETA.setPartyCategories(state.pcats);
+}
 let clientsSeq = 0; // 2.2.40: a slow answer to an older search must not overwrite the newer one
 async function loadClients(q = "", by = $("#client-search-by")?.value || "") {
   const mine = ++clientsSeq;
@@ -220,6 +225,7 @@ function applyPermissions() {
   $("#dtab-objetos").hidden = !isGerencia(); // version 2.2.46: contract objects are Gerencia's
   $("#dtab-poderes").hidden = !isGerencia(); // version 2.2.47: so are the power classes
   $("#dtab-memcats").hidden = !isGerencia(); // version 2.2.65: and the memorial categories
+  $("#dtab-pcats").hidden = !isGerencia(); // version 2.2.87: and the party categories
   $("#tpl-drop").hidden = !can("templates.manage");
   $$('[data-tpl-out="sign"], [data-out="sign"]').forEach((b) => (b.hidden = !can("esign.use")));
   $$('[data-tpl-out="mail"]').forEach((b) => (b.hidden = !can("mail.send")));
@@ -1102,7 +1108,7 @@ function caseActionBar(k) {
 }
 /** Parties by side, our clients marked (main client included). */
 function partiesView(k) {
-  const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "");
+  const labels = CMETA.sideLabels(k.category_name || "", k.type_name || "", k.client_role || "");
   const mainSide = CMETA.sideOfRole(k.client_role);
   const list = [...(mainSide ? [{ side: mainSide, role: k.client_role, name: k.client_name, ours: true, client_id: k.client_id, main: true }] : []), ...(k.parties || [])];
   if (!list.length) return "";
@@ -2300,44 +2306,37 @@ function fillTypeSelect(catId, selectedTypeId) {
   fillRoleSelect();
 }
 
-// Procedural role options follow the process: Demandante/Demandado, Ejecutante/Ejecutado, penal roles…
-// The process's own roles come first, grouped by side; every other role stays available under «Otros roles».
+// Version 2.2.87: the roles are the active categories Gerencia keeps (Demandante, Ejecutante, Peticionario, Accionante…), by side.
+// A role already stored on a case stays selectable even if it was deactivated.
 function roleOptions(selected, blank) {
-  const cat = categoryOf(caseForm.elements.category_id.value);
-  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-  const r = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "");
-  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
+  const g = CMETA.roleGroups();
   const opt = (x) => `<option${x === selected ? " selected" : ""}>${escapeHtml(x)}</option>`;
   const group = (label, list) => list.length ? `<optgroup label="${escapeHtml(label)}">${list.map(opt).join("")}</optgroup>` : "";
-  const known = [...r.activa, ...r.pasiva, ...r.others];
-  return `<option value="">${escapeHtml(blank)}</option>` + group(labels.activa, r.activa) + group(labels.pasiva, r.pasiva) +
-    group("Otros roles", r.others) + (selected && !known.includes(selected) ? opt(selected) : "");
+  return `<option value="">${escapeHtml(blank)}</option>` + group("Parte activa (demanda o pide)", g.activa) + group("Parte pasiva (contraparte)", g.pasiva) +
+    (selected && ![...g.activa, ...g.pasiva].includes(selected) ? opt(selected) : "");
 }
 function fillRoleSelect(selected = caseForm.elements.client_role.value) {
-  caseForm.elements.client_role.innerHTML = roleOptions(selected || "", "— Elija: demandante, demandado… —");
+  caseForm.elements.client_role.innerHTML = roleOptions(selected || "", "— Elija la categoría del cliente —");
   caseForm.elements.client_role.value = selected || "";
-  renderRoleChips();
+  renderCondTags();
 }
-// Version 2.61: the user marks the side of the process where our client is (Demandantes / Demandados…);
-// the hidden select keeps the stored role (the side's first role, or the one already chosen for that side).
-function renderRoleChips() {
-  const sel = caseForm.elements.client_role, box = $("#role-chips");
-  const cat = categoryOf(caseForm.elements.category_id.value);
-  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
-  const mine = CMETA.sideOfRole(sel.value);
-  box.innerHTML = ["activa", "pasiva"].map((side) => `<label class="inline toggle"><input type="checkbox" data-side-pick="${side}" ${mine === side ? "checked" : ""} /> ${escapeHtml(labels[side])}</label>`).join("");
+// Conditions of the client (Cliente afiliado, Curador ad-litem): tags with ✕ and a selector to add more. They are kept in the hidden
+// checkboxes `affiliated` / `ad_litem`, so the case is stored exactly as before.
+function renderCondTags() {
+  const box = $("#cond-tags");
+  const conds = (state.pcats || []).filter((x) => x.kind === "condicion");
+  const on = conds.filter((x) => caseForm.elements[x.flag]?.checked), off = conds.filter((x) => x.is_active && !caseForm.elements[x.flag]?.checked);
+  box.innerHTML = on.map((x) => `<span class="follow ok">${escapeHtml(x.title)} <button type="button" class="mini" data-cond-del="${x.flag}" aria-label="Quitar ${escapeHtml(x.title)}">✕</button></span>`).join("")
+    + (off.length ? `<select data-cond-add aria-label="Agregar condición"><option value="">+ Agregar condición…</option>${off.map((x) => `<option value="${x.flag}">${escapeHtml(x.title)}</option>`).join("")}</select>` : "")
+    + (!on.length && !off.length ? '<span class="muted">Sin condiciones</span>' : "");
 }
-$("#role-chips").addEventListener("change", (e) => {
-  const side = e.target.dataset.sidePick;
-  if (!side) return;
-  const sel = caseForm.elements.client_role;
-  const cat = categoryOf(caseForm.elements.category_id.value);
-  const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-  const first = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
-  if (e.target.checked && first && ![...sel.options].some((o) => o.value === first)) sel.add(new Option(first, first));
-  sel.value = e.target.checked ? first : "";
-  sel.dispatchEvent(new Event("change", { bubbles: true }));
+$("#cond-tags").addEventListener("click", (e) => {
+  const del = e.target.closest("[data-cond-del]");
+  if (del) { caseForm.elements[del.dataset.condDel].checked = false; renderCondTags(); }
+});
+$("#cond-tags").addEventListener("change", (e) => {
+  const add = e.target.closest("[data-cond-add]");
+  if (add?.value) { caseForm.elements[add.value].checked = true; renderCondTags(); }
 });
 const partyLine = (k) => [k.client_role, k.affiliated ? "Afiliado" : "", k.ad_litem ? "Curador ad-litem" : ""].filter(Boolean).join(" · ");
 
@@ -2553,7 +2552,7 @@ const partyBox = $(".parties-box", caseForm);
 function renderParties() {
   const cat = categoryOf(caseForm.elements.category_id.value);
   const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "");
+  const labels = CMETA.sideLabels(cat?.name || "", type?.path || type?.name || "", caseForm.elements.client_role.value);
   const main = state.clients.find((c) => c.id === Number(caseForm.elements.client_id.value));
   const mainRole = caseForm.elements.client_role.value;
   const mainSide = CMETA.sideOfRole(mainRole);
@@ -2579,7 +2578,7 @@ partyBox.addEventListener("click", (e) => {
     // A new party starts with the first role of its column (Demandante, Demandado, Denunciado…).
     const side = add.dataset.addParty, cat = categoryOf(caseForm.elements.category_id.value);
     const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-    const role = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
+    const role = CMETA.defaultRole(side, cat?.name || "", type?.path || type?.name || "", caseForm.elements.client_role.value);
     partyRows.push({ side, role, name: "", id_number: "", ours: false, client_id: null }); renderParties(); $$(`[data-side="${add.dataset.addParty}"] .party-row:last-child input`, partyBox)[0]?.focus(); }
   const del = e.target.closest("[data-del-party]");
   if (del) { partyRows.splice(Number(del.dataset.delParty), 1); renderParties(); }
@@ -2619,7 +2618,8 @@ partyBox.addEventListener("click", (e) => {
   if (!c) return;
   const side = b.dataset.pickSide, cat = categoryOf(caseForm.elements.category_id.value);
   const type = cat?.types.find((t) => t.id === Number(caseForm.elements.process_type_id.value));
-  const role = CMETA.sideRoles(cat?.name || "", type?.path || type?.name || "")[side][0] || "";
+  const catName = cat?.name || "", typeName = type?.path || type?.name || "";
+  const role = CMETA.defaultRole(side, catName, typeName, c.id === Number(caseForm.elements.client_id.value) ? "" : caseForm.elements.client_role.value);
   if (c.id === Number(caseForm.elements.client_id.value)) {
     // The case's own client goes to this side as «Nuestro cliente» (same as ticking the side above).
     const sel = caseForm.elements.client_role;
@@ -2638,7 +2638,7 @@ partyBox.addEventListener("click", (e) => {
   renderParties();
   toast(`${c.full_name} agregado. Desmarque «Nuestro cliente» si es la contraparte.`);
 });
-for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => { renderParties(); renderRoleChips(); });
+for (const n of ["client_role", "process_type_id", "category_id", "client_id"]) caseForm.elements[n].addEventListener("change", () => { renderParties(); });
 
 async function openCaseDialog(k = null, clientId = null) {
   await Promise.all([loadCatalog(), loadClients()]);
@@ -3236,6 +3236,22 @@ document.addEventListener("click", (e) => {
       location.hash === "#borradores" ? renderBorradores() : (location.hash = "#borradores");
     },
     "slink-case": () => openSlink(id),
+    "new-pcat": () => openPcatDialog(null),
+    "edit-pcat": async () => openPcatDialog((await api("GET", "/party-categories?all=1")).find((o) => o.id === id)),
+    "toggle-pcat": async () => {
+      const o = (await api("GET", "/party-categories?all=1")).find((x) => x.id === id);
+      await api("PUT", `/party-categories/${id}`, { is_active: !o.is_active });
+      toast(o.is_active ? "Desactivada: ya no se ofrece en el expediente." : "Activada: ya se ofrece en el expediente.");
+      await renderPcatAdmin();
+    },
+    "up-pcat": () => pcatMove(id, -1),
+    "down-pcat": () => pcatMove(id, 1),
+    "delete-pcat": async () => {
+      if (!(await confirmAsk("Eliminar categoría de partes", "Si ya está en expedientes solo se desactiva (los expedientes conservan su marca); si no se usa, se elimina.", "Eliminar"))) return;
+      const r = await api("DELETE", `/party-categories/${id}`);
+      toast(r.deactivated ? "Está en uso: quedó desactivada." : "Categoría eliminada.");
+      await renderPcatAdmin();
+    },
     "new-mcat": () => openMcatDialog(null),
     "edit-mcat": async () => openMcatDialog((await api("GET", "/memorial-categories?all=1")).find((o) => o.id === id)),
     "toggle-mcat": async () => {
@@ -5077,6 +5093,7 @@ $("#doc-tabs").addEventListener("click", (e) => {
   if (b.dataset.dtab === "nomos") guarded(renderNomos);
   if (b.dataset.dtab === "guiado" || b.dataset.dtab === "memoriales") guarded(renderWizard);
   if (b.dataset.dtab === "memcats") guarded(renderMcatAdmin);
+  if (b.dataset.dtab === "pcats") guarded(renderPcatAdmin);
   if (b.dataset.dtab === "objetos") guarded(() => renderPickAdmin("contrato"));
   if (b.dataset.dtab === "poderes") guarded(() => renderPickAdmin("poder"));
 });
@@ -5774,6 +5791,52 @@ for (const kind of Object.keys(PICK)) {
     await renderPickAdmin(kind);
   });
 }
+// ----- Version 2.2.87: party categories (Gerencia) -----
+async function renderPcatAdmin() {
+  await loadPartyCats().catch(() => {});
+  const list = state.pcats;
+  const nameOf = (id) => list.find((x) => x.id === id)?.title;
+  $("#pcat-list").innerHTML = list.map((o, i) => `<article class="panel cobj-item ${o.is_active ? "" : "off"}">
+    <div class="cobj-head"><strong>${escapeHtml(o.title)}</strong> <span class="muted">(plural: ${escapeHtml(o.plural || o.title + "s")})</span>
+      <span class="badge ${o.is_active ? "ok" : "warn"}">${o.is_active ? "Activa" : "Desactivada"}</span>
+      <span class="muted">· ${o.kind === "condicion" ? "Condición del cliente" : o.side === "activa" ? "Parte activa" : "Parte pasiva"}${o.pair_id ? ` · pareja: ${escapeHtml(nameOf(o.pair_id) || "")}` : ""} · en ${o.uses} expediente(s)</span></div>
+    <div class="toolbar">
+      <button type="button" class="mini" data-action="up-pcat" data-id="${o.id}" ${i ? "" : "disabled"} aria-label="Subir">↑ Subir</button>
+      <button type="button" class="mini" data-action="down-pcat" data-id="${o.id}" ${i < list.length - 1 ? "" : "disabled"} aria-label="Bajar">↓ Bajar</button>
+      <button type="button" class="mini" data-action="edit-pcat" data-id="${o.id}">Editar</button>
+      <button type="button" class="mini" data-action="toggle-pcat" data-id="${o.id}">${o.is_active ? "Desactivar" : "Activar"}</button>
+      ${o.kind === "condicion" ? "" : `<button type="button" class="mini danger" data-action="delete-pcat" data-id="${o.id}">Eliminar</button>`}
+    </div></article>`).join("");
+  return list;
+}
+function openPcatDialog(o = null) {
+  const dlg = $("#pcat-dialog"), form = dlg.querySelector("form");
+  const roles = state.pcats.filter((x) => x.kind !== "condicion" && (!o || x.id !== o.id));
+  form.elements.pair_id.innerHTML = '<option value="">— Sin pareja —</option>' + roles.map((x) => `<option value="${x.id}">${escapeHtml(x.title)} (${x.side === "activa" ? "activa" : "pasiva"})</option>`).join("");
+  openDialog(dlg, o ? "Editar categoría de partes" : "Nueva categoría de partes", o ? { id: o.id, title: o.title, plural: o.plural || "", side: o.side || "activa", pair_id: o.pair_id || "" } : { side: "activa" });
+  form.elements.is_active.checked = o ? !!o.is_active : true;
+  const cond = o?.kind === "condicion", locked = !!o && !cond && o.uses > 0;
+  for (const el of dlg.querySelectorAll("[data-pcat-rolefields]")) el.hidden = cond;
+  form.elements.title.readOnly = locked; form.elements.side.disabled = locked;
+  dlg.querySelector("[data-pcat-note]").textContent = locked ? `Está en ${o.uses} expediente(s): su nombre y su parte no se pueden cambiar; puede cambiar el plural, la pareja o desactivarla.` : "";
+}
+wireDialog($("#pcat-dialog"), async (form) => {
+  const { id, ...d } = formData(form);
+  d.is_active = form.elements.is_active.checked;
+  d.side = form.elements.side.value;
+  d.pair_id = Number(d.pair_id) || null;
+  if (id) await api("PUT", `/party-categories/${id}`, d); else await api("POST", "/party-categories", d);
+  toast(`Categoría ${id ? "actualizada" : "creada"}.`);
+  await renderPcatAdmin();
+});
+const pcatMove = async (id, delta) => {
+  const ids = (await renderPcatAdmin()).map((o) => o.id);
+  const at = ids.indexOf(id), to = at + delta;
+  if (at < 0 || to < 0 || to >= ids.length) return;
+  [ids[at], ids[to]] = [ids[to], ids[at]];
+  await api("PUT", "/party-categories/order", { ids });
+  await renderPcatAdmin();
+};
 // ----- Version 2.2.65: categories of «Memoriales» (Gerencia) -----
 async function renderMcatAdmin() {
   const list = await api("GET", "/memorial-categories?all=1");

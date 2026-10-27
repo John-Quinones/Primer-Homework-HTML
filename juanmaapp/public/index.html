@@ -471,6 +471,7 @@
           <button role="tab" data-dtab="objetos" id="dtab-objetos" hidden title="Solo Gerencia">Categorías Contratos</button>
           <button role="tab" data-dtab="poderes" id="dtab-poderes" hidden title="Solo Gerencia">Categorías Poder</button>
           <button role="tab" data-dtab="memcats" id="dtab-memcats" hidden title="Solo Gerencia">Categoría Memoriales</button>
+          <button role="tab" data-dtab="pcats" id="dtab-pcats" hidden title="Solo Gerencia">Categorías de partes</button>
         </div>
 
         <div data-dpanel="objetos" hidden>
@@ -492,6 +493,17 @@
             </div>
             <p class="hint">Cada clase es el texto de facultades de un tipo de poder (por ejemplo «Poder para proceso ejecutivo», «laboral», «de familia» o «trámite administrativo»). Al hacer un poder, el usuario marca una o varias casillas y el texto de cada una se imprime donde el Word tiene el marcador <code>{{CLASES_DE_PODER}}</code> (también sirve <code>{{FACULTADES_ESPECIFICAS}}</code>). Si marca varias, salen como A), B), C… en el orden de esta lista. En el texto puede usar datos como <code>{{cliente.nombre}}</code>. Una clase que ya se usó en algún poder no se borra: se desactiva y deja de aparecer en la lista de casillas.</p>
             <div id="pcls-list"></div>
+          </section>
+        </div>
+
+        <div data-dpanel="pcats" hidden>
+          <section class="panel">
+            <div class="toolbar">
+              <h3>Categorías de partes · «Partes del proceso» del expediente</h3>
+              <button type="button" class="primary" data-action="new-pcat">+ Nueva categoría</button>
+            </div>
+            <p class="hint">Son las categorías que se eligen en el expediente para nuestro cliente y para cada parte (Demandante, Ejecutante, Peticionario, Accionante, Denunciante…). Cada una dice si es de la parte <strong>activa</strong> (la que demanda o pide) o <strong>pasiva</strong>, cómo se llama en plural y cuál es su <strong>pareja</strong> del otro lado: al elegirla, los títulos de las dos columnas cambian (Ejecutante → «Ejecutantes» y «Ejecutados»). Una categoría que ya está en expedientes no cambia de nombre ni de parte, y no se borra: se desactiva.</p>
+            <div id="pcat-list"></div>
           </section>
         </div>
 
@@ -1348,13 +1360,14 @@
         </label>
       </div>
       <fieldset class="parties-box"><legend>Partes del proceso</legend>
-        <p class="muted-line">Marque en qué parte del proceso está nuestro cliente: <strong data-main-name></strong></p>
-        <select name="client_role" hidden></select>
-        <div id="role-chips" class="role-chips" role="group" aria-label="Parte del proceso en la que está nuestro cliente"></div>
-        <div class="role-chips" role="group" aria-label="Condición del cliente en el proceso">
-          <label class="inline toggle"><input type="checkbox" name="affiliated" /> Cliente afiliado</label>
-          <label class="inline toggle"><input type="checkbox" name="ad_litem" /> Actuamos como curadores ad-litem</label>
+        <p class="muted-line">Elija la categoría de nuestro cliente en el proceso: <strong data-main-name></strong></p>
+        <div class="grid2">
+          <label>Nuestro cliente actúa como <select name="client_role" id="case-client-role"></select></label>
+          <div class="cond-box"><span class="muted-line">Condición del cliente</span>
+            <div id="cond-tags" class="role-chips" role="group" aria-label="Condición del cliente en el proceso"></div></div>
         </div>
+        <input type="checkbox" name="affiliated" hidden tabindex="-1" aria-hidden="true" />
+        <input type="checkbox" name="ad_litem" hidden tabindex="-1" aria-hidden="true" />
         <p class="hint">Agregue a todos los que actúan en cada lado (pueden ser varios), elija el <strong>rol</strong> de cada uno (demandante, demandado, denunciante, denunciado…) y marque <strong>«Nuestro cliente»</strong> en quienes representa la firma. Si ya están registrados como clientes (mismo número de documento), el expediente también aparece en su ficha.</p>
         <div class="parties-grid">
           <div class="party-side" data-side="activa"><h4 data-side-title></h4><ul class="party-rows"></ul><button type="button" class="mini" data-add-party="activa">+ Agregar a mano</button>
@@ -1682,6 +1695,27 @@
         <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activo (aparece como casilla al hacer el contrato)</label>
       </div>
       <p class="hint">Texto simple: una línea en blanco separa párrafos. La letra, el tamaño y el formato los pone el Word de la plantilla.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Categoría de partes -->
+  <dialog id="pcat-dialog" class="wide-dialog">
+    <form method="dialog" data-form="pcat">
+      <h3 data-title>Nueva categoría de partes</h3>
+      <input type="hidden" name="id" />
+      <div class="grid2">
+        <label>Nombre (singular) * <input name="title" required maxlength="60" placeholder="Ej. Ejecutante" /></label>
+        <label>Plural (título de la columna) <input name="plural" maxlength="60" placeholder="Ej. Ejecutantes" /></label>
+        <label data-pcat-rolefields>Parte * <select name="side"><option value="activa">Activa (demanda o pide)</option><option value="pasiva">Pasiva (contraparte)</option></select></label>
+        <label data-pcat-rolefields>Pareja del otro lado <select name="pair_id"></select></label>
+        <label class="inline span2"><input type="checkbox" name="is_active" checked /> Activa (aparece en el expediente)</label>
+      </div>
+      <p class="hint" data-pcat-note></p>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
