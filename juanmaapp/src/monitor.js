@@ -14,7 +14,7 @@ import { checkPublicaciones } from "./publicaciones.js";
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
 
 // ---------- Schedule (Gerencia) ----------
-// Version 2.2.84: Gerencia chooses the hours of the automatic consultation (default 7:00 and 16:00).
+// Version 2.2.83: Gerencia chooses the hours of the automatic consultation (default 7:00 and 16:00).
 export const DEFAULT_SCHEDULE = { enabled: true, hours: ["07:00", "16:00"] };
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 export function getSchedule(db) {

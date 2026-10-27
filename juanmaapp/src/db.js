@@ -136,6 +136,77 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, read_at);
 
+-- Chat between the firm's users (version 2.2.82). Only additive tables: nothing existing is touched.
+-- Messages are never deleted: an author's «eliminar» only retracts (retracted_at), and every edit keeps the earlier text in history.
+CREATE TABLE IF NOT EXISTS chat_conversations (
+  id          INTEGER PRIMARY KEY,
+  kind        TEXT NOT NULL CHECK (kind IN ('general','direct','group')),
+  name        TEXT NOT NULL DEFAULT '',
+  direct_key  TEXT UNIQUE,                 -- "lowId:highId" for a 1-to-1 conversation
+  created_by  INTEGER REFERENCES users(id),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS chat_members (
+  conv_id       INTEGER NOT NULL REFERENCES chat_conversations(id),
+  user_id       INTEGER NOT NULL REFERENCES users(id),
+  last_read_id  INTEGER NOT NULL DEFAULT 0,
+  joined_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  left_at       TEXT,
+  PRIMARY KEY (conv_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS chat_files (
+  id          INTEGER PRIMARY KEY,
+  conv_id     INTEGER NOT NULL REFERENCES chat_conversations(id),
+  name        TEXT NOT NULL,
+  mime        TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size        INTEGER NOT NULL DEFAULT 0,
+  data        BLOB NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id            INTEGER PRIMARY KEY,
+  conv_id       INTEGER NOT NULL REFERENCES chat_conversations(id),
+  user_id       INTEGER NOT NULL REFERENCES users(id),
+  kind          TEXT NOT NULL DEFAULT 'text',   -- text | call
+  body          TEXT NOT NULL DEFAULT '',
+  case_id       INTEGER,
+  client_id     INTEGER,
+  link_label    TEXT NOT NULL DEFAULT '',
+  file_id       INTEGER REFERENCES chat_files(id),
+  call_id       TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  edited_at     TEXT,
+  retracted_at  TEXT,
+  history       TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS chat_messages_conv ON chat_messages(conv_id, id);
+CREATE TABLE IF NOT EXISTS chat_calls (
+  id          TEXT PRIMARY KEY,
+  conv_id     INTEGER NOT NULL REFERENCES chat_conversations(id),
+  started_by  INTEGER NOT NULL REFERENCES users(id),
+  started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at    TEXT
+);
+CREATE TABLE IF NOT EXISTS chat_call_members (
+  call_id    TEXT NOT NULL REFERENCES chat_calls(id),
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  joined_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  ping_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  left_at    TEXT,
+  PRIMARY KEY (call_id, user_id)
+);
+-- WebRTC handshake messages between call participants; short-lived, purged after a few minutes.
+CREATE TABLE IF NOT EXISTS chat_signals (
+  id         INTEGER PRIMARY KEY,
+  call_id    TEXT NOT NULL,
+  from_user  INTEGER NOT NULL,
+  to_user    INTEGER NOT NULL,
+  kind       TEXT NOT NULL,
+  payload    TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS chat_signals_to ON chat_signals(to_user, id);
+
 -- Rama Judicial consultation: actions (actuaciones) seen per case and each check run.
 CREATE TABLE IF NOT EXISTS actuaciones (
   id           INTEGER PRIMARY KEY,
@@ -420,7 +491,7 @@ CREATE TABLE IF NOT EXISTS payment_reminders (
   sent_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Publicaciones Procesales (version 2.2.84): documents already read and the mentions found per case. Add-only.
+-- Publicaciones Procesales (version 2.2.83): documents already read and the mentions found per case. Add-only.
 CREATE TABLE IF NOT EXISTS publicaciones_docs (
   url      TEXT PRIMARY KEY,
   despacho TEXT NOT NULL DEFAULT '',

@@ -92,7 +92,7 @@ export function monitorRouter(db) {
     res.json(await probePortals());
   });
 
-  // Automatic consultation (version 2.2.84): hours chosen by Gerencia, «Consultar ahora», Publicaciones Procesales.
+  // Automatic consultation (version 2.2.83): hours chosen by Gerencia, «Consultar ahora», Publicaciones Procesales.
   const gerencia = (req, res) => (req.user.permissions.includes("users.manage") ? true : (res.status(403).json({ error: "Solo Gerencia." }), false));
   r.get("/schedule", (req, res) => res.json({ ...getSchedule(db), ...cycleState(), publicaciones: !!urlTemplate() }));
   r.put("/schedule", (req, res) => {
