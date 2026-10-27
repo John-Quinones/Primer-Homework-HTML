@@ -1468,3 +1468,6 @@ dialog:not([open]) { pointer-events: none; }
 .btn-group-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; min-width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
 .btn-group-pop button { text-align: left; white-space: nowrap; }
 @media (max-width: 760px) { .btn-group-pop { max-width: calc(100vw - 32px); } .btn-group-pop button { white-space: normal; } }
+
+.copy-ico { display: grid; place-items: center; align-self: center; width: 36px; height: 36px; padding: 0; margin: 0 !important; border-radius: 50%; }
+.copy-ico svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

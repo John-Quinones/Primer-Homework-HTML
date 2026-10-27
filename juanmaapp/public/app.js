@@ -1080,6 +1080,7 @@ const ICON = {
   portals: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   del: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
 };
 const iconBtn = (icon, label, attrs, cls = "") => `<button type="button" class="ico-btn ${cls}" ${attrs} title="${label}">`
   + `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[icon]}</svg><span>${label}</span></button>`;
@@ -1161,7 +1162,7 @@ async function renderExpedienteFicha(id) {
       <button type="button" class="mini" data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></nav>
     <div class="ficha-chips">
       <span class="chip-stat">Cliente <strong>${clientName(k.client_id, k.client_name)}</strong></span>
-      ${k.radicado ? `<span class="chip-stat">Radicado No. <strong class="mono">${escapeHtml(formatRadicado(k.radicado))}</strong></span><button type="button" class="mini" data-action="copy-radicado" data-radicado="${escapeHtml(k.radicado)}" title="Copia el radicado solo con números (sin guiones) para pegarlo en otros documentos">Copiar sin guiones</button>` : ""}
+      ${k.radicado ? `<span class="chip-stat">Radicado No. <strong class="mono">${escapeHtml(formatRadicado(k.radicado))}</strong></span><button type="button" class="copy-ico" data-action="copy-radicado" data-radicado="${escapeHtml(k.radicado)}" title="Copiar el radicado sin guiones (solo números)" aria-label="Copiar el radicado sin guiones"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON.copy}</svg></button>` : ""}
       ${partyLine(k) ? `<span class="chip-stat">${escapeHtml(partyLine(k))}</span>` : ""}
       <button type="button" class="chip-stat" data-action="goto-sec" data-sec="responsable" title="Ver o cambiar el funcionario responsable">Responsable <strong>${escapeHtml(k.assigned_name || "sin asignar")}</strong></button>
       ${charges ? `<span class="chip-stat">Honorarios <strong>${cop(billed)}</strong></span><span class="chip-stat">Pagado <strong>${cop(paid)}</strong></span><span class="chip-stat ${balance > 0 ? "warn" : ""}">Saldo <strong>${cop(balance)}</strong></span>` : ""}
