@@ -992,9 +992,14 @@
       const t = s.tasks.find((x) => x.id === +m[1]);
       const kase = t && s.cases.find((x) => x.id === t.case_id);
       (t && kase && (inScope(kase.office_id) || t.assigned_user_id === me().id)) || fail("La tarea no existe.");
-      // Version 2.82, same as the server: the assignee may always say whether it was fulfilled.
+      // Same as the server: the assignee may also edit the task, but not reassign it or notify.
       const full = me().permissions.includes("cases.write") && inScope(kase.office_id);
-      if (!full && !(t.assigned_user_id === me().id && Object.keys(b).every((x) => ["status", "done_notes"].includes(x)))) fail("Su rol no tiene permiso para esta acción.");
+      if (!full) {
+        if (t.assigned_user_id !== me().id) fail("Su rol no tiene permiso para esta acción.");
+        if ("assigned_user_id" in b && (Number(b.assigned_user_id) || null) !== t.assigned_user_id) fail("Solo quien tiene permiso sobre el expediente puede reasignar la tarea.");
+        if ("case_id" in b && Number(b.case_id) !== t.case_id) fail("Su rol no tiene permiso para esta acción.");
+        delete b.notify;
+      }
       const prev = clone(t), before = t.due_at, assignee = t.assigned_user_id, wasDone = t.status === "hecha";
       Object.assign(t, taskValues(b, t));
       t.done_at = t.status === "hecha" ? t.done_at || stamp() : null;

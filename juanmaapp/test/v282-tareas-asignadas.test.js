@@ -25,10 +25,11 @@ test("a task assigned to someone is in their list even if the case is in another
   assert.equal(mine[0].due_at, "2026-10-19 17:00");
 });
 
-test("the assignee can mark it as fulfilled or not fulfilled, and cannot change anything else", async () => {
+test("the assignee can mark it as fulfilled or not fulfilled, and edit it, but cannot reassign it", async () => {
   const me = await srv.login("laura@firma.co", "tribunal-azul-2026");
-  const bad = await me.call("PUT", `/tasks/${taskId}`, { title: "Otro título" });
+  const bad = await me.call("PUT", `/tasks/${taskId}`, { title: "Otro título", assigned_user_id: null });
   assert.equal(bad.status, 403);
+  assert.equal((await me.call("PUT", `/tasks/${taskId}`, { title: "Otro título" })).status, 200);
   const no = await me.call("PUT", `/tasks/${taskId}`, { status: "cancelada", done_notes: "No se alcanzó" });
   assert.equal(no.status, 200);
   assert.equal(no.body.status, "cancelada");

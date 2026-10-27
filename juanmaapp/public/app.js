@@ -1282,10 +1282,11 @@ function taskTable(list, answers) {
   const rows = list.map((t) => {
     const closing = t.status === "pendiente" && !answers && (canWrite || t.assigned_user_id === me.id)
       ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button><button class="mini" data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : "";
+    const mine = !canWrite && t.assigned_user_id === me.id ? `<button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
     const actions = canWrite ? `${closing}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
       ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing;
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing + mine;
     const done = t.status === "cancelada" ? `No cumplida${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
@@ -6675,6 +6676,7 @@ async function renderAgenda() {
           </div>
           <span class="toolbar">${can("scope.all") || myOfficeIds().includes(t.office_id) ? `<button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>` : ""}
           ${!can("cases.write") && t.status === "pendiente" && t.assigned_user_id === me.id && !CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : ""}
+          ${!can("cases.write") && t.assigned_user_id === me.id ? `<button data-action="edit-task" data-id="${t.id}">Editar</button>` : ""}
           ${can("cases.write") ? `
             ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>`) : ""}
             ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
@@ -6829,6 +6831,9 @@ taskForm.elements.case_id.addEventListener("change", () => { fillTaskAssignees(t
 
 async function openTaskDialog(t = null, caseId = null, kind = null, preset = {}, focus = "") {
   const cases = await api("GET", "/cases");
+  // The assignee may edit a task of a case whose office they cannot open: the case is then only named by the task itself.
+  const own = !!t && !can("cases.write");
+  if (own && !cases.some((x) => x.id === t.case_id)) cases.push({ id: t.case_id, client_name: t.client_name || "", type_name: t.type_name || "", title: "", office_id: t.office_id });
   if (!cases.length) { toast("Primero cree un expediente.", true); return; }
   taskCases = cases;
   taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${caseFolder(k) ? "Carpeta " + escapeHtml(caseFolder(k)) + " · " : ""}${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
@@ -6847,6 +6852,8 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   taskForm.elements.case_id.value = t?.case_id ?? caseId ?? cases[0].id;
   taskForm.elements.case_id.disabled = !!t;
   fillTaskAssignees(cases, t?.assigned_user_id ?? preset.assigned_user_id ?? "");
+  // Editing one's own task: it stays assigned to the same person.
+  if (own) taskForm.elements.assigned_user_id.innerHTML = `<option value="${me.id}" selected>${escapeHtml(me.name)} (usted)</option>`;
   const days = t ? t.remind_days : k0 === "audiencia" ? [3, 1] : [1];
   $$("input[name=remind]", taskForm).forEach((c) => (c.checked = days.includes(Number(c.value))));
   taskForm.elements.done.checked = t?.status === "hecha";
@@ -6854,6 +6861,7 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   taskForm.elements.notify_on.dataset.want = !t || focus === "notify" ? "1" : "";
   if (!noticeChannels) noticeChannels = await api("GET", "/tasks/notify-channels").catch(() => ({ email: false, whatsapp: false }));
   syncTaskForm(!t);
+  if (own) { taskForm.elements.notify_on.checked = false; taskForm.elements.notify_on.disabled = true; $("[data-notify-box]", taskForm).hidden = true; }
   if (focus === "notify") taskForm.elements.notify_message.focus();
   if (focus && taskForm.elements[focus]) {
     if (focus === "response_at" && !taskForm.elements.response_at.value) taskForm.elements.response_at.value = bogotaNow().slice(0, 10);
