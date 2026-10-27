@@ -5,6 +5,7 @@ import { startServer } from "./helpers.js";
 import { boldSignature } from "../src/bold.js";
 import { setBoldFetch } from "../src/bold.js";
 import { setTransports } from "../src/notify.js";
+import { setPaymentsClock } from "../src/payments.js";
 import { renderCobroEmail, longDate, montoCOP } from "../src/email-cobro.js";
 
 process.env.BOLD_API_KEY = "llave-identidad-de-prueba";
@@ -103,7 +104,9 @@ test("el correo «Cyber LegalTech» llena las variables, escapa y quita el botó
 test("el recordatorio por correo usa la plantilla y el link de Bold", async () => {
   const id2 = (await call("POST", "/payments/charges", { client_id: client.id, concept: "Cuota extra", amount: 500000, due_date: "2027-01-10" })).body.ids[0];
   setTransports({ mail: { sendMail: async (m) => { mails.push(m); return {}; } } });
+  setPaymentsClock(() => new Date("2026-11-04T17:00:00Z")); // a Wednesday at noon in Colombia: inside the Ley 2300 window whatever the hour the test runs
   const out = await call("POST", `/payments/charges/${id2}/remind`, { channels: ["email"] });
+  setPaymentsClock(null);
   assert.equal(out.status, 200, JSON.stringify(out.body));
   const m = mails.at(-1);
   assert.ok(m.html.includes("PAGAR EN LÍNEA") && m.html.includes("https://checkout.bold.co/LNK_TEST1") && m.html.includes("Cuota extra"));
