@@ -70,7 +70,8 @@ const parseRow = (row) => {
 const nameOf = (x) => x && (x.full_name || x.title || x.name || x.concept || x.subject || (x.number ? `N.º ${x.number}` : "") || x.email || "");
 // Reads and housekeeping that are not changes.
 // Hiding users is logged by auth.js itself, without the hidden user's name.
-const SKIP = [/^\/notifications/, /^\/auth\//, /^\/admin\/hidden-users\//, /^\/admin\/users\/\d+\/hidden$/, /^\/monitor\/report\/preview/, /^\/payments\/reminders\/preview/];
+// The chat (v2.2.82) is private between its members: its messages never reach the Bitácora.
+const SKIP = [/^\/notifications/, /^\/chat\//, /^\/auth\//, /^\/admin\/hidden-users\//, /^\/admin\/users\/\d+\/hidden$/, /^\/monitor\/report\/preview/, /^\/payments\/reminders\/preview/];
 
 /** Middleware after requireAuth: logs every successful (or denied) change. */
 export function auditMiddleware(db) {

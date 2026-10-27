@@ -16,5 +16,6 @@ Estas notas viven fuera de `juanmaapp/`, así que cambiarlas no sube la versión
 | [pruebas-locales.md](pruebas-locales.md) | Trucos para probar la App en el contenedor |
 | [contacto-gerencia.md](contacto-gerencia.md) | Correo y WhatsApp de Gerencia y dónde se guardan |
 | [campana.md](campana.md) | Qué avisos muestra la campana y cuándo desaparecen |
+| [chat.md](chat.md) | Chat entre usuarios y videollamada: dónde está, privacidad y límites |
 
 Regla para estas notas: una nota por tema, corta (menos de 3 KB), sin datos de clientes ni contraseñas.
