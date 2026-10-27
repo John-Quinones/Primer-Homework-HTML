@@ -627,6 +627,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: .
 
 /* Only Gerencia deletes (change 24): delete buttons are hidden for every other role. */
 body:not(.is-gerencia) [data-action^="delete-"], body:not(.is-gerencia) [data-jact^="delete-"] { display: none !important; }
+body:not(.is-gerencia) [data-gerencia-only] { display: none !important; }
 
 /* Official portals dialog */
 .portal-rad { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 12px; }

@@ -3026,6 +3026,18 @@ document.addEventListener("click", (e) => {
     "new-mail": () => openMailDialog({}),
     "mail-case": () => openMailDialog({ caseId: Number(btn.dataset.case) }),
     "mail-court": () => openMailDialog({ to: btn.dataset.to, entity: btn.dataset.entity || "", court: { court_name: btn.dataset.entity || "", court_email: btn.dataset.to, court_address: btn.dataset.address || "", city: btn.dataset.city || "" } }),
+    "new-court": () => openCourt(),
+    "edit-court": () => openCourt(courtRows.get(Number(btn.dataset.id))),
+    "add-court-area": () => addCourtArea(),
+    "toggle-court": async () => {
+      const c = courtRows.get(Number(btn.dataset.id));
+      const on = c.active === 0;
+      if (!on && !(await ask({ title: "Desactivar despacho", message: `«${c.name}» dejará de ofrecerse en los expedientes nuevos. No se borra ni cambia nada de los expedientes que ya lo usan; puede activarlo de nuevo cuando quiera.`, okLabel: "Desactivar" }))) return;
+      await api("PUT", `/courts/${c.id}/active`, { active: on });
+      courtCache.clear();
+      toast(on ? "Despacho activado." : "Despacho desactivado.");
+      await renderDespachos();
+    },
     "new-authority": () => openAuthority(),
     "edit-authority": () => openAuthority(authorityCache.find((a) => a.id === Number(btn.dataset.id))),
     "delete-authority": async () => {
@@ -7187,14 +7199,47 @@ async function searchCourts() {
   if ($("#courts-city").value) q.set("city", $("#courts-city").value);
   if ($("#courts-area").value) q.set("area", $("#courts-area").value);
   if ($("#courts-q").value.trim()) q.set("q", $("#courts-q").value.trim());
+  q.set("all", "1"); // the screen also lists the switched-off ones, greyed out
   const rows = await api("GET", `/courts?${q}`);
   $("#courts-count").textContent = `${rows.length}${rows.length === 500 ? "+" : ""} despacho(s)`;
-  $("#courts-table tbody").innerHTML = rows.map((c) => `<tr>
-    <td><strong>${escapeHtml(c.name)}</strong>${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
+  courtRows = new Map(rows.map((c) => [c.id, c]));
+  $("#courts-table tbody").innerHTML = rows.map((c) => `<tr${c.active === 0 ? ' class="muted"' : ""}>
+    <td><strong>${escapeHtml(c.name)}</strong>${c.custom ? ' <span class="chip">Creado a mano</span>' : ""}${c.active === 0 ? ' <span class="chip">Desactivado</span>' : ""}${c.code ? `<br><span class="muted mono">${escapeHtml(c.code)}</span>` : ""}</td>
     <td>${escapeHtml(c.area)}</td><td>${escapeHtml(c.city)}<br><span class="muted">${escapeHtml([c.circuit && c.circuit !== c.city ? "Circuito de " + c.circuit : "", c.department].filter(Boolean).join(" · "))}</span></td>
     <td>${c.email ? `<span class="copyable">${escapeHtml(c.email)}</span> <button class="mini" data-copy="${escapeHtml(c.email)}">Copiar</button>${can("mail.send") ? ` <button class="mini" data-action="mail-court" data-to="${escapeHtml(c.email)}" data-entity="${escapeHtml(c.name)}" data-address="${escapeHtml(c.address || "")}" data-city="${escapeHtml(c.city || "")}">Escribir</button>` : ""}` : ""}</td>
-    <td>${escapeHtml(c.phone)}</td></tr>`).join("");
+    <td>${escapeHtml(c.phone)}</td>
+    <td class="row-actions">${c.custom ? `<button class="mini" data-action="edit-court" data-id="${c.id}" data-gerencia-only>Editar</button>
+      <button class="mini" data-action="toggle-court" data-id="${c.id}" data-gerencia-only>${c.active === 0 ? "Activar" : "Desactivar"}</button>` : ""}</td></tr>`).join("");
 }
+let courtRows = new Map();
+
+// Courts created by hand (Gerencia): same fields as the directory, saved with custom = 1 so the official Excel never overwrites them.
+function fillCourtAreas(selected = "") {
+  $("#court-dialog [name=area]").innerHTML = '<option value="">—</option>' + AREAS.map((a) => `<option${a === selected ? " selected" : ""}>${escapeHtml(a)}</option>`).join("");
+}
+function openCourt(c = null) {
+  fillCourtAreas(c?.area || "");
+  $("#court-new-area").value = "";
+  openDialog($("#court-dialog"), c ? "Editar despacho" : "Nuevo despacho", c ? { ...c } : {});
+  if (c) $("#court-dialog [name=area]").value = c.area;
+}
+async function addCourtArea() {
+  const name = $("#court-new-area").value.trim();
+  if (!name) return toast("Escriba el nombre del área.");
+  const out = await api("POST", "/courts/areas", { name });
+  AREAS = out.areas;
+  await loadAreas();
+  fillCourtAreas(out.name);
+  $("#court-new-area").value = "";
+  toast(out.created ? `Área «${out.name}» agregada.` : `El área «${out.name}» ya existía.`);
+}
+wireDialog($("#court-dialog"), async (form) => {
+  const d = formData(form);
+  await api(d.id ? "PUT" : "POST", d.id ? `/courts/${d.id}` : "/courts", d);
+  courtCache.clear();
+  toast(`Despacho guardado: ${d.name}.`);
+  await renderDespachos();
+});
 for (const sel of ["#courts-dep", "#courts-city", "#courts-area"]) $(sel).addEventListener("change", () => guarded(searchCourts));
 $("#courts-q").addEventListener("input", () => { clearTimeout(courtsTimer); courtsTimer = setTimeout(() => guarded(searchCourts), 250); });
 document.addEventListener("click", async (e) => {

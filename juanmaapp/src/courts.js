@@ -6,16 +6,90 @@ import { can } from "./auth.js";
 import { courtCircuit, filterCourts } from "./case-meta.js";
 import { judgeByRadicado } from "./ramajudicial.js";
 import { properName } from "./person.js";
-import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityFromText, cityCode, inferArea } from "./places.js";
+import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityFromText, cityCode, inferArea, registerAreas } from "./places.js";
 
 
 export function courtsRouter(db) {
   const r = express.Router();
+  const loadAreas = () => registerAreas(db.prepare("SELECT name FROM court_areas ORDER BY rowid").all().map((x) => x.name));
+  loadAreas();
+  const gerencia = (req, res) => {
+    if (can(req, "catalog.manage")) return true;
+    res.status(403).json({ error: "Solo Gerencia puede crear o cambiar despachos." });
+    return false;
+  };
 
   r.get("/meta", (req, res) => {
     const total = db.prepare("SELECT COUNT(*) AS n FROM courts").get().n;
     const updated = db.prepare("SELECT MAX(updated_at) AS t FROM courts").get().t;
-    res.json({ areas: AREAS, total, updated });
+    const custom = db.prepare("SELECT COUNT(*) AS n FROM courts WHERE custom = 1").get().n;
+    res.json({ areas: AREAS, total, updated, custom });
+  });
+
+  // The administrator adds an area of law that is not in the list (e.g. «Disciplinario Interno»).
+  r.post("/areas", (req, res) => {
+    if (!gerencia(req, res)) return;
+    const name = str(req.body?.name).replace(/\s+/g, " ");
+    if (!name) return res.status(400).json({ error: "Escriba el nombre del área." });
+    if (name.length > 80) return res.status(400).json({ error: "El nombre del área es muy largo." });
+    const same = AREAS.find((a) => a.toLowerCase() === name.toLowerCase());
+    if (same) return res.json({ name: same, created: false, areas: AREAS });
+    db.prepare("INSERT INTO court_areas (name) VALUES (?)").run(name);
+    loadAreas();
+    res.status(201).json({ name, created: true, areas: AREAS });
+  });
+
+  const courtInput = (b) => {
+    const name = str(b.name).replace(/\s+/g, " ");
+    const department = canonicalDepartment(b.department);
+    if (!name) return { error: "Escriba el nombre del despacho." };
+    if (!department) return { error: "Elija el departamento del despacho." };
+    const city = canonicalCity(str(b.city) || cityFromText(b.department, department), department);
+    if (!city) return { error: "Elija la ciudad del despacho." };
+    const area = str(b.area);
+    if (!area) return { error: "Elija el área del despacho." };
+    if (!AREAS.includes(area)) return { error: "Área no válida. Agréguela primero con «+ Nueva área»." };
+    const email = str(b.email).toLowerCase();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "El correo no es válido." };
+    return { v: { code: str(b.code), name, department, city, city_code: cityCode(city, department), circuit: courtCircuit(name, b.circuit), area,
+      email, phone: str(b.phone), address: str(b.address), judge: str(b.judge).replace(/\s+/g, " ") } };
+  };
+  const sameKey = (name, city, exceptId = -1) => db.prepare("SELECT id FROM courts WHERE name = ? AND city = ? AND id != ?").get(name, city, exceptId);
+
+  r.post("/", (req, res) => {
+    if (!gerencia(req, res)) return;
+    const { v, error } = courtInput(req.body || {});
+    if (error) return res.status(400).json({ error });
+    if (sameKey(v.name, v.city)) return res.status(409).json({ error: "Ya existe un despacho con ese nombre en esa ciudad." });
+    const id = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, circuit, area, email, phone, address, judge, custom)
+      VALUES (:code, :name, :department, :city, :city_code, :circuit, :area, :email, :phone, :address, :judge, 1)`).run(v).lastInsertRowid;
+    res.status(201).json(db.prepare("SELECT * FROM courts WHERE id = ?").get(id));
+  });
+
+  // Only the courts created by hand change here; the ones from the official file stay as loaded.
+  r.put("/:id", (req, res) => {
+    if (!gerencia(req, res)) return;
+    const row = db.prepare("SELECT * FROM courts WHERE id = ?").get(Number(req.params.id));
+    if (!row) return res.status(404).json({ error: "No existe el despacho." });
+    if (!row.custom) return res.status(400).json({ error: "Los despachos del directorio oficial no se editan aquí; se actualizan cargando el Excel." });
+    const { v, error } = courtInput(req.body || {});
+    if (error) return res.status(400).json({ error });
+    if (sameKey(v.name, v.city, row.id)) return res.status(409).json({ error: "Ya existe un despacho con ese nombre en esa ciudad." });
+    db.prepare(`UPDATE courts SET code = :code, name = :name, department = :department, city = :city, city_code = :city_code, circuit = :circuit, area = :area,
+      email = :email, phone = :phone, address = :address, judge = :judge, updated_at = datetime('now') WHERE id = :id`).run({ ...v, id: row.id });
+    // Cases linked to this court keep their text in step with the new name.
+    if (row.name !== v.name) db.prepare("UPDATE cases SET court_name = ? WHERE court_id = ?").run(v.name, row.id);
+    res.json(db.prepare("SELECT * FROM courts WHERE id = ?").get(row.id));
+  });
+
+  // Switching off hides a hand-made court from the pickers without deleting it or the cases that use it.
+  r.put("/:id/active", (req, res) => {
+    if (!gerencia(req, res)) return;
+    const row = db.prepare("SELECT id, custom FROM courts WHERE id = ?").get(Number(req.params.id));
+    if (!row) return res.status(404).json({ error: "No existe el despacho." });
+    if (!row.custom) return res.status(400).json({ error: "Solo se desactivan los despachos creados a mano." });
+    db.prepare("UPDATE courts SET active = ? WHERE id = ?").run(req.body?.active ? 1 : 0, row.id);
+    res.json({ id: row.id, active: req.body?.active ? 1 : 0 });
   });
 
   // Departments and cities that actually have courts (for filters).
@@ -28,6 +102,7 @@ export function courtsRouter(db) {
     // Department in SQL; city (or its circuit) and area (with the courts that
     // also hear it, e.g. promiscuous ones) through the shared rule.
     const where = [], params = [];
+    if (str(req.query.all) !== "1") where.push("active = 1"); // Despachos screen asks for all=1 to show the switched-off ones too
     if (str(req.query.department)) { where.push("department = ?"); params.push(str(req.query.department)); }
     if (str(req.query.q)) {
       where.push("(name LIKE ? OR email LIKE ? OR code LIKE ?)");
@@ -77,7 +152,9 @@ export function courtsRouter(db) {
     if (!rows.length) return res.status(400).json({ error: "El archivo no trae despachos." });
     if (rows.length > 20000) return res.status(400).json({ error: "Máximo 20.000 despachos por carga." });
     const out = { created: 0, updated: 0, skipped: [] };
-    const find = db.prepare("SELECT id FROM courts WHERE name = ? AND city = ?");
+    const find = db.prepare("SELECT id, custom FROM courts WHERE name = ? AND city = ?");
+    const fill = db.prepare(`UPDATE courts SET email = CASE WHEN email = '' THEN :email ELSE email END, phone = CASE WHEN phone = '' THEN :phone ELSE phone END,
+      address = CASE WHEN address = '' THEN :address ELSE address END, judge = CASE WHEN judge = '' THEN :judge ELSE judge END WHERE id = :id`);
     const ins = db.prepare(`INSERT INTO courts (code, name, department, city, city_code, circuit, area, email, phone, address, judge)
       VALUES (:code, :name, :department, :city, :city_code, :circuit, :area, :email, :phone, :address, :judge)`);
     const upd = db.prepare(`UPDATE courts SET code = :code, department = :department, city = :city, city_code = :city_code, circuit = :circuit, area = :area,
@@ -85,7 +162,7 @@ export function courtsRouter(db) {
       address = CASE WHEN :address != '' THEN :address ELSE address END, judge = CASE WHEN :judge != '' THEN :judge ELSE judge END, updated_at = datetime('now') WHERE id = :id`);
     db.exec("BEGIN");
     try {
-      if (req.body?.replace) db.prepare("DELETE FROM courts").run(); // Gerencia only, checked above (audit A01-001)
+      if (req.body?.replace) db.prepare("DELETE FROM courts WHERE custom = 0").run(); // courts made by hand stay. Gerencia only, checked above (audit A01-001)
       rows.forEach((row, i) => {
         const name = str(row.name);
         const department = canonicalDepartment(row.department);
@@ -101,7 +178,11 @@ export function courtsRouter(db) {
         };
         // A court loaded before with the city as the file wrote it («Cartagena») is found and its city updated, not duplicated.
         const hit = find.get(name, city) || find.get(name, properName(str(row.city)));
-        if (hit) {
+        if (hit && hit.custom) {
+          // Created by hand: the file never changes its name, place or area; it only fills what is still empty.
+          fill.run({ email: v.email, phone: v.phone, address: v.address, judge: v.judge, id: hit.id });
+          out.updated++;
+        } else if (hit) {
           const { name: _n, ...rest } = v;
           upd.run({ ...rest, id: hit.id });
           out.updated++;
@@ -120,8 +201,9 @@ export function courtsRouter(db) {
 
   r.delete("/", (req, res) => {
     if (!can(req, "catalog.manage")) return res.status(403).json({ error: "Su rol no tiene permiso para esta acción." });
-    db.prepare("UPDATE cases SET court_id = NULL WHERE court_id IS NOT NULL").run();
-    db.prepare("DELETE FROM courts").run();
+    // Only the directory loaded from the file; the courts Gerencia created by hand stay.
+    db.prepare("UPDATE cases SET court_id = NULL WHERE court_id IN (SELECT id FROM courts WHERE custom = 0)").run();
+    db.prepare("DELETE FROM courts WHERE custom = 0").run();
     res.status(204).end();
   });
 

@@ -646,6 +646,10 @@ function migrate(db) {
   add("courts", "circuit", "TEXT NOT NULL DEFAULT ''");
   // Version 2.27: the judge of a court (directory file, when it has the column) and the judge chosen on each case.
   add("courts", "judge", "TEXT NOT NULL DEFAULT ''");
+  // Version 2.2.87: courts created by hand by Gerencia (custom = 1, never touched by the official Excel) and switched off without deleting.
+  add("courts", "custom", "INTEGER NOT NULL DEFAULT 0");
+  add("courts", "active", "INTEGER NOT NULL DEFAULT 1");
+  db.exec("CREATE TABLE IF NOT EXISTS court_areas (name TEXT PRIMARY KEY)");
   // Certified e-mail evidence (change 39): the exact message sent (.eml) with several digests, attachment digests, trusted timestamp.
   for (const [col, def] of [["raw", "BLOB"], ["raw_sha1", "TEXT NOT NULL DEFAULT ''"], ["raw_sha256", "TEXT NOT NULL DEFAULT ''"], ["raw_sha512", "TEXT NOT NULL DEFAULT ''"],
     ["raw_sha3_512", "TEXT NOT NULL DEFAULT ''"], ["attach_mode", "TEXT NOT NULL DEFAULT 'adjunto'"], ["tsa_url", "TEXT NOT NULL DEFAULT ''"], ["tsa_reply", "TEXT"],

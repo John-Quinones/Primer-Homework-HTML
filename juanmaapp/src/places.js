@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { properName } from "./person.js";
 import { makePlaces } from "./place-rules.js";
 
-export { AREAS, inferArea, normalizeRadicado } from "./place-rules.js";
+export { AREAS, inferArea, normalizeRadicado, registerAreas } from "./place-rules.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DIVIPOLA = JSON.parse(readFileSync(path.join(here, "..", "public", "data", "divipola.json"), "utf8"));
