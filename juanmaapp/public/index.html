@@ -1611,6 +1611,43 @@
     </form>
   </dialog>
 
+  <!-- Solicitar link de expediente (versión 2.2.83) -->
+  <dialog id="slink-dialog" class="wide-dialog">
+    <form method="dialog" data-form="slink">
+      <h3 data-title>Solicitar link del expediente</h3>
+      <p class="hint">Se envía por correo al juzgado del expediente, con su firma. Solo escriba el tipo de actuación y pulse «Enviar al juzgado».</p>
+      <div class="grid2">
+        <label>Para (correo del juzgado) * <input name="to" type="email" required placeholder="juzgado@cendoj.ramajudicial.gov.co" /></label>
+        <label>Tipo de actuación * <input name="tipo_actuacion" required placeholder="Ej.: Interrogatorio de parte" /></label>
+      </div>
+      <details id="slink-data">
+        <summary>Datos de la carta (se llenan solos del expediente)</summary>
+        <div class="grid2">
+          <label>Ciudad <input name="ciudad" /></label>
+          <label>Fecha <input name="fecha_solicitud" /></label>
+          <label>Nombre del juez o doctora <input name="nombre_juez_o_doctora" /></label>
+          <label>Cargo o despacho <input name="cargo_despacho" /></label>
+          <label>Ciudad del juzgado <input name="ciudad_juzgado" /></label>
+          <label>Demandante <input name="demandante" /></label>
+          <label>Demandado <input name="demandado" /></label>
+          <label>Número de radicado <input name="numero_radicado" /></label>
+          <label>Nombre del cliente <input name="nombre_cliente" /></label>
+          <label>«del señor» / «de la señora» <input name="cliente_del_senor" /></label>
+        </div>
+      </details>
+      <input type="hidden" name="correo_juzgado" />
+      <p class="form-error" id="slink-missing" hidden></p>
+      <article id="slink-preview" class="document" style="background:#fff;color:#333;padding:18px;border-radius:8px"></article>
+      <p class="hint" id="slink-web-note" hidden>En el enlace de prueba no se envían correos: el botón abre su programa de correo con el texto. El envío con la firma sale desde la App del servidor.</p>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <a class="button primary" id="slink-mailto" hidden target="_blank" rel="noopener">Abrir en mi correo</a>
+        <button class="primary" id="slink-send" value="save">Enviar al juzgado</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Funcionario de una entidad (versión 2.27) -->
   <dialog id="authority-dialog">
     <form method="dialog" data-form="authority">

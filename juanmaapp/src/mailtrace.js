@@ -15,6 +15,11 @@ import { scopeOf } from "./auth.js";
 import { mailTransport, GRAPH_MAX_MIME } from "./notify.js";
 import { publicUrl } from "./esign.js";
 import { stamp } from "./tsa.js";
+import { readFileSync } from "node:fs";
+import { buildLetter, letterMissing } from "./solicitud-link-letter.js";
+
+// Version 2.2.83: the signature picture of «Solicitar link de expediente», sent inline (cid) so mail programs show it.
+const SIGNATURE_PNG = new URL("../public/firma-john.png", import.meta.url);
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const digests = (b) => ({ sha1: createHash("sha1").update(b).digest("hex"), sha256: sha(b),
@@ -78,7 +83,15 @@ export function mailRouter(db) {
     const to = str(b.to).split(/[,;\s]+/).filter(Boolean);
     const cc = str(b.cc).split(/[,;\s]+/).filter(Boolean);
     if (!to.length || [...to, ...cc].some((a) => !EMAIL.test(a))) return res.status(400).json({ error: "Revise las direcciones de correo." });
-    const subject = str(b.subject), body = String(b.body ?? "").trim();
+    // Version 2.2.83: a letter built here from its data (escaped), with the signature picture inline.
+    let letter = null;
+    if (b.letter) {
+      if (b.letter.kind !== "solicitud_link") return res.status(400).json({ error: "Carta no válida." });
+      const missing = letterMissing(b.letter.fields ?? {});
+      if (missing.length) return res.status(400).json({ error: `Falta: ${missing.join(", ")}.` });
+      letter = buildLetter(b.letter.fields, { imgSrc: "cid:firma-john" });
+    }
+    const subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
     if (!subject || !body) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
     const files = (Array.isArray(b.attachments) ? b.attachments : []).map((a) => ({
       filename: str(a.filename).replace(/[\\/:*?"<>|]+/g, "_").slice(0, 150) || "adjunto", mime: str(a.mime) || "application/octet-stream",
@@ -103,7 +116,7 @@ export function mailRouter(db) {
     const contentHash = sha(JSON.stringify({ to, cc, subject, body, attachments: hashes }));
     const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(2)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
     const fileLines = files.map((f, i) => ({ name: f.filename, size: `${kb(f.data.length)} (${f.data.length.toLocaleString("es-CO")} bytes)`, sha256: hashes[i], link: `${base}/api/public/mail/${token}/a/${i + 1}` }));
-    const html = `<div style="font-family:Arial,sans-serif;color:#101010;white-space:pre-wrap">${esc(body)}</div>
+    const html = `${letter ? letter.html : `<div style="font-family:Arial,sans-serif;color:#101010;white-space:pre-wrap">${esc(body)}</div>`}
       ${files.length ? `<p style="font-family:Arial,sans-serif;font-size:13px;margin-top:18px"><strong>Anexos${mode === "enlace" ? " (descárguelos con estos enlaces)" : ""}:</strong></p>
       <ul style="font-family:Arial,sans-serif;font-size:13px">${fileLines.map((f) => `<li><a href="${f.link}">${esc(f.name)}</a> · ${f.size}<br><span style="font-size:11px;color:#888">SHA-256 ${f.sha256}</span></li>`).join("")}</ul>` : ""}
       <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">
@@ -115,12 +128,13 @@ export function mailRouter(db) {
     const mail = {
       from: process.env.MAIL_FROM, to, cc, subject, text, html,
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
-      attachments: mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [],
+      attachments: [...(letter ? [{ filename: "firma-john.png", content: readFileSync(SIGNATURE_PNG), cid: "firma-john", contentType: "image/png", contentDisposition: "inline" }] : []),
+        ...(mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [])],
     };
     let raw = Buffer.from((await composer.sendMail(mail)).message);
     // Microsoft 365 takes about 3 MB per message: larger attachments travel as tracked links.
     if (t.graph && raw.length > GRAPH_MAX_MIME && mail.attachments.length) {
-      mail.attachments = [];
+      mail.attachments = mail.attachments.filter((a) => a.cid);
       mode = "enlace";
       mail.html = mail.html.replace("<strong>Anexos:</strong>", "<strong>Anexos (descárguelos con estos enlaces):</strong>");
       raw = Buffer.from((await composer.sendMail(mail)).message);
