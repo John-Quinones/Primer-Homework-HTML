@@ -29,22 +29,25 @@ function event(db, requestId, signerId, name, detail = "", ip = "") {
 }
 
 /**
- * Version 2.2.91: the electronic signature of a letter the platform sends itself (the «Solicitud link de expediente»). The user who sends it signs
- * with the platform's account: a completed request with the exact text and its SHA-256, a signer with the time and address, and a verification code
- * that the public page (verificar.html) answers. Returns {code, id}.
+ * Version 2.2.91: the electronic signature of a letter the platform sends itself (the «Solicitud link de expediente»). The page makes the PDF of the
+ * letter; the user who sends it signs with the platform's account: a completed request holding that PDF (and its SHA-256), a signer with the time and
+ * address, and a verification code. The signed PDF carries the signature module's own stamp (QR, time, data) and certificate, built by ensureSignedPdf,
+ * so it verifies on verificar.html by code or by uploading the file. Returns {id, code, signed: {pdf, sha256}}.
  */
-export function issueLetterSignature(db, req, { title, text, caseId, officeId, signer }) {
-  const hash = sha(Buffer.from(text, "utf8")), code = newVerifyCode();
-  const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_name, doc_hash, message, status, created_by, verify_code, completed_at)
-    VALUES (?, ?, ?, 'markdown', ?, 'solicitud-link-expediente.txt', ?, 'Carta enviada por la plataforma', 'completada', ?, ?, datetime('now'))`)
-    .run(title, caseId || null, officeId || null, text, hash, req.user.id, code).lastInsertRowid;
+export async function issueLetterSignature(db, req, { title, pdf, stampPos, caseId, officeId, signer }) {
+  const hash = sha(pdf), code = newVerifyCode();
+  const pos = /^at:(0(\.\d{1,4})?|1(\.0{1,4})?),(0(\.\d{1,4})?|1(\.0{1,4})?)$/.test(str(stampPos)) ? str(stampPos) : "br";
+  const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_file, doc_name, doc_hash, message, status, created_by, verify_code, completed_at, stamp_page, stamp_pos, notify)
+    VALUES (?, ?, ?, 'pdf', ?, 'solicitud-link-expediente.pdf', ?, 'Carta enviada por la plataforma', 'completada', ?, ?, datetime('now'), 'first', ?, 0)`)
+    .run(title, caseId || null, officeId || null, pdf, hash, req.user.id, code, pos).lastInsertRowid;
   event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
   const sid = db.prepare(`INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, status, method, signed_at, ip, user_agent, typed_name)
     VALUES (?, ?, 'CC', ?, ?, ?, ?, 'firmado', 'plataforma', datetime('now'), ?, ?, ?)`)
     .run(id, signer.name, signer.id_number, signer.email || "", signer.phone || "", sha(randomBytes(24)), clientIp(req), str(req.get?.("user-agent")).slice(0, 300), signer.name).lastInsertRowid;
   event(db, id, sid, "firmado", `Firma electrónica con la cuenta ${req.user.email || req.user.name} · SHA-256 ${hash}`, clientIp(req));
   event(db, id, null, "completada", "Carta firmada por la plataforma para enviarla por correo.");
-  return { id, code };
+  const signed = await ensureSignedPdf(db, req, id);
+  return { id, code, signed };
 }
 
 const CHANNELS = ["email", "sms", "whatsapp"];

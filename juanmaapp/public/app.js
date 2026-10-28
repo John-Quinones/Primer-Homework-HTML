@@ -1651,10 +1651,11 @@ const formData = (form) => Object.fromEntries(new FormData(form).entries());
 // ----- Version 2.2.83: «Solicitar link de expediente» — a short HTML letter e-mailed to the case's court with one click -----
 const SL = window.JuanmaSolicitudLink;
 const slForm = $("#slink-dialog form");
-let slCase = null;
-async function openSlink(caseId) {
+let slCase = null, slFromPanel = false;
+async function openSlink(caseId, fromPanel = false) {
   const data = await api("GET", `/templates/data?caseId=${caseId}`);
   slCase = caseId;
+  slFromPanel = fromPanel; // from the template panel the letter takes the next memorial number when it is sent
   openDialog($("#slink-dialog"), "Solicitar link del expediente", { to: data["destinatario.correo"] || data["expediente.correo_despacho"] || "", ...SL.letterFields(data) });
   $("#slink-send").hidden = WEB;
   $("#slink-mailto").hidden = !WEB;
@@ -1677,10 +1678,26 @@ function renderSlink() {
   a.classList.toggle("disabled", !!miss.length);
 }
 slForm.addEventListener("input", renderSlink);
+// Version 2.2.91: the letter goes as the firm's design in a PDF that the signature module stamps (QR, time, data, certificate); the e-mail carries it signed.
+async function slinkLetterPdf(fields) {
+  const list = tplList?.length ? tplList : await api("GET", "/templates");
+  const found = list.find((t) => t.name === "Solicitud link de expediente");
+  const tpl = found && (found.body ? found : await api("GET", `/templates/${found.id}`));
+  if (!tpl || !HTMLT.isHtml(tpl.body)) throw new Error("Falta la plantilla «Solicitud link de expediente» en Memoriales. Pida a Gerencia que la restablezca.");
+  let number = "";
+  if (slFromPanel && tplActive?.id === tpl.id) { await ensureDocNumber("slink"); number = docNum?.label || ""; }
+  const signer = SL.signerView(me);
+  const data = { ...fields, nombre_abogado: signer.name.toLocaleUpperCase("es-CO"), correo_abogado: "gerencia@tecjuridicos.com", "documento.numero": number, elaboro: window.JuanmaGeneratedBy() };
+  const { blob, spot } = await HTMLT.toPdfSpot(HTMLT.fill(tpl.body, data, HTMLT.LABELS));
+  const bin = new Uint8Array(await blob.arrayBuffer());
+  let s = "";
+  for (let i = 0; i < bin.length; i += 0x8000) s += String.fromCharCode(...bin.subarray(i, i + 0x8000));
+  return { pdf_base64: btoa(s), stamp_pos: spot ? `at:${spot.x},${spot.y}` : "br" };
+}
 wireDialog($("#slink-dialog"), async (form) => {
   const d = formData(form), fields = slFields();
-  const m = await api("POST", "/mail", { to: d.to.trim(), case_id: slCase, letter: { kind: "solicitud_link", fields } });
-  toast(`Solicitud enviada a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
+  const m = await api("POST", "/mail", { to: d.to.trim(), case_id: slCase, letter: { kind: "solicitud_link", fields, ...(await slinkLetterPdf(fields)) } });
+  toast(`Solicitud enviada a ${m.to_addr}, firmada electrónicamente. Queda en Correo certificado con su constancia de envío.`);
 });
 
 const clientForm = $("#client-dialog form");
@@ -5587,7 +5604,7 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
     if (action === "slink") {
       const id = Number($("#tpl-case").value);
       if (!id) throw new Error("Elija primero el expediente: la carta se envía al juzgado de ese expediente.");
-      return openSlink(id);
+      return openSlink(id, true);
     }
     if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action) && !(await missingOk())) return;
     if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action)) await ensureDocNumber(action);

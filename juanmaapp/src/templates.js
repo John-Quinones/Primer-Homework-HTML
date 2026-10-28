@@ -8,7 +8,7 @@ import { typePath } from "./sql.js";
 import { feeVariables } from "./ledger.js";
 import { counterpartyText, counterpartyLines, fillRadicadoAliases, partyContext, partyWords, isFolderLabel, caseRecipient, recipientVariables, fieldDocValue, genderWords, idPlaceVariables, processVariables, plaintiffNames, lastActuacionVariables } from "./case-meta.js";
 import { allAuthorities } from "./authorities.js";
-import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES, SLINK_V1_SHA } from "./templates-seed.js";
+import { DOC_CATEGORIES, VARIABLES, SEED_TEMPLATES, FIRM_FIXES, SLINK_V1_SHA, SLINK_V2_SHA } from "./templates-seed.js";
 import { createHash } from "node:crypto";
 
 const MAX_FILE = 8 * 1024 * 1024;
@@ -41,6 +41,13 @@ export function seedTemplates(db) {
     const cur = t && db.prepare("SELECT id, body FROM document_templates WHERE name = ? AND builtin = 1").get(t.name);
     if (cur && createHash("sha256").update(cur.body).digest("hex") === SLINK_V1_SHA) db.prepare("UPDATE document_templates SET body = ?, description = ? WHERE id = ?").run(t.body, t.description, cur.id);
     setFlag.run("template-slink-v2");
+  }
+  // Version 2.2.92: the same, from the 2.2.91 body to the Word-faithful letterhead (only while nobody edited it).
+  if (!flag.get("template-slink-v3")) {
+    const t = SEED_TEMPLATES.find((x) => x.name === "Solicitud link de expediente");
+    const cur = t && db.prepare("SELECT id, body FROM document_templates WHERE name = ? AND builtin = 1").get(t.name);
+    if (cur && createHash("sha256").update(cur.body).digest("hex") === SLINK_V2_SHA) db.prepare("UPDATE document_templates SET body = ?, description = ? WHERE id = ?").run(t.body, t.description, cur.id);
+    setFlag.run("template-slink-v3");
   }
 }
 

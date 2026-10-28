@@ -86,13 +86,16 @@ export function mailRouter(db) {
     if (!to.length || [...to, ...cc].some((a) => !EMAIL.test(a))) return res.status(400).json({ error: "Revise las direcciones de correo." });
     // Version 2.2.83: a letter built here from its data (escaped). Version 2.2.91: the firm's letterhead and the platform's electronic signature
     // (the sender signs; a verification code and QR that verificar.html answers), issued after the checks and before the message goes out.
-    let letter = null, letterSigner = null;
+    let letter = null, letterSigner = null, letterPdf = null;
     if (b.letter) {
       if (b.letter.kind !== "solicitud_link") return res.status(400).json({ error: "Carta no válida." });
       letterSigner = signerView(req.user);
       const missing = letterMissing(b.letter.fields ?? {}, letterSigner);
       if (missing.length) return res.status(400).json({ error: `Falta: ${missing.join(", ")}.` });
-      letter = buildLetter(b.letter.fields, { signer: letterSigner }); // the text that is signed; the final one carries the stamp
+      // The page makes the letter's PDF (the firm's design); the platform signs exactly that file.
+      letterPdf = Buffer.from(String(b.letter.pdf_base64 || ""), "base64");
+      if (letterPdf.length < 1000 || letterPdf.length > 8 * 1024 * 1024 || letterPdf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: "Falta el PDF de la carta." });
+      letter = buildLetter(b.letter.fields, { signer: letterSigner });
     }
     let subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
     if (!subject || !body) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
@@ -109,9 +112,10 @@ export function mailRouter(db) {
       officeId = k.office_id;
     }
     officeId ||= req.user.offices[0]?.id ?? null;
-    let letterQr = null;
+    let letterQr = null, signedPdf = null;
     if (letter) {
-      const sig = issueLetterSignature(db, req, { title: subject, text: letter.text, caseId: Number(b.case_id) || null, officeId, signer: letterSigner });
+      const sig = await issueLetterSignature(db, req, { title: subject, pdf: letterPdf, stampPos: b.letter.stamp_pos, caseId: Number(b.case_id) || null, officeId, signer: letterSigner });
+      signedPdf = sig.signed.pdf;
       letterQr = qrPng(`${publicUrl(req)}/verificar.html#${sig.code}`);
       letter = buildLetter(b.letter.fields, { signer: letterSigner, imgs: { logo: "cid:carta-logo", qr: "cid:carta-qr", globo: "cid:carta-globo", ubicacion: "cid:carta-ubicacion" },
         stamp: { code: sig.code, signed_at: stampTime(), qrSrc: "cid:firma-qr" } });
@@ -140,13 +144,14 @@ export function mailRouter(db) {
       from: process.env.MAIL_FROM, to, cc, subject, text, html,
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
       attachments: [...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
-        { filename: "firma-qr.png", content: letterQr, cid: "firma-qr", contentType: "image/png", contentDisposition: "inline" }] : []),
+        { filename: "firma-qr.png", content: letterQr, cid: "firma-qr", contentType: "image/png", contentDisposition: "inline" },
+        { filename: "Solicitud link expediente - firmada.pdf", content: signedPdf, contentType: "application/pdf" }] : []),
         ...(mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [])],
     };
     let raw = Buffer.from((await composer.sendMail(mail)).message);
     // Microsoft 365 takes about 3 MB per message: larger attachments travel as tracked links.
     if (t.graph && raw.length > GRAPH_MAX_MIME && mail.attachments.length) {
-      mail.attachments = mail.attachments.filter((a) => a.cid);
+      mail.attachments = mail.attachments.filter((a) => a.cid || String(a.filename).endsWith("firmada.pdf"));
       mode = "enlace";
       mail.html = mail.html.replace("<strong>Anexos:</strong>", "<strong>Anexos (descárguelos con estos enlaces):</strong>");
       raw = Buffer.from((await composer.sendMail(mail)).message);
