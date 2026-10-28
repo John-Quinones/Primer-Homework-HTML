@@ -10,6 +10,17 @@ import { notify } from "./monitor.js";
 
 export const MAX_BODY = 4000;
 export const MAX_FILE = 5 * 1024 * 1024;
+// Images shown inside the message (their real type is checked against the first bytes). Anything else is
+// offered as a download only, and programs/scripts are refused.
+const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const BLOCKED_EXT = /\.(exe|bat|cmd|com|scr|msi|dll|js|mjs|vbs|vbe|ps1|jar|apk|app|sh|hta|lnk|reg|svg|html?)$/i;
+export function sniffImage(buf) {
+  if (buf.length > 12 && buf[0] === 0x89 && buf.toString("latin1", 1, 4) === "PNG") return "image/png";
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.length > 6 && /^GIF8[79]a/.test(buf.toString("latin1", 0, 6))) return "image/gif";
+  if (buf.length > 12 && buf.toString("latin1", 0, 4) === "RIFF" && buf.toString("latin1", 8, 12) === "WEBP") return "image/webp";
+  return null;
+}
 export const CALL_MAX = 6; // a full mesh: every participant sends video to every other one
 const ONLINE = "-3 minutes";
 const CALL_ALIVE = "-25 seconds";
@@ -240,8 +251,12 @@ export function chatRouter(db) {
       const data = Buffer.from(String(b.file.data_base64 || ""), "base64");
       if (!data.length) return err(res, 400, "El archivo está vacío.");
       if (data.length > MAX_FILE) return err(res, 413, "El archivo pesa más de 5 MB.");
+      const fname = str(b.file.name).slice(0, 160) || "archivo";
+      if (BLOCKED_EXT.test(fname)) return err(res, 400, "Ese tipo de archivo no se puede enviar por el chat (programas, scripts y páginas web).");
+      // The stored type is the real one for images and a neutral one for everything else.
+      const mime = sniffImage(data) || "application/octet-stream";
       fileId = Number(db.prepare("INSERT INTO chat_files (conv_id, name, mime, size, data) VALUES (?, ?, ?, ?, ?)")
-        .run(c.id, str(b.file.name).slice(0, 160) || "archivo", str(b.file.mime).slice(0, 100) || "application/octet-stream", data.length, data).lastInsertRowid);
+        .run(c.id, fname, mime, data.length, data).lastInsertRowid);
     }
     if (!body && !fileId && !link.label) return err(res, 400, "Escriba un mensaje.");
     const id = Number(db.prepare("INSERT INTO chat_messages (conv_id, user_id, body, case_id, client_id, link_label, file_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -283,8 +298,11 @@ export function chatRouter(db) {
     // A retracted message's file is no longer offered.
     const m = db.prepare("SELECT retracted_at FROM chat_messages WHERE file_id = ?").get(f.id);
     if (m?.retracted_at) return err(res, 404, "El archivo no existe.");
-    res.setHeader("Content-Type", f.mime);
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    const inline = req.query.inline === "1" && IMAGE_MIMES.includes(f.mime);
+    res.setHeader("Content-Type", inline ? f.mime : IMAGE_MIMES.includes(f.mime) ? f.mime : "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`);
     res.send(f.data);
   });
 

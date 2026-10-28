@@ -154,3 +154,31 @@ test("chat timbre", async () => {
   assert.equal((await monica.call("GET", "/chat/unread")).body.rings.length, 0);
   t.close();
 });
+
+// Imágenes y archivos (version 2.2.99): images show inside the message, other files download, programs are refused.
+test("chat imagenes y archivos", async () => {
+  const t = await startServer();
+  const admin = await t.setup();
+  const ibague = (await admin.call("GET", "/admin/offices")).body[0];
+  await admin.call("POST", "/admin/users", { name: "Carla Prueba", email: "carla@firma.co", role: "Asistente", office_ids: [ibague.id], password: "clave-segura-9" });
+  const carla = await t.login("carla@firma.co", "clave-segura-9");
+  const g = (await carla.call("GET", "/chat/conversations")).body.find((c) => c.kind === "general").id;
+  const png = Buffer.concat([Buffer.from([0x89]), Buffer.from("PNG\r\n\x1a\n"), Buffer.alloc(20)]);
+  const send = (name, mime, buf) => carla.call("POST", `/chat/conversations/${g}/messages`, { file: { name, mime, data_base64: buf.toString("base64") } });
+  const img = await send("foto.png", "text/html", png); // a lying type is ignored
+  assert.equal(img.status, 201);
+  assert.equal(img.body.file.mime, "image/png");
+  const get = (id, q = "") => fetch(t.base + `/chat/files/${id}${q}`, { headers: { Cookie: carla.cookie } });
+  const inline = await get(img.body.file.id, "?inline=1");
+  assert.match(inline.headers.get("content-disposition"), /^inline/);
+  assert.equal(inline.headers.get("content-type"), "image/png");
+  assert.match((await get(img.body.file.id)).headers.get("content-disposition"), /^attachment/);
+  const fake = await send("pagina.png", "image/png", Buffer.from("<script>alert(1)</script>")); // not really an image
+  assert.equal(fake.body.file.mime, "application/octet-stream");
+  assert.match((await get(fake.body.file.id, "?inline=1")).headers.get("content-disposition"), /^attachment/);
+  assert.equal((await send("virus.exe", "application/x-msdownload", Buffer.from("MZ"))).status, 400);
+  assert.equal((await send("a.html", "text/html", Buffer.from("<b>"))).status, 400);
+  assert.equal((await send("pesado.pdf", "application/pdf", Buffer.alloc(5 * 1024 * 1024 + 1))).status, 413);
+  assert.equal((await send("acta.pdf", "application/pdf", Buffer.from("%PDF-1.4"))).status, 201);
+  t.close();
+});
