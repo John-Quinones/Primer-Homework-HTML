@@ -2486,11 +2486,26 @@ async function courtsFor(dep, city, area) {
   }
   return courtCache.get(key);
 }
-function showCourtEmail(court) {
-  $("#court-email").innerHTML = court?.email
-    ? `Correo del despacho: <strong class="copyable">${escapeHtml(court.email)}</strong>${court.phone ? ` · Tel. ${escapeHtml(court.phone)}` : ""}`
-    : court ? "El directorio no trae correo para este despacho." : "";
+// Version 2.3.2: the court's e-mail is a field of the case: the directory fills it, and it can be typed by hand when the court has none.
+let emailCourt = null, autoEmail = "";
+function showCourtEmail(court, typed) {
+  const input = caseForm.elements.court_email;
+  emailCourt = court && court.id ? court : null;
+  if (typed !== undefined) input.value = typed;
+  else if (!input.value || input.value === autoEmail) input.value = court?.email || "";
+  autoEmail = court?.email || "";
+  const phone = court?.phone ? ` Tel. ${escapeHtml(court.phone)}.` : "";
+  $("#court-email").innerHTML = court?.email && input.value === court.email ? `Correo tomado del directorio de despachos; puede corregirlo.${phone}`
+    : court && !court.email ? `El directorio no trae correo para este despacho: escríbalo aquí y quedará guardado en el expediente.${phone}`
+    : court ? "" : "Si el despacho no aparece en el directorio, escriba el correo a mano.";
+  updateCourtEmailSave();
 }
+function updateCourtEmailSave() {
+  const box = $("#court-email-save");
+  box.hidden = !(can("catalog.manage") && emailCourt && !emailCourt.email && caseForm.elements.court_email.value.trim());
+  if (box.hidden) caseForm.elements.save_court_email.checked = false;
+}
+caseForm.elements.court_email.addEventListener("input", updateCourtEmailSave);
 // v2.72: courts are matched with ordinals as numbers («Quinto» finds «005», «Juzgado 5»), accents ignored.
 const ORDINALS = { primero: 1, primer: 1, segundo: 2, tercero: 3, tercer: 3, cuarto: 4, quinto: 5, sexto: 6, septimo: 7, octavo: 8, noveno: 9, decimo: 10,
   undecimo: 11, duodecimo: 12, decimotercero: 13, decimocuarto: 14, decimoquinto: 15, decimosexto: 16, decimoseptimo: 17, decimooctavo: 18, decimonoveno: 19, vigesimo: 20 };
@@ -2706,8 +2721,13 @@ async function openCaseDialog(k = null, clientId = null) {
   caseForm.elements.client_role.innerHTML = "";
   caseForm.elements.monitor.checked = !!k?.monitor; // v2.38: off until the user ticks it
   caseForm.elements.ad_litem.checked = !!k?.ad_litem; // v2.61
-  showCourtEmail(k?.court_name ? { email: k.court_email } : null);
+  showCourtEmail(k?.court_id ? { id: k.court_id, email: "" } : null, k?.court_email || "");
   linkCourtByName(k).catch(() => {});
+  // The linked court's directory row says whether the directory has its e-mail (hint and «guardar también»).
+  if (k?.court_id) courtsFor(k.department || "", "", "").then((list) => {
+    const c = list.find((x) => x.id === k.court_id);
+    if (c && caseForm.elements.court_id.value === String(c.id)) showCourtEmail(c, caseForm.elements.court_email.value);
+  }).catch(() => {});
   $("#judge-suggest").innerHTML = "";
   if (k?.court_name) suggestJudge();
   const firstActive = activeClients(state.clients)[0];
@@ -2753,7 +2773,7 @@ wireDialog($("#case-dialog"), async (form) => {
     client_role: d.client_role, affiliated: form.elements.affiliated.checked,
     office_id: Number(d.office_id), assigned_user_id: Number(d.assigned_user_id) || null,
     radicado: d.radicado, department: d.department, city: d.city, area: d.area,
-    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
+    court_id: Number(d.court_id) || null, court_name: Number(d.court_id) ? undefined : d.court_search, court_email: d.court_email, save_court_email: form.elements.save_court_email.checked, judge_name: d.judge_name || "", monitor: form.elements.monitor.checked, ad_litem: form.elements.ad_litem.checked,
     parties: partyRows.filter((p) => p.name.trim()).map(({ side, role, name, id_type, id_number, ours, client_id }) => ({ side, role: role || "", name, id_type: id_type || "", id_number, ours, client_id })),
   };
   {
