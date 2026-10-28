@@ -474,7 +474,16 @@
   const PERSON = window.JuanmaPerson;
   const PLACE = { canonicalDepartment: canonDep, canonicalCity: canonCity, placeFromRadicado: placeFromRad, areas: AREAS, fail };
   const clientValues = (b, existing = {}) => RR.clientValues(b, existing, { ...PLACE, personFields: PERSON.personFields, properAddress: PERSON.properAddress, properPhone: PERSON.properPhone, normGender: CM.normGender });
-  const caseLocation = (b, cur = {}) => RR.caseLocation(b, cur, { ...PLACE, court: (id) => s.courts.find((x) => x.id === id) || null });
+  const caseLocation = (b, cur = {}) => {
+    const loc = RR.caseLocation(b, cur, { ...PLACE, court: (id) => s.courts.find((x) => x.id === id) || null });
+    // Version 2.3.2: «Guardar también en el despacho» (Gerencia; only when the directory has no e-mail for that court).
+    if (b.save_court_email && loc.court_id && loc.court_email) {
+      need("catalog.manage");
+      const c = s.courts.find((x) => x.id === loc.court_id);
+      if (c && !c.email) c.email = loc.court_email;
+    }
+    return loc;
+  };
   const savedVisible = (r) => scope() === null || r.created_by === me().id || (r.case_id && s.cases.some((k) => k.id === r.case_id && inScope(k.office_id)));
   const usedFolders = () => {
     const ids = s.fields.filter((f) => CM.isFolderLabel(f.label)).map((f) => f.id);

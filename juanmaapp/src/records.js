@@ -392,6 +392,13 @@ export function recordsRouter(db) {
   // Place, area, court and radicado of a case (rules in record-rules.js).
   const caseLocation = (b, cur = {}) => locate(b, cur, { ...PLACE, court: (id) => db.prepare("SELECT * FROM courts WHERE id = ?").get(id) ?? null });
 
+  // Version 2.3.2: «Guardar también en el despacho» — only Gerencia (catalog.manage) and only when the directory has no e-mail for that court.
+  const saveCourtEmail = (req, b, loc) => {
+    if (!b.save_court_email || !loc.court_id || !loc.court_email) return;
+    checkPerm(req, "catalog.manage");
+    db.prepare("UPDATE courts SET email = ?, updated_at = datetime('now') WHERE id = ? AND email = ''").run(loc.court_email, loc.court_id);
+  };
+
   // The responsible person must be an active user of the case's office (or see all offices).
   const checkAssignee = (userId, officeId) => {
     if (!userId) return null;
@@ -436,6 +443,7 @@ export function recordsRouter(db) {
     const typeId = toInt(b.process_type_id, "El subproceso");
     const values = cleanFieldValues(typeId, b.field_values);
     const loc = caseLocation(b);
+    saveCourtEmail(req, b, loc);
     const id = db.prepare(`INSERT INTO cases (client_id, process_type_id, title, status, counterparty, facts, field_values, office_id, assigned_user_id,
         department, city, area, court_id, court_name, court_email, radicado, monitor, client_role, affiliated, parties, judge_name, case_number, ad_litem, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))`)
@@ -460,6 +468,7 @@ export function recordsRouter(db) {
       ? checkAssignee(b.assigned_user_id ? toInt(b.assigned_user_id, "El responsable") : null, officeId)
       : cur.assigned_user_id && officeId !== cur.office_id ? null : cur.assigned_user_id;
     const loc = caseLocation(b, cur);
+    saveCourtEmail(req, b, loc);
     db.prepare(`UPDATE cases SET process_type_id = ?, title = ?, status = ?, counterparty = ?, facts = ?,
       field_values = ?, office_id = ?, assigned_user_id = ?, department = ?, city = ?, area = ?, court_id = ?,
       court_name = ?, court_email = ?, radicado = ?, monitor = ?, client_role = ?, affiliated = ?, parties = ?, judge_name = ?, case_number = ?, ad_litem = ?, updated_at = datetime('now') WHERE id = ?`)

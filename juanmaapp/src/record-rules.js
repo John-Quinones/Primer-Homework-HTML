@@ -180,11 +180,13 @@ export function caseLocation(b, cur, lib) {
     courtId = b.court_id ? Number(b.court_id) : null;
     if (courtId !== null && !(Number.isInteger(courtId) && courtId > 0)) lib.fail("El despacho no es válido.");
   }
-  let courtName = pick("court_name"), courtEmail = pick("court_email");
+  let courtName = pick("court_name"), courtEmail = pick("court_email").toLowerCase();
+  // Version 2.3.2: the e-mail may be typed by hand; the directory's one fills it only when nothing is typed.
+  if (courtEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courtEmail)) lib.fail("El correo del despacho no es válido.");
   const court = courtId ? lib.court(courtId) || lib.fail("El despacho no existe en el directorio.") : null;
   if (court) {
     courtName = court.name;
-    courtEmail = court.email;
+    courtEmail = ("court_email" in b ? courtEmail : "") || court.email || (courtId === cur.court_id ? str(cur.court_email) : "");
     department ||= court.department;
     city ||= court.city;
   }

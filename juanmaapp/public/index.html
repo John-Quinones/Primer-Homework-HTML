@@ -1407,7 +1407,9 @@
           <label class="span2">Despacho <input name="court_search" class="combo" data-combo="court" autocomplete="off" placeholder="Toque para ver los despachos del filtro, o escriba para buscar" /></label>
         </div>
         <input type="hidden" name="court_id" />
+        <label>Correo del despacho <input name="court_email" type="email" autocomplete="off" maxlength="200" placeholder="Se llena con el directorio; si no aparece, escríbalo" /></label>
         <p class="hint" id="court-email"></p>
+        <label class="inline" id="court-email-save" hidden><input type="checkbox" name="save_court_email" /> Guardar también este correo en el despacho del directorio (queda para todos los expedientes)</label>
         <div class="judge-box">
           <label>Nombre del juez <input name="judge_name" autocomplete="off" maxlength="200" placeholder="Elija el nombre sugerido o escríbalo a mano" /></label>
           <div id="judge-suggest" class="judge-suggest" aria-live="polite"></div>
