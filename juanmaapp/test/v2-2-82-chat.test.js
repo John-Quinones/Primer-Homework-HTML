@@ -152,4 +152,5 @@ test("chat timbre", async () => {
   assert.equal((await carla.call("POST", `/chat/rings/${k.body.id}/seen`)).status, 404, "only the target can answer");
   assert.equal((await monica.call("POST", `/chat/rings/${k.body.id}/seen`)).status, 200);
   assert.equal((await monica.call("GET", "/chat/unread")).body.rings.length, 0);
+  t.close();
 });
