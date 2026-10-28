@@ -736,14 +736,17 @@ function renderClientList() {
   // «Todos los estados» lists every state with its tag. The note says how many other matches sit in other states.
   const searching = !!($("#client-search")?.value || "").trim() && $("#client-search-by")?.value !== "case";
   const everything = f === "todos";
-  const shown = clientsByFolder(everything ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f));
+  // Version 2.3.4: with «Expedientes» the left column lists only the clients who own a matching case (the cases go at the right).
+  const caseText = ($("#client-search")?.value || "").trim(), onlyCases = !!caseText && $("#client-search-by")?.value === "case";
+  const owners = onlyCases ? new Set(state.cases.filter(caseSearchMatcher(caseText)).map((k) => k.client_id)) : null;
+  const shown = clientsByFolder((everything ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f)).filter((c) => !owners || owners.has(c.id)));
   const others = ["", ...CLIENT_ARCHIVE].filter((st) => st !== f && !everything).map((st) => [st || "Activo", state.clients.filter((c) => (c.archive_status || "") === st).length]);
   const note = $("#client-archive-note");
   if (note) note.textContent = !others.some(([, n]) => n) ? "" : searching
     ? `Coinciden también ${others.filter(([, n]) => n).map(([st, n]) => `${n} en ${st.toLowerCase()}`).join(" · ")}: cambie el estado de arriba o elija «Todos los estados» para verlos.`
     : (f ? "" : others.filter(([, n]) => n).map(([st, n]) => `${n} cliente(s) en ${st.toLowerCase()}`).join(" · "));
   if (!shown.length) {
-    ul.innerHTML = `<li class="empty">${searching ? `Ningún cliente coincide con la búsqueda en ${everything ? "ningún estado" : f ? f.toLowerCase() : "clientes activos"}.` : f && !everything ? `No hay clientes en ${f.toLowerCase()}.` : everything ? "No hay clientes registrados." : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
+    ul.innerHTML = `<li class="empty">${onlyCases ? "Ningún cliente tiene expedientes que coincidan." : searching ? `Ningún cliente coincide con la búsqueda en ${everything ? "ningún estado" : f ? f.toLowerCase() : "clientes activos"}.` : f && !everything ? `No hay clientes en ${f.toLowerCase()}.` : everything ? "No hay clientes registrados." : "No hay clientes activos. Cree el primero con “+ Nuevo cliente”."}</li>`;
     return;
   }
   ul.innerHTML = shown.map((c) => `
@@ -785,6 +788,10 @@ document.addEventListener("change", (e) => {
 
 async function renderClientDetail() {
   const box = $("#client-detail");
+  // Version 2.3.4: while a search shows the case preview (right column) and no client is chosen, the preview takes the place of the sheet.
+  const preview = $("#client-case-results");
+  box.hidden = !preview.hidden;
+  if (box.hidden) return;
   const c = state.clients.find((c) => c.id === state.selectedClientId);
   if (!c) {
     box.innerHTML = '<p class="empty">Seleccione un cliente o cree uno nuevo.</p>';
@@ -1431,8 +1438,10 @@ document.addEventListener("click", (e) => {
 $("#client-archive").addEventListener("change", () => guarded(async () => { renderClientList(); await renderClientDetail(); }));
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
+  if ($("#client-search").value.trim()) state.selectedClientId = null; // a new search shows the cases preview again
   renderClientList();
   renderClientCaseSearch();
+  await renderClientDetail();
 }));
 
 $("#client-list").addEventListener("click", (e) => {
@@ -1441,6 +1450,7 @@ $("#client-list").addEventListener("click", (e) => {
   // Selecting shows the summary at the side and a menu next to the name with the client's data and cases.
   state.selectedClientId = Number(btn.dataset.client);
   renderClientList();
+  renderClientCaseSearch();
   guarded(renderClientDetail);
   const again = $(`#client-list [data-client="${btn.dataset.client}"]`);
   e.openedClientMenu = true; // the same click must not close it again below
@@ -2138,8 +2148,10 @@ function renderClientCaseSearch() {
   // clients; «Expedientes» looks only at cases (and says so when none match).
   const box = $("#client-case-results"), text = $("#client-search").value.trim(), onlyCases = $("#client-search-by").value === "case";
   const found = text ? casesByFolder(state.cases.filter(caseSearchMatcher(text))) : [];
-  if (!text || (!onlyCases && !found.length)) { box.hidden = true; box.innerHTML = ""; return; }
+  // Version 2.3.4: the cases preview fills the right column until a client is chosen (then the client's sheet takes its place).
+  if (!text || (!onlyCases && !found.length) || state.selectedClientId) { box.hidden = true; box.innerHTML = ""; $("#client-detail").hidden = false; return; }
   box.hidden = false;
+  $("#client-detail").hidden = true;
   box.innerHTML = found.length
     ? `<p class="muted">${found.length} expediente(s) encontrado(s)${found.length > 20 ? " (se muestran 20)" : ""}.</p><ul class="item-list">${found.slice(0, 20).map((k) => `
       <li><div class="item"><strong>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span> ` : ""}${escapeHtml(k.client_name || "")}</strong>
