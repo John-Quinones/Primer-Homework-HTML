@@ -207,6 +207,16 @@ CREATE TABLE IF NOT EXISTS chat_signals (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS chat_signals_to ON chat_signals(to_user, id);
+-- Timbre (version 2.2.96): an audible call-for-attention sent to one person; stays until that person answers it.
+CREATE TABLE IF NOT EXISTS chat_rings (
+  id         INTEGER PRIMARY KEY,
+  from_user  INTEGER NOT NULL,
+  to_user    INTEGER NOT NULL,
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  seen_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS chat_rings_to ON chat_rings(to_user, seen_at);
 
 -- Rama Judicial consultation: actions (actuaciones) seen per case and each check run.
 CREATE TABLE IF NOT EXISTS actuaciones (

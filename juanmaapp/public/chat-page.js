@@ -42,6 +42,7 @@
     S.calling = u.calling;
     if (!u.calling || callState) hideAlert("call");
     if ((newMsg || newCall) && !callState) announce(newMsg, newCall);
+    showRings(u.rings || []);
     S.byConv = u.by_conversation;
   }
 
@@ -95,6 +96,30 @@
       alertTimer = setTimeout(() => hideAlert("msg"), 9000);
     }
     desktopNotice(call ? `Videollamada de ${who}` : `Mensaje de ${who}`, call ? "Abra el chat para unirse." : conv.last_preview, call ? "chat-call" : "chat-msg");
+  }
+  // Timbre (version 2.2.96): sounds every 2 s and stays on screen until the person answers it.
+  let ringList = [], ringBeat = 0;
+  function showRings(list) {
+    const el = $("#chat-ring-alert");
+    ringList = list;
+    if (!list.length) { el.hidden = true; clearInterval(ringBeat); ringBeat = 0; return; }
+    const k = list[0];
+    $("#chat-ring-title").textContent = `🔔 ${k.from} le llama`;
+    $("#chat-ring-text").textContent = k.body + (list.length > 1 ? ` (+${list.length - 1} más)` : "");
+    if (el.hidden) {
+      el.hidden = true; el.hidden = false;
+      desktopNotice(`🔔 ${k.from} le llama`, k.body, "chat-ring");
+    }
+    if (!ringBeat) {
+      const beat = () => tones([988, 784, 988, 784, 988], 0.16);
+      beat(); ringBeat = setInterval(beat, 2000);
+    }
+  }
+  async function answerRing() {
+    const k = ringList[0];
+    if (!k) return;
+    await api("POST", `/chat/rings/${k.id}/seen`);
+    showRings(ringList.slice(1));
   }
   async function announce(newMsg, newCall) {
     try { await loadConvs(); } catch { return; }
@@ -216,7 +241,8 @@
     syncDock();
     if (on) pollBadge();
   }
-  setInterval(() => { if (me && !document.hidden) pollBadge(); }, BADGE_MS);
+  let hiddenTick = 0; // a hidden tab still asks every 20 s, so a timbre is not missed
+  setInterval(() => { if (me && (!document.hidden || ++hiddenTick % 4 === 0)) pollBadge(); }, BADGE_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && me) pollBadge(); });
 
   // ---------- screen ----------
@@ -708,6 +734,18 @@
         drawLog(false);
       });
     });
+    $("#chat-ring-ok").addEventListener("click", () => guarded(answerRing));
+    $("#chat-ring").addEventListener("click", () => {
+      const sel = $("#chat-ring-to");
+      sel.innerHTML = S.people.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}${p.online ? "" : " (sin conexión)"}</option>`).join("");
+      if (S.cur?.kind === "direct" && S.cur.other_id) sel.value = String(S.cur.other_id);
+      $("#chat-ring-dialog").showModal();
+    });
+    $("#chat-ring-go").addEventListener("click", () => guarded(async () => {
+      const r = await api("POST", "/chat/ring", { to: Number($("#chat-ring-to").value), body: $("#chat-ring-text").value });
+      $("#chat-ring-dialog").close();
+      toast(`🔔 Timbre enviado a ${r.to_name}.`);
+    }));
     $("#chat-alert-go").addEventListener("click", () => guarded(alertGo));
     $("#chat-alert-x").addEventListener("click", () => hideAlert());
     document.addEventListener("click", () => { if (window.Notification?.permission === "default") Notification.requestPermission().catch(() => {}); }, { once: true });
