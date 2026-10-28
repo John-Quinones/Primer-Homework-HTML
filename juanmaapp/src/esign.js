@@ -34,6 +34,8 @@ function event(db, requestId, signerId, name, detail = "", ip = "") {
  * address, and a verification code. The signed PDF carries the signature module's own stamp (QR, time, data) and certificate, built by ensureSignedPdf,
  * so it verifies on verificar.html by code or by uploading the file. Returns {id, code, signed: {pdf, sha256}}.
  */
+// Version 2.3.11: the firm's own signature always shows the firm's e-mail, not the e-mail of the account that signs.
+const FIRM_SIGN_EMAIL = "gerencia@tecjuridicos.com";
 export async function issueLetterSignature(db, req, { title, pdf, stampPos, caseId, officeId, signer, docName = "solicitud-link-expediente.pdf", stampPage = "first", message = "Carta enviada por la plataforma" }) {
   const hash = sha(pdf), code = newVerifyCode();
   const pos = /^at:(0(\.\d{1,4})?|1(\.0{1,4})?),(0(\.\d{1,4})?|1(\.0{1,4})?)$/.test(str(stampPos)) ? str(stampPos) : "br";
@@ -43,7 +45,7 @@ export async function issueLetterSignature(db, req, { title, pdf, stampPos, case
   event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
   const sid = db.prepare(`INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, status, method, signed_at, ip, user_agent, typed_name)
     VALUES (?, ?, 'CC', ?, ?, ?, ?, 'firmado', 'plataforma', datetime('now'), ?, ?, ?)`)
-    .run(id, signer.name, signer.id_number, signer.email || "", signer.phone || "", sha(randomBytes(24)), clientIp(req), str(req.get?.("user-agent")).slice(0, 300), signer.name).lastInsertRowid;
+    .run(id, signer.name, signer.id_number, FIRM_SIGN_EMAIL, signer.phone || "", sha(randomBytes(24)), clientIp(req), str(req.get?.("user-agent")).slice(0, 300), signer.name).lastInsertRowid;
   event(db, id, sid, "firmado", `Firma electrónica con la cuenta ${req.user.email || req.user.name} · SHA-256 ${hash}`, clientIp(req));
   event(db, id, null, "completada", "Carta firmada por la plataforma para enviarla por correo.");
   const signed = await ensureSignedPdf(db, req, id);

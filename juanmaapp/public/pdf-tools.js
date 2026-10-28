@@ -7,6 +7,8 @@
   const STATUS = { enviada: "En curso", completada: "Firmado por todos", cancelada: "Cancelada", rechazada: "Rechazada" };
   const CHANNEL = { email: "correo electrónico", sms: "mensaje de texto (SMS)", whatsapp: "WhatsApp" };
   // Stored times are UTC; documents show Colombia time (UTC-5, no daylight saving).
+  // Stamp of the firm's own signature (platform account): the T.P. line under the ID and the firm's e-mail (version 2.3.11).
+  const FIRM_SIGN = { card: "T.P. No.150.081 del C.S. de la J.", email: "gerencia@tecjuridicos.com" };
   const co = (utc) => (utc ? new Date(Date.parse(String(utc).replace(" ", "T") + "Z") - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") + " (hora de Colombia)" : "");
   const methodText = (x) => (x.method === "presencial" ? "en persona, con testigo"
     : x.method === "plataforma" ? "sesión autenticada en la cuenta de la plataforma"
@@ -199,11 +201,13 @@
         const put = (text, dx, dy, f, size, color, max = 40) => page.drawText(ansi(text).slice(0, max), { x: dx, y: y + dy, size, font: f, color });
         put(s.typed_name || s.name, left, boxH - 16, font, 9, gray, 34);
         put(`${s.id_type || "CC"}. ${s.id_number || ""}`.trim(), left, boxH - 28, font, 9, gray);
-        put("Firma Electrónica", left, boxH - 42, bold, 6.5, blue);
-        put(isoCo(s.signed_at), left, boxH - 50, font, 6.5, blue);
+        const own = s.method === "plataforma";
+        if (own) put(FIRM_SIGN.card, left, boxH - 39, font, 8, gray, 40);
+        put("Firma Electrónica", left, boxH - (own ? 51 : 42), bold, 6.5, blue);
+        put(isoCo(s.signed_at), left, boxH - (own ? 59 : 50), font, 6.5, blue);
         const bx = x + 6;
         put(s.typed_name || s.name, bx, 24, bold, 7.4, rgb(0.06, 0.06, 0.06), 52);
-        put([`${s.id_type || ""} ${s.id_number || ""}`.trim(), s.email, s.phone].filter(Boolean).join(" · "), bx, 15, font, 6.4, rgb(0.1, 0.1, 0.1), 66);
+        put([`${s.id_type || ""} ${s.id_number || ""}`.trim(), own ? FIRM_SIGN.email : s.email, s.phone].filter(Boolean).join(" · "), bx, 15, font, 6.4, rgb(0.1, 0.1, 0.1), 66);
         put(s.method === "presencial" ? "Verificación: en persona con testigo"
           : s.method === "plataforma" ? "Verificación: cuenta autenticada en la plataforma"
           : `Verificación: código OTP por ${s.otp_channel === "sms" ? "SMS" : s.otp_channel === "whatsapp" ? "WhatsApp" : "correo"}`, bx, 6, font, 6, gray, 66);
