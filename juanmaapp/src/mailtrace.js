@@ -38,6 +38,8 @@ const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const clientIp = (req) => String(req.ip || req.socket.remoteAddress || "");
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 const MAX_TOTAL = 15 * 1024 * 1024;
+// Version 2.3.6: the PDF the sender signs may weigh up to this much (it travels as an attachment or, when the mail server cannot take it, as a tracked download link).
+export const MAX_SIGN_PDF = 30 * 1024 * 1024;
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 
 let transportOverride = null;
@@ -104,7 +106,7 @@ export function mailRouter(db) {
       const missing = [!letterSigner.name && "su nombre completo (Usuarios)", !letterSigner.id_number && "su cédula (Usuarios)"].filter(Boolean);
       if (missing.length) return res.status(400).json({ error: `Para firmar falta: ${missing.join(", ")}.` });
       const pdf = Buffer.from(String(b.sign.pdf_base64 || ""), "base64");
-      if (pdf.length < 100 || pdf.length > 8 * 1024 * 1024 || pdf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: "Falta el PDF o no es válido (máximo 8 MB)." });
+      if (pdf.length < 100 || pdf.length > MAX_SIGN_PDF || pdf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: pdf.length > MAX_SIGN_PDF ? `El PDF pesa ${(pdf.length / 1048576).toFixed(1)} MB y el máximo es 30 MB.` : "Falta el PDF o no es válido." });
       signDoc = { pdf, name: str(b.sign.filename).replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "documento" };
     }
     let subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
@@ -122,12 +124,12 @@ export function mailRouter(db) {
       officeId = k.office_id;
     }
     officeId ||= req.user.offices[0]?.id ?? null;
-    let letterQr = null, signedPdf = null, signedDocName = "";
+    let letterQr = null, signedPdf = null;
     if (signDoc) {
       const sig = await issueLetterSignature(db, req, { title: subject, pdf: signDoc.pdf, stampPos: b.sign.stamp_pos, stampPage: str(b.sign.stamp_page), caseId: Number(b.case_id) || null, officeId,
         signer: letterSigner, docName: `${signDoc.name}.pdf`, message: "Documento firmado y enviado por correo desde la plataforma" });
-      signedPdf = sig.signed.pdf;
-      signedDocName = `${signDoc.name} - firmada.pdf`;
+      // The signed PDF is a normal attachment: attached when the mail server takes it, otherwise offered as a tracked download link (below).
+      files.push({ filename: `${signDoc.name} - firmada.pdf`, mime: "application/pdf", data: sig.signed.pdf });
     }
     if (letter) {
       const sig = await issueLetterSignature(db, req, { title: subject, pdf: letterPdf, stampPos: b.letter.stamp_pos, caseId: Number(b.case_id) || null, officeId, signer: letterSigner });
@@ -159,8 +161,7 @@ export function mailRouter(db) {
     const mail = {
       from: process.env.MAIL_FROM, to, cc, subject, text, html,
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
-      attachments: [...(signDoc ? [{ filename: signedDocName, content: signedPdf, contentType: "application/pdf" }] : []),
-        ...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
+      attachments: [...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
         { filename: "firma-qr.png", content: letterQr, cid: "firma-qr", contentType: "image/png", contentDisposition: "inline" },
         { filename: "Solicitud link expediente - firmada.pdf", content: signedPdf, contentType: "application/pdf" }] : []),
         ...(mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [])],
@@ -168,7 +169,7 @@ export function mailRouter(db) {
     let raw = Buffer.from((await composer.sendMail(mail)).message);
     // Microsoft 365 takes about 3 MB per message: larger attachments travel as tracked links.
     if (t.graph && raw.length > GRAPH_MAX_MIME && mail.attachments.length) {
-      mail.attachments = mail.attachments.filter((a) => a.cid || String(a.filename).endsWith("firmada.pdf"));
+      mail.attachments = mail.attachments.filter((a) => a.cid || (letter && String(a.filename).endsWith("firmada.pdf")));
       mode = "enlace";
       mail.html = mail.html.replace("<strong>Anexos:</strong>", "<strong>Anexos (descárguelos con estos enlaces):</strong>");
       raw = Buffer.from((await composer.sendMail(mail)).message);
