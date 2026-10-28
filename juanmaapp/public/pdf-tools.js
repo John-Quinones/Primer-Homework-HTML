@@ -84,7 +84,7 @@
         line(`Firmó: ${co(x.signed_at)} · Verificación: ${methodText(x)}`);
         line(`Nombre escrito: ${x.typed_name || ""} · IP: ${x.ip || "—"}`);
         line(`Navegador: ${x.user_agent || "—"}`, { size: 8, color: [90, 90, 90] });
-        try { doc.addImage(x.signature_png, "PNG", M, y, 180, 60); } catch {}
+        try { doc.addImage(x.signature_png, "PNG", M, y, 180, 60, undefined, "FAST"); } catch {}
         doc.setDrawColor(150); doc.line(M, y + 62, M + 200, y + 62);
         y += 78;
       } else {
