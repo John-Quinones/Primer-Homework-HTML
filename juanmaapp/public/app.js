@@ -2114,7 +2114,7 @@ function casesByPlace() {
 }
 // Version 2.70: the list hides archived cases unless «Estado» asks for them (Archivo provisional / Archivo definitivo / Todos).
 const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"]); // everything but Activo: the views are exclusive (v2.96 adds Pendiente Pago Sentencia)
-// Version 2.2.94: one case search for Expedientes and Clientes. Every typed word must appear in the folder, case number, client name
+// Version 2.2.95: one case search for Expedientes and Clientes. Every typed word must appear in the folder, case number, client name
 // AND document, title, type, court, radicado or parties (any order, no accents); 4+ digits also match the radicado with or without dashes.
 function caseSearchMatcher(text) {
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
