@@ -20,6 +20,7 @@ const data = { "fecha.hoy": "27 de octubre de 2026", "expediente.juez": "Yolanda
 test("letterFields takes the case's data; the type of action is typed", () => {
   const f = letterFields(data);
   assert.equal(f.ciudad, "Ibagué");
+  assert.equal(letterFields({ ...data, "expediente.clase_proceso": "Pertenencia" }).tipo_actuacion, "Pertenencia"); // v2.2.93: the case's process class
   assert.equal(f.nombre_juez_o_doctora, "YOLANDA VARGAS");
   assert.equal(f.numero_radicado, "73-001-40-03-003-2026-00312-00");
   assert.equal(f.demandante, "Alirio Guzmán");

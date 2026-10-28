@@ -30,7 +30,7 @@
     if (!A) return;
     const b = pdfBox(doc), { W, H } = b;
     keepState(doc, () => {
-      const img = (a, x, y, w, h) => { try { doc.addImage(a.png, "PNG", x, y, w, h); } catch { /* the letterhead never stops a document */ } };
+      const img = (a, x, y, w, h) => { try { doc.addImage(a.png, "PNG", x, y, w, h, undefined, "FAST"); } catch { /* the letterhead never stops a document */ } };
       // Watermark first, so it stays behind the text.
       const wmW = b.landscape ? 330 : 360;
       img(A.wm, (W - wmW) / 2, (H - wmW * A.wm.h / A.wm.w) / 2, wmW, wmW * A.wm.h / A.wm.w);

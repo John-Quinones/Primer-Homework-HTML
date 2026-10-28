@@ -156,6 +156,7 @@ export function mailRouter(db) {
       mail.html = mail.html.replace("<strong>Anexos:</strong>", "<strong>Anexos (descárguelos con estos enlaces):</strong>");
       raw = Buffer.from((await composer.sendMail(mail)).message);
     }
+    if (t.graph && raw.length > GRAPH_MAX_MIME) return res.status(400).json({ error: "El mensaje supera los 3 MB que admite Microsoft 365, incluso sin anexos. Reduzca el contenido." });
     const rawDigests = digests(raw);
     const messageId = (raw.toString("latin1").match(/^Message-ID:\s*(<[^>]+>)/im) || [])[1] || "";
     let status = "enviado", info = {}, response = "";

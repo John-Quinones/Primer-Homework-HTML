@@ -25,7 +25,7 @@ export function letterFields(v) {
     cargo_despacho: first("destinatario.entidad", "expediente.despacho"),
     correo_juzgado: first("destinatario.correo", "expediente.correo_despacho"),
     ciudad_juzgado: first("destinatario.ciudad", "expediente.ciudad"),
-    tipo_actuacion: "",
+    tipo_actuacion: String(v["expediente.clase_proceso"] || "").trim(), // the case's process class: Pertenencia, Ejecutivo, Ordinario Laboral de Primera Instancia…
     demandante: v["expediente.demandantes"] || (v["cliente.calidad_sola"] === "demandante" ? v["cliente.nombre"] : "") || "",
     demandado: first("expediente.contraparte"),
     numero_radicado: dashed(first("expediente.radicado")),
