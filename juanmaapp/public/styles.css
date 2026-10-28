@@ -1573,7 +1573,6 @@ dialog.chat-call[open] { display: flex; }
 /* Chat docked at the bottom of every screen (version 2.2.82): a fixed horizontal bar, and a resizable window above it */
 :root { --dock-left: 210px; --dock-pad: 0px; --dock-w: 380px; --dock-h: 460px; }
 .has-chat-dock main { padding-bottom: calc(var(--dock-pad) + 12px); }
-.has-chat-dock .page-nav { bottom: var(--dock-pad); }
 .chat-dock { position: fixed; left: var(--dock-left); right: 104px; bottom: 0; z-index: 30; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0; box-shadow: 0 -4px 18px rgba(0, 0, 0, .3); }
 .chat-dock[hidden], .chat-dock-body[hidden] { display: none; }
 .chat-dock-mini { display: flex; flex-direction: column; gap: 6px; padding: 8px 14px 6px; }
@@ -1647,13 +1646,13 @@ iframe.html-letter { width: 100%; min-height: 640px; border: 1px solid var(--lin
 .chat-app.chat-docked .chat-ring-t { display: none; }
 @media (max-width: 600px) { .chat-ring-t { display: none; } }
 
-/* Version 2.3.4 (user's choice, idea 1): the Atrás / Adelante buttons float as two round buttons in the side margins, at 30% of the window height, of the
+/* Version 2.3.4 (user's choice, idea 1): the Atrás / Adelante buttons float as two round buttons in the side margins, at about 30% of the window height, always above the chat window, of the
    window. The screen or dialog keeps a reserved strip at each side (--nav-side), so the buttons never sit over what is being read.
    The bar itself has no height (sticky at 30% of the window height, above the HUD arrows and Mony at the right edge), so it takes no room in the flow. Pop-up lists, the sign-in card and the public pages keep a plain bar. */
 :root { --nav-side: 52px; --nav-btn: 44px; }
 @media (max-width: 560px) { :root { --nav-side: 40px; --nav-btn: 34px; } }
 main .view, dialog:not(.chat-call) { padding-inline: var(--nav-side); }
-.page-nav, dialog .dlg-nav { position: sticky; bottom: 70vh; z-index: 40; height: 0; margin: 0; padding: 0; background: none; box-shadow: none; display: block; }
+.page-nav, dialog .dlg-nav { position: sticky; bottom: min(max(70vh, calc(var(--dock-pad) + var(--dock-h) + 56px)), calc(100vh - 130px)); z-index: 40; height: 0; margin: 0; padding: 0; background: none; box-shadow: none; display: block; }
 .page-nav > button {
   position: absolute; bottom: calc(var(--nav-btn) / -2); width: var(--nav-btn); height: var(--nav-btn); min-height: 0; padding: 0; border-radius: 50%;
   font-size: 0; display: inline-flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
