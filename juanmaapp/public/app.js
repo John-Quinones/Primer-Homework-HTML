@@ -6596,6 +6596,7 @@ function fseSetMode() {
   $("#fse-carta", fseDlg).hidden = !carta;
   $("[data-fse-pdf-req]", fseDlg).hidden = carta;
   e.pdf.required = !carta;
+  fseForm.classList.toggle("fse-side", !carta);
   // Version 2.3.13: with the letter, the e-mail carries the letter itself (HTML), so the plain message is not used.
   e.body.required = !carta;
   e.body.closest("label").hidden = carta;

@@ -1673,3 +1673,11 @@ main .view, dialog:not(.chat-call) { padding-inline: var(--nav-side); }
   #fse-carta > * { grid-column: 1; min-width: 0; }
   #fse-carta > #fse-carta-view { grid-column: 2; grid-row: 1 / span 30; position: sticky; top: 0; height: 80vh !important; }
 }
+
+/* Version 2.3.14: «Solo el PDF que subo»: the fields on the left and the PDF preview (where the signature goes) fixed on the right, to follow the data live. */
+@media (min-width: 1000px) {
+  #fse-dialog form.fse-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
+  #fse-dialog form.fse-side > * { grid-column: 1; min-width: 0; }
+  #fse-dialog form.fse-side > h3, #fse-dialog form.fse-side > h3 + p.hint { grid-column: 1 / -1; }
+  #fse-dialog form.fse-side > #fse-view { grid-column: 2; grid-row: 3 / span 40; position: sticky; top: 0; max-height: 82vh; }
+}
