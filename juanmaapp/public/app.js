@@ -6464,6 +6464,7 @@ $("#sign-pdf-view").addEventListener("keydown", (e) => {
 
 // ---------- Version 2.2.97: sign a PDF of the office and e-mail it to one or more recipients ----------
 const fseDlg = $("#fse-dialog"), fseForm = $("form", fseDlg), fseView = $("#fse-view");
+const FSE_MAX = 30 * 1024 * 1024; // same limit as the server (MAX_SIGN_PDF)
 let fseSpot = null; // { fx, fy, page }: top-left corner of the stamp as fractions of its page
 let fseDrag = null;
 const fsePos = () => (fseSpot ? `at:${fseSpot.fx.toFixed(4)},${fseSpot.fy.toFixed(4)}` : "br");
@@ -6495,8 +6496,8 @@ fseForm.elements.pdf.addEventListener("change", () => guarded(async () => {
   const f = fseForm.elements.pdf.files[0], info = $("[data-fse-info]", fseDlg);
   fseSpot = null;
   if (!f) return;
+  if (f.size > FSE_MAX) throw new Error(`El PDF pesa ${(f.size / 1048576).toFixed(1)} MB y el máximo es 30 MB.`);
   const bytes = new Uint8Array(await f.arrayBuffer());
-  if (f.size > 8 * 1024 * 1024) throw new Error("El PDF debe pesar menos de 8 MB.");
   if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") throw new Error("El archivo no es un PDF válido.");
   if (!fseForm.elements.subject.value.trim()) fseForm.elements.subject.value = f.name.replace(/\.pdf$/i, "");
   const pages = await window.JuanmaPdfView.render(fseView, bytes);
@@ -6540,12 +6541,17 @@ fseView.addEventListener("keydown", (e) => {
 wireDialog(fseDlg, async (form) => {
   const f = form.elements.pdf.files[0];
   if (!f) throw new Error("Elija el archivo PDF.");
+  if (f.size > FSE_MAX) throw new Error(`El PDF pesa ${(f.size / 1048576).toFixed(1)} MB y el máximo es 30 MB.`);
+  // Read in pieces: a one-shot data URL of a big file can fail on some browsers.
+  const raw = new Uint8Array(await f.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < raw.length; i += 0x8000) bin += String.fromCharCode(...raw.subarray(i, i + 0x8000));
   // Recipients: «Name: address» lines are fine, only the addresses are kept.
   const found = (s) => [...new Set(s.match(/[^\s@,;:<>]+@[^\s@,;<>]+\.[^\s@,;<>]+/g) || [])];
   const to = found(form.elements.to.value);
   if (!to.length) throw new Error("Escriba al menos un correo de destinatario.");
   const m = await api("POST", "/mail", { to: to.join(", "), cc: found(form.elements.cc.value).join(", "), subject: form.elements.subject.value, body: form.elements.body.value,
-    case_id: Number(form.elements.case_id.value) || null, sign: { pdf_base64: await fileToBase64(f), filename: f.name, stamp_page: fsePage(), stamp_pos: fsePos() } });
+    case_id: Number(form.elements.case_id.value) || null, sign: { pdf_base64: btoa(bin), filename: f.name, stamp_page: fsePage(), stamp_pos: fsePos() } });
   toast(`Documento firmado y enviado a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
 });
 
