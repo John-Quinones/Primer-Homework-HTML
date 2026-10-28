@@ -24,7 +24,13 @@ export function seedTemplates(db) {
     const key = `template:${t.name}`;
     if (flag.get(key)) continue;
     const exists = db.prepare("SELECT 1 FROM document_templates WHERE name = ?").get(t.name);
-    if (first || !exists) { if (!exists) ins.run(t.name, t.category, t.description, FIRM_FIXES.reduce((b, [from, to]) => b.split(from).join(to), t.body)); }
+    if (first || !exists) {
+      if (!exists) {
+        const id = ins.run(t.name, t.category, t.description, FIRM_FIXES.reduce((b, [from, to]) => b.split(from).join(to), t.body)).lastInsertRowid;
+        // Version 2.2.90: a memorial arrives inside its category when the firm still has it (only fills the empty column).
+        if (t.memorialCategory) db.prepare("UPDATE document_templates SET memorial_category_id = (SELECT id FROM memorial_categories WHERE title = ? LIMIT 1) WHERE id = ?").run(t.memorialCategory, id);
+      }
+    }
     setFlag.run(key);
   }
   setFlag.run("templates_seeded");

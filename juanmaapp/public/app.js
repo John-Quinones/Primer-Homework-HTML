@@ -4942,6 +4942,7 @@ wireDialog($("#password-dialog"), async (form) => {
 
 // ---------- Documentos: plantillas ----------
 const D = window.JuanmaDocx;
+const HTMLT = window.JuanmaHtmlTemplate; // version 2.2.90: letters written in HTML (public/html-template.js)
 let tplMeta = null, tplList = [], tplCat = "", tplActive = null, tplData = {}, tplOverrides = {};
 // Version 2.2.58: the footer of every generated document names who generated it (docx.js and membrete.js read this).
 // Version 2.2.66 (John): «Elaboró» + the user's initials («John Fredy Quiñones» → JFQ).
@@ -5173,6 +5174,7 @@ async function openTemplate(id) {
     t.vars = D.textVariables(t.body);
     t.optional = D.textOptional(t.body);
     t.lines = [];
+    t.html = HTMLT.isHtml(t.body);
   }
   // Version 2.50: «el suscrito / identificada…» all depend on one datum, the client's gender.
   t.vars = [...new Set(t.vars.map((k) => (CMETA.dependsOnGender(k) ? "cliente.genero" : k)))];
@@ -5184,8 +5186,12 @@ async function openTemplate(id) {
   $("#tpl-active").hidden = false;
   $("#tpl-name").textContent = t.name;
   $("#tpl-cat").textContent = t.category;
-  $("#tpl-format").textContent = t.format === "docx" ? "Word" : "Texto";
-  $$("[data-text-only]").forEach((el) => (el.hidden = t.format === "docx"));
+  $("#tpl-format").textContent = t.format === "docx" ? "Word" : t.html ? "Carta HTML" : "Texto";
+  $$("[data-text-only]").forEach((el) => (el.hidden = t.format === "docx" || t.html));
+  // Version 2.2.90: an HTML letter is delivered as PDF (no Word, no e-signature of plain text).
+  $('[data-tpl-out="docx"]').hidden = !!t.html;
+  $('[data-tpl-out="slink"]').hidden = !t.html || !can("mail.send");
+  $('[data-tpl-out="sign"]').hidden = !!t.html || !can("esign.use");
   $("#tpl-docx-note").hidden = t.format !== "docx";
   $("#tpl-blanks-btn").hidden = !can("templates.manage");
   $("#tpl-edit-mode").checked = false;
@@ -5265,7 +5271,7 @@ tplRecipient.addEventListener("recipientchange", () => {
   if (!$("#tpl-edit-mode").checked) renderTplDoc();
 });
 
-const varLabel = (key) => tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
+const varLabel = (key) => HTMLT.LABELS[key] || tplMeta.variables.find((v) => v.key === key)?.label || key.replace(/^campo\./, "");
 // Version 2.46: a datum that opens an optional passage ({{#…}}) may stay empty; the passage is then left out.
 const isOptionalVar = (k) => !!tplActive?.optional?.includes(k);
 // Role words (el demandante / la demandada / los demandados) follow the gender chosen in the form.
@@ -5290,6 +5296,8 @@ const tplValues = () => {
   }
   const mem = memorialText(all);
   if (mem) all[MC_MARKER] = mem;
+  // Version 2.2.90: the HTML letter's own names (ciudad, demandante…) come from the case; what the user typed wins.
+  if (tplActive?.html) for (const [k, x] of Object.entries(HTMLT.fromCase(all, window.JuanmaGeneratedBy()))) if (!v[k] && x) all[k] = x;
   return all;
 };
 // Version 2.2.48: a Word of category Poder always shows the power classes; without the marker it offers to put it in (offerMarker).
@@ -5388,7 +5396,7 @@ function renderTplVars() {
   $("#tpl-vars-box").open = missing.length > 0 || wizardOn();
   // Missing data first, so what needs attention is at the top.
   // With the addressee box shown, the box edits {{destinatario.*}}, not loose inputs here.
-  const ordered = allVars().filter((k) => k !== "documento.numero" && !FEE_VARS.includes(k) && !anyPickKey(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
+  const ordered = allVars().filter((k) => k !== "documento.numero" && k !== "elaboro" && !FEE_VARS.includes(k) && !anyPickKey(k) && (tplRecipient.hidden || !k.startsWith("destinatario."))).sort((a, b) => Number(!!vals[a] || isOptionalVar(a)) - Number(!!vals[b] || isOptionalVar(b)));
   // A minuta's own date (version 2.44, «Fecha del fallecimiento») is picked on a calendar and written in words.
   $("#tpl-vars").innerHTML = Object.keys(PICK).map((kind) => usesPick(kind) || offersPick(kind) ? pickChecklist(kind) : "").join("") + (usesFeeChecklist() ? feeChecklist(vals) : "") + ordered.map((k) => k === "cliente.genero" ? genderField(vals[k]) : isDateVar(k)
     ? `<label>${escapeHtml(varLabel(k))}
@@ -5396,7 +5404,7 @@ function renderTplVars() {
     : isOptionalVar(k) ? `<label>${escapeHtml(varLabel(k))} <span class="muted">(opcional)</span>
     <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea). " : ""}Si lo deja vacío, esa frase no aparece" /></label>`
     : `<label>${escapeHtml(varLabel(k))}
-    <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea)" : "Falta"}" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
+    <input data-var="${escapeHtml(k)}" value="${escapeHtml(vals[k] ?? "")}" placeholder="${tplActive.lines?.includes(k) ? "Varios: sepárelos con ; (uno por línea)" : HTMLT.HINTS[k] || "Falta"}" class="${vals[k] ? "" : "missing"}" /></label>`).join("")
     || '<p class="muted">Esta plantilla no tiene variables.</p>';
   $("#tpl-fields-row").hidden = !($("#tpl-case").value && can("cases.write") && (usesFeeChecklist() || tplActive.vars.some((k) => k.startsWith("campo."))));
   if (wizardOn()) wzBar();
@@ -5529,6 +5537,16 @@ function renderTplDoc() {
     }</tbody></table>`;
     return;
   }
+  if (tplActive.html) {
+    let fr = $("#tpl-preview iframe.html-letter");
+    if (!fr) {
+      $("#tpl-preview").innerHTML = '<iframe class="html-letter" sandbox="allow-same-origin" title="Vista previa de la carta"></iframe>';
+      fr = $("#tpl-preview iframe.html-letter");
+      fr.addEventListener("load", () => { try { fr.style.height = fr.contentDocument.documentElement.scrollHeight + 8 + "px"; } catch { /* sin medida */ } });
+    }
+    fr.srcdoc = HTMLT.fill(tplActive.body, tplValues(), tplLabels());
+    return;
+  }
   const text = $("#tpl-edit-mode").checked ? $("#tpl-text").value : filledText();
   $("#tpl-preview").innerHTML = renderMarkdown(text);
 }
@@ -5565,15 +5583,21 @@ $("#tpl-active .actions").addEventListener("click", (e) => {
   const action = e.target.closest("[data-tpl-out]")?.dataset.tplOut;
   if (!action) return;
   guarded(async () => {
+    if (action === "slink") {
+      const id = Number($("#tpl-case").value);
+      if (!id) throw new Error("Elija primero el expediente: la carta se envía al juzgado de ese expediente.");
+      return openSlink(id);
+    }
     if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action) && !(await missingOk())) return;
     if (["docx", "pdf", "save", "mail", "whatsapp", "sign"].includes(action)) await ensureDocNumber(action);
     if (["docx", "pdf", "save", "mail", "whatsapp"].includes(action)) {
       if (!tplRecipient.hidden) await saveRecipientIfAsked(tplRecipient);
-      const word = () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues(), tplLabels()) : D.markdownToDocx(currentText(), tplActive.name));
+      const word = tplActive.html ? null : () => (tplActive.format === "docx" ? D.fillDocx(tplActive.bytes, tplValues(), tplLabels()) : D.markdownToDocx(currentText(), tplActive.name));
       await exportDocument(action, {
         name: tplActive.name, base: tplFileBase(), caseId: Number($("#tpl-case").value) || null, word,
         // A Word form's PDF looks like the Word (version 2.44); if the page cannot draw it, the same text in the firm's PDF layout.
         pdf: async () => {
+          if (tplActive.html) return HTMLT.toPdf(HTMLT.fill(tplActive.body, tplValues(), tplLabels()));
           if (tplActive.format !== "docx") return markdownToPdf(currentText());
           const bytes = new Uint8Array(await word().arrayBuffer());
           try { return await window.JuanmaDocxPdf.docxToPdf(bytes); }
@@ -5614,19 +5638,21 @@ const blobToB64 = async (blob) => bytesToB64(new Uint8Array(await blob.arrayBuff
 async function exportDocument(action, doc) {
   const word = async () => doc.word();
   const pdf = async () => doc.pdf();
+  const formats = doc.word ? [["docx", word], ["pdf", pdf]] : [["pdf", pdf]]; // an HTML letter has no Word
   if (action === "docx") return saveFile(`${doc.base}.docx`, await word());
   if (action === "pdf") return saveFile(`${doc.base}.pdf`, await pdf());
   if (action === "save") {
     if (!doc.caseId) throw new Error("Elija primero el expediente donde se guardará el documento.");
-    for (const [ext, blob] of [["docx", await word()], ["pdf", await pdf()]]) {
+    for (const [ext, make] of formats) {
+      const blob = await make();
       await api("POST", `/cases/${doc.caseId}/documents`, { name: doc.name, filename: `${doc.base}.${ext}`, file_base64: await blobToB64(blob) });
     }
     toast("Documento guardado en el expediente (Word y PDF). Lo encuentra en Expedientes → Documentos.");
     return;
   }
   if (action === "mail") {
-    const [w, p] = [await word(), await pdf()];
-    return openMailDialog({ caseId: doc.caseId, subject: doc.name, files: [new File([w], `${doc.base}.docx`, { type: w.type }), new File([p], `${doc.base}.pdf`, { type: "application/pdf" })] });
+    const [w, p] = [doc.word ? await word() : null, await pdf()];
+    return openMailDialog({ caseId: doc.caseId, subject: doc.name, files: [...(w ? [new File([w], `${doc.base}.docx`, { type: w.type })] : []), new File([p], `${doc.base}.pdf`, { type: "application/pdf" })] });
   }
   if (action === "whatsapp") return openWhatsappDialog(doc);
 }
@@ -5651,6 +5677,7 @@ async function openWhatsappDialog(doc) {
   }
   waForm.elements.phone.value = phone;
   waForm.elements.format.value = "pdf";
+  [...waForm.elements.format.options].forEach((o) => (o.disabled = o.value === "docx" && !doc.word));
   waForm.elements.message.value = `${name ? `Hola ${name}, ` : "Hola, "}le enviamos el documento «${doc.name}». Quedamos atentos.\n\n${me?.name || ""} · TEC Jurídicos`.trim();
   $(".form-error", waForm).hidden = true;
   refreshWaLink();

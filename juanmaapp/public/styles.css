@@ -1621,3 +1621,5 @@ dialog.chat-call[open] { display: flex; }
 @keyframes chat-alert-in { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes chat-ring { 0%, 100% { box-shadow: 0 0 0 3px rgba(46, 125, 79, .35), 0 10px 32px rgba(0, 0, 0, .5); } 50% { box-shadow: 0 0 0 8px rgba(46, 125, 79, .15), 0 10px 32px rgba(0, 0, 0, .5); } }
 @media (max-width: 760px) { .chat-alert { right: 8px; left: 8px; width: auto; } }
+/* Version 2.2.90: preview of an HTML letter (Solicitud link de expediente) */
+iframe.html-letter { width: 100%; min-height: 640px; border: 1px solid var(--line, #3a4a66); border-radius: 8px; background: #e9ecf1; }

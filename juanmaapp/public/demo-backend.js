@@ -145,6 +145,14 @@
       }
       st.info = { ...st.info, seededTemplates: [...st.info.seededTemplates, t.name] };
     }
+    // 2.2.90: «Solicitud link de expediente» arrives inside the memorial category «Solicitud de link», once (the firm may move it afterwards).
+    if (!st.info.linkTplCat) {
+      for (const t of TPL.seed) {
+        const tpl = t.memorialCategory && st.templates.find((x) => x.name === t.name), cat = t.memorialCategory && st.memcats.find((o) => o.title === t.memorialCategory);
+        if (tpl && cat && !tpl.memorial_category_id) tpl.memorial_category_id = cat.id;
+      }
+      st.info = { ...st.info, linkTplCat: true };
+    }
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
   }
