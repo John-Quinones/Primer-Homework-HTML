@@ -1586,6 +1586,14 @@
       </label>
       <label>Con copia <input name="cc" placeholder="Opcional" /></label>
       <label>Mensaje * <textarea name="body" rows="6" required></textarea></label>
+            <fieldset class="onedrive-box"><legend>Archivo grande en OneDrive (opcional)</legend>
+        <p class="hint">Suba el archivo a su OneDrive, pulse «Compartir» → «Cualquier persona con el vínculo puede ver» (o «Personas específicas» con los correos de los destinatarios) y pegue aquí el enlace. El correo lleva el enlace con los pasos para que el destinatario lo abra.</p>
+        <div class="grid2">
+          <label>Enlace de OneDrive <input name="onedrive_url" inputmode="url" placeholder="https://1drv.ms/… o https://…sharepoint.com/…" autocomplete="off" /></label>
+          <label>Nombre del archivo <input name="onedrive_name" placeholder="Ej.: Expediente completo.pdf" autocomplete="off" /></label>
+        </div>
+        <label>Contraseña del enlace (si la puso) <input name="onedrive_password" autocomplete="off" /></label>
+      </fieldset>
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
@@ -1655,6 +1663,14 @@
       <fieldset class="recipient-box" data-recipient="mail"></fieldset>
       <div class="toolbar"><button type="button" class="mini" id="mail-put-recipient" title="Escribe al comienzo del mensaje: Señor(a), nombre, cargo y entidad">Poner el destinatario al inicio del mensaje</button></div>
       <label>Mensaje * <textarea name="body" rows="8" required></textarea></label>
+            <fieldset class="onedrive-box"><legend>Archivo grande en OneDrive (opcional)</legend>
+        <p class="hint">Suba el archivo a su OneDrive, pulse «Compartir» → «Cualquier persona con el vínculo puede ver» (o «Personas específicas» con los correos de los destinatarios) y pegue aquí el enlace. El correo lleva el enlace con los pasos para que el destinatario lo abra.</p>
+        <div class="grid2">
+          <label>Enlace de OneDrive <input name="onedrive_url" inputmode="url" placeholder="https://1drv.ms/… o https://…sharepoint.com/…" autocomplete="off" /></label>
+          <label>Nombre del archivo <input name="onedrive_name" placeholder="Ej.: Expediente completo.pdf" autocomplete="off" /></label>
+        </div>
+        <label>Contraseña del enlace (si la puso) <input name="onedrive_password" autocomplete="off" /></label>
+      </fieldset>
       <label>Adjuntos <input type="file" name="files" multiple /></label>
       <ul id="mail-pending-atts" class="muted"></ul>
       <label>Entrega de los anexos
