@@ -128,3 +128,28 @@ test("chat between users", async () => {
   assert.equal((await laura.call("GET", `/chat/calls/${c1.call_id}/poll`)).body.ended, true);
   t.close();
 });
+
+// Timbre (version 2.2.96): one person rings another; it stays until answered.
+test("chat timbre", async () => {
+  const t = await startServer();
+  const admin = await t.setup();
+  const ibague = (await admin.call("GET", "/admin/offices")).body[0];
+  const mk = (name, email) => admin.call("POST", "/admin/users", { name, email, role: "Asistente", office_ids: [ibague.id], password: "clave-segura-9" });
+  await mk("Monica Julieth Salcedo Mendez", "monica@firma.co");
+  await mk("Carla Prueba", "carla@firma.co");
+  const monica = await t.login("monica@firma.co", "clave-segura-9");
+  const carla = await t.login("carla@firma.co", "clave-segura-9");
+  const monId = (await carla.call("GET", "/chat/users")).body.find((u) => u.name.startsWith("Monica")).id;
+  assert.equal((await carla.call("POST", "/chat/ring", { to: 999999 })).status, 400);
+  const k = await carla.call("POST", "/chat/ring", { to: monId });
+  assert.equal(k.status, 201);
+  assert.equal(k.body.body, "Sube al segundo piso");
+  assert.equal((await carla.call("POST", "/chat/ring", { to: monId })).status, 429, "no flooding");
+  assert.equal((await carla.call("GET", "/chat/unread")).body.rings.length, 0, "only the target hears it");
+  const heard = (await monica.call("GET", "/chat/unread")).body.rings;
+  assert.equal(heard.length, 1);
+  assert.equal(heard[0].from, "Carla Prueba");
+  assert.equal((await carla.call("POST", `/chat/rings/${k.body.id}/seen`)).status, 404, "only the target can answer");
+  assert.equal((await monica.call("POST", `/chat/rings/${k.body.id}/seen`)).status, 200);
+  assert.equal((await monica.call("GET", "/chat/unread")).body.rings.length, 0);
+});

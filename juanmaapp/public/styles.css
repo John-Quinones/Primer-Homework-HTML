@@ -1623,3 +1623,10 @@ dialog.chat-call[open] { display: flex; }
 @media (max-width: 760px) { .chat-alert { right: 8px; left: 8px; width: auto; } }
 /* Version 2.2.90: preview of an HTML letter (Solicitud link de expediente) */
 iframe.html-letter { width: 100%; min-height: 640px; border: 1px solid var(--line, #3a4a66); border-radius: 8px; background: #e9ecf1; }
+
+/* Timbre (version 2.2.96): big, centered, flashing until answered */
+.chat-ring-alert { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); z-index: 70; width: min(420px, calc(100vw - 24px)); display: grid; gap: 10px; padding: 18px 20px; text-align: center; background: var(--surface); color: var(--text); border: 2px solid #e0a100; border-radius: 14px; animation: chat-ring-flash 1s ease-in-out infinite; }
+.chat-ring-alert[hidden] { display: none; }
+.chat-ring-alert strong { font-size: 1.25rem; }
+.chat-ring-alert p { margin: 0; font-size: 1.6rem; font-weight: 700; }
+@keyframes chat-ring-flash { 0%, 100% { box-shadow: 0 0 0 4px rgba(224, 161, 0, .35), 0 12px 40px rgba(0, 0, 0, .55); } 50% { box-shadow: 0 0 0 14px rgba(224, 161, 0, .12), 0 12px 40px rgba(0, 0, 0, .55); } }

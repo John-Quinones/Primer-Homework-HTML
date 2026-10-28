@@ -13,6 +13,8 @@ export const MAX_FILE = 5 * 1024 * 1024;
 export const CALL_MAX = 6; // a full mesh: every participant sends video to every other one
 const ONLINE = "-3 minutes";
 const CALL_ALIVE = "-25 seconds";
+const RING_LIVE = "-15 minutes"; // an unanswered timbre stops sounding after this
+export const RING_DEFAULT = "Sube al segundo piso";
 
 export function chatRouter(db) {
   const r = express.Router();
@@ -307,7 +309,33 @@ export function chatRouter(db) {
       WHERE m.user_id = ? AND m.left_at IS NULL GROUP BY c.id`).all(req.user.id);
     const call = db.prepare(`SELECT 1 FROM chat_calls k WHERE k.ended_at IS NULL AND k.started_by <> ? AND EXISTS (SELECT 1 FROM chat_call_members cm WHERE cm.call_id = k.id AND cm.left_at IS NULL AND cm.ping_at > datetime('now', ?))
       AND (k.conv_id = ? OR EXISTS (SELECT 1 FROM chat_members m WHERE m.conv_id = k.conv_id AND m.user_id = ? AND m.left_at IS NULL))`).get(req.user.id, CALL_ALIVE, g, req.user.id);
-    res.json({ unread: rows.reduce((s, x) => s + x.n, 0), by_conversation: Object.fromEntries(rows.filter((x) => x.n).map((x) => [x.id, x.n])), calling: !!call });
+    const rings = db.prepare("SELECT id, from_user, body, created_at FROM chat_rings WHERE to_user = ? AND seen_at IS NULL AND created_at > datetime('now', ?) ORDER BY id").all(req.user.id, RING_LIVE)
+      .map((x) => ({ id: x.id, from: shown(x.from_user), body: x.body, created_at: x.created_at }));
+    res.json({ unread: rows.reduce((s, x) => s + x.n, 0), by_conversation: Object.fromEntries(rows.filter((x) => x.n).map((x) => [x.id, x.n])), calling: !!call, rings });
+  });
+
+  // ----- timbre: an audible, visible call for one person («Sube al segundo piso») -----
+  r.post("/ring", (req, res) => {
+    const to = Number(req.body?.to);
+    const target = db.prepare("SELECT s.id FROM users_shown s JOIN users u ON u.id = s.id WHERE u.active = 1 AND s.id = ?").get(to);
+    if (!target || to === req.user.id) return err(res, 400, "Elija a otra persona del despacho.");
+    const body = str(req.body?.body).trim().slice(0, 120) || RING_DEFAULT;
+    if (db.prepare("SELECT 1 FROM chat_rings WHERE from_user = ? AND to_user = ? AND created_at > datetime('now', '-5 seconds')").get(req.user.id, to))
+      return err(res, 429, "Ya le sonó el timbre hace unos segundos.");
+    const id = Number(db.prepare("INSERT INTO chat_rings (from_user, to_user, body) VALUES (?, ?, ?)").run(req.user.id, to, body).lastInsertRowid);
+    notify(db, to, "chat", `🔔 ${req.user.name} le tocó el timbre`, body, "#chat", `chatring:${id}`);
+    res.status(201).json({ id, to_name: shown(to), body });
+  });
+
+  // The person answers («Voy para allá»); the one who rang is told.
+  r.post("/rings/:id/seen", (req, res) => {
+    const k = db.prepare("SELECT * FROM chat_rings WHERE id = ? AND to_user = ?").get(Number(req.params.id), req.user.id);
+    if (!k) return err(res, 404, "Ese timbre no existe.");
+    if (!k.seen_at) {
+      db.prepare("UPDATE chat_rings SET seen_at = datetime('now') WHERE id = ?").run(k.id);
+      notify(db, k.from_user, "chat", `${req.user.name} contestó su timbre`, "Va para allá.", "#chat", `chatringseen:${k.id}`);
+    }
+    res.json({ ok: true });
   });
 
   // ----- video calls -----

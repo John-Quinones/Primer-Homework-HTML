@@ -797,6 +797,7 @@
               <div class="chat-head-t"><strong id="chat-title"></strong><small id="chat-sub"></small></div>
               <div class="chat-head-b">
                 <button type="button" class="mini" id="chat-members" hidden>Integrantes</button>
+                <button type="button" class="mini" id="chat-ring" title="Hacer sonar un timbre en el computador de otra persona">🔔 Timbre</button>
                 <button type="button" class="primary mini" id="chat-call" title="Iniciar o unirse a la videollamada">📹 Videollamada</button>
               </div>
             </header>
@@ -1244,6 +1245,12 @@
       <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button></span></div>
   </div>
   <!-- Aviso de mensaje nuevo o videollamada entrante (versión 2.2.84) -->
+  <!-- Timbre recibido (versión 2.2.96) -->
+  <div id="chat-ring-alert" class="chat-ring-alert" role="alertdialog" aria-live="assertive" hidden>
+    <strong id="chat-ring-title"></strong>
+    <p id="chat-ring-text"></p>
+    <button type="button" class="primary" id="chat-ring-ok">Voy para allá</button>
+  </div>
   <div id="chat-alert" class="chat-alert" role="alert" hidden>
     <div class="chat-alert-t"><strong id="chat-alert-title"></strong><button type="button" class="chat-x" id="chat-alert-x" aria-label="Cerrar el aviso">✕</button></div>
     <p id="chat-alert-text"></p>
@@ -1260,6 +1267,15 @@
     <button type="button" class="chat-dock-bar" id="chat-dock-bar" aria-expanded="false" title="Abrir o plegar el chat">💬 <span>Chat</span> <b id="chat-dock-badge" class="nav-badge" hidden></b></button>
   </div>
   <!-- Chat (versión 2.2.82): nuevo chat o grupo, enlazar cliente/expediente, videollamada -->
+  <dialog id="chat-ring-dialog">
+    <form method="dialog" id="chat-ring-form">
+      <h3>🔔 Timbre</h3>
+      <p class="hint">Suena en el computador de la persona y muestra su mensaje hasta que lo conteste.</p>
+      <label>Persona<select id="chat-ring-to"></select></label>
+      <label>Mensaje<input id="chat-ring-text" maxlength="120" value="Sube al segundo piso" /></label>
+      <div class="dialog-actions"><button value="cancel" formnovalidate>Cancelar</button><button type="button" class="primary" id="chat-ring-go">Tocar timbre</button></div>
+    </form>
+  </dialog>
   <dialog id="chat-new-dialog">
     <form method="dialog" id="chat-new-form">
       <h3>Nuevo chat</h3>
