@@ -1,5 +1,6 @@
 import { auditMiddleware, auditRouter } from "./audit.js";
 import express from "express";
+import compression from "compression";
 import { typePath } from "./sql.js";
 import Anthropic from "@anthropic-ai/sdk";
 import path from "node:path";
@@ -72,6 +73,8 @@ export function createApp(db) {
   const CSP = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob:", "connect-src 'self'", "frame-src 'self' blob:",
     "worker-src 'self' blob:", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'"].join("; ");
+  // Version 2.2.94: gzip text answers (scripts, styles, JSON); streamed NDJSON answers (NomosAI, Mony) are sent as they come.
+  app.use(compression({ filter: (req, res) => !/ndjson|event-stream/.test(String(res.getHeader("Content-Type"))) && compression.filter(req, res) }));
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
@@ -90,7 +93,12 @@ export function createApp(db) {
   // Only the API reads the session: page files (styles, scripts, images, /vendor) are the same
   // for everyone, so loading them does not query the database.
   app.use("/api", sessionMiddleware(db));
-  app.use(express.static(path.join(root, "public")));
+  // Version 2.2.94: libraries under /vendor and images change only with a new release, so the browser keeps them for a day;
+  // the app's own scripts and styles keep asking whether they changed (ETag) so a new version shows at once.
+  app.use("/vendor", (_req, res, next) => { res.setHeader("Cache-Control", "public, max-age=86400"); next(); });
+  app.use(express.static(path.join(root, "public"), { setHeaders: (res, file) => {
+    if (/\.(png|webp|jpe?g|docx)$/i.test(file)) res.setHeader("Cache-Control", "public, max-age=86400");
+  } }));
   app.get("/vendor/marked.min.js", (_req, res) => res.sendFile(path.join(root, "node_modules/marked/marked.min.js")));
   app.get("/vendor/read-excel-file.min.js", (_req, res) =>
     res.sendFile(path.join(root, "node_modules/read-excel-file/bundle/read-excel-file.min.js")));
