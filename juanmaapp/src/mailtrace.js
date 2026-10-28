@@ -19,6 +19,7 @@ import { stamp } from "./tsa.js";
 import { readFileSync } from "node:fs";
 import { onedriveBlock } from "./onedrive-link.js";
 import { buildLetter, letterMissing, signerView, stampTime } from "./solicitud-link-letter.js";
+import { buildCartaMail, cartaMissing } from "./carta-firma-mail.js";
 
 // Version 2.2.83: the signature picture of «Solicitar link de expediente», sent inline (cid) so mail programs show it.
 const PUBLIC = (f) => new URL(`../public/${f}`, import.meta.url);
@@ -101,17 +102,23 @@ export function mailRouter(db) {
       letter = buildLetter(b.letter.fields, { signer: letterSigner });
     }
     // Version 2.2.97: any PDF of the office, signed by the sender with the platform's stamp where they marked it, and sent to one or more recipients.
-    let signDoc = null;
+    let signDoc = null, cartaData = null, cartaMail = null;
     if (b.sign && !letter) {
       letterSigner = signerView(req.user);
       const missing = [!letterSigner.name && "su nombre completo (Usuarios)", !letterSigner.id_number && "su cédula (Usuarios)"].filter(Boolean);
       if (missing.length) return res.status(400).json({ error: `Para firmar falta: ${missing.join(", ")}.` });
       const pdf = Buffer.from(String(b.sign.pdf_base64 || ""), "base64");
       if (pdf.length < 100 || pdf.length > MAX_SIGN_PDF || pdf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: pdf.length > MAX_SIGN_PDF ? `El PDF pesa ${(pdf.length / 1048576).toFixed(1)} MB y el máximo es 30 MB.` : "Falta el PDF o no es válido." });
+      // Version 2.3.13: with the letter of the dialog, the e-mail carries the letter itself (HTML/CSS) and not a plain message.
+      if (b.sign.carta && typeof b.sign.carta === "object") {
+        const miss = cartaMissing(b.sign.carta);
+        if (miss.length) return res.status(400).json({ error: `Falta en la carta: ${miss.join(", ")}.` });
+        cartaData = b.sign.carta;
+      }
       signDoc = { pdf, name: str(b.sign.filename).replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "documento" };
     }
     let subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
-    if (!subject || !body) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
+    if (!subject || (!body && !cartaData)) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
     // Version 2.3.7: a OneDrive link (with the steps to open it) for files too big to attach; it goes inside the message and is part of what is hashed.
     let od = null;
     try { od = onedriveBlock(b.onedrive); } catch (err) { return res.status(400).json({ error: err.message }); }
@@ -129,11 +136,17 @@ export function mailRouter(db) {
     }
     officeId ||= req.user.offices[0]?.id ?? null;
     let letterQr = null, signedPdf = null;
+    const cartaImgs = { logo: "cid:carta-logo", qr: "cid:carta-qr", globo: "cid:carta-globo", ubicacion: "cid:carta-ubicacion" };
     if (signDoc) {
       const sig = await issueLetterSignature(db, req, { title: subject, pdf: signDoc.pdf, stampPos: b.sign.stamp_pos, stampPage: str(b.sign.stamp_page), caseId: Number(b.case_id) || null, officeId,
         signer: letterSigner, docName: `${signDoc.name}.pdf`, message: "Documento firmado y enviado por correo desde la plataforma" });
       // The signed PDF is a normal attachment: attached when the mail server takes it, otherwise offered as a tracked download link (below).
       files.push({ filename: `${signDoc.name} - firmada.pdf`, mime: "application/pdf", data: sig.signed.pdf });
+      if (cartaData) {
+        letterQr = qrPng(`${publicUrl(req)}/verificar.html#${sig.code}`);
+        cartaMail = buildCartaMail(cartaData, { signer: letterSigner, imgs: cartaImgs, stamp: { code: sig.code, signed_at: stampTime(), qrSrc: "cid:firma-qr" } });
+        body = cartaMail.text;
+      }
     }
     if (letter) {
       const sig = await issueLetterSignature(db, req, { title: subject, pdf: letterPdf, stampPos: b.letter.stamp_pos, caseId: Number(b.case_id) || null, officeId, signer: letterSigner });
@@ -155,7 +168,7 @@ export function mailRouter(db) {
     const contentHash = sha(JSON.stringify({ to, cc, subject, body, attachments: hashes }));
     const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(2)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
     const fileLines = files.map((f, i) => ({ name: f.filename, size: `${kb(f.data.length)} (${f.data.length.toLocaleString("es-CO")} bytes)`, sha256: hashes[i], link: `${base}/api/public/mail/${token}/a/${i + 1}` }));
-    const html = `${letter ? letter.html : `<div style="font-family:Arial,sans-serif;color:#101010;white-space:pre-wrap">${esc(userBody)}</div>`}
+    const html = `${letter ? letter.html : cartaMail ? cartaMail.html : `<div style="font-family:Arial,sans-serif;color:#101010;white-space:pre-wrap">${esc(userBody)}</div>`}
       ${od ? od.html : ""}
       ${files.length ? `<p style="font-family:Arial,sans-serif;font-size:13px;margin-top:18px"><strong>Anexos${mode === "enlace" ? " (descárguelos con estos enlaces)" : ""}:</strong></p>
       <ul style="font-family:Arial,sans-serif;font-size:13px">${fileLines.map((f) => `<li><a href="${f.link}">${esc(f.name)}</a> · ${f.size}<br><span style="font-size:11px;color:#888">SHA-256 ${f.sha256}</span></li>`).join("")}</ul>` : ""}
@@ -168,9 +181,9 @@ export function mailRouter(db) {
     const mail = {
       from: process.env.MAIL_FROM, to, cc, subject, text, html,
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
-      attachments: [...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
+      attachments: [...(letter || cartaMail ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
         { filename: "firma-qr.png", content: letterQr, cid: "firma-qr", contentType: "image/png", contentDisposition: "inline" },
-        { filename: "Solicitud link expediente - firmada.pdf", content: signedPdf, contentType: "application/pdf" }] : []),
+        ...(letter ? [{ filename: "Solicitud link expediente - firmada.pdf", content: signedPdf, contentType: "application/pdf" }] : [])] : []),
         ...(mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [])],
     };
     let raw = Buffer.from((await composer.sendMail(mail)).message);

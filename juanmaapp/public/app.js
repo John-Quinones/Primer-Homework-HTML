@@ -6596,6 +6596,9 @@ function fseSetMode() {
   $("#fse-carta", fseDlg).hidden = !carta;
   $("[data-fse-pdf-req]", fseDlg).hidden = carta;
   e.pdf.required = !carta;
+  // Version 2.3.13: with the letter, the e-mail carries the letter itself (HTML), so the plain message is not used.
+  e.body.required = !carta;
+  e.body.closest("label").hidden = carta;
   $("[data-fse-spot]", fseDlg).hidden = !fseCanPlace() || !$$(".pdf-sheet", fseView).length;
   e.c_unir.disabled = carta && e.c_donde.value === "pdf";
   if (e.c_unir.disabled) e.c_unir.checked = true;
@@ -6648,7 +6651,7 @@ wireDialog(fseDlg, async (form) => {
     }
   }
   const m = await api("POST", "/mail", { to: to.join(", "), cc: found(form.elements.cc.value).join(", "), subject: form.elements.subject.value, body: form.elements.body.value, attachments,
-    case_id: Number(form.elements.case_id.value) || null, onedrive: onedriveOf(formData(form)), sign: { pdf_base64: u8ToB64(bytes), filename: name, stamp_page: page, stamp_pos: pos } });
+    case_id: Number(form.elements.case_id.value) || null, onedrive: onedriveOf(formData(form)), sign: { pdf_base64: u8ToB64(bytes), filename: name, stamp_page: page, stamp_pos: pos, carta: carta ? fseCartaData() : undefined } });
   toast(`Documento firmado y enviado a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
 });
 
