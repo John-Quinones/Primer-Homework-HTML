@@ -759,12 +759,14 @@
       });
     });
     $("#chat-ring-ok").addEventListener("click", () => guarded(answerRing));
-    $("#chat-ring").addEventListener("click", () => {
+    const openRing = () => {
       const sel = $("#chat-ring-to");
       sel.innerHTML = S.people.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}${p.online ? "" : " (sin conexión)"}</option>`).join("");
       if (S.cur?.kind === "direct" && S.cur.other_id) sel.value = String(S.cur.other_id);
       $("#chat-ring-dialog").showModal();
-    });
+    };
+    $("#chat-ring").addEventListener("click", openRing);
+    $("#chat-mini-ring").addEventListener("click", openRing);
     $("#chat-ring-go").addEventListener("click", () => guarded(async () => {
       const r = await api("POST", "/chat/ring", { to: Number($("#chat-ring-to").value), body: $("#chat-ring-text").value });
       $("#chat-ring-dialog").close();

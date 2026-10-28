@@ -797,7 +797,6 @@
               <div class="chat-head-t"><strong id="chat-title"></strong><small id="chat-sub"></small></div>
               <div class="chat-head-b">
                 <button type="button" class="mini" id="chat-members" hidden>Integrantes</button>
-                <button type="button" class="mini" id="chat-ring" title="Hacer sonar un timbre en el computador de otra persona">🔔 Timbre</button>
                 <button type="button" class="primary mini" id="chat-call" title="Iniciar o unirse a la videollamada">📹 Videollamada</button>
               </div>
             </header>
@@ -810,6 +809,7 @@
               <button type="button" class="mini" id="chat-link" title="Enlazar un cliente o expediente" aria-label="Enlazar cliente o expediente">🔗</button>
               <input type="file" id="chat-file" hidden />
               <textarea id="chat-input" rows="1" maxlength="4000" placeholder="Escriba un mensaje… (@ para mencionar)" enterkeyhint="send"></textarea>
+              <button type="button" class="mini chat-ring-btn" id="chat-ring" title="Hacer sonar un timbre en el computador de otra persona" aria-label="Timbre">🔔<span class="chat-ring-t"> Timbre</span></button>
               <button type="submit" class="primary" id="chat-send">Enviar</button>
             </form>
           </div>
@@ -1261,6 +1261,7 @@
       <div id="chat-mini-log" class="chat-mini-log" role="button" tabindex="0" title="Toque para abrir el chat"></div>
       <form id="chat-mini-form" class="chat-mini-form" autocomplete="off">
         <input id="chat-mini-input" maxlength="4000" placeholder="Escriba un mensaje…" aria-label="Escribir un mensaje rápido" />
+        <button type="button" class="mini chat-ring-btn" id="chat-mini-ring" title="Hacer sonar un timbre en el computador de otra persona" aria-label="Timbre">🔔</button>
         <button type="submit" class="primary mini" id="chat-mini-send">Enviar</button>
       </form>
     </div>
