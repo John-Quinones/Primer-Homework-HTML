@@ -1606,6 +1606,12 @@
           <label>Despedida <input name="c_despedida" value="Atentamente," placeholder="Atentamente, Cordialmente…" /></label>
           <label class="inline"><input type="checkbox" name="c_elaboro" checked /> Mostrar «Elaboró: iniciales» al pie de la firma</label>
         </div>
+        <label>Dónde va la firma
+          <select name="c_donde">
+            <option value="carta">En la carta (espacio al final de la carta)</option>
+            <option value="pdf">En el PDF que subo (la marco yo en la vista previa)</option>
+          </select>
+        </label>
         <label class="inline"><input type="checkbox" name="c_unir" checked /> Unir el PDF subido a la carta en un solo archivo firmado (la firma cubre todo)</label>
         <p class="form-error" id="fse-carta-missing" hidden></p>
         <iframe id="fse-carta-view" title="Vista previa de la carta" style="width:100%;height:560px;border:1px solid var(--line,#444);border-radius:8px;background:#fff"></iframe>

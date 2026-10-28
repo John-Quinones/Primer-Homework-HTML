@@ -6482,10 +6482,12 @@ const FSE_MAX = 30 * 1024 * 1024; // same limit as the server (MAX_SIGN_PDF)
 let fseSpot = null; // { fx, fy, page }: top-left corner of the stamp as fractions of its page
 let fseDrag = null;
 const fsePos = () => (fseSpot ? `at:${fseSpot.fx.toFixed(4)},${fseSpot.fy.toFixed(4)}` : "br");
+// Version 2.3.11: with the letter, the signature may also go on the uploaded PDF (the user marks it on the preview).
+const fseCanPlace = () => !fseCarta() || fseForm.elements.c_donde.value === "pdf";
 const fsePage = () => (fseSpot ? String(fseSpot.page) : "last");
 function fseMarks() {
   const sheets = $$(".pdf-sheet", fseView);
-  if (fseForm.elements.mode.value === "carta") { fseView.querySelectorAll(".stamp-mark").forEach((m) => m.remove()); return; }
+  if (!fseCanPlace()) { fseView.classList.remove("stamp-picking"); fseView.querySelectorAll(".stamp-mark").forEach((m) => m.remove()); return; }
   fseView.classList.add("stamp-picking");
   if (!sheets.length) return;
   const m = window.JuanmaPdfView.markStamps(fseView, { page: fsePage(), pos: fsePos(), n: 1, label: "Mi firma" });
@@ -6531,7 +6533,7 @@ fseForm.elements.pdf.addEventListener("change", () => guarded(async () => {
   if (!fseForm.elements.subject.value.trim()) fseForm.elements.subject.value = f.name.replace(/\.pdf$/i, "");
   const pages = await window.JuanmaPdfView.render(fseView, bytes);
   info.textContent = `${f.name} · ${pages} página${pages === 1 ? "" : "s"}.`;
-  $("[data-fse-spot]", fseDlg).hidden = fseCarta();
+  $("[data-fse-spot]", fseDlg).hidden = !fseCanPlace();
   fseMarks();
 }));
 fseView.addEventListener("pointerdown", (e) => {
@@ -6594,7 +6596,9 @@ function fseSetMode() {
   $("#fse-carta", fseDlg).hidden = !carta;
   $("[data-fse-pdf-req]", fseDlg).hidden = carta;
   e.pdf.required = !carta;
-  $("[data-fse-spot]", fseDlg).hidden = carta || !$$(".pdf-sheet", fseView).length;
+  $("[data-fse-spot]", fseDlg).hidden = !fseCanPlace() || !$$(".pdf-sheet", fseView).length;
+  e.c_unir.disabled = carta && e.c_donde.value === "pdf";
+  if (e.c_unir.disabled) e.c_unir.checked = true;
   if (carta) {
     if (!e.c_fecha.value) e.c_fecha.value = dateLong();
     if (!e.c_cuerpo.value) e.c_cuerpo.value = window.JuanmaCartaFirma.defaultBody(me?.legal_name || me?.name);
@@ -6602,9 +6606,11 @@ function fseSetMode() {
     if (!e.subject.value) e.subject.value = e.c_titulo.value || "Remisión de documento";
     fseFillReference();
     fseRenderCarta();
+    fseMarks();
   } else { fseTooLong = false; fseMarks(); }
 }
 fseForm.elements.mode.addEventListener("change", fseSetMode);
+fseForm.elements.c_donde.addEventListener("change", fseSetMode);
 fseForm.elements.case_id.addEventListener("change", fseFillReference);
 $("#fse-carta", fseDlg).addEventListener("input", fseSchedule);
 const u8ToB64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
@@ -6629,7 +6635,9 @@ wireDialog(fseDlg, async (form) => {
     name = `${(data.titulo || "Carta").replace(/[\\/:*?"<>|]+/g, " ").trim()}.pdf`;
     pos = spot ? `at:${spot.x},${spot.y}` : "br";
     page = "first";
-    if (f && form.elements.c_unir.checked) {
+    const onPdf = !!f && form.elements.c_donde.value === "pdf"; // the signature goes where the user marked on the uploaded PDF (after the letter's page)
+    if (onPdf) { pos = fsePos(); page = fseSpot ? String(fseSpot.page + 1) : "last"; }
+    if (f && (onPdf || form.elements.c_unir.checked)) {
       // One signed file: the letter first, the uploaded PDF after it.
       const { PDFDocument } = window.PDFLib, out = await PDFDocument.load(letter), annex = await PDFDocument.load(bytes, { ignoreEncryption: true });
       (await out.copyPages(annex, annex.getPageIndices())).forEach((p) => out.addPage(p));
