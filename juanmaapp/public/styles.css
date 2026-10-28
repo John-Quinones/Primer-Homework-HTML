@@ -1571,7 +1571,7 @@ dialog.chat-call[open] { display: flex; }
 }
 
 /* Chat docked at the bottom of every screen (version 2.2.82): a fixed horizontal bar, and a resizable window above it */
-:root { --dock-left: 210px; --dock-pad: 0px; --dock-w: 380px; --dock-h: 460px; }
+:root { --dock-left: 210px; --dock-pad: 0px; --dock-w: 340px; --dock-h: 400px; --mony-open-w: 434px; }
 .has-chat-dock main { padding-bottom: calc(var(--dock-pad) + 12px); }
 .has-chat-dock .page-nav { bottom: var(--dock-pad); }
 .chat-dock { position: fixed; left: var(--dock-left); right: 104px; bottom: 0; z-index: 30; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0; box-shadow: 0 -4px 18px rgba(0, 0, 0, .3); }
@@ -1623,3 +1623,13 @@ dialog.chat-call[open] { display: flex; }
 @media (max-width: 760px) { .chat-alert { right: 8px; left: 8px; width: auto; } }
 /* Version 2.2.90: preview of an HTML letter (Solicitud link de expediente) */
 iframe.html-letter { width: 100%; min-height: 640px; border: 1px solid var(--line, #3a4a66); border-radius: 8px; background: #e9ecf1; }
+
+/* v2.2.96: con la ventana de Mony abierta, el chat se corre a su izquierda y no la cubre (en celular Mony ocupa la pantalla y queda encima) */
+@media (min-width: 900px) {
+  body:has(.mony-panel:not([hidden])) .chat-dock { right: var(--mony-open-w); }
+  body:has(.mony-panel:not([hidden])) .chat-dock-body { right: var(--mony-open-w); width: min(var(--dock-w), calc(100vw - var(--dock-left) - var(--mony-open-w) - 12px)); }
+  body:has(.mony-panel:not([hidden])) .chat-alert { right: var(--mony-open-w); }
+}
+@media (max-width: 899px) {
+  body:has(.mony-panel:not([hidden])) .chat-dock, body:has(.mony-panel:not([hidden])) .chat-dock-body { display: none; }
+}
