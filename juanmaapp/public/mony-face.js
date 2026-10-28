@@ -256,6 +256,9 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
     if (failed || !ready) return;
     const f = active();
     if (!f) return; // nothing on screen: stop until something shows up again (wake)
+    // Version 2.3.15: at rest (no intro, not speaking or listening) the face is redrawn about 25 times a second, not 60:
+    // the blink, breath and glances look the same and the processor is left free for the rest of the App.
+    if (lastT && mode === "idle" && f.introAt === null && t - lastT < 38) { raf = requestAnimationFrame(frame); return; }
     scan();
     const dt = Math.min(60, lastT ? t - lastT : 16); lastT = t;
     think(t, dt);
@@ -274,7 +277,9 @@ void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0; if (d > 1
       f.was = v;
     }
   }
-  function wake() { if (ready && !failed) { scan(); if (!raf) { lastT = 0; raf = requestAnimationFrame(frame); } } }
+  // Version 2.3.15: while the loop is running it already scans every frame; scanning again on each pointer move or page
+  // change forced a layout of the whole screen every time.
+  function wake() { if (ready && !failed && !raf) { scan(); lastT = 0; raf = requestAnimationFrame(frame); } }
 
   document.addEventListener("pointermove", (e) => { pointer = { x: e.clientX, y: e.clientY }; pointerAt = performance.now(); wake(); });
   document.addEventListener("visibilitychange", wake);

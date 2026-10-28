@@ -24,18 +24,27 @@
   };
 
   // ---------- unread badge (always on, outside the chat screen too) ----------
+  // Version 2.3.15: syncDock runs every second and the chat polls every few seconds; each write below happens only when the value really changes,
+  // so an idle screen no longer triggers style recalculation (and Mony's observer) once a second.
+  const lastCss = {};
+  const setCss = (root, k, v) => { if (lastCss[k] !== v) { lastCss[k] = v; root.setProperty(k, v); } };
+  const setHidden = (el, v) => { if (el.hidden !== v) el.hidden = v; };
+  const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
+  const setHtml = (el, v) => { if (el._html !== v) { el._html = v; el.innerHTML = v; } };
+  const setClass = (el, name, on) => { if (el.classList.contains(name) !== !!on) el.classList.toggle(name, !!on); };
   async function pollBadge() {
     if (SERVER_ONLY || !me) return;
     const u = await api("GET", "/chat/unread").catch(() => null);
     if (!u) return;
     const b = $("#chat-badge");
-    b.hidden = !u.unread && !u.calling;
-    b.textContent = u.calling ? "📹" : u.unread > 99 ? "99+" : u.unread;
-    b.classList.toggle("calling", !!u.calling);
+    setHidden(b, !u.unread && !u.calling);
+    setText(b, String(u.calling ? "📹" : u.unread > 99 ? "99+" : u.unread));
+    setClass(b, "calling", u.calling);
     const d = $("#chat-dock-badge");
-    d.hidden = b.hidden; d.textContent = b.textContent; d.classList.toggle("calling", !!u.calling);
-    document.title = document.title.replace(/^\(\d+\) /, "");
-    if (u.unread) document.title = `(${u.unread}) ${document.title}`;
+    setHidden(d, b.hidden); setText(d, b.textContent); setClass(d, "calling", u.calling);
+    const title = document.title.replace(/^\(\d+\) /, "");
+    const next = u.unread ? `(${u.unread}) ${title}` : title;
+    if (document.title !== next) document.title = next;
     const newMsg = u.unread > S.lastUnread, newCall = u.calling && !S.calling;
     if (u.unread !== S.lastUnread || u.calling !== S.calling) refreshBell?.(); // mentions and calls also reach the bell
     S.lastUnread = u.unread;
@@ -149,20 +158,21 @@
   function syncDock() {
     const dock = $("#chat-dock");
     const show = !SERVER_ONLY && !!me && !inChat();
-    dock.hidden = !show;
-    document.body.classList.toggle("has-chat-dock", show);
+    setHidden(dock, !show);
+    if (document.body.classList.contains("has-chat-dock") !== show) document.body.classList.toggle("has-chat-dock", show);
     const root = document.documentElement.style;
-    root.setProperty("--dock-left", (innerWidth > 760 ? ($(".sidenav")?.offsetWidth || 210) : 0) + "px");
-    root.setProperty("--dock-pad", (show ? dock.offsetHeight : 0) + "px");
+    setCss(root, "--dock-left", (innerWidth > 760 ? ($(".sidenav")?.offsetWidth || 210) : 0) + "px");
+    setCss(root, "--dock-pad", (show ? dock.offsetHeight : 0) + "px");
     const open = show && dockOpen;
-    $("#chat-dock-body").hidden = !open;
-    $("#chat-dock-bar").setAttribute("aria-expanded", String(open));
-    dock.classList.toggle("open", open);
+    setHidden($("#chat-dock-body"), !open);
+    const exp = String(open);
+    if ($("#chat-dock-bar").getAttribute("aria-expanded") !== exp) $("#chat-dock-bar").setAttribute("aria-expanded", exp);
+    if (dock.classList.contains("open") !== open) dock.classList.toggle("open", open);
     const app = $("#chat-app");
     const wantDock = show && dockOpen;
     if (wantDock && app.parentElement !== $("#chat-dock-body")) { $("#chat-dock-body").append(app); app.classList.add("chat-docked"); dockLoad(); }
     if (!wantDock && app.parentElement === $("#chat-dock-body")) { home.after(app); app.classList.remove("chat-docked"); }
-    $("#chat-dock-title").textContent = open && S.cur && app.classList.contains("show-main") ? S.cur.title : "Chat";
+    setText($("#chat-dock-title"), open && S.cur && app.classList.contains("show-main") ? S.cur.title : "Chat");
     if (show && !open && !miniTimer) { miniRefresh(); miniTimer = setInterval(miniRefresh, 6000); }
     if ((!show || open) && miniTimer) { clearInterval(miniTimer); miniTimer = 0; }
   }
@@ -185,10 +195,10 @@
       await loadConvs();
       mini = pickMini();
       const bar = $("#chat-dock-bar span");
-      bar.textContent = mini ? `Chat · ${mini.title}` : "Chat";
-      if (!mini) { $("#chat-mini-log").innerHTML = '<p class="hint">Sin conversaciones todavía. Toque para empezar.</p>'; return; }
+      setText(bar, mini ? `Chat · ${mini.title}` : "Chat");
+      if (!mini) { setHtml($("#chat-mini-log"), '<p class="hint">Sin conversaciones todavía. Toque para empezar.</p>'); return; }
       const r = await api("GET", `/chat/conversations/${mini.id}/messages?limit=2${markRead ? "" : "&read=0"}`);
-      $("#chat-mini-log").innerHTML = r.messages.map(miniLine).join("") || '<p class="hint">Sin mensajes. Escriba el primero.</p>';
+      setHtml($("#chat-mini-log"), r.messages.map(miniLine).join("") || '<p class="hint">Sin mensajes. Escriba el primero.</p>');
       syncDock();
     } catch { /* the next tick retries */ }
   }
@@ -278,17 +288,17 @@
     }
   }
   function drawPeople() {
-    $("#chat-people").innerHTML = S.people.map((p) => `<li><button type="button" class="chat-row" data-person="${p.id}">${avatar(p.name, p.online)}
-      <span class="chat-row-t"><strong>${escapeHtml(p.name)}</strong><small>${p.online ? "Conectado" : "Sin conexión"} · ${escapeHtml(p.role)}</small></span></button></li>`).join("") || '<li class="hint">No hay más usuarios activos.</li>';
+    setHtml($("#chat-people"), S.people.map((p) => `<li><button type="button" class="chat-row" data-person="${p.id}">${avatar(p.name, p.online)}
+      <span class="chat-row-t"><strong>${escapeHtml(p.name)}</strong><small>${p.online ? "Conectado" : "Sin conexión"} · ${escapeHtml(p.role)}</small></span></button></li>`).join("") || '<li class="hint">No hay más usuarios activos.</li>');
   }
   function drawConvs() {
-    $("#chat-convs").innerHTML = S.convs.map((c) => `<li><button type="button" class="chat-row${S.cur?.id === c.id ? " active" : ""}" data-conv="${c.id}">
+    setHtml($("#chat-convs"), S.convs.map((c) => `<li><button type="button" class="chat-row${S.cur?.id === c.id ? " active" : ""}" data-conv="${c.id}">
       ${c.kind === "direct" ? avatar(c.title, c.online) : `<span class="chat-av grp" aria-hidden="true">${c.kind === "general" ? "#" : "👥"}</span>`}
       <span class="chat-row-t"><strong>${escapeHtml(c.title)}${c.call ? ' <span class="chat-live" title="Videollamada en curso">📹</span>' : ""}</strong>
       <small>${c.last_preview ? escapeHtml((c.last_from && c.kind !== "direct" ? c.last_from.split(" ")[0] + ": " : "") + c.last_preview) : "Sin mensajes"}</small></span>
-      ${c.unread ? `<b class="nav-badge">${c.unread > 99 ? "99+" : c.unread}</b>` : ""}</button></li>`).join("");
+      ${c.unread ? `<b class="nav-badge">${c.unread > 99 ? "99+" : c.unread}</b>` : ""}</button></li>`).join(""));
   }
-  const showEmpty = (on) => { $("#chat-empty").hidden = !on; $("#chat-main").hidden = on; $("#chat-app").classList.toggle("show-main", !on); if (typeof syncDock === "function") syncDock(); };
+  const showEmpty = (on) => { setHidden($("#chat-empty"), !on); setHidden($("#chat-main"), on); setClass($("#chat-app"), "show-main", !on); if (typeof syncDock === "function") syncDock(); };
 
   function drawHead() {
     const c = S.cur;
