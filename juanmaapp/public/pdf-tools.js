@@ -192,12 +192,12 @@
         const s = signed[i];
         page.drawRectangle({ x, y, width: boxW, height: boxH, color: rgb(1, 1, 1), opacity: 0.94 });
         // Tecjuridicos logo faded behind the whole stamp (version 2.60).
-        if (wm) { const zone = boxW - 74, k = Math.min(zone / wm.width, (boxH - 8) / wm.height); page.drawImage(wm, { x: x + 70 + (zone - wm.width * k) / 2, y: y + (boxH - wm.height * k) / 2, width: wm.width * k, height: wm.height * k, opacity: 0.55 }); }
+        if (wm) { const zone = boxW - 74, k = Math.min(zone / wm.width, (boxH - 8) / wm.height); page.drawImage(wm, { x: x + 8 + (zone - wm.width * k) / 2, y: y + (boxH - wm.height * k) / 2, width: wm.width * k, height: wm.height * k, opacity: 0.55 }); }
         // QR with the verification link (navy, transparent background) and, under the name, the signature data.
         const qr = verifyText ? window.JuanmaQr?.modules?.(`${verifyText}`) : null;
-        const qs = 58, cell = qr ? qs / qr.length : 0, qx = x + 6, qy = y + boxH - 6 - qs;
+        const qs = 58, cell = qr ? qs / qr.length : 0, qx = x + boxW - 6 - qs, qy = y + boxH - 6 - qs;
         if (qr) qr.forEach((row, ri) => row.forEach((dark, ci) => dark && page.drawRectangle({ x: qx + ci * cell, y: qy + qs - (ri + 1) * cell, width: cell + 0.05, height: cell + 0.05, color: navy })));
-        const left = x + (qr ? qs + 14 : 8);
+        const left = x + 8; // the QR sits at the right side of the signature (version 2.3.11)
         const put = (text, dx, dy, f, size, color, max = 40) => page.drawText(ansi(text).slice(0, max), { x: dx, y: y + dy, size, font: f, color });
         put(s.typed_name || s.name, left, boxH - 16, font, 9, gray, 34);
         put(`${s.id_type || "CC"}. ${s.id_number || ""}`.trim(), left, boxH - 28, font, 9, gray);
