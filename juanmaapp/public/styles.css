@@ -1665,3 +1665,11 @@ main .view, dialog:not(.chat-call) { padding-inline: var(--nav-side); }
 .pop-nav, .auth-nav, .public-nav, .mony-zoom .page-nav { position: static; height: auto; display: flex; z-index: auto; padding: 8px 0; }
 .pop-nav > button, .auth-nav > button, .public-nav > button, .mony-zoom .page-nav > button { position: static; width: auto; height: auto; min-height: 36px; padding: 6px 14px; border-radius: 999px; font-size: .85rem; box-shadow: none; }
 .pop-nav > button::before, .auth-nav > button::before, .public-nav > button::before, .mony-zoom .page-nav > button::before { content: none; }
+
+/* Version 2.3.12: in «Firmar y enviar por correo», the letter's template (preview) on the right and its fields on the left, to see the result step by step. */
+@media (min-width: 1000px) {
+  #fse-dialog { width: min(1400px, calc(100vw - 32px)); }
+  #fse-carta:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
+  #fse-carta > * { grid-column: 1; min-width: 0; }
+  #fse-carta > #fse-carta-view { grid-column: 2; grid-row: 1 / span 30; position: sticky; top: 0; height: 80vh !important; }
+}
