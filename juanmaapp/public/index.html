@@ -249,15 +249,14 @@
           <div class="toolbar">
             <select id="client-search-by" aria-label="Buscar por">
               <option value="">Buscar en todo</option><option value="first">Nombres</option><option value="last">Apellidos</option>
-              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option>
+              <option value="doc">Cédula o NIT</option><option value="city">Ciudad</option><option value="case">Expedientes</option>
             </select>
-            <input id="client-search" type="search" placeholder="Nombre, apellidos, cédula, NIT o ciudad" />
+            <input id="client-search" type="search" placeholder="Nombre, cédula, NIT, ciudad, carpeta, radicado o parte" />
             <select id="client-order" data-folder-order aria-label="Orden por número de carpeta"><option value="asc">Carpeta ↑ ascendente</option><option value="desc">Carpeta ↓ descendente</option></select>
             <select id="client-archive" aria-label="Estado del cliente"><option value="">Clientes activos</option><option value="Archivo provisional">Archivo provisional</option><option value="Archivo definitivo">Archivo definitivo</option><option value="Pendiente Pago Sentencia">Pendiente Pago Sentencia</option><option value="todos">Todos los estados</option></select>
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
         </div>
-        <div class="toolbar"><input id="client-case-search" type="search" placeholder="Buscar expediente: carpeta, radicado, cliente o parte" aria-label="Buscar expediente" /></div>
         <div id="client-case-results" class="panel" hidden></div>
         <p class="muted" id="client-archive-note"></p>
         <div class="split">
