@@ -34,12 +34,12 @@ function event(db, requestId, signerId, name, detail = "", ip = "") {
  * address, and a verification code. The signed PDF carries the signature module's own stamp (QR, time, data) and certificate, built by ensureSignedPdf,
  * so it verifies on verificar.html by code or by uploading the file. Returns {id, code, signed: {pdf, sha256}}.
  */
-export async function issueLetterSignature(db, req, { title, pdf, stampPos, caseId, officeId, signer }) {
+export async function issueLetterSignature(db, req, { title, pdf, stampPos, caseId, officeId, signer, docName = "solicitud-link-expediente.pdf", stampPage = "first", message = "Carta enviada por la plataforma" }) {
   const hash = sha(pdf), code = newVerifyCode();
   const pos = /^at:(0(\.\d{1,4})?|1(\.0{1,4})?),(0(\.\d{1,4})?|1(\.0{1,4})?)$/.test(str(stampPos)) ? str(stampPos) : "br";
   const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_file, doc_name, doc_hash, message, status, created_by, verify_code, completed_at, stamp_page, stamp_pos, notify)
-    VALUES (?, ?, ?, 'pdf', ?, 'solicitud-link-expediente.pdf', ?, 'Carta enviada por la plataforma', 'completada', ?, ?, datetime('now'), 'first', ?, 0)`)
-    .run(title, caseId || null, officeId || null, pdf, hash, req.user.id, code, pos).lastInsertRowid;
+    VALUES (?, ?, ?, 'pdf', ?, ?, ?, ?, 'completada', ?, ?, datetime('now'), ?, ?, 0)`)
+    .run(title, caseId || null, officeId || null, pdf, docName, hash, message, req.user.id, code, /^(last|first|all|new|\d{1,3})$/.test(str(stampPage)) ? str(stampPage) : "first", pos).lastInsertRowid;
   event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
   const sid = db.prepare(`INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, status, method, signed_at, ip, user_agent, typed_name)
     VALUES (?, ?, 'CC', ?, ?, ?, ?, 'firmado', 'plataforma', datetime('now'), ?, ?, ?)`)
