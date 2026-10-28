@@ -54,6 +54,8 @@ html = html
   .replace('<script src="vendor/html2canvas.min.js"></script>', () => `<script>${safe(read("node_modules/html2canvas/dist/html2canvas.min.js"))}</script>`)
   .replace('<script src="docx-pdf.js"></script>', () => `<script>${safe(read("public/docx-pdf.js"))}</script>`)
   .replace('<script src="html-template.js"></script>', () => `<script>${safe(read("public/html-template.js"))}</script>`)
+  .replace('<script src="carta-firma-tpl.js"></script>', () => `<script>${safe(read("public/carta-firma-tpl.js"))}</script>`)
+  .replace('<script src="carta-firma.js"></script>', () => `<script>${safe(read("public/carta-firma.js"))}</script>`)
   .replace('<script src="sigpad.js"></script>', () => `<script>${safe(read("public/sigpad.js"))}</script>`)
   .replace('<script src="vendor/jspdf.umd.min.js"></script>', () => `<script>${safe(read("node_modules/jspdf/dist/jspdf.umd.min.js"))}</script>`)
   .replace('<script src="vendor/jspdf.plugin.autotable.min.js"></script>', () => `<script>${safe(read("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.min.js"))}</script>`)

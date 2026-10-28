@@ -6485,6 +6485,7 @@ const fsePos = () => (fseSpot ? `at:${fseSpot.fx.toFixed(4)},${fseSpot.fy.toFixe
 const fsePage = () => (fseSpot ? String(fseSpot.page) : "last");
 function fseMarks() {
   const sheets = $$(".pdf-sheet", fseView);
+  if (fseForm.elements.mode.value === "carta") { fseView.querySelectorAll(".stamp-mark").forEach((m) => m.remove()); return; }
   fseView.classList.add("stamp-picking");
   if (!sheets.length) return;
   const m = window.JuanmaPdfView.markStamps(fseView, { page: fsePage(), pos: fsePos(), n: 1, label: "Mi firma" });
@@ -6505,6 +6506,7 @@ async function openFseDialog() {
   fseView.hidden = true;
   $("[data-fse-spot]", fseDlg).hidden = true;
   $("[data-fse-info]", fseDlg).textContent = "";
+  fseSetMode();
 }
 fseForm.elements.pdf.addEventListener("change", () => guarded(async () => {
   const f = fseForm.elements.pdf.files[0], info = $("[data-fse-info]", fseDlg);
@@ -6516,7 +6518,7 @@ fseForm.elements.pdf.addEventListener("change", () => guarded(async () => {
   if (!fseForm.elements.subject.value.trim()) fseForm.elements.subject.value = f.name.replace(/\.pdf$/i, "");
   const pages = await window.JuanmaPdfView.render(fseView, bytes);
   info.textContent = `${f.name} · ${pages} página${pages === 1 ? "" : "s"}.`;
-  $("[data-fse-spot]", fseDlg).hidden = false;
+  $("[data-fse-spot]", fseDlg).hidden = fseCarta();
   fseMarks();
 }));
 fseView.addEventListener("pointerdown", (e) => {
@@ -6552,20 +6554,77 @@ fseView.addEventListener("keydown", (e) => {
   fsePlace(Number(sheet.dataset.page), fseSpot.fx + step[0] * k, fseSpot.fy + step[1] * k, sheet);
   $(".stamp-mark", sheet)?.focus();
 });
+// ----- Version 2.3.9: the letter with the firm's letterhead (public/carta-firma.js), filled by the user, signed and e-mailed -----
+const fseCarta = () => fseForm.elements.mode.value === "carta";
+const fseCartaData = () => {
+  const e = fseForm.elements;
+  return { ciudad: e.c_ciudad.value, fecha: e.c_fecha.value, destinatario: e.c_destinatario.value, atencion: e.c_atencion.value, titulo: e.c_titulo.value, referencia: e.c_referencia.value, cuerpo: e.c_cuerpo.value, elaboro: window.JuanmaGeneratedBy() };
+};
+let fseTooLong = false, fseTimer = null;
+const dateLong = (d = new Date()) => d.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });
+function fseRenderCarta() {
+  const C = window.JuanmaCartaFirma, data = fseCartaData(), frame = $("#fse-carta-view"), miss = C.missing(data), box = $("#fse-carta-missing");
+  box.hidden = !miss.length;
+  box.textContent = miss.length ? `Falta: ${miss.join(", ")}.` : "";
+  frame.onload = () => {
+    // One sheet: the signature space and the line below it must end above the footer (890 px of 1056).
+    const d = frame.contentDocument, last = d?.querySelector(".numero")?.getBoundingClientRect();
+    fseTooLong = !!last && last.bottom > 884;
+    if (fseTooLong) { box.hidden = false; box.textContent = `${box.textContent} La carta no cabe en una hoja: acorte el texto o déjelo en el PDF anexo.`.trim(); }
+  };
+  frame.srcdoc = C.build(data);
+}
+const fseSchedule = () => { clearTimeout(fseTimer); fseTimer = setTimeout(fseRenderCarta, 400); };
+function fseSetMode() {
+  const carta = fseCarta(), e = fseForm.elements;
+  $("#fse-carta", fseDlg).hidden = !carta;
+  $("[data-fse-pdf-req]", fseDlg).hidden = carta;
+  e.pdf.required = !carta;
+  $("[data-fse-spot]", fseDlg).hidden = carta || !$$(".pdf-sheet", fseView).length;
+  if (carta) {
+    if (!e.c_fecha.value) e.c_fecha.value = dateLong();
+    if (!e.c_cuerpo.value) e.c_cuerpo.value = window.JuanmaCartaFirma.defaultBody(me?.legal_name || me?.name);
+    if (!e.body.value) e.body.value = `Cordial saludo.\n\nRemito el documento adjunto, firmado electrónicamente. Para verificar su autenticidad use el código y el QR de la firma en tecjuridicos.com/verificar.\n\nAtentamente,\n${me?.legal_name || me?.name || ""}`;
+    if (!e.subject.value) e.subject.value = e.c_titulo.value || "Remisión de documento";
+    fseRenderCarta();
+  } else { fseTooLong = false; fseMarks(); }
+}
+fseForm.elements.mode.addEventListener("change", fseSetMode);
+$("#fse-carta", fseDlg).addEventListener("input", fseSchedule);
+const u8ToB64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
 wireDialog(fseDlg, async (form) => {
-  const f = form.elements.pdf.files[0];
-  if (!f) throw new Error("Elija el archivo PDF.");
-  if (f.size > FSE_MAX) throw new Error(`El PDF pesa ${(f.size / 1048576).toFixed(1)} MB y el máximo es 30 MB.`);
-  // Read in pieces: a one-shot data URL of a big file can fail on some browsers.
-  const raw = new Uint8Array(await f.arrayBuffer());
-  let bin = "";
-  for (let i = 0; i < raw.length; i += 0x8000) bin += String.fromCharCode(...raw.subarray(i, i + 0x8000));
+  const f = form.elements.pdf.files[0], carta = fseCarta();
+  if (!f && !carta) throw new Error("Elija el archivo PDF.");
+  if (f && f.size > FSE_MAX) throw new Error(`El PDF pesa ${(f.size / 1048576).toFixed(1)} MB y el máximo es 30 MB.`);
   // Recipients: «Name: address» lines are fine, only the addresses are kept.
   const found = (s) => [...new Set(s.match(/[^\s@,;:<>]+@[^\s@,;<>]+\.[^\s@,;<>]+/g) || [])];
   const to = found(form.elements.to.value);
   if (!to.length) throw new Error("Escriba al menos un correo de destinatario.");
-  const m = await api("POST", "/mail", { to: to.join(", "), cc: found(form.elements.cc.value).join(", "), subject: form.elements.subject.value, body: form.elements.body.value,
-    case_id: Number(form.elements.case_id.value) || null, onedrive: onedriveOf(formData(form)), sign: { pdf_base64: btoa(bin), filename: f.name, stamp_page: fsePage(), stamp_pos: fsePos() } });
+  // Read in pieces: a one-shot data URL of a big file can fail on some browsers.
+  let bytes = f ? new Uint8Array(await f.arrayBuffer()) : null, name = f?.name || "Carta.pdf", pos = fsePos(), page = fsePage(), attachments;
+  if (carta) {
+    const data = fseCartaData(), miss = window.JuanmaCartaFirma.missing(data);
+    if (miss.length) throw new Error(`Falta en la carta: ${miss.join(", ")}.`);
+    fseRenderCarta();
+    await new Promise((r) => setTimeout(r, 600));
+    if (fseTooLong) throw new Error("La carta no cabe en una hoja: acorte el texto o déjelo en el PDF anexo.");
+    const { blob, spot } = await HTMLT.toPdfSpot(window.JuanmaCartaFirma.build(data));
+    const letter = new Uint8Array(await blob.arrayBuffer());
+    name = `${(data.titulo || "Carta").replace(/[\\/:*?"<>|]+/g, " ").trim()}.pdf`;
+    pos = spot ? `at:${spot.x},${spot.y}` : "br";
+    page = "first";
+    if (f && form.elements.c_unir.checked) {
+      // One signed file: the letter first, the uploaded PDF after it.
+      const { PDFDocument } = window.PDFLib, out = await PDFDocument.load(letter), annex = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      (await out.copyPages(annex, annex.getPageIndices())).forEach((p) => out.addPage(p));
+      bytes = new Uint8Array(await out.save());
+    } else {
+      if (f) attachments = [{ filename: f.name, mime: "application/pdf", base64: u8ToB64(bytes) }];
+      bytes = letter;
+    }
+  }
+  const m = await api("POST", "/mail", { to: to.join(", "), cc: found(form.elements.cc.value).join(", "), subject: form.elements.subject.value, body: form.elements.body.value, attachments,
+    case_id: Number(form.elements.case_id.value) || null, onedrive: onedriveOf(formData(form)), sign: { pdf_base64: u8ToB64(bytes), filename: name, stamp_page: page, stamp_pos: pos } });
   toast(`Documento firmado y enviado a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
 });
 
