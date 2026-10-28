@@ -6571,7 +6571,8 @@ fseView.addEventListener("keydown", (e) => {
 const fseCarta = () => fseForm.elements.mode.value === "carta";
 const fseCartaData = () => {
   const e = fseForm.elements;
-  return { ciudad: e.c_ciudad.value, fecha: e.c_fecha.value, destinatario: e.c_destinatario.value, atencion: e.c_atencion.value, titulo: e.c_titulo.value, referencia: e.c_referencia.value, cuerpo: e.c_cuerpo.value, elaboro: window.JuanmaGeneratedBy() };
+  return { ciudad: e.c_ciudad.value, fecha: e.c_fecha.value, destinatario: e.c_destinatario.value, atencion: e.c_atencion.value, titulo: e.c_titulo.value, referencia: e.c_referencia.value, cuerpo: e.c_cuerpo.value, elaboro: window.JuanmaGeneratedBy(),
+    tratamiento: e.c_tratamiento.value, etiqueta: e.c_etiqueta.value, despedida: e.c_despedida.value, mayusculas: e.c_mayusculas.checked, mostrarElaboro: e.c_elaboro.checked };
 };
 let fseTooLong = false, fseTimer = null;
 const dateLong = (d = new Date()) => d.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Bogota" });

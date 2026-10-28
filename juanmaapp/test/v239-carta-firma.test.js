@@ -45,3 +45,17 @@ test("a missing field shows as a yellow [FILL: …]; the reference box is left o
 test("the default text names the signer in capitals", () => {
   assert.match(C.defaultBody("John Quiñones"), /^Cordial saludo\.\n\nJOHN QUIÑONES, identificado civil y profesionalmente como aparece al final en la firma electrónica/);
 });
+
+test("every part of the letter can be edited: treatment, reference label, closing, capitals and the «Elaboró» line", () => {
+  const h = C.build({ ...data, tratamiento: "Señora", etiqueta: "Asunto", despedida: "Cordialmente,", mayusculas: false, mostrarElaboro: false });
+  assert.match(h, /<p class="tratamiento">Señora<\/p>/);
+  assert.match(h, /<p class="et">Asunto<\/p>/);
+  assert.match(h, /<p class="atte">Cordialmente,<\/p>/);
+  assert.match(h, />Ministerio de Educación Nacional</);
+  assert.doesNotMatch(h, /Elaboró/);
+  const d = C.build(data);
+  assert.match(d, /<p class="tratamiento">Señores<\/p>/);
+  assert.match(d, /<p class="atte">Atentamente,<\/p>/);
+  assert.match(d, /Elaboró: JQ/);
+  assert.doesNotMatch(d, /@@/);
+});

@@ -59,16 +59,16 @@
     <p class="lugar">{{ciudad}}, {{fecha}}</p>
     <!-- INSERTAR: entidad o despacho destinatario, en mayúsculas; una entidad por grupo de líneas -->
     <section class="dest">
-      <p class="tratamiento">Señores</p>
+      <p class="tratamiento">@@TRATAMIENTO@@</p>
       @@DEST@@
     </section>
     @@ASUNTO@@
     <!-- INSERTAR: texto de la carta; los párrafos los redacta el usuario -->
     <section class="texto">@@CUERPO@@</section>
-    <p class="atte">Atentamente,</p>
+    <p class="atte">@@DESPEDIDA@@</p>
     <!-- La firma electrónica la estampa el módulo de firma de la plataforma en este espacio -->
     <div class="espacio-firma">Aquí se estampa la firma electrónica del módulo de firma, con su QR, hora y código de verificación, al firmar y enviar.</div>
-    <div class="numero"><span></span><span>Elaboró: {{elaboro}}</span></div>
+    <div class="numero"><span></span><span>@@ELABORO@@</span></div>
   </main>
   <footer class="pie">
     <p><b>📍 </b>Carrera 5 No. 29-32 Of.290 Centro Comercial La Quinta</p>
