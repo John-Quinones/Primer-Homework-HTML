@@ -144,7 +144,7 @@ button:where(:not(.mony-fab, .mony-panel-btn)):focus-visible, a.button:focus-vis
 .item.selected, .tpl-item.selected { background: var(--select-tint); box-shadow: inset 3px 0 0 var(--hud-teal); }
 
 /* ---- Atrás / Adelante: cápsulas con borde cian ---- */
-.page-nav { background: linear-gradient(to top, rgba(3, 9, 24, .96) 70%, transparent); }
+.page-nav { background: none; }
 .page-nav button, .history-nav button { border: 1px solid rgba(0, 240, 255, .6); background: rgba(0, 40, 80, .45); color: #fff; border-radius: 999px; box-shadow: 0 0 10px rgba(0, 240, 255, .2); padding-inline: 18px; }
 .page-nav button:hover:not(:disabled), .history-nav button:hover:not(:disabled) { border-color: var(--hud-teal); background: rgba(44, 245, 192, .2); }
 

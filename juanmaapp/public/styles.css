@@ -1646,3 +1646,7 @@ iframe.html-letter { width: 100%; min-height: 640px; border: 1px solid var(--lin
 .chat-ring-btn { flex: none; align-self: flex-end; }
 .chat-app.chat-docked .chat-ring-t { display: none; }
 @media (max-width: 600px) { .chat-ring-t { display: none; } }
+
+/* Version 2.3.3: the Atrás / Adelante bar never covers information. It sits in the flow at the foot of each screen, window and list,
+   so the last rows can always be read; it no longer floats over the content while scrolling. */
+.page-nav, dialog .dlg-nav, .pop-nav, .has-chat-dock .page-nav { position: static; bottom: auto; background: none; box-shadow: none; }
