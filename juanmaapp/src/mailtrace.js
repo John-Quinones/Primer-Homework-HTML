@@ -13,13 +13,14 @@ import { createHash, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { scopeOf } from "./auth.js";
 import { mailTransport, GRAPH_MAX_MIME } from "./notify.js";
-import { publicUrl } from "./esign.js";
+import { publicUrl, issueLetterSignature } from "./esign.js";
+import { qrPng } from "./qr-png.js";
 import { stamp } from "./tsa.js";
 import { readFileSync } from "node:fs";
-import { buildLetter, letterMissing } from "./solicitud-link-letter.js";
+import { buildLetter, letterMissing, signerView, stampTime } from "./solicitud-link-letter.js";
 
 // Version 2.2.83: the signature picture of «Solicitar link de expediente», sent inline (cid) so mail programs show it.
-const SIGNATURE_PNG = new URL("../public/firma-john.png", import.meta.url);
+const PUBLIC = (f) => new URL(`../public/${f}`, import.meta.url);
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const digests = (b) => ({ sha1: createHash("sha1").update(b).digest("hex"), sha256: sha(b),
@@ -83,15 +84,17 @@ export function mailRouter(db) {
     const to = str(b.to).split(/[,;\s]+/).filter(Boolean);
     const cc = str(b.cc).split(/[,;\s]+/).filter(Boolean);
     if (!to.length || [...to, ...cc].some((a) => !EMAIL.test(a))) return res.status(400).json({ error: "Revise las direcciones de correo." });
-    // Version 2.2.83: a letter built here from its data (escaped), with the signature picture inline.
-    let letter = null;
+    // Version 2.2.83: a letter built here from its data (escaped). Version 2.2.91: the firm's letterhead and the platform's electronic signature
+    // (the sender signs; a verification code and QR that verificar.html answers), issued after the checks and before the message goes out.
+    let letter = null, letterSigner = null;
     if (b.letter) {
       if (b.letter.kind !== "solicitud_link") return res.status(400).json({ error: "Carta no válida." });
-      const missing = letterMissing(b.letter.fields ?? {});
+      letterSigner = signerView(req.user);
+      const missing = letterMissing(b.letter.fields ?? {}, letterSigner);
       if (missing.length) return res.status(400).json({ error: `Falta: ${missing.join(", ")}.` });
-      letter = buildLetter(b.letter.fields, { imgSrc: "cid:firma-john" });
+      letter = buildLetter(b.letter.fields, { signer: letterSigner }); // the text that is signed; the final one carries the stamp
     }
-    const subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
+    let subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
     if (!subject || !body) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
     const files = (Array.isArray(b.attachments) ? b.attachments : []).map((a) => ({
       filename: str(a.filename).replace(/[\\/:*?"<>|]+/g, "_").slice(0, 150) || "adjunto", mime: str(a.mime) || "application/octet-stream",
@@ -106,6 +109,14 @@ export function mailRouter(db) {
       officeId = k.office_id;
     }
     officeId ||= req.user.offices[0]?.id ?? null;
+    let letterQr = null;
+    if (letter) {
+      const sig = issueLetterSignature(db, req, { title: subject, text: letter.text, caseId: Number(b.case_id) || null, officeId, signer: letterSigner });
+      letterQr = qrPng(`${publicUrl(req)}/verificar.html#${sig.code}`);
+      letter = buildLetter(b.letter.fields, { signer: letterSigner, imgs: { logo: "cid:carta-logo", qr: "cid:carta-qr", globo: "cid:carta-globo", ubicacion: "cid:carta-ubicacion" },
+        stamp: { code: sig.code, signed_at: stampTime(), qrSrc: "cid:firma-qr" } });
+      body = letter.text;
+    }
 
     const token = randomBytes(24).toString("base64url");
     const base = publicUrl(req);
@@ -128,7 +139,8 @@ export function mailRouter(db) {
     const mail = {
       from: process.env.MAIL_FROM, to, cc, subject, text, html,
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
-      attachments: [...(letter ? [{ filename: "firma-john.png", content: readFileSync(SIGNATURE_PNG), cid: "firma-john", contentType: "image/png", contentDisposition: "inline" }] : []),
+      attachments: [...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
+        { filename: "firma-qr.png", content: letterQr, cid: "firma-qr", contentType: "image/png", contentDisposition: "inline" }] : []),
         ...(mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [])],
     };
     let raw = Buffer.from((await composer.sendMail(mail)).message);

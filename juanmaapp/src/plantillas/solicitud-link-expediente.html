@@ -1,207 +1,101 @@
 <!--tj-html-->
 <!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Solicitud Link Expediente</title>
-<!--
-  PLANTILLA «SOLICITAR LINK DE EXPEDIENTE» — TecjuridicosApp (Memorial › Solicitud de link).
-  Un solo archivo: HTML5 + CSS embebido. Las variables van entre dobles llaves y TecjuridicosApp las
-  reemplaza con los datos reales del expediente, del cliente y del usuario (el backend las inserta donde
-  dice «INSERTAR»). Un dato que falte sale resaltado en amarillo como [FILL: dato] para completarlo a mano.
-  Las imágenes de la firma (logo y foto) se incrustan como data URI al publicar.
--->
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Solicitud link de expediente</title>
 <style>
-  :root {
-    --azul: #002c6c;          /* azul profundo corporativo */
-    --azul-2: #003366;
-    --azul-vivo: #1560d4;     /* acento vibrante */
-    --gris-oscuro: #1e1e1e;
-    --gris-texto: #333333;
-    --plata: #c9ced6;
-    --plata-claro: #eef0f4;
-    --fondo-tarjeta: #f5f7fa;
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; background: #e9ecf1; color: var(--gris-texto);
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; line-height: 1.6; font-size: 15px; }
-
-  /* Hoja tamaño carta; en pantallas pequeñas ocupa todo el ancho */
-  .hoja { max-width: 816px; margin: 24px auto; background: #fff; box-shadow: 0 10px 40px rgba(0, 28, 70, .16);
-    border-radius: 6px; overflow: hidden; }
-
-  /* ---------- Cabecera de la App / despacho ---------- */
-  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    padding: 18px 44px; color: #fff; background: linear-gradient(100deg, var(--azul) 0%, var(--azul-2) 55%, #0a4aa6 100%);
-    border-bottom: 4px solid var(--plata); }
-  .marca { font-size: 21px; font-weight: 700; letter-spacing: .3px; }
-  .marca b { font-weight: 300; color: var(--plata); }
-  .cabecera small { font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--plata); }
-
-  .contenido { padding: 36px 44px 28px; }
-
-  /* ---------- Fecha y destinatario ---------- */
-  .fecha { margin: 0 0 22px; color: #555; }
-  .destinatario { margin: 0 0 26px; }
-  .destinatario p { margin: 0; }
-  .destinatario .nombre { font-size: 16px; font-weight: 700; color: var(--azul); letter-spacing: .2px; }
-  .destinatario .correo { color: var(--azul-vivo); }
-
-  /* ---------- Asunto: tarjeta destacada ---------- */
-  .asunto { margin: 0 0 26px; background: var(--fondo-tarjeta); border: 1px solid #dde2ea; border-left: 5px solid var(--azul);
-    border-radius: 12px; padding: 16px 20px; }
-  .asunto .etiqueta { font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: #6b7686; margin: 0 0 4px; }
-  .asunto .titulo { margin: 0 0 12px; font-size: 16px; font-weight: 700; color: var(--azul); }
-  .asunto dl { margin: 0; display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; }
-  .asunto dt { color: #6b7686; font-size: 13px; }
-  .asunto dd { margin: 0; font-weight: 600; color: var(--gris-oscuro); word-break: break-word; }
-
-  /* ---------- Cuerpo ---------- */
-  .cuerpo p { margin: 0 0 14px; text-align: justify; hyphens: none; }
-  .cuerpo strong { color: var(--gris-oscuro); }
-  .despedida { margin-top: 22px; }
-  .despedida p { margin: 0; }
-
-  /* Dato faltante: sale resaltado para completarlo a mano */
-  mark.fill { background: #fff176; color: #000; padding: 0 3px; border-radius: 3px; }
-
-  /* ---------- Firma digital ---------- */
-  .firma { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--plata-claro); }
-  .firma-grid { display: grid; grid-template-columns: minmax(130px, 190px) 1fr; align-items: center; gap: 4px 0; }
-  .firma-logo { width: 100%; max-width: 190px; height: auto; display: block; }
-  .firma-bloque { position: relative; display: flex; align-items: center; gap: 18px; background: var(--gris-oscuro); color: #fff;
-    border-radius: 999px 22px 22px 999px; padding: 12px 22px 12px 12px; }
-  .firma-foto { flex: 0 0 auto; width: 122px; height: 122px; border-radius: 50%; object-fit: cover; display: block;
-    background: #0f1b2e; box-shadow: 0 0 0 4px rgba(255, 255, 255, .08); }
-  .firma-texto { min-width: 0; font-size: 12.5px; line-height: 1.45; }
-  .firma-nombre { margin: 0 0 4px; font-size: 19px; font-weight: 700; color: #fff; letter-spacing: .2px; }
-  .firma-titulos { margin: 0 0 10px; color: #dfe3ea; font-size: 12px; }
-  .firma-titulos span { display: block; }
-  .contacto { list-style: none; margin: 0; padding: 0; }
-  .contacto li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1.5px solid rgba(255, 255, 255, .85);
-    max-width: 330px; }
-  .contacto li:last-child { border-bottom: 0; }
-  .contacto svg { flex: 0 0 auto; width: 15px; height: 15px; fill: #fff; }
-  .contacto a { color: #fff; text-decoration: none; }
-  .firma-web { grid-column: 2; justify-self: end; margin-top: 6px; font-size: 13px; color: var(--gris-oscuro); display: flex; gap: 6px; align-items: center; }
-  .firma-web svg { width: 13px; height: 13px; fill: none; stroke: var(--gris-oscuro); stroke-width: 1.6; }
-  .firma-web a { color: var(--gris-oscuro); text-decoration: none; font-weight: 600; }
-
-  .pie { padding: 10px 44px 18px; font-size: 10.5px; color: #8a93a1; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-
-  /* ---------- Responsivo ---------- */
-  @media (max-width: 680px) {
-    .hoja { margin: 0; border-radius: 0; }
-    .cabecera, .contenido, .pie { padding-left: 18px; padding-right: 18px; }
-    .asunto dl { grid-template-columns: 1fr; gap: 0 0; }
-    .asunto dt { margin-top: 8px; }
-    .firma-grid { grid-template-columns: 1fr; justify-items: center; gap: 12px; }
-    .firma-bloque { flex-direction: column; text-align: center; border-radius: 28px; padding: 18px 16px; }
-    .contacto li { justify-content: flex-start; text-align: left; }
-    .firma-web { grid-column: 1; justify-self: center; }
-    .cuerpo p { text-align: left; }
-  }
-
-  /* ---------- Impresión / PDF: conserva colores y proporciones ---------- */
-  @page { size: Letter; margin: 0; }
-  @media print {
-    body { background: #fff; }
-    .hoja { margin: 0; max-width: none; box-shadow: none; border-radius: 0; }
-    .cabecera, .firma-bloque, .asunto, mark.fill { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .firma, .asunto, .destinatario { break-inside: avoid; }
-    /* Un poco más compacta para que la carta (con su firma) quepa en una sola hoja */
-    .cabecera { padding-top: 12px; padding-bottom: 12px; }
-    .contenido { padding-top: 24px; padding-bottom: 14px; }
-    .fecha { margin-bottom: 14px; }
-    .destinatario, .asunto { margin-bottom: 18px; }
-    .cuerpo p { margin-bottom: 10px; }
-    .firma { margin-top: 14px; padding-top: 14px; }
-    .pie { padding-top: 4px; padding-bottom: 12px; }
-  }
-</style>
-</head>
+  :root { --navy:#002b6a; --blue:#027cc6; --silver:#989795; --silver-l:#c4c8cb; --ink:#1e1e1e; --paper:#fff; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:#eceef1; font-family:"Century Gothic","CenturyGothic","Questrial","Poppins","Segoe UI",Arial,sans-serif; color:var(--ink); font-size:13px; line-height:1.55; padding:24px 12px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .hoja { position:relative; width:816px; max-width:100%; min-height:1056px; margin:0 auto; background:var(--paper); box-shadow:0 10px 30px rgba(0,43,106,.18); display:flex; flex-direction:column; }
+  .hoja::before { content:""; position:absolute; inset:14px; border:1.5px solid var(--navy); box-shadow:2px 2px 0 var(--navy); pointer-events:none; }
+  .encab { display:flex; justify-content:space-between; align-items:flex-start; padding:34px 56px 0 64px; }
+  .encab .logo { width:150px; height:auto; display:block; }
+  .encab .hqr { width:60px; height:60px; display:block; }
+  .filete { height:3px; margin:14px 56px 0 64px; background:linear-gradient(90deg,var(--navy),var(--blue) 60%,var(--silver-l)); border-radius:2px; }
+  .cont { flex:1; padding:22px 64px 8px; }
+  .lugar { text-align:right; color:var(--silver); font-size:12px; letter-spacing:.02em; margin-bottom:18px; }
+  .dest p { line-height:1.45; }
+  .dest .tratamiento { color:var(--silver); font-size:11.5px; text-transform:uppercase; letter-spacing:.12em; }
+  .dest .despacho { font-weight:700; color:var(--navy); font-size:15px; letter-spacing:.01em; margin-top:2px; }
+  .dest .juez { font-weight:600; }
+  .dest .correo { color:var(--blue); font-size:12px; }
+  .asunto { margin:18px 0 16px; display:grid; grid-template-columns:5px 1fr; background:linear-gradient(180deg,#f4f6f9,#eaeef4); border-radius:6px; overflow:hidden; box-shadow:0 1px 0 rgba(0,43,106,.08); }
+  .asunto::before { content:""; background:linear-gradient(180deg,var(--navy),var(--blue)); }
+  .asunto .in { padding:10px 18px 12px; }
+  .asunto .et { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--silver); }
+  .asunto .tit { font-weight:700; color:var(--navy); font-size:15px; margin:1px 0 6px; }
+  .asunto dl { display:grid; grid-template-columns:auto 1fr; column-gap:14px; row-gap:1px; font-size:12.5px; }
+  .asunto dt { color:var(--silver); } .asunto dd { font-weight:600; }
+  .cuerpo p { margin-bottom:10px; text-align:justify; hyphens:none; }
+  .cuerpo strong { color:var(--navy); }
+  .atte { margin:14px 0 8px; }
+  .estampa { position:relative; display:grid; grid-template-columns:auto 1fr; gap:6px 16px; align-items:start; margin-top:6px; padding:8px 0 0; max-width:540px; break-inside:avoid; }
+  .estampa .marca { position:absolute; right:-30px; top:-6px; width:210px; opacity:.07; pointer-events:none; }
+  .estampa .qr { display:block; grid-row:1; }
+  .estampa .ph { width:112px; height:112px; border:1px dashed var(--silver); color:var(--silver); font-size:10px; line-height:1.3; text-align:center; padding-top:42px; }
+  .estampa .nombre { font-size:19px; color:#6b6e72; line-height:1.15; }
+  .estampa .cc { font-size:15px; color:#6b6e72; }
+  .estampa .fe { margin-top:7px; font-weight:700; color:var(--blue); font-size:12.5px; }
+  .estampa .hora { color:var(--blue); font-size:12.5px; }
+  .estampa .datos { grid-column:1 / -1; font-size:11.5px; margin-top:2px; }
+  .estampa .datos b { font-size:12.5px; }
+  .estampa .datos .v { color:var(--silver); }
+  .estampa .auten { grid-column:1 / -1; font-size:10px; color:var(--silver); line-height:1.4; border-top:1px solid var(--silver-l); padding-top:4px; }
+  .estampa .auten b { color:var(--navy); letter-spacing:.06em; }
+  .pie-doc { display:flex; justify-content:space-between; padding:6px 64px 0; font-size:10px; color:var(--silver); }
+  .pie { display:flex; justify-content:flex-end; padding:10px 64px 34px; }
+  .pie ul { list-style:none; text-align:right; font-size:13px; color:#1F3864; line-height:1.55; }
+  .pie li { display:flex; justify-content:flex-end; align-items:center; gap:8px; }
+  .pie a { color:#1F3864; text-decoration:underline; }
+  mark.fill { background:#fff200; color:#1e1e1e; padding:0 2px; }
+  @media (max-width:720px) { body{padding:0;font-size:14px} .hoja{min-height:0} .hoja::before{inset:6px} .encab{padding:22px 24px 0} .filete{margin:12px 24px 0} .cont{padding:18px 24px 6px} .pie-doc,.pie{padding-left:24px;padding-right:24px} .cuerpo p{text-align:left} .encab .logo{width:110px} .estampa{grid-template-columns:1fr} .estampa .nombre{font-size:17px} }
+  @page { size:Letter; margin:0 }
+  @media print { body{background:#fff;padding:0;font-size:12.5px;line-height:1.45} .hoja{box-shadow:none;width:auto;min-height:0;height:1054px;overflow:hidden} .encab{padding-top:26px} .cont{padding-top:14px} .lugar{margin-bottom:10px} .asunto{margin:12px 0 10px} .cuerpo p{margin-bottom:7px} .atte{margin:8px 0 4px} .estampa .qr{width:96px;height:96px} .pie{padding-bottom:26px;padding-top:4px} .pie ul{font-size:12px;line-height:1.45} }
+</style></head>
 <body>
 <article class="hoja">
-
-  <!-- Cabecera de la App / despacho -->
-  <header class="cabecera">
-    <div class="marca">Tecjuridicos<b>App</b></div>
-    <small>Solicitud de acceso a expediente digital</small>
-  </header>
-
-  <main class="contenido">
-
-    <!-- INSERTAR: ciudad (por defecto Ibagué) y fecha de hoy -->
-    <p class="fecha">{{ciudad}}, {{fecha_solicitud}}</p>
-
-    <!-- INSERTAR: datos del despacho destinatario -->
-    <section class="destinatario">
-      <p>Señor(a)</p>
-      <p class="nombre">{{nombre_juez_o_doctora}}</p>
-      <p>{{cargo_despacho}}</p>
+  <!-- Membrete de la plantilla Word: logo a la izquierda, QR a la derecha -->
+  <header class="encab"><img class="logo" src="@@LOGO@@" alt="TEC Jurídicos"><img class="hqr" src="@@HQR@@" alt=""></header>
+  <div class="filete"></div>
+  <main class="cont">
+    <!-- INSERTAR: ciudad (por defecto Ibagué) y fecha -->
+    <p class="lugar">{{ciudad}}, {{fecha_solicitud}}</p>
+    <!-- INSERTAR: despacho del expediente, en mayúsculas (p. ej. JUZGADO 05 CIVIL MUNICIPAL DE IBAGUÉ) -->
+    <section class="dest">
+      <p class="tratamiento">Señor(a)</p>
+      <p class="despacho">{{cargo_despacho}}</p>
+      <p class="juez">{{nombre_juez_o_doctora}}</p>
       <p class="correo">{{correo_juzgado}}</p>
       <p>{{ciudad_juzgado}}</p>
     </section>
-
-    <!-- INSERTAR: asunto en tarjeta destacada (tipo de actuación, partes y radicado) -->
-    <section class="asunto">
-      <p class="etiqueta">Referencia</p>
-      <p class="titulo">Solicitud Link Expediente - {{tipo_actuacion}}</p>
-      <dl>
-        <dt>Demandante</dt><dd>{{demandante}}</dd>
-        <dt>Demandado</dt><dd>{{demandado}}</dd>
-        <dt>Radicación No.</dt><dd>{{numero_radicado}}</dd>
-      </dl>
-    </section>
-
-    <!-- Cuerpo formal: las palabras clave van en negrita -->
+    <section class="asunto"><div class="in">
+      <p class="et">Referencia</p>
+      <p class="tit">Solicitud Link Expediente - {{tipo_actuacion}}</p>
+      <dl><dt>Demandante</dt><dd>{{demandante}}</dd><dt>Demandado</dt><dd>{{demandado}}</dd><dt>Radicación No.</dt><dd>{{numero_radicado}}</dd></dl>
+    </div></section>
     <section class="cuerpo">
       <p>Cordial saludo.</p>
-      <p>Yo, <strong>{{nombre_abogado}}</strong>, identificado con {{identificacion_abogado}}, obrando como apoderado de
-        <strong>{{nombre_cliente}}</strong> dentro del proceso de la referencia, de manera respetuosa me permito presentar la
-        <strong>Solicitud Link Expediente</strong>, con el fin de que se sirva remitir al correo electrónico
-        <strong>{{correo_abogado}}</strong> el enlace de acceso al expediente digital, para poder asistir y participar en la
-        diligencia programada de <strong>{{tipo_actuacion}}</strong>, garantizando así el derecho de defensa y el acceso efectivo a la
-        administración de justicia.</p>
+      <p><strong>{{nombre_abogado}}</strong>, identificado civil y profesionalmente como aparece al final en la firma electrónica, actuando como apoderado judicial {{cliente_del_senor}} <strong>{{nombre_cliente}}</strong>, por medio del presente escrito solicito de manera respetuosa a su Señoría se sirva compartirme el <strong>link del expediente electrónico</strong>.</p>
+      <p>Informo a su Señoría que el correo autorizado por el suscrito apoderado corresponde a <strong>{{correo_abogado}}</strong>.</p>
       <p>Agradezco de antemano su atención y colaboración.</p>
     </section>
-
-    <div class="despedida">
-      <p>Atentamente,</p>
+    <p class="atte">Atentamente,</p>
+    <!-- Firma electrónica de la plataforma: la estampa se inserta con la firma del usuario y su código de verificación -->
+    <div class="estampa">
+      <img class="marca" src="@@LOGO@@" alt="">
+      <div class="qr ph">QR de verificación<br>se emite al enviar</div>
+      <div><p class="nombre">{{firma_nombre}}</p><p class="cc">{{firma_cc}}</p><p class="fe">Firma Electrónica</p><p class="hora">{{firma_fecha}}</p></div>
+      <p class="datos"><b>{{firma_nombre}}</b><br>{{firma_cc}} · {{firma_tarjeta}}<br>{{firma_contacto}}<br><span class="v">Verificación: código OTP por correo</span></p>
+      <p class="auten">Documento firmado electrónicamente con estampa de tiempo. Verifique su autenticidad con el código QR y el código de verificación que se emiten al enviar la carta (<b>tecjuridicos.com/verificar</b>).</p>
     </div>
-
-    <!-- Firma digital: logotipo · foto circular · bloque oscuro con datos de contacto -->
-    <footer class="firma">
-      <div class="firma-grid">
-        <img class="firma-logo" src="@@FIRMA_LOGO@@" alt="TEC Jurídicos" />
-        <div class="firma-bloque">
-          <img class="firma-foto" src="@@FIRMA_FOTO@@" alt="John Fredy Quiñones M." />
-          <div class="firma-texto">
-            <p class="firma-nombre">John Fredy Quiñones M.</p>
-            <p class="firma-titulos">
-              <span>Magister en Derecho - Especialista en Derecho</span>
-              <span>Experto en Medicina Laboral</span>
-              <span>Ex Conjuez del Tribunal Administrativo del Tolima</span>
-            </p>
-            <ul class="contacto">
-              <li><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span>+57 314 415 6914</span></li>
-              <li><svg viewBox="0 0 24 24"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm9 7.2L4.2 7v.1L12 12.4 19.8 7.1V7z"/></svg><a href="mailto:gerencia@tecjuridicos.com">gerencia@tecjuridicos.com</a></li>
-              <li><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg><span>Carrera 5a No.29-32 Oficina 290<br />Centro Comercial La Quinta Ibagué - Colombia</span></li>
-            </ul>
-          </div>
-        </div>
-        <div class="firma-web">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>
-          <a href="https://www.tecjuridicos.com">www.tecjuridicos.com</a>
-        </div>
-      </div>
-    </footer>
   </main>
-
-  <!-- INSERTAR: número del memorial y quién lo elaboró -->
-  <div class="pie"><span>Memorial N.º {{documento.numero}}</span><span>Elaboró: {{elaboro}}</span></div>
+  <div class="pie-doc"><span>Memorial N.º {{documento.numero}}</span><span>Elaboró: {{elaboro}}</span></div>
+  <footer class="pie"><ul>
+    <li><span>Carrera 5 No. 29-32 Of.290 Centro Comercial La Quinta</span><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#e0523f" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg></li>
+    <li><span>Tel. 314 415 6914 / 320 557 7777</span><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#c8342b" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1z"/></svg></li>
+    <li><a href="https://www.tecjuridicos.com">www.tecjuridicos.com</a><img src="@@GLOBE@@" width="14" height="14" alt=""></li>
+    <li><a href="mailto:gerencia@tecjuridicos.com">gerencia@tecjuridicos.com</a><svg viewBox="0 0 24 24" width="14" height="14"><path fill="#1F3864" d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm9 7.2L4.2 7v.1L12 12.4 19.8 7.1V7z"/></svg></li>
+    <li><span>Ibagué – Colombia</span><img src="@@LOC@@" width="14" height="14" alt=""></li>
+  </ul></footer>
 </article>
-</body>
-</html>
+</body></html>
