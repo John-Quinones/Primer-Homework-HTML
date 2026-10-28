@@ -13,15 +13,18 @@
 
   /** The letter's HTML for the data {ciudad, fecha, destinatario, atencion, titulo, referencia, cuerpo, elaboro}. */
   function build(d, tpl = window.JuanmaCartaTpl) {
-    const ents = groups(d.destinatario).map((g) => `<div class="grupo">${g.map((l, i) => `<p class="${/@/.test(l) ? "correo" : i === 0 ? "despacho" : ""}">${esc(/@/.test(l) ? l : up(l))}</p>`).join("")}</div>`).join("");
+    const ents = groups(d.destinatario).map((g) => `<div class="grupo">${g.map((l, i) => `<p class="${/@/.test(l) ? "correo" : i === 0 ? "despacho" : ""}">${esc(/@/.test(l) || d.mayusculas === false ? l : up(l))}</p>`).join("")}</div>`).join("");
     const dest = (ents || fill(LABELS.destinatario)) + (String(d.atencion || "").trim() ? `<p class="juez">${esc(d.atencion.trim())}</p>` : "");
     const ref = lines(d.referencia).filter(Boolean).map((l) => { const m = l.match(/^([^:]{1,40}):\s*(.+)$/); return m ? `<dt>${esc(m[1])}</dt><dd>${esc(m[2])}</dd>` : `<dt></dt><dd>${esc(l)}</dd>`; }).join("");
     const titulo = String(d.titulo || "").trim();
-    const asunto = titulo || ref ? `<section class="asunto"><div class="in"><p class="et">Referencia</p>${titulo ? `<p class="tit">${esc(titulo)}</p>` : ""}${ref ? `<dl>${ref}</dl>` : ""}</div></section>` : "";
+    const asunto = titulo || ref ? `<section class="asunto"><div class="in"><p class="et">${esc(String(d.etiqueta ?? "Referencia").trim() || "Referencia")}</p>${titulo ? `<p class="tit">${esc(titulo)}</p>` : ""}${ref ? `<dl>${ref}</dl>` : ""}</div></section>` : "";
     const cuerpo = groups(d.cuerpo).map((g) => `<p>${g.map(esc).join("<br>")}</p>`).join("");
     return String(tpl)
+      .replace("@@TRATAMIENTO@@", () => esc(String(d.tratamiento ?? "Señores").trim()))
+      .replace("@@DESPEDIDA@@", () => esc(String(d.despedida ?? "Atentamente,").trim()))
+      .replace("@@ELABORO@@", () => (d.mostrarElaboro === false || !String(d.elaboro || "").trim() ? "" : `Elaboró: ${esc(String(d.elaboro).trim())}`))
       .replace("@@DEST@@", () => dest).replace("@@ASUNTO@@", () => asunto).replace("@@CUERPO@@", () => cuerpo || `<p>${fill(LABELS.cuerpo)}</p>`)
-      .replace(/\{\{\s*(ciudad|fecha|elaboro)\s*\}\}/g, (_, k) => (String(d[k] || "").trim() ? esc(String(d[k]).trim()) : k === "elaboro" ? "" : fill(LABELS[k])));
+      .replace(/\{\{\s*(ciudad|fecha)\s*\}\}/g, (_, k) => (String(d[k] || "").trim() ? esc(String(d[k]).trim()) : fill(LABELS[k])));
   }
 
   /** A first text for the body: the user's name (capitals) as the apoderado who sends the attached document. */

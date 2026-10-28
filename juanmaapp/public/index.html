@@ -1586,17 +1586,26 @@
           <label>Ciudad * <input name="c_ciudad" value="Ibagué" /></label>
           <label>Fecha * <input name="c_fecha" /></label>
         </div>
+        <div class="grid2">
+          <label>Tratamiento <input name="c_tratamiento" value="Señores" placeholder="Señores, Señor, Señora, Doctor…" /></label>
+          <label class="inline"><input type="checkbox" name="c_mayusculas" checked /> Escribir la entidad en mayúsculas</label>
+        </div>
         <label>Entidad destinataria * (una entidad por grupo de líneas, separe los grupos con una línea en blanco; se escribe en mayúsculas)
           <textarea name="c_destinatario" rows="4" placeholder="Ministerio de Educación Nacional&#10;Bogotá D.C.&#10;&#10;Fondo Nacional de Prestaciones Sociales del Magisterio"></textarea>
         </label>
         <label>Atención (opcional) <input name="c_atencion" placeholder="Ej.: Dra. Ana Pérez · Jefe de la Oficina Jurídica" /></label>
         <div class="grid2">
           <label>Título de la referencia (opcional) <input name="c_titulo" placeholder="Ej.: Derecho de petición" /></label>
-          <label>Datos de la referencia (opcional, una línea «Etiqueta: valor»)
+          <label>Rótulo de la referencia <input name="c_etiqueta" value="Referencia" placeholder="Referencia, Asunto, Ref." /></label>
+          <label>Datos de la referencia (se llenan con el cliente, el radicado y el despacho del expediente que elija; puede corregirlos o agregar más, una línea «Etiqueta: valor»)
             <textarea name="c_referencia" rows="3" placeholder="Peticionario: Nombre&#10;Radicado: 00000"></textarea>
           </label>
         </div>
         <label>Texto de la carta * (separe los párrafos con una línea en blanco) <textarea name="c_cuerpo" rows="8"></textarea></label>
+        <div class="grid2">
+          <label>Despedida <input name="c_despedida" value="Atentamente," placeholder="Atentamente, Cordialmente…" /></label>
+          <label class="inline"><input type="checkbox" name="c_elaboro" checked /> Mostrar «Elaboró: iniciales» al pie de la firma</label>
+        </div>
         <label class="inline"><input type="checkbox" name="c_unir" checked /> Unir el PDF subido a la carta en un solo archivo firmado (la firma cubre todo)</label>
         <p class="form-error" id="fse-carta-missing" hidden></p>
         <iframe id="fse-carta-view" title="Vista previa de la carta" style="width:100%;height:560px;border:1px solid var(--line,#444);border-radius:8px;background:#fff"></iframe>
