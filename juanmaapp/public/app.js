@@ -1665,8 +1665,9 @@ async function openSlink(caseId) {
 const slFields = () => { const d = formData(slForm); return { ...Object.fromEntries(SL.LETTER_KEYS.map((k) => [k, d[k] || ""])), correo_juzgado: (d.to || "").trim() }; };
 function renderSlink() {
   const f = slFields(), to = slForm.elements.to.value.trim();
-  const miss = SL.letterMissing(f);
-  const L = SL.buildLetter(f, { imgSrc: `${WEB ? SERVER_URL : ""}/firma-john.png` });
+  const signer = SL.signerView(me), base = WEB ? SERVER_URL : "";
+  const miss = SL.letterMissing(f, signer);
+  const L = SL.buildLetter(f, { signer, imgs: { logo: `${base}/carta-logo.png`, qr: `${base}/carta-qr.png`, globo: `${base}/carta-globo.png`, ubicacion: `${base}/carta-ubicacion.png` } });
   $("#slink-preview").innerHTML = DOMPurify.sanitize(L.html);
   $("#slink-missing").textContent = miss.length ? `Falta: ${miss.join(", ")}.` : "";
   $("#slink-missing").hidden = !miss.length;
@@ -5297,7 +5298,7 @@ const tplValues = () => {
   const mem = memorialText(all);
   if (mem) all[MC_MARKER] = mem;
   // Version 2.2.90: the HTML letter's own names (ciudad, demandante…) come from the case; what the user typed wins.
-  if (tplActive?.html) for (const [k, x] of Object.entries(HTMLT.fromCase(all, window.JuanmaGeneratedBy()))) if (!v[k] && x) all[k] = x;
+  if (tplActive?.html) for (const [k, x] of Object.entries(HTMLT.fromCase(all, window.JuanmaGeneratedBy(), me))) if (!v[k] && x) all[k] = x;
   return all;
 };
 // Version 2.2.48: a Word of category Poder always shows the power classes; without the marker it offers to put it in (offerMarker).

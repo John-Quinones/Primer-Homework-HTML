@@ -7,13 +7,16 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The letter's HTML lives in plantillas/solicitud-link-expediente.html; the signature pictures (public/firma-*.png) travel inside it as data URIs.
+// The letter's HTML lives in plantillas/solicitud-link-expediente.html; the letterhead pictures (public/carta-*.png, taken from the firm's Word letterhead) travel inside it as data URIs.
 const here = path.dirname(fileURLToPath(import.meta.url));
 export function solicitudLinkHtml() {
   const img = (f) => "data:image/png;base64," + readFileSync(path.join(here, "..", "public", f)).toString("base64");
   return readFileSync(path.join(here, "plantillas", "solicitud-link-expediente.html"), "utf8")
-    .replace("@@FIRMA_LOGO@@", () => img("firma-logo.png")).replace("@@FIRMA_FOTO@@", () => img("firma-foto.png"));
+    .replaceAll("@@LOGO@@", () => img("carta-logo.png")).replaceAll("@@HQR@@", () => img("carta-qr.png"))
+    .replaceAll("@@GLOBE@@", () => img("carta-globo.png")).replaceAll("@@LOC@@", () => img("carta-ubicacion.png"));
 }
+// SHA-256 of the body seeded by version 2.2.90 (old design): version 2.2.91 replaces the starter template only while it is still exactly that one.
+export const SLINK_V1_SHA = "203ea29bd298a23c0637c987000b9a5ad9cde4fe1d915968524131837d64e715";
 
 export const DOC_CATEGORIES = ["Contrato", "Poder", "Autorización", "Derecho de petición", "Demanda", "Tutela", "Recurso", "Memorial", "Otro"];
 
@@ -423,7 +426,7 @@ T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
   },
   // Version 2.2.90 (John, 27/10/2026): HTML letter with the firm's design and digital signature; goes to Memorial › Solicitud de link.
   { name: "Solicitud link de expediente", category: "Memorial", memorialCategory: "Solicitud de link",
-    description: "Carta al despacho pidiendo el link del expediente digital, con diseño TecjuridicosApp y firma digital.", body: solicitudLinkHtml() },
+    description: "Carta al despacho pidiendo el link del expediente digital, con el membrete y el pie de la plantilla Word y la firma electrónica de la plataforma.", body: solicitudLinkHtml() },
 ];
 
 // The starter fee clause before change 36, and its replacement: the fee comes from Pagos.

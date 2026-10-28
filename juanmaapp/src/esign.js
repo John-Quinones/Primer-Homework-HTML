@@ -28,6 +28,25 @@ function event(db, requestId, signerId, name, detail = "", ip = "") {
   db.prepare("INSERT INTO sign_events (request_id, signer_id, event, detail, ip) VALUES (?, ?, ?, ?, ?)").run(requestId, signerId, name, detail, ip);
 }
 
+/**
+ * Version 2.2.91: the electronic signature of a letter the platform sends itself (the «Solicitud link de expediente»). The user who sends it signs
+ * with the platform's account: a completed request with the exact text and its SHA-256, a signer with the time and address, and a verification code
+ * that the public page (verificar.html) answers. Returns {code, id}.
+ */
+export function issueLetterSignature(db, req, { title, text, caseId, officeId, signer }) {
+  const hash = sha(Buffer.from(text, "utf8")), code = newVerifyCode();
+  const id = db.prepare(`INSERT INTO sign_requests (title, case_id, office_id, doc_kind, doc_text, doc_name, doc_hash, message, status, created_by, verify_code, completed_at)
+    VALUES (?, ?, ?, 'markdown', ?, 'solicitud-link-expediente.txt', ?, 'Carta enviada por la plataforma', 'completada', ?, ?, datetime('now'))`)
+    .run(title, caseId || null, officeId || null, text, hash, req.user.id, code).lastInsertRowid;
+  event(db, id, null, "creada", `${req.user.name} · SHA-256 ${hash}`, clientIp(req));
+  const sid = db.prepare(`INSERT INTO sign_signers (request_id, name, id_type, id_number, email, phone, token_hash, status, method, signed_at, ip, user_agent, typed_name)
+    VALUES (?, ?, 'CC', ?, ?, ?, ?, 'firmado', 'plataforma', datetime('now'), ?, ?, ?)`)
+    .run(id, signer.name, signer.id_number, signer.email || "", signer.phone || "", sha(randomBytes(24)), clientIp(req), str(req.get?.("user-agent")).slice(0, 300), signer.name).lastInsertRowid;
+  event(db, id, sid, "firmado", `Firma electrónica con la cuenta ${req.user.email || req.user.name} · SHA-256 ${hash}`, clientIp(req));
+  event(db, id, null, "completada", "Carta firmada por la plataforma para enviarla por correo.");
+  return { id, code };
+}
+
 const CHANNELS = ["email", "sms", "whatsapp"];
 const CHANNEL_LABEL = { email: "correo", sms: "SMS", whatsapp: "WhatsApp" };
 const maskEmail = (e) => String(e || "").replace(/^(.{2}).*(@.*)$/, "$1•••$2");

@@ -111,3 +111,9 @@ Reglas de John para TODAS las minutas y plantillas (19/10/2026):
 - Variables propias (las de John): ciudad, fecha_solicitud, nombre_juez_o_doctora, cargo_despacho, correo_juzgado, ciudad_juzgado, tipo_actuacion, demandante, demandado, numero_radicado, nombre_abogado, identificacion_abogado, nombre_cliente, correo_abogado (+ `documento.numero`, `elaboro`). `tipo_actuacion` e `identificacion_abogado` se escriben a mano (el abogado trae tarjeta profesional si está guardada).
 - La firma del pie es siempre la de John (fija en el HTML); `nombre_abogado` sale del responsable del expediente.
 - Copias autónomas: `node scripts/build-solicitud-link.mjs <carpeta>` (entregadas en /mnt/project-files/solicitud-link-expediente/). Pruebas: `test/v2281-solicitud-link.test.js`.
+
+## Carta «Solicitud link de expediente» con membrete y firma electrónica (v2.2.91, 28/10/2026)
+- Diseño HTML/CSS = membrete de la plantilla Word «Plantilla Membrete_Pie_Encab_Pagina»: logo arriba izquierda, QR arriba derecha, borde azul con sombra, pie alineado a la derecha (dirección, teléfonos, web, correo, ciudad). Imágenes recortadas en `public/carta-*.png`. Archivo: `src/plantillas/solicitud-link-expediente.html`; el correo usa el mismo diseño en tablas (`buildLetter` en `src/solicitud-link-letter.js`).
+- Texto de John: inicia con «NOMBRE, identificado civil y profesionalmente como aparece al final en la firma electrónica, actuando como apoderado judicial de …» (sin «Yo»). Despacho en mayúsculas, radicado con guiones.
+- Firma: al enviar por `POST /mail` con `letter`, `issueLetterSignature` (`src/esign.js`) crea una solicitud completada (método `plataforma`) con código verificable; QR PNG de `src/qr-png.js`. La estampa lleva nombre completo, cédula y tarjeta profesional del usuario (Usuarios). Sin nombre completo o cédula no se envía.
+- La plantilla vieja de 2.2.90 se reemplaza una vez si su SHA-256 coincide (`SLINK_V1_SHA`); demo por marca `class="cabecera"`.

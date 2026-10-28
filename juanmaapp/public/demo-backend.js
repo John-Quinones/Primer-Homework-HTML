@@ -153,6 +153,12 @@
       }
       st.info = { ...st.info, linkTplCat: true };
     }
+    // 2.2.91: the starter «Solicitud link de expediente» takes the letterhead design while it still has the old one (once).
+    if (!st.info.slinkV2) {
+      const seed = TPL.seed.find((t) => t.name === "Solicitud link de expediente"), cur = seed && st.templates.find((t) => t.builtin && t.name === seed.name);
+      if (cur && cur.body.includes('class="cabecera"')) Object.assign(cur, { body: seed.body, description: seed.description });
+      st.info = { ...st.info, slinkV2: true };
+    }
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
   }

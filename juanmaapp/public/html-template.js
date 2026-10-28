@@ -9,7 +9,7 @@
     cargo_despacho: "Cargo o despacho", correo_juzgado: "Correo del juzgado", ciudad_juzgado: "Ciudad del juzgado",
     tipo_actuacion: "Tipo de actuación (audiencia o diligencia)", demandante: "Demandante", demandado: "Demandado",
     numero_radicado: "Número de radicado", nombre_abogado: "Nombre del abogado", identificacion_abogado: "Identificación del abogado",
-    nombre_cliente: "Nombre del cliente", correo_abogado: "Correo del abogado", elaboro: "Quién elaboró",
+    nombre_cliente: "Nombre del cliente", cliente_del_senor: "«del señor» o «de la señora»", firma_nombre: "Su nombre completo para firmas (Usuarios)", firma_cc: "Su cédula (Usuarios)", firma_tarjeta: "Su tarjeta profesional (Usuarios)", firma_contacto: "Su correo (Usuarios)", firma_fecha: "Fecha de la firma", correo_abogado: "Correo del abogado", elaboro: "Quién elaboró",
   };
   const HINTS = {
     tipo_actuacion: "Ej.: Interrogatorio de parte", identificacion_abogado: "Ej.: C.C. No. 00.000.000 y T.P. No. 000.000 del C. S. de la J.",
@@ -19,13 +19,15 @@
   const up = (x) => String(x || "").toLocaleUpperCase("es-CO");
 
   /** Values of the letter's variables from the data the document already has: the shared letter data (src/solicitud-link-letter.js) plus the lawyer's. */
-  function fromCase(v, who) {
-    const L = window.JuanmaSolicitudLink.letterFields(v);
+  function fromCase(v, who, user) {
+    const L = window.JuanmaSolicitudLink.letterFields(v), S = window.JuanmaSolicitudLink.signerView(user || {});
     return {
       ...L,
-      nombre_abogado: up(v["abogado.nombre"]),
-      identificacion_abogado: v["abogado.tarjeta_profesional"] ? `tarjeta profesional N.º ${v["abogado.tarjeta_profesional"]}` : "",
-      correo_abogado: v["abogado.correo"],
+      cliente_del_senor: L.cliente_del_senor || "de",
+      nombre_abogado: up(S.name),
+      firma_nombre: S.name, firma_cc: S.id_number ? `CC. ${S.id_number}` : "", firma_tarjeta: S.card, firma_contacto: [S.email, S.phone].filter(Boolean).join(" · "),
+      firma_fecha: "se registra al enviar", firma_codigo: "se emite al enviar",
+      correo_abogado: "gerencia@tecjuridicos.com",
       elaboro: who || "",
     };
   }
