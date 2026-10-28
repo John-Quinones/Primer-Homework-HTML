@@ -1573,7 +1573,35 @@
     <form method="dialog">
       <h3 data-title>Firmar y enviar por correo</h3>
       <p class="hint">Suba un PDF de la oficina, marque dónde va su firma electrónica y envíelo a una o varias autoridades. La firma lleva el código y el QR que se verifica en la App; el PDF firmado va adjunto y el envío queda en Correo certificado. Tamaño máximo del PDF: 30 MB; si el correo de Microsoft 365 no admite un adjunto tan pesado (más de unos 3 MB), el mensaje lleva el PDF firmado como enlace de descarga con constancia.</p>
-      <label>PDF * <input type="file" name="pdf" accept="application/pdf,.pdf" required /></label>
+      <label>Qué se firma
+        <select name="mode">
+          <option value="pdf">Solo el PDF que subo (firma donde yo marque)</option>
+          <option value="carta">Una carta con el membrete de la firma, y el PDF que subo como anexo</option>
+        </select>
+      </label>
+      <fieldset id="fse-carta" hidden>
+        <legend>Carta con membrete (el mismo diseño de «Solicitud link de expediente»)</legend>
+        <p class="hint">Complete los datos: lo que falte aparece resaltado en amarillo en la vista previa y no deja enviar. La firma electrónica queda en el espacio al final de la carta. Una sola hoja: si el texto es muy largo, déjelo en el PDF anexo.</p>
+        <div class="grid2">
+          <label>Ciudad * <input name="c_ciudad" value="Ibagué" /></label>
+          <label>Fecha * <input name="c_fecha" /></label>
+        </div>
+        <label>Entidad destinataria * (una entidad por grupo de líneas, separe los grupos con una línea en blanco; se escribe en mayúsculas)
+          <textarea name="c_destinatario" rows="4" placeholder="Ministerio de Educación Nacional&#10;Bogotá D.C.&#10;&#10;Fondo Nacional de Prestaciones Sociales del Magisterio"></textarea>
+        </label>
+        <label>Atención (opcional) <input name="c_atencion" placeholder="Ej.: Dra. Ana Pérez · Jefe de la Oficina Jurídica" /></label>
+        <div class="grid2">
+          <label>Título de la referencia (opcional) <input name="c_titulo" placeholder="Ej.: Derecho de petición" /></label>
+          <label>Datos de la referencia (opcional, una línea «Etiqueta: valor»)
+            <textarea name="c_referencia" rows="3" placeholder="Peticionario: Nombre&#10;Radicado: 00000"></textarea>
+          </label>
+        </div>
+        <label>Texto de la carta * (separe los párrafos con una línea en blanco) <textarea name="c_cuerpo" rows="8"></textarea></label>
+        <label class="inline"><input type="checkbox" name="c_unir" checked /> Unir el PDF subido a la carta en un solo archivo firmado (la firma cubre todo)</label>
+        <p class="form-error" id="fse-carta-missing" hidden></p>
+        <iframe id="fse-carta-view" title="Vista previa de la carta" style="width:100%;height:560px;border:1px solid var(--line,#444);border-radius:8px;background:#fff"></iframe>
+      </fieldset>
+      <label data-fse-pdf>PDF <span data-fse-pdf-req>*</span> <input type="file" name="pdf" accept="application/pdf,.pdf" required /></label>
       <p class="hint" data-fse-info></p>
       <div id="fse-view" class="pdf-view" aria-label="Vista previa del PDF" hidden></div>
       <p class="hint" data-fse-spot hidden>Haga clic en la página donde quiere su firma y arrastre el recuadro punteado para ajustarlo (también con las flechas del teclado). Si no marca nada, va al pie de la última página.</p>
@@ -2375,6 +2403,8 @@
   <script src="vendor/html2canvas.min.js"></script>
   <script src="docx-pdf.js"></script>
   <script src="html-template.js"></script>
+  <script src="carta-firma-tpl.js"></script>
+  <script src="carta-firma.js"></script>
   <script src="sigpad.js"></script>
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>

@@ -1,0 +1,81 @@
+<!--tj-html-->
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carta para enviar con firma electrónica</title>
+<style>
+  /* Membrete y pie: los de la «Plantilla Membrete_Pie_Encab_Pagina» de Word, sin cambios. Hoja Carta (816 × 1056 px): márgenes 3 cm arriba, abajo y derecha, 3,5 cm a la izquierda;
+     borde de página azul #002B6A de 1 pt con sombra a 24 pt del borde; encabezado a 1,25 cm; letra Century Gothic 10 pt en azul #1F3864 en el pie. */
+  :root { --navy:#002b6a; --navy-pie:#1F3864; --blue:#027cc6; --silver:#989795; --silver-l:#c4c8cb; --ink:#1e1e1e; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:#eceef1; font-family:"Century Gothic","CenturyGothic","Questrial","Poppins","Segoe UI",Arial,sans-serif; color:var(--ink); padding:24px 0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .hoja { position:relative; width:816px; height:1056px; margin:0 auto; background:#fff; overflow:hidden; box-shadow:0 10px 30px rgba(0,43,106,.18); }
+  .borde { position:absolute; inset:32px; border:1.33px solid #002B6A; box-shadow:2px 2px 0 #000; pointer-events:none; }
+  /* Encabezado: tabla de dos celdas con el logo (131 × 70 px) a la izquierda y el QR (70 × 70 px) a la derecha */
+  .encab { position:absolute; top:47px; left:132px; width:571px; display:flex; justify-content:space-between; align-items:center; padding:0 7px; }
+  .encab .logo { width:131px; height:70px; display:block; }
+  .encab .hqr { width:70px; height:70px; display:block; }
+  /* Pie: cinco renglones a la derecha, Century Gothic 10 pt, #1F3864 */
+  .pie { position:absolute; left:132px; width:571px; top:890px; text-align:right; font-size:13.33px; line-height:17.5px; color:#1F3864; }
+  .pie p { position:relative; height:17.5px; white-space:nowrap; }
+  .pie b { font-weight:700; }
+  .pie u { text-decoration:underline; }
+  .pie a { color:#1F3864; text-decoration:underline; }
+  .pie a.mail { color:#0000FF; }
+  .pie img { position:absolute; width:14px; height:14px; top:2.4px; }
+  /* Cuerpo */
+  .cuerpo { position:absolute; left:132px; width:571px; top:158px; font-size:12.5px; line-height:1.5; }
+  .lugar { text-align:right; color:var(--silver); font-size:12px; margin-bottom:12px; }
+  .dest p { line-height:1.4; }
+  .dest .tratamiento { color:var(--silver); font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
+  .dest .despacho { font-weight:700; color:var(--navy); font-size:14px; margin-top:1px; }
+  .dest .grupo { margin-bottom:6px; }
+  .dest .juez { font-weight:600; }
+  .dest .correo { color:var(--blue); font-size:12px; }
+  .asunto { margin:14px 0 12px; display:grid; grid-template-columns:5px 1fr; background:linear-gradient(180deg,#f4f6f9,#eaeef4); border-radius:6px; overflow:hidden; }
+  .asunto::before { content:""; background:linear-gradient(180deg,var(--navy),var(--blue)); }
+  .asunto .in { padding:9px 16px 10px; }
+  .asunto .et { font-size:9.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--silver); }
+  .asunto .tit { font-weight:700; color:var(--navy); font-size:14px; margin:1px 0 5px; }
+  .asunto dl { display:grid; grid-template-columns:auto 1fr; column-gap:14px; row-gap:1px; font-size:12px; }
+  .asunto dt { color:var(--silver); } .asunto dd { font-weight:600; }
+  .texto p { margin-bottom:8px; text-align:justify; hyphens:none; }
+  .texto strong { color:var(--navy); }
+  .atte { margin:10px 0 6px; }
+  /* Aquí la plataforma estampa la firma electrónica del módulo de firma (QR, hora, datos y certificado): 250 × 104 pt = 333 × 139 px */
+  .espacio-firma { width:333px; height:139px; border:1px dashed var(--silver-l); border-radius:4px; color:var(--silver); font-size:10px; line-height:1.4; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; }
+  .numero { display:flex; justify-content:space-between; margin-top:8px; font-size:10px; color:var(--silver); }
+  mark.fill { background:#fff200; color:#1e1e1e; padding:0 2px; }
+  @page { size:Letter; margin:0 }
+  @media print { body { background:#fff; padding:0 } .hoja { box-shadow:none; margin:0 } .espacio-firma { border-color:transparent; color:transparent } }
+  @media (max-width:840px) { body { padding:0 } .hoja { zoom:calc(100vw / 816px) } }
+</style></head>
+<body>
+<article class="hoja">
+  <div class="borde"></div>
+  <!-- Membrete de la plantilla Word -->
+  <header class="encab"><img class="logo" src="@@LOGO@@" alt="TEC Jurídicos"><img class="hqr" src="@@HQR@@" alt=""></header>
+  <main class="cuerpo">
+    <!-- INSERTAR: ciudad (por defecto Ibagué) y fecha -->
+    <p class="lugar">{{ciudad}}, {{fecha}}</p>
+    <!-- INSERTAR: entidad o despacho destinatario, en mayúsculas; una entidad por grupo de líneas -->
+    <section class="dest">
+      <p class="tratamiento">Señores</p>
+      @@DEST@@
+    </section>
+    @@ASUNTO@@
+    <!-- INSERTAR: texto de la carta; los párrafos los redacta el usuario -->
+    <section class="texto">@@CUERPO@@</section>
+    <p class="atte">Atentamente,</p>
+    <!-- La firma electrónica la estampa el módulo de firma de la plataforma en este espacio -->
+    <div class="espacio-firma">Aquí se estampa la firma electrónica del módulo de firma, con su QR, hora y código de verificación, al firmar y enviar.</div>
+    <div class="numero"><span></span><span>Elaboró: {{elaboro}}</span></div>
+  </main>
+  <footer class="pie">
+    <p><b>📍 </b>Carrera 5 No. 29-32 Of.290 Centro Comercial La Quinta</p>
+    <p><b>☎ </b>Tel. 314 415 6914 / 320 557 7777</p>
+    <p><img src="@@GLOBE@@" alt="" style="left:408.7px"><a href="https://www.tecjuridicos.com">www.tecjuridicos.com</a></p>
+    <p><b>✉ </b><a class="mail" href="mailto:gerencia@tecjuridicos.com">gerencia@tecjuridicos.com</a></p>
+    <p><img src="@@LOC@@" alt="" style="left:428.9px">Ibagué – Colombia</p>
+  </footer>
+</article>
+</body></html>
