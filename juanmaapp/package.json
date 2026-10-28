@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
+    "compression": "^1.8.1",
     "docx-preview": "0.3.7",
     "docxtemplater": "3.70.1",
     "dompurify": "^3.1.6",

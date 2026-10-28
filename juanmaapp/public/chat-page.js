@@ -216,7 +216,7 @@
     syncDock();
     if (on) pollBadge();
   }
-  setInterval(() => { if (me) pollBadge(); }, BADGE_MS);
+  setInterval(() => { if (me && !document.hidden) pollBadge(); }, BADGE_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && me) pollBadge(); });
 
   // ---------- screen ----------
