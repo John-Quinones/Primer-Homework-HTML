@@ -6476,6 +6476,8 @@ $("#sign-pdf-view").addEventListener("keydown", (e) => {
 
 // ---------- Version 2.2.97: sign a PDF of the office and e-mail it to one or more recipients ----------
 const fseDlg = $("#fse-dialog"), fseForm = $("form", fseDlg), fseView = $("#fse-view");
+// Version 2.3.7: the optional OneDrive link (and its name and password) of a mail form.
+const onedriveOf = (d) => (d.onedrive_url?.trim() ? { url: d.onedrive_url, name: d.onedrive_name, password: d.onedrive_password } : undefined);
 const FSE_MAX = 30 * 1024 * 1024; // same limit as the server (MAX_SIGN_PDF)
 let fseSpot = null; // { fx, fy, page }: top-left corner of the stamp as fractions of its page
 let fseDrag = null;
@@ -6563,7 +6565,7 @@ wireDialog(fseDlg, async (form) => {
   const to = found(form.elements.to.value);
   if (!to.length) throw new Error("Escriba al menos un correo de destinatario.");
   const m = await api("POST", "/mail", { to: to.join(", "), cc: found(form.elements.cc.value).join(", "), subject: form.elements.subject.value, body: form.elements.body.value,
-    case_id: Number(form.elements.case_id.value) || null, sign: { pdf_base64: btoa(bin), filename: f.name, stamp_page: fsePage(), stamp_pos: fsePos() } });
+    case_id: Number(form.elements.case_id.value) || null, onedrive: onedriveOf(formData(form)), sign: { pdf_base64: btoa(bin), filename: f.name, stamp_page: fsePage(), stamp_pos: fsePos() } });
   toast(`Documento firmado y enviado a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
 });
 
@@ -6820,7 +6822,7 @@ wireDialog($("#mail-dialog"), async (form) => {
   const d = formData(form);
   // The official is kept even if the e-mail then fails to go out.
   await saveRecipientIfAsked(mailRecipient, d.to.split(",").length === 1 ? d.to.trim() : "");
-  const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments, attach_mode: d.attach_mode });
+  const m = await api("POST", "/mail", { to: d.to, cc: d.cc, subject: d.subject, body: d.body, case_id: Number(d.case_id) || null, attachments, attach_mode: d.attach_mode, onedrive: onedriveOf(d) });
   toast(`Correo enviado a ${m.to_addr}.`);
   if (FICHAS[route().name]) await refreshView();
   else location.hash === "#correo" ? await renderCorreo() : (location.hash = "#correo");

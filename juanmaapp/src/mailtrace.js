@@ -17,6 +17,7 @@ import { publicUrl, issueLetterSignature } from "./esign.js";
 import { qrPng } from "./qr-png.js";
 import { stamp } from "./tsa.js";
 import { readFileSync } from "node:fs";
+import { onedriveBlock } from "./onedrive-link.js";
 import { buildLetter, letterMissing, signerView, stampTime } from "./solicitud-link-letter.js";
 
 // Version 2.2.83: the signature picture of «Solicitar link de expediente», sent inline (cid) so mail programs show it.
@@ -111,6 +112,9 @@ export function mailRouter(db) {
     }
     let subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
     if (!subject || !body) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
+    // Version 2.3.7: a OneDrive link (with the steps to open it) for files too big to attach; it goes inside the message and is part of what is hashed.
+    let od = null;
+    try { od = onedriveBlock(b.onedrive); } catch (err) { return res.status(400).json({ error: err.message }); }
     const files = (Array.isArray(b.attachments) ? b.attachments : []).map((a) => ({
       filename: str(a.filename).replace(/[\\/:*?"<>|]+/g, "_").slice(0, 150) || "adjunto", mime: str(a.mime) || "application/octet-stream",
       data: Buffer.from(String(a.base64 || ""), "base64"),
@@ -146,10 +150,13 @@ export function mailRouter(db) {
     let mode = b.attach_mode === "enlace" && files.length ? "enlace" : "adjunto";
     const fileDigests = files.map((f) => digests(f.data));
     const hashes = fileDigests.map((d) => d.sha256);
+    const userBody = body;
+    if (od) body = `${body}\n\n${od.text}`;
     const contentHash = sha(JSON.stringify({ to, cc, subject, body, attachments: hashes }));
     const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(2)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
     const fileLines = files.map((f, i) => ({ name: f.filename, size: `${kb(f.data.length)} (${f.data.length.toLocaleString("es-CO")} bytes)`, sha256: hashes[i], link: `${base}/api/public/mail/${token}/a/${i + 1}` }));
-    const html = `${letter ? letter.html : `<div style="font-family:Arial,sans-serif;color:#101010;white-space:pre-wrap">${esc(body)}</div>`}
+    const html = `${letter ? letter.html : `<div style="font-family:Arial,sans-serif;color:#101010;white-space:pre-wrap">${esc(userBody)}</div>`}
+      ${od ? od.html : ""}
       ${files.length ? `<p style="font-family:Arial,sans-serif;font-size:13px;margin-top:18px"><strong>Anexos${mode === "enlace" ? " (descárguelos con estos enlaces)" : ""}:</strong></p>
       <ul style="font-family:Arial,sans-serif;font-size:13px">${fileLines.map((f) => `<li><a href="${f.link}">${esc(f.name)}</a> · ${f.size}<br><span style="font-size:11px;color:#888">SHA-256 ${f.sha256}</span></li>`).join("")}</ul>` : ""}
       <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">

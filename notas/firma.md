@@ -6,3 +6,4 @@
 - Los destinatarios no están guardados en la App: el usuario los escribe cada vez (acepta «Nombre: correo»).
 - Pruebas: `test/v2297-firmar-y-enviar.test.js`.
 - Tamaño (v2.3.6): PDF hasta 30 MB (`MAX_SIGN_PDF`, `FSE_MAX`; el cuerpo de `/api/mail` admite 42 MB). El correo por Graph admite ~3 MB: si el PDF firmado no cabe, va como enlace de descarga rastreado (modo `enlace`). Pendiente posible: adjuntarlo de verdad con sesión de carga de Graph (sin probar aquí).
+- Enlace de OneDrive (v2.3.7): campos `onedrive_url/name/password` en el correo (`src/onedrive-link.js`, `onedriveBlock`, `POST /mail` con `onedrive`); solo https de 1drv.ms, onedrive.live.com o sharepoint.com; las instrucciones al destinatario van en el texto y en el HTML. La App no sube nada a OneDrive: John sube el archivo y pega el enlace.
