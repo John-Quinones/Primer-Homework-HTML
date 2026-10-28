@@ -1292,7 +1292,8 @@ function taskTable(list, answers) {
     const actions = canWrite ? `${closing}
       ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
       ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing + mine;
+      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>
+      <button class="mini danger" data-action="delete-task" data-id="${t.id}" title="Solo Gerencia; queda en el historial de tareas y en la Bitácora">Eliminar</button>` : closing + mine;
     const done = t.status === "cancelada" ? `No cumplida${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
@@ -3190,7 +3191,8 @@ document.addEventListener("click", (e) => {
       goToSection("actuaciones");
     },
     "delete-task": async () => {
-      if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
+      const title = agendaCache.find((t) => t.id === id)?.title;
+      if (!(await confirmAsk("Eliminar", `Se eliminará ${title ? `«${title}»` : "esta tarea o audiencia"}. Queda registrado en el historial de tareas y en la Bitácora.`))) return;
       await api("DELETE", `/tasks/${id}`);
       await refreshView();
     },
