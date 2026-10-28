@@ -6496,8 +6496,21 @@ function fsePlace(n, fx, fy, sheet) {
   fseSpot = { page: n, fx: Math.min(Math.max(0, fx), Math.max(0, 1 - S.w / W)), fy: Math.min(Math.max(0, fy), Math.max(0, 1 - S.h / H)) };
   fseMarks();
 }
+let fseCases = [], fseRefAuto = "";
+// Version 2.3.10: «Datos de la referencia» comes from the chosen expediente: client, radicado and court (kept only while the user has not changed it).
+function fseFillReference() {
+  const e = fseForm.elements, k = fseCases.find((x) => String(x.id) === e.case_id.value);
+  if (!k || !fseCarta()) return;
+  if (e.c_referencia.value.trim() && e.c_referencia.value !== fseRefAuto) return;
+  const num = k.radicado ? formatRadicado(k.radicado) : k.case_number || "";
+  fseRefAuto = [k.client_name && `Cliente: ${k.client_name}`, num && `Radicado: ${num}`, k.court_name && `Despacho: ${k.court_name}`].filter(Boolean).join("\n");
+  e.c_referencia.value = fseRefAuto;
+  fseSchedule();
+}
 async function openFseDialog() {
   const cases = await api("GET", "/cases");
+  fseCases = cases;
+  fseRefAuto = "";
   openDialog(fseDlg, "Firmar y enviar por correo");
   fseForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
     `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
@@ -6586,10 +6599,12 @@ function fseSetMode() {
     if (!e.c_cuerpo.value) e.c_cuerpo.value = window.JuanmaCartaFirma.defaultBody(me?.legal_name || me?.name);
     if (!e.body.value) e.body.value = `Cordial saludo.\n\nRemito el documento adjunto, firmado electrónicamente. Para verificar su autenticidad use el código y el QR de la firma en tecjuridicos.com/verificar.\n\nAtentamente,\n${me?.legal_name || me?.name || ""}`;
     if (!e.subject.value) e.subject.value = e.c_titulo.value || "Remisión de documento";
+    fseFillReference();
     fseRenderCarta();
   } else { fseTooLong = false; fseMarks(); }
 }
 fseForm.elements.mode.addEventListener("change", fseSetMode);
+fseForm.elements.case_id.addEventListener("change", fseFillReference);
 $("#fse-carta", fseDlg).addEventListener("input", fseSchedule);
 const u8ToB64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
 wireDialog(fseDlg, async (form) => {
