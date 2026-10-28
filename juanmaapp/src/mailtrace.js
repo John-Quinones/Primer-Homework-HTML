@@ -97,6 +97,16 @@ export function mailRouter(db) {
       if (letterPdf.length < 1000 || letterPdf.length > 8 * 1024 * 1024 || letterPdf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: "Falta el PDF de la carta." });
       letter = buildLetter(b.letter.fields, { signer: letterSigner });
     }
+    // Version 2.2.97: any PDF of the office, signed by the sender with the platform's stamp where they marked it, and sent to one or more recipients.
+    let signDoc = null;
+    if (b.sign && !letter) {
+      letterSigner = signerView(req.user);
+      const missing = [!letterSigner.name && "su nombre completo (Usuarios)", !letterSigner.id_number && "su cédula (Usuarios)"].filter(Boolean);
+      if (missing.length) return res.status(400).json({ error: `Para firmar falta: ${missing.join(", ")}.` });
+      const pdf = Buffer.from(String(b.sign.pdf_base64 || ""), "base64");
+      if (pdf.length < 100 || pdf.length > 8 * 1024 * 1024 || pdf.subarray(0, 5).toString("latin1") !== "%PDF-") return res.status(400).json({ error: "Falta el PDF o no es válido (máximo 8 MB)." });
+      signDoc = { pdf, name: str(b.sign.filename).replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "documento" };
+    }
     let subject = letter ? letter.subject : str(b.subject), body = letter ? letter.text : String(b.body ?? "").trim();
     if (!subject || !body) return res.status(400).json({ error: "Escriba el asunto y el mensaje." });
     const files = (Array.isArray(b.attachments) ? b.attachments : []).map((a) => ({
@@ -112,7 +122,13 @@ export function mailRouter(db) {
       officeId = k.office_id;
     }
     officeId ||= req.user.offices[0]?.id ?? null;
-    let letterQr = null, signedPdf = null;
+    let letterQr = null, signedPdf = null, signedDocName = "";
+    if (signDoc) {
+      const sig = await issueLetterSignature(db, req, { title: subject, pdf: signDoc.pdf, stampPos: b.sign.stamp_pos, stampPage: str(b.sign.stamp_page), caseId: Number(b.case_id) || null, officeId,
+        signer: letterSigner, docName: `${signDoc.name}.pdf`, message: "Documento firmado y enviado por correo desde la plataforma" });
+      signedPdf = sig.signed.pdf;
+      signedDocName = `${signDoc.name} - firmada.pdf`;
+    }
     if (letter) {
       const sig = await issueLetterSignature(db, req, { title: subject, pdf: letterPdf, stampPos: b.letter.stamp_pos, caseId: Number(b.case_id) || null, officeId, signer: letterSigner });
       signedPdf = sig.signed.pdf;
@@ -143,7 +159,8 @@ export function mailRouter(db) {
     const mail = {
       from: process.env.MAIL_FROM, to, cc, subject, text, html,
       headers: { "Disposition-Notification-To": process.env.MAIL_FROM || "", "Return-Receipt-To": process.env.MAIL_FROM || "" },
-      attachments: [...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
+      attachments: [...(signDoc ? [{ filename: signedDocName, content: signedPdf, contentType: "application/pdf" }] : []),
+        ...(letter ? [...["carta-logo", "carta-qr", "carta-globo", "carta-ubicacion"].map((n) => ({ filename: `${n}.png`, content: readFileSync(PUBLIC(`${n}.png`)), cid: n, contentType: "image/png", contentDisposition: "inline" })),
         { filename: "firma-qr.png", content: letterQr, cid: "firma-qr", contentType: "image/png", contentDisposition: "inline" },
         { filename: "Solicitud link expediente - firmada.pdf", content: signedPdf, contentType: "application/pdf" }] : []),
         ...(mode === "adjunto" ? files.map((f) => ({ filename: f.filename, content: f.data, contentType: f.mime })) : [])],

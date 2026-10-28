@@ -705,7 +705,7 @@
       <section id="view-firmas" class="view" hidden>
         <div class="view-head">
           <h2>Firma electrónica</h2>
-          <div class="toolbar"><button data-action="verify-sign">Verificar documento</button><button class="primary" data-action="new-sign">+ Enviar documento a firma</button></div>
+          <div class="toolbar"><button data-action="verify-sign">Verificar documento</button><button data-action="sign-send">Firmar y enviar por correo</button><button class="primary" data-action="new-sign">+ Enviar documento a firma</button></div>
         </div>
         <p class="hint" id="sign-note">Cada firmante recibe un enlace por correo, confirma su identidad con un código de un solo uso enviado a su correo y firma en pantalla. Queda registrada la huella SHA-256 del documento, la fecha y hora, la IP y el navegador. También puede firmar en persona en este equipo.</p>
         <div class="panel"><div class="table-scroll">
@@ -1562,6 +1562,32 @@
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
         <button class="primary" value="save">Enviar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Firmar un PDF y enviarlo por correo (versión 2.2.97) -->
+  <dialog id="fse-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3 data-title>Firmar y enviar por correo</h3>
+      <p class="hint">Suba un PDF de la oficina, marque dónde va su firma electrónica y envíelo a una o varias autoridades. La firma lleva el código y el QR que se verifica en la App; el PDF firmado va adjunto y el envío queda en Correo certificado.</p>
+      <label>PDF * <input type="file" name="pdf" accept="application/pdf,.pdf" required /></label>
+      <p class="hint" data-fse-info></p>
+      <div id="fse-view" class="pdf-view" aria-label="Vista previa del PDF" hidden></div>
+      <p class="hint" data-fse-spot hidden>Haga clic en la página donde quiere su firma y arrastre el recuadro punteado para ajustarlo (también con las flechas del teclado). Si no marca nada, va al pie de la última página.</p>
+      <div class="grid2">
+        <label>Expediente <select name="case_id"><option value="">— Ninguno —</option></select></label>
+        <label>Asunto * <input name="subject" required /></label>
+      </div>
+      <label>Destinatarios * (uno por línea o separados por coma; puede editarlos y agregar los que quiera)
+        <textarea name="to" rows="4" placeholder="Ministerio de Educación Nacional: correo&#10;Fondo Nacional de Prestaciones Sociales del Magisterio: correo&#10;Secretaría de Educación Departamental del Putumayo: correo" required></textarea>
+      </label>
+      <label>Con copia <input name="cc" placeholder="Opcional" /></label>
+      <label>Mensaje * <textarea name="body" rows="6" required></textarea></label>
+      <p class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button value="cancel" formnovalidate>Cancelar</button>
+        <button class="primary" value="save">Firmar y enviar</button>
       </div>
     </form>
   </dialog>

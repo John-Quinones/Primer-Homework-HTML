@@ -209,7 +209,7 @@ function applyPermissions() {
   document.body.classList.toggle("is-gerencia", isGerencia());
   $$(".sidenav a").forEach((a) => (a.hidden = !!VIEW_PERMS[a.dataset.view] && !can(VIEW_PERMS[a.dataset.view])));
   // Buttons that need a permission carry data-perm (set when rendered) or are matched here.
-  const needs = { "new-receipt": "payments.manage", "new-charge": "payments.manage", "new-sign": "esign.use", "new-mail": "mail.send", "new-client": "clients.write", "new-case": "cases.write", "new-task": "cases.write", "add-radicado": "cases.write" };
+  const needs = { "new-receipt": "payments.manage", "new-charge": "payments.manage", "new-sign": "esign.use", "sign-send": "mail.send", "new-mail": "mail.send", "new-client": "clients.write", "new-case": "cases.write", "new-task": "cases.write", "add-radicado": "cases.write" };
   $$("[data-action]").forEach((b) => { if (needs[b.dataset.action]) b.hidden = !can(needs[b.dataset.action]); });
   $("#user-name").textContent = me.name;
   $("#user-role").textContent = me.role;
@@ -3061,6 +3061,7 @@ document.addEventListener("click", (e) => {
       openDialog($("#password-dialog"), "Cambiar contraseña");
     },
     "new-sign": () => openSignDialog({}),
+    "sign-send": () => openFseDialog(),
     "sign-case": () => openSignDialog({ caseId: id }),
     "open-sign": () => openSignDetail(id),
     "new-mail": () => openMailDialog({}),
@@ -6429,6 +6430,93 @@ $("#sign-pdf-view").addEventListener("keydown", (e) => {
   const k = e.shiftKey ? 0.05 : 0.01;
   placeSpot(Number(sheet.dataset.page), signSpot.fx + step[0] * k, signSpot.fy + step[1] * k, sheet);
   $(".stamp-mark", sheet)?.focus();
+});
+
+// ---------- Version 2.2.97: sign a PDF of the office and e-mail it to one or more recipients ----------
+const fseDlg = $("#fse-dialog"), fseForm = $("form", fseDlg), fseView = $("#fse-view");
+let fseSpot = null; // { fx, fy, page }: top-left corner of the stamp as fractions of its page
+let fseDrag = null;
+const fsePos = () => (fseSpot ? `at:${fseSpot.fx.toFixed(4)},${fseSpot.fy.toFixed(4)}` : "br");
+const fsePage = () => (fseSpot ? String(fseSpot.page) : "last");
+function fseMarks() {
+  const sheets = $$(".pdf-sheet", fseView);
+  fseView.classList.add("stamp-picking");
+  if (!sheets.length) return;
+  const m = window.JuanmaPdfView.markStamps(fseView, { page: fsePage(), pos: fsePos(), n: 1, label: "Mi firma" });
+  m.forEach((x) => { x.tabIndex = 0; x.setAttribute("role", "button"); x.setAttribute("aria-label", "Lugar de la firma: arrástrelo o muévalo con las flechas"); });
+}
+function fsePlace(n, fx, fy, sheet) {
+  const W = Number(sheet.dataset.w), H = Number(sheet.dataset.h), S = window.JuanmaPdf.STAMP;
+  fseSpot = { page: n, fx: Math.min(Math.max(0, fx), Math.max(0, 1 - S.w / W)), fy: Math.min(Math.max(0, fy), Math.max(0, 1 - S.h / H)) };
+  fseMarks();
+}
+async function openFseDialog() {
+  const cases = await api("GET", "/cases");
+  openDialog(fseDlg, "Firmar y enviar por correo");
+  fseForm.elements.case_id.innerHTML = '<option value="">— Ninguno —</option>' + cases.map((k) =>
+    `<option value="${k.id}">${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}</option>`).join("");
+  fseSpot = null;
+  fseView.replaceChildren();
+  fseView.hidden = true;
+  $("[data-fse-spot]", fseDlg).hidden = true;
+  $("[data-fse-info]", fseDlg).textContent = "";
+}
+fseForm.elements.pdf.addEventListener("change", () => guarded(async () => {
+  const f = fseForm.elements.pdf.files[0], info = $("[data-fse-info]", fseDlg);
+  fseSpot = null;
+  if (!f) return;
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  if (f.size > 8 * 1024 * 1024) throw new Error("El PDF debe pesar menos de 8 MB.");
+  if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") throw new Error("El archivo no es un PDF válido.");
+  if (!fseForm.elements.subject.value.trim()) fseForm.elements.subject.value = f.name.replace(/\.pdf$/i, "");
+  const pages = await window.JuanmaPdfView.render(fseView, bytes);
+  info.textContent = `${f.name} · ${pages} página${pages === 1 ? "" : "s"}.`;
+  $("[data-fse-spot]", fseDlg).hidden = false;
+  fseMarks();
+}));
+fseView.addEventListener("pointerdown", (e) => {
+  const sheet = e.target.closest(".pdf-sheet");
+  if (!sheet) return;
+  const r = sheet.getBoundingClientRect(), W = Number(sheet.dataset.w), H = Number(sheet.dataset.h), S = window.JuanmaPdf.STAMP;
+  if (e.target.closest(".stamp-mark")) {
+    const first = $(".stamp-mark", sheet).getBoundingClientRect();
+    fseDrag = { dx: e.clientX - first.left, dy: e.clientY - first.top, id: e.pointerId };
+    fseView.classList.add("stamp-dragging");
+    fseView.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    return;
+  }
+  fsePlace(Number(sheet.dataset.page), (e.clientX - r.left) / r.width - S.w / W / 2, (e.clientY - r.top) / r.height - S.h / H / 2, sheet);
+});
+fseView.addEventListener("pointermove", (e) => {
+  if (!fseDrag || e.pointerId !== fseDrag.id) return;
+  const sheet = document.elementFromPoint(e.clientX, e.clientY)?.closest("#fse-view .pdf-sheet");
+  if (!sheet) return;
+  const r = sheet.getBoundingClientRect();
+  fsePlace(Number(sheet.dataset.page), (e.clientX - fseDrag.dx - r.left) / r.width, (e.clientY - fseDrag.dy - r.top) / r.height, sheet);
+});
+const fseEnd = () => { fseDrag = null; fseView.classList.remove("stamp-dragging"); };
+fseView.addEventListener("pointerup", fseEnd);
+fseView.addEventListener("pointercancel", fseEnd);
+fseView.addEventListener("keydown", (e) => {
+  const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  const sheet = e.target.closest?.(".stamp-mark") && e.target.closest(".pdf-sheet");
+  if (!step || !sheet || !fseSpot) return;
+  e.preventDefault();
+  const k = e.shiftKey ? 0.05 : 0.01;
+  fsePlace(Number(sheet.dataset.page), fseSpot.fx + step[0] * k, fseSpot.fy + step[1] * k, sheet);
+  $(".stamp-mark", sheet)?.focus();
+});
+wireDialog(fseDlg, async (form) => {
+  const f = form.elements.pdf.files[0];
+  if (!f) throw new Error("Elija el archivo PDF.");
+  // Recipients: «Name: address» lines are fine, only the addresses are kept.
+  const found = (s) => [...new Set(s.match(/[^\s@,;:<>]+@[^\s@,;<>]+\.[^\s@,;<>]+/g) || [])];
+  const to = found(form.elements.to.value);
+  if (!to.length) throw new Error("Escriba al menos un correo de destinatario.");
+  const m = await api("POST", "/mail", { to: to.join(", "), cc: found(form.elements.cc.value).join(", "), subject: form.elements.subject.value, body: form.elements.body.value,
+    case_id: Number(form.elements.case_id.value) || null, sign: { pdf_base64: await fileToBase64(f), filename: f.name, stamp_page: fsePage(), stamp_pos: fsePos() } });
+  toast(`Documento firmado y enviado a ${m.to_addr}. Queda en Correo certificado con su constancia de envío.`);
 });
 
 async function openSignDialog({ title = "", text = "", caseId = null } = {}) {
