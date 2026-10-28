@@ -736,7 +736,7 @@ function renderClientList() {
   // «Todos los estados» lists every state with its tag. The note says how many other matches sit in other states.
   const searching = !!($("#client-search")?.value || "").trim() && $("#client-search-by")?.value !== "case";
   const everything = f === "todos";
-  // Version 2.3.4: with «Expedientes» the left column lists only the clients who own a matching case (the cases go at the right).
+  // Version 2.3.5: with «Expedientes» the left column lists only the clients who own a matching case (the cases go at the right).
   const caseText = ($("#client-search")?.value || "").trim(), onlyCases = !!caseText && $("#client-search-by")?.value === "case";
   const owners = onlyCases ? new Set(state.cases.filter(caseSearchMatcher(caseText)).map((k) => k.client_id)) : null;
   const shown = clientsByFolder((everything ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f)).filter((c) => !owners || owners.has(c.id)));
@@ -788,7 +788,7 @@ document.addEventListener("change", (e) => {
 
 async function renderClientDetail() {
   const box = $("#client-detail");
-  // Version 2.3.4: while a search shows the case preview (right column) and no client is chosen, the preview takes the place of the sheet.
+  // Version 2.3.5: while a search shows the case preview (right column) and no client is chosen, the preview takes the place of the sheet.
   const preview = $("#client-case-results");
   box.hidden = !preview.hidden;
   if (box.hidden) return;
@@ -2148,7 +2148,7 @@ function renderClientCaseSearch() {
   // clients; «Expedientes» looks only at cases (and says so when none match).
   const box = $("#client-case-results"), text = $("#client-search").value.trim(), onlyCases = $("#client-search-by").value === "case";
   const found = text ? casesByFolder(state.cases.filter(caseSearchMatcher(text))) : [];
-  // Version 2.3.4: the cases preview fills the right column until a client is chosen (then the client's sheet takes its place).
+  // Version 2.3.5: the cases preview fills the right column until a client is chosen (then the client's sheet takes its place).
   if (!text || (!onlyCases && !found.length) || state.selectedClientId) { box.hidden = true; box.innerHTML = ""; $("#client-detail").hidden = false; return; }
   box.hidden = false;
   $("#client-detail").hidden = true;
