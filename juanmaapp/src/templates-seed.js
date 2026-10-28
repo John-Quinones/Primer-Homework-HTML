@@ -3,6 +3,18 @@
 // Legal references are limited to well-established provisions; everything
 // case-specific is left for the attorney.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The letter's HTML lives in plantillas/solicitud-link-expediente.html; the signature pictures (public/firma-*.png) travel inside it as data URIs.
+const here = path.dirname(fileURLToPath(import.meta.url));
+export function solicitudLinkHtml() {
+  const img = (f) => "data:image/png;base64," + readFileSync(path.join(here, "..", "public", f)).toString("base64");
+  return readFileSync(path.join(here, "plantillas", "solicitud-link-expediente.html"), "utf8")
+    .replace("@@FIRMA_LOGO@@", () => img("firma-logo.png")).replace("@@FIRMA_FOTO@@", () => img("firma-foto.png"));
+}
+
 export const DOC_CATEGORIES = ["Contrato", "Poder", "Autorización", "Derecho de petición", "Demanda", "Tutela", "Recurso", "Memorial", "Otro"];
 
 export const VARIABLES = [
@@ -409,6 +421,9 @@ _______________________________
 **{{abogado.nombre}}**
 T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
   },
+  // Version 2.2.90 (John, 27/10/2026): HTML letter with the firm's design and digital signature; goes to Memorial › Solicitud de link.
+  { name: "Solicitud link de expediente", category: "Memorial", memorialCategory: "Solicitud de link",
+    description: "Carta al despacho pidiendo el link del expediente digital, con diseño TecjuridicosApp y firma digital.", body: solicitudLinkHtml() },
 ];
 
 // The starter fee clause before change 36, and its replacement: the fee comes from Pagos.
