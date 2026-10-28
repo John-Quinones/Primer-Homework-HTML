@@ -9,6 +9,7 @@
   // Stored times are UTC; documents show Colombia time (UTC-5, no daylight saving).
   const co = (utc) => (utc ? new Date(Date.parse(String(utc).replace(" ", "T") + "Z") - 5 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") + " (hora de Colombia)" : "");
   const methodText = (x) => (x.method === "presencial" ? "en persona, con testigo"
+    : x.method === "plataforma" ? "sesión autenticada en la cuenta de la plataforma"
     : `enlace privado y código de un solo uso enviado por ${CHANNEL[x.otp_channel] || CHANNEL.email}${x.otp_to ? " a " + x.otp_to : x.email ? " a " + x.email : ""}`);
 
   // Every PDF has the letterhead (public/membrete.js, version 2.2.4); without it (tests) a plain letter page.
@@ -204,6 +205,7 @@
         put(s.typed_name || s.name, bx, 24, bold, 7.4, rgb(0.06, 0.06, 0.06), 52);
         put([`${s.id_type || ""} ${s.id_number || ""}`.trim(), s.email, s.phone].filter(Boolean).join(" · "), bx, 15, font, 6.4, rgb(0.1, 0.1, 0.1), 66);
         put(s.method === "presencial" ? "Verificación: en persona con testigo"
+          : s.method === "plataforma" ? "Verificación: cuenta autenticada en la plataforma"
           : `Verificación: código OTP por ${s.otp_channel === "sms" ? "SMS" : s.otp_channel === "whatsapp" ? "WhatsApp" : "correo"}`, bx, 6, font, 6, gray, 66);
       });
     }

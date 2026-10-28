@@ -17,6 +17,8 @@ export function solicitudLinkHtml() {
 }
 // SHA-256 of the body seeded by version 2.2.90 (old design): version 2.2.91 replaces the starter template only while it is still exactly that one.
 export const SLINK_V1_SHA = "203ea29bd298a23c0637c987000b9a5ad9cde4fe1d915968524131837d64e715";
+// Same for the body seeded by 2.2.91 (its own stamp drawn in the letter): version 2.2.92 takes the Word-faithful letterhead and the signature module's own stamp.
+export const SLINK_V2_SHA = "14916d19657ec4c76ba728dc1c7f054ce3f0ef6a9514e13e81a3925246fbeda4";
 
 export const DOC_CATEGORIES = ["Contrato", "Poder", "Autorización", "Derecho de petición", "Demanda", "Tutela", "Recurso", "Memorial", "Otro"];
 
@@ -426,7 +428,7 @@ T.P. {{abogado.tarjeta_profesional}} del C. S. de la J.${FOOTER}`,
   },
   // Version 2.2.90 (John, 27/10/2026): HTML letter with the firm's design and digital signature; goes to Memorial › Solicitud de link.
   { name: "Solicitud link de expediente", category: "Memorial", memorialCategory: "Solicitud de link",
-    description: "Carta al despacho pidiendo el link del expediente digital, con el membrete y el pie de la plantilla Word y la firma electrónica de la plataforma.", body: solicitudLinkHtml() },
+    description: "Carta al despacho pidiendo el link del expediente digital, con el membrete y el pie de la plantilla Word, sin cambios, y el espacio de la firma electrónica del módulo de firma.", body: solicitudLinkHtml() },
 ];
 
 // The starter fee clause before change 36, and its replacement: the fee comes from Pagos.

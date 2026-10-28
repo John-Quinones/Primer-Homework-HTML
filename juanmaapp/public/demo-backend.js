@@ -159,6 +159,12 @@
       if (cur && cur.body.includes('class="cabecera"')) Object.assign(cur, { body: seed.body, description: seed.description });
       st.info = { ...st.info, slinkV2: true };
     }
+    // 2.2.92: and once more, from the 2.2.91 body (it carried the drawn stamp) to the Word-faithful letterhead.
+    if (!st.info.slinkV3) {
+      const seed = TPL.seed.find((t) => t.name === "Solicitud link de expediente"), cur = seed && st.templates.find((t) => t.builtin && t.name === seed.name);
+      if (cur && cur.body.includes('class="estampa"')) Object.assign(cur, { body: seed.body, description: seed.description });
+      st.info = { ...st.info, slinkV3: true };
+    }
     for (const t of st.templates) if (t.file_b64) { st.blobs[`tpl-${t.id}`] = t.file_b64; delete t.file_b64; }
     return st;
   }

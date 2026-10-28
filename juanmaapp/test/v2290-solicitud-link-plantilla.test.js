@@ -43,9 +43,12 @@ test("fromCase maps the case's data to the letter's own names", () => {
 
 test("the template names every variable John asked for", () => {
   const body = readFileSync(new URL("../src/plantillas/solicitud-link-expediente.html", import.meta.url), "utf8");
-  for (const k of ["ciudad", "fecha_solicitud", "nombre_juez_o_doctora", "cargo_despacho", "correo_juzgado", "ciudad_juzgado", "tipo_actuacion", "demandante", "demandado", "numero_radicado", "nombre_abogado", "nombre_cliente", "cliente_del_senor", "firma_nombre", "firma_cc", "firma_tarjeta", "firma_contacto", "firma_fecha"])
+  for (const k of ["ciudad", "fecha_solicitud", "nombre_juez_o_doctora", "cargo_despacho", "correo_juzgado", "ciudad_juzgado", "tipo_actuacion", "demandante", "demandado", "numero_radicado", "nombre_abogado", "nombre_cliente", "cliente_del_senor", "correo_abogado"])
     assert.ok(body.includes(`{{${k}}}`), k);
   assert.match(body, /print-color-adjust:\s*exact/);
+  assert.match(body, /class="espacio-firma"/); // the signature module stamps here; the letter itself carries no drawn signature
+  assert.match(body, /Tel\. 314 415 6914 \/ 320 557 7777/);
+  assert.match(body, /border:1\.33px solid #002B6A/); // the Word's page border
   assert.match(body, /Carrera 5 No\. 29-32 Of\.290 Centro Comercial La Quinta/);
   assert.doesNotMatch(body, /Yo,/);
 });
@@ -65,4 +68,21 @@ test("the starter letter takes the new design only while it is exactly the one 2
   db.prepare("UPDATE document_templates SET body = ? WHERE name = ?").run(old + "<!-- editada por Gerencia -->", name);
   flag(); seedTemplates(db);
   assert.match(body(), /editada por Gerencia/);
+});
+
+test("2.2.92 replaces the 2.2.91 starter letter once, only while it is exactly that one", async () => {
+  const { createHash } = await import("node:crypto");
+  const { SLINK_V2_SHA, SEED_TEMPLATES } = await import("../src/templates-seed.js");
+  const { seedTemplates } = await import("../src/templates.js");
+  const v2 = readFileSync(new URL("./fixtures/solicitud-link-v2.html", import.meta.url), "utf8");
+  assert.equal(createHash("sha256").update(v2).digest("hex"), SLINK_V2_SHA);
+  const db = openDb(":memory:");
+  const name = "Solicitud link de expediente", reset = () => db.prepare("DELETE FROM app_flags WHERE key IN ('template-slink-v2', 'template-slink-v3')").run();
+  const body = () => db.prepare("SELECT body FROM document_templates WHERE name = ?").get(name).body;
+  db.prepare("UPDATE document_templates SET body = ? WHERE name = ?").run(v2, name);
+  reset(); seedTemplates(db);
+  assert.equal(body(), SEED_TEMPLATES.find((t) => t.name === name).body);
+  db.prepare("UPDATE document_templates SET body = ? WHERE name = ?").run(v2 + "<!-- editada -->", name);
+  reset(); seedTemplates(db);
+  assert.match(body(), /editada/);
 });
