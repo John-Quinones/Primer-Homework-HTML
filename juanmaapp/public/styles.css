@@ -1636,3 +1636,8 @@ iframe.html-letter { width: 100%; min-height: 640px; border: 1px solid var(--lin
 .chat-dl { display: inline-block; margin-top: 2px; font-size: .75rem; color: var(--muted, inherit); text-decoration: none; }
 .chat-thumb { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; }
 #chat-app.dropping { outline: 3px dashed var(--accent, #3b6fd0); outline-offset: -6px; }
+
+/* Timbre button sits next to Enviar (v2.2.100); only the bell on narrow screens and in the docked window */
+.chat-ring-btn { flex: none; align-self: flex-end; }
+.chat-app.chat-docked .chat-ring-t { display: none; }
+@media (max-width: 600px) { .chat-ring-t { display: none; } }
