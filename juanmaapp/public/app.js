@@ -1412,6 +1412,7 @@ function caseCard(k) {
 async function renderClientes() {
   await Promise.all([loadClients($("#client-search").value), loadCatalog(), loadCases()]);
   renderClientList();
+  renderClientCaseSearch();
   await renderClientDetail();
 }
 
@@ -1426,6 +1427,7 @@ for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "chan
   renderClientList();
 }));
 
+$("#client-case-search").addEventListener("input", renderClientCaseSearch);
 $("#client-list").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-client]");
   if (!btn) return;
@@ -2112,19 +2114,39 @@ function casesByPlace() {
 }
 // Version 2.70: the list hides archived cases unless «Estado» asks for them (Archivo provisional / Archivo definitivo / Todos).
 const ARCHIVED_STATUSES = new Set(["Archivo provisional", "Archivo definitivo", "Pendiente Pago Sentencia"]); // everything but Activo: the views are exclusive (v2.96 adds Pendiente Pago Sentencia)
+// Version 2.2.95: one case search for Expedientes and Clientes. Every typed word must appear in the folder, case number, client name
+// AND document, title, type, court, radicado or parties (any order, no accents); 4+ digits also match the radicado with or without dashes.
+function caseSearchMatcher(text) {
+  const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const q = flat(String(text || "").trim());
+  const qDigits = q.replace(/\D/g, "");
+  const qWords = q.split(/\s+/).filter(Boolean);
+  return (k) => !q || qWords.every((w) => [caseFolder(k), k.case_number, k.client_name, state.clients.find((c) => c.id === k.client_id)?.id_number, k.title, k.type_name, k.court_name, k.radicado, ...(k.parties || []).flatMap((p) => [p.name, p.id_number])]
+    .some((x) => flat(x).includes(w) || (w.replace(/\D/g, "").length >= 4 && String(x ?? "").replace(/\D/g, "").includes(w.replace(/\D/g, "")))))
+    || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
+}
+// Clientes: «Buscar expediente» lists the matching cases (all states) with the client who owns each; no data is touched.
+function renderClientCaseSearch() {
+  const box = $("#client-case-results"), text = $("#client-case-search").value.trim();
+  if (!text) { box.hidden = true; box.innerHTML = ""; return; }
+  const found = casesByFolder(state.cases.filter(caseSearchMatcher(text)));
+  box.hidden = false;
+  box.innerHTML = found.length
+    ? `<p class="muted">${found.length} expediente(s) encontrado(s)${found.length > 20 ? " (se muestran 20)" : ""}.</p><ul class="item-list">${found.slice(0, 20).map((k) => `
+      <li><div class="item"><strong>${caseFolder(k) ? `<span class="folder-tag">${escapeHtml(caseFolder(k))}</span> ` : ""}${escapeHtml(k.client_name || "")}</strong>
+        <span>${escapeHtml([k.title, k.type_name, k.radicado && formatRadicado(k.radicado), k.status].filter(Boolean).join(" · "))}</span>
+        <span class="toolbar"><button data-action="go" data-to="#expediente-${k.id}">Ver expediente</button><button data-action="go" data-to="#cliente-${k.client_id}">Ver cliente</button></span></div></li>`).join("")}</ul>`
+    : '<p class="empty">Ningún expediente coincide. Pruebe con la carpeta, el radicado (con o sin guiones), un apellido o el nombre de una parte.</p>';
+}
 function renderCaseRows() {
   const catId = Number($("#case-filter").value) || null;
   const officeId = Number($("#case-office-filter").value) || null;
   const mine = $("#case-mine").checked;
   const flat = (x) => String(x ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const q = flat($("#case-search").value.trim());
-  const qDigits = q.replace(/\D/g, "");
   // Version 2.2.40: every typed word must appear in the folder, case number, client name AND document, title, type, parties or
   // radicado (any order, no accents); 4+ digits also match the radicado. Searching looks in ALL states, not only «Activos».
-  const qWords = q.split(/\s+/).filter(Boolean);
-  const matches = (k) => !q || qWords.every((w) => [caseFolder(k), k.case_number, k.client_name, state.clients.find((c) => c.id === k.client_id)?.id_number, k.title, k.type_name, k.court_name, k.radicado, ...(k.parties || []).flatMap((p) => [p.name, p.id_number])]
-    .some((x) => flat(x).includes(w) || (w.replace(/\D/g, "").length >= 4 && String(x ?? "").replace(/\D/g, "").includes(w.replace(/\D/g, "")))))
-    || (qDigits.length >= 4 && String(k.radicado || "").replace(/\D/g, "").includes(qDigits));
+  const matches = caseSearchMatcher($("#case-search").value);
   const court = $("#case-court").value, status = $("#case-status").value, adLitem = $("#case-adlitem").checked;
   const rows = casesByFolder(casesByPlace()).filter((k) => (!catId || k.category_id === catId) && (!officeId || k.office_id === officeId)
     && (!mine || k.assigned_user_id === me.id) && (status === "todos" || (status ? k.status === status : (!!q || !ARCHIVED_STATUSES.has(k.status)))) && (!adLitem || k.ad_litem)

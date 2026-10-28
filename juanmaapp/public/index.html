@@ -257,6 +257,8 @@
             <button class="primary" data-action="new-client">+ Nuevo cliente</button>
           </div>
         </div>
+        <div class="toolbar"><input id="client-case-search" type="search" placeholder="Buscar expediente: carpeta, radicado, cliente o parte" aria-label="Buscar expediente" /></div>
+        <div id="client-case-results" class="panel" hidden></div>
         <p class="muted" id="client-archive-note"></p>
         <div class="split">
           <div class="panel list-panel">
@@ -283,7 +285,7 @@
         <div class="view-head">
           <h2>Expedientes</h2>
           <div class="toolbar">
-            <input id="case-search" type="search" placeholder="Buscar carpeta, cliente o radicado" aria-label="Buscar expediente" />
+            <input id="case-search" type="search" placeholder="Buscar expediente: carpeta, radicado, cliente o parte" aria-label="Buscar expediente" />
             <select id="case-office-filter"><option value="">Todas mis oficinas</option></select>
             <select id="case-filter"><option value="">Todos los tipos de proceso</option></select>
             <label class="inline toggle"><input type="checkbox" id="case-mine" /> Solo míos</label>
