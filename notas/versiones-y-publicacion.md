@@ -22,3 +22,4 @@
 - Publicar siempre la cabeza de la rama; nunca una versión anterior encima de una más nueva.
 - Antes de publicar: si Azure ya tiene el cambio, no publicar. Si la cabeza trae versiones de otros hilos que John no aprobó (sobre todo migraciones de datos), preguntarle primero.
 - Cada vez que se publica, darle a John el enlace de Azure para probar.
+- 28/10/2026 (John): la 2.2.100 es la última de la serie 2.2.x; el siguiente cambio es 2.3.0, luego 2.3.1… (`V2_3_0_CHANGE` en `src/version.js`; fila en CAMBIOS.md con 2.3.N).

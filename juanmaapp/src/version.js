@@ -17,10 +17,14 @@ export const VERSION_2_CHANGE = 64;
 // count of the 2.2.1 commit's position again: 2.2.N = change - V2_2_1_CHANGE + 1.
 export const V2_2_1_CHANGE = 171;
 
-// Version name shown to people: 63 and earlier keep their number; then 2, 2.1 … 2.104; then 2.2.1, 2.2.2, …
+// Change number of version 2.3.0 (user's rule, 28/10/2026: 2.2.100 is the last 2.2.N; then 2.3.0, 2.3.1, …).
+export const V2_3_0_CHANGE = V2_2_1_CHANGE + 100;
+
+// Version name shown to people: 63 and earlier keep their number; then 2, 2.1 … 2.104; then 2.2.1 … 2.2.100; then 2.3.0, 2.3.1, …
 export function versionName(change) {
   if (!change) return "";
   if (change < VERSION_2_CHANGE) return String(change);
+  if (change >= V2_3_0_CHANGE) return `2.3.${change - V2_3_0_CHANGE}`;
   if (change >= V2_2_1_CHANGE) return `2.2.${change - V2_2_1_CHANGE + 1}`;
   return change === VERSION_2_CHANGE ? "2" : `2.${change - VERSION_2_CHANGE}`;
 }
