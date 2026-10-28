@@ -1283,16 +1283,22 @@ function followSummary(list) {
     ${r.ok ? `<span class="follow ok">${r.ok} a tiempo</span>` : ""}${r.tarde ? `<span class="follow warn">${r.tarde} con retraso</span>` : ""}</span>`).join("")}</div>`;
 }
 
+/** Version 2.2.98: one «Acciones» menu per task (Cumplida, No cumplida, Notificar, Editar, Eliminar); Eliminar only for Gerencia. */
+function taskMenu(t, isResp) {
+  const canWrite = can("cases.write"), mine = t.assigned_user_id === me.id, pend = t.status === "pendiente";
+  const b = (action, label, extra = "") => `<button data-action="${action}" data-id="${t.id}"${extra}>${label}</button>`;
+  return btnGroup("Acciones", [
+    pend && isResp && canWrite ? b("edit-task", "Registrar respuesta", ' data-focus="response_at"') : "",
+    pend && !isResp && (canWrite || mine) ? b("task-done", "Cumplida") + b("task-notdone", "No cumplida") : "",
+    pend && canWrite ? b("notify-task", "Notificar") : "",
+    canWrite || mine ? b("edit-task", "Editar") : "",
+    isGerencia() ? b("delete-task", "Eliminar", ' class="danger" title="Solo Gerencia; queda en el historial de tareas y en la Bitácora"') : "",
+  ], "mini");
+}
+
 function taskTable(list, answers) {
-  const canWrite = can("cases.write");
   const rows = list.map((t) => {
-    const closing = t.status === "pendiente" && !answers && (canWrite || t.assigned_user_id === me.id)
-      ? `<button class="mini" data-action="task-done" data-id="${t.id}">Cumplida</button><button class="mini" data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : "";
-    const mine = !canWrite && t.assigned_user_id === me.id ? `<button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : "";
-    const actions = canWrite ? `${closing}
-      ${t.status === "pendiente" && answers ? `<button class="mini" data-action="edit-task" data-id="${t.id}" data-focus="response_at">Registrar respuesta</button>` : ""}
-      ${t.status === "pendiente" ? `<button class="mini" data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-      <button class="mini" data-action="edit-task" data-id="${t.id}">Editar</button>` : closing + mine;
+    const actions = taskMenu(t, answers);
     const done = t.status === "cancelada" ? `No cumplida${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : t.status === "hecha" ? `Cumplida ${escapeHtml(CMETA.utcToBogota(t.done_at))}${t.done_by_name ? " por " + escapeHtml(t.done_by_name) : ""}${t.done_notes ? " · " + escapeHtml(t.done_notes) : ""}` : "";
     return answers ? `<tr class="${t.status !== "pendiente" ? "is-done" : ""}">
         <td><span class="badge">${escapeHtml(KIND_LABEL[t.kind])}</span></td>
@@ -3190,7 +3196,8 @@ document.addEventListener("click", (e) => {
       goToSection("actuaciones");
     },
     "delete-task": async () => {
-      if (!(await confirmAsk("Eliminar", "Se eliminará esta tarea o audiencia."))) return;
+      const title = agendaCache.find((t) => t.id === id)?.title;
+      if (!(await confirmAsk("Eliminar", `Se eliminará ${title ? `«${title}»` : "esta tarea o audiencia"}. Queda registrado en el historial de tareas y en la Bitácora.`))) return;
       await api("DELETE", `/tasks/${id}`);
       await refreshView();
     },
@@ -6940,13 +6947,7 @@ async function renderAgenda() {
             <span class="muted">${escapeHtml(whoOf(t))}${t.delivered_at ? " · entregado " + escapeHtml(t.delivered_at) : ""}${t.response_at ? " · respuesta " + escapeHtml(t.response_at) : ""}</span>
           </div>
           <span class="toolbar">${can("scope.all") || myOfficeIds().includes(t.office_id) ? `<button data-action="go" data-to="#expediente-${t.case_id}-tareas">Ver expediente</button>` : ""}
-          ${!can("cases.write") && t.status === "pendiente" && t.assigned_user_id === me.id && !CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>` : ""}
-          ${!can("cases.write") && t.assigned_user_id === me.id ? `<button data-action="edit-task" data-id="${t.id}">Editar</button>` : ""}
-          ${can("cases.write") ? `
-            ${t.status === "pendiente" ? (CMETA.RESPONSE_KINDS.includes(t.kind) ? `<button data-action="edit-task" data-id="${t.id}" data-focus="response_at">Respuesta</button>` : `<button data-action="task-done" data-id="${t.id}">Cumplida</button><button data-action="task-notdone" data-id="${t.id}">No cumplida</button>`) : ""}
-            ${t.status === "pendiente" ? `<button data-action="notify-task" data-id="${t.id}">Notificar</button>` : ""}
-            <button data-action="edit-task" data-id="${t.id}">Editar</button>
-            <button class="danger" data-action="delete-task" data-id="${t.id}" aria-label="Eliminar">✕</button>` : ""}</span>
+          ${taskMenu(t, CMETA.RESPONSE_KINDS.includes(t.kind))}</span>
         </li>`).join("")}</ul>
     </section>`).join("") || '<p class="empty panel">No hay tareas ni audiencias con este filtro. Cree una con “+ Tarea o audiencia” o desde un expediente.</p>';
   agendaCache = tasks;
