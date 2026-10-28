@@ -75,7 +75,8 @@ async function loadPartyCats() {
 let clientsSeq = 0; // 2.2.40: a slow answer to an older search must not overwrite the newer one
 async function loadClients(q = "", by = $("#client-search-by")?.value || "") {
   const mine = ++clientsSeq;
-  const list = await api("GET", `/clients?${new URLSearchParams({ q, by })}`);
+  // Version 2.2.100: «Expedientes» searches cases (renderClientCaseSearch), so the client list is not filtered by that text.
+  const list = await api("GET", `/clients?${new URLSearchParams(by === "case" ? { q: "", by: "" } : { q, by })}`);
   if (mine === clientsSeq) state.clients = list;
 }
 async function loadCases() { state.cases = await api("GET", "/cases"); }
@@ -733,7 +734,7 @@ function renderClientList() {
   const f = clientArchiveFilter();
   // Version 2.2.42: the chosen state rules, also while searching («Clientes activos» never lists archived clients);
   // «Todos los estados» lists every state with its tag. The note says how many other matches sit in other states.
-  const searching = !!($("#client-search")?.value || "").trim();
+  const searching = !!($("#client-search")?.value || "").trim() && $("#client-search-by")?.value !== "case";
   const everything = f === "todos";
   const shown = clientsByFolder(everything ? state.clients : state.clients.filter((c) => (c.archive_status || "") === f));
   const others = ["", ...CLIENT_ARCHIVE].filter((st) => st !== f && !everything).map((st) => [st || "Activo", state.clients.filter((c) => (c.archive_status || "") === st).length]);
@@ -1431,9 +1432,9 @@ $("#client-archive").addEventListener("change", () => guarded(async () => { rend
 for (const [id, ev] of [["#client-search", "input"], ["#client-search-by", "change"]]) $(id).addEventListener(ev, () => guarded(async () => {
   await loadClients($("#client-search").value);
   renderClientList();
+  renderClientCaseSearch();
 }));
 
-$("#client-case-search").addEventListener("input", renderClientCaseSearch);
 $("#client-list").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-client]");
   if (!btn) return;
@@ -2133,9 +2134,11 @@ function caseSearchMatcher(text) {
 }
 // Clientes: «Buscar expediente» lists the matching cases (all states) with the client who owns each; no data is touched.
 function renderClientCaseSearch() {
-  const box = $("#client-case-results"), text = $("#client-case-search").value.trim();
-  if (!text) { box.hidden = true; box.innerHTML = ""; return; }
-  const found = casesByFolder(state.cases.filter(caseSearchMatcher(text)));
+  // Version 2.2.100: the one search bar (#client-search) also finds cases: «Buscar en todo» adds the cases that match under the
+  // clients; «Expedientes» looks only at cases (and says so when none match).
+  const box = $("#client-case-results"), text = $("#client-search").value.trim(), onlyCases = $("#client-search-by").value === "case";
+  const found = text ? casesByFolder(state.cases.filter(caseSearchMatcher(text))) : [];
+  if (!text || (!onlyCases && !found.length)) { box.hidden = true; box.innerHTML = ""; return; }
   box.hidden = false;
   box.innerHTML = found.length
     ? `<p class="muted">${found.length} expediente(s) encontrado(s)${found.length > 20 ? " (se muestran 20)" : ""}.</p><ul class="item-list">${found.slice(0, 20).map((k) => `
