@@ -341,7 +341,8 @@
       else {
         inner = (m.body ? `<p>${rich(m.body, names)}</p>` : "")
           + (m.link ? `<button type="button" class="chat-chip" data-go="${m.link.case_id ? `#expediente-${m.link.case_id}` : `#cliente-${m.link.client_id}`}">${m.link.case_id ? "📁" : "👤"} ${escapeHtml(m.link.label)}</button>` : "")
-          + (m.file ? `<a class="chat-chip" href="/api/chat/files/${m.file.id}" download="${escapeHtml(m.file.name)}">📎 ${escapeHtml(m.file.name)} <small>${Math.max(1, Math.round(m.file.size / 1024))} KB</small></a>` : "");
+          + (m.file && /^image\/(png|jpeg|gif|webp)$/.test(m.file.mime) ? `<a class="chat-imgwrap" href="/api/chat/files/${m.file.id}?inline=1" target="_blank" rel="noopener" title="${escapeHtml(m.file.name)}"><img class="chat-img" loading="lazy" alt="${escapeHtml(m.file.name)}" src="/api/chat/files/${m.file.id}?inline=1"></a><a class="chat-dl" href="/api/chat/files/${m.file.id}" download="${escapeHtml(m.file.name)}">⬇ ${escapeHtml(m.file.name)} · ${Math.max(1, Math.round(m.file.size / 1024))} KB</a>`
+          : m.file ? `<a class="chat-chip" href="/api/chat/files/${m.file.id}" download="${escapeHtml(m.file.name)}">📎 ${escapeHtml(m.file.name)} <small>${Math.max(1, Math.round(m.file.size / 1024))} KB</small></a>` : "");
       }
       html += `<div class="chat-msg${m.mine ? " mine" : ""}${S.focus === m.id ? " focus" : ""}" data-msg="${m.id}">
         ${m.mine || direct ? "" : avatar(m.user_name)}
@@ -370,6 +371,31 @@
   setInterval(() => tick(), POLL_MS);
   setInterval(() => { if (me && active() && !document.hidden) { loadPeople().catch(() => {}); loadConvs().catch(() => {}); } }, LIST_MS);
 
+  const MAX_UP = 5 * 1024 * 1024, BAD_EXT = /\.(exe|bat|cmd|com|scr|msi|dll|js|mjs|vbs|vbe|ps1|jar|apk|app|sh|hta|lnk|reg|svg|html?)$/i;
+  const readB64 = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(blob); });
+  // Big photos (phones) are reduced to 2000 px so they fit; GIFs are sent as they are.
+  async function shrink(f) {
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 1.5 * 1024 * 1024) return f;
+    try {
+      const bmp = await createImageBitmap(f), k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+      cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+      const out = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", 0.85));
+      return out && out.size < f.size ? new File([out], f.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : f;
+    } catch { return f; }
+  }
+  async function takeFiles(list) {
+    if (!list.length || !S.cur || S.editing) return;
+    if (list.length > 1) toast("Se envía un archivo por mensaje; se tomó el primero.");
+    let f = list[0];
+    if (BAD_EXT.test(f.name)) return toast("Ese tipo de archivo no se puede enviar (programas, scripts y páginas web).", true);
+    f = await shrink(f);
+    if (f.size > MAX_UP) return toast("El archivo pesa más de 5 MB.", true);
+    const name = f.name && f.name !== "image.png" ? f.name : "imagen-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "") + (f.type === "image/jpeg" ? ".jpg" : ".png");
+    S.attach = { name, mime: f.type || "application/octet-stream", data_base64: await readB64(f), preview: /^image\//.test(f.type) ? URL.createObjectURL(f) : "" };
+    drawChips();
+  }
+
   async function send(e) {
     e.preventDefault();
     if (!S.cur || S.busy) return;
@@ -385,7 +411,7 @@
       } else {
         const payload = { body };
         if (S.link) Object.assign(payload, S.link.case_id ? { case_id: S.link.case_id } : { client_id: S.link.client_id });
-        if (S.attach) payload.file = S.attach;
+        if (S.attach) payload.file = { name: S.attach.name, mime: S.attach.mime, data_base64: S.attach.data_base64 };
         const m = await api("POST", `/chat/conversations/${S.cur.id}/messages`, payload);
         S.msgs.push(m);
         S.attach = null; S.link = null; drawChips();
@@ -405,7 +431,7 @@
   function drawChips() {
     const el = $("#chat-chips"), parts = [];
     if (S.editing) parts.push('<span class="chat-chip">✎ Editando el mensaje <button type="button" class="chat-x" data-chip="edit" aria-label="Cancelar edición">✕</button></span>');
-    if (S.attach) parts.push(`<span class="chat-chip">📎 ${escapeHtml(S.attach.name)} <button type="button" class="chat-x" data-chip="file" aria-label="Quitar archivo">✕</button></span>`);
+    if (S.attach) parts.push(`<span class="chat-chip">${S.attach.preview ? `<img class="chat-thumb" alt="" src="${S.attach.preview}">` : "📎"} ${escapeHtml(S.attach.name)} <button type="button" class="chat-x" data-chip="file" aria-label="Quitar archivo">✕</button></span>`);
     if (S.link) parts.push(`<span class="chat-chip">${S.link.case_id ? "📁" : "👤"} ${escapeHtml(S.link.label)} <button type="button" class="chat-x" data-chip="link" aria-label="Quitar enlace">✕</button></span>`);
     el.hidden = !parts.length;
     el.innerHTML = parts.join("");
@@ -662,15 +688,13 @@
       input.focus(); $("#chat-mention").hidden = true;
     });
     $("#chat-attach").addEventListener("click", () => $("#chat-file").click());
-    $("#chat-file").addEventListener("change", async (e) => {
-      const f = e.target.files[0];
-      e.target.value = "";
-      if (!f) return;
-      if (f.size > 5 * 1024 * 1024) return toast("El archivo pesa más de 5 MB.", true);
-      const data = await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.readAsDataURL(f); });
-      S.attach = { name: f.name, mime: f.type || "application/octet-stream", data_base64: data };
-      drawChips();
-    });
+    $("#chat-file").addEventListener("change", (e) => { const fs = [...e.target.files]; e.target.value = ""; takeFiles(fs); });
+    // Drag files onto the chat or paste a picture (Ctrl+V / long press) to attach it.
+    const app = $("#chat-app");
+    ["dragenter", "dragover"].forEach((ev) => app.addEventListener(ev, (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { e.preventDefault(); app.classList.add("dropping"); } }));
+    app.addEventListener("dragleave", (e) => { if (!app.contains(e.relatedTarget)) app.classList.remove("dropping"); });
+    app.addEventListener("drop", (e) => { app.classList.remove("dropping"); if (e.dataTransfer?.files?.length) { e.preventDefault(); takeFiles([...e.dataTransfer.files]); } });
+    input.addEventListener("paste", (e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); takeFiles(fs); } });
     $("#chat-link").addEventListener("click", () => { $("#chat-link-q").value = ""; drawLinkList().catch((err) => toast(err.message, true)); $("#chat-link-dialog").showModal(); $("#chat-link-q").focus(); });
     $("#chat-link-q").addEventListener("input", () => { clearTimeout(linkTimer); linkTimer = setTimeout(() => drawLinkList().catch(() => {}), 250); });
     $("#chat-link-list").addEventListener("click", (e) => {
