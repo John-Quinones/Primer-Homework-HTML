@@ -91,6 +91,7 @@ export function createApp(db) {
   app.use("/api/public", express.json({ limit: "2mb" }));
   // Version 2.3.6: «Firmar y enviar por correo» carries a PDF of up to 30 MB as base64 (about 41 MB of JSON).
   app.use("/api/mail", express.json({ limit: "42mb" }));
+  app.use("/api/esign/self", express.json({ limit: "42mb" }));
   app.use(express.json({ limit: "12mb" }));
   // Only the API reads the session: page files (styles, scripts, images, /vendor) are the same
   // for everyone, so loading them does not query the database.
