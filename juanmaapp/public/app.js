@@ -7070,7 +7070,9 @@ async function renderAgenda() {
   sel.innerHTML = '<option value="">Todos los funcionarios</option>' + directory.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
   sel.value = cur;
   if (sel.value) { q.set("userId", sel.value); q.delete("mine"); }
-  const [tasks, all] = await Promise.all([api("GET", `/tasks?${q}`), api("GET", "/tasks")]);
+  // Version 2.3.17: sin filtros las dos consultas serían idénticas; se pide una sola vez.
+  const qs = q.toString();
+  const [tasks, all] = qs ? await Promise.all([api("GET", `/tasks?${qs}`), api("GET", "/tasks")]) : await api("GET", "/tasks").then((t) => [t, t]);
   renderFollowTable(all);
   const now = bogotaNow();
   const groups = new Map();
