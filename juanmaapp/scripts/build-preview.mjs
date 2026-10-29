@@ -27,7 +27,8 @@ const PDFJS = pdfjsClassic(root);
 // The app on the server (Azure); the link sends there what it cannot do itself.
 const SERVER_URL = process.env.JUANMA_SERVER_URL || "https://juanmaapp-tec-efasc4bqgtc8djhp.westus3-01.azurewebsites.net";
 const logo = "data:image/png;base64," + readFileSync(path.join(root, "public/logo-t.png")).toString("base64");
-let html = read("public/index.html");
+// Version 2.3.18: index.html loads its scripts with `defer` (2.3.17); the link inlines them in order, so the plain tags are matched below.
+let html = read("public/index.html").replace(/<script defer src=/g, "<script src=");
 
 html = html
   .replace('<link rel="stylesheet" href="brand.css" />', () => `<style>\n${read("public/brand.css")}\n</style>`)
