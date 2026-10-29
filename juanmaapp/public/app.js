@@ -5245,9 +5245,19 @@ $("#tpl-list").addEventListener("click", (e) => {
   if (b) guarded(() => openTemplate(Number(b.dataset.tpl)));
 });
 
+// Version 2.3.18: the Word libraries load after the screen (2.3.17); wait for them instead of failing when someone is quicker.
+const waitForLibs = (names, ms = 20000) => new Promise((resolve, reject) => {
+  const t0 = Date.now();
+  (function check() {
+    if (names.every((n) => window[n])) return resolve();
+    if (Date.now() - t0 > ms) return reject(new Error("Las herramientas de Word aún no cargan. Revise la conexión y vuelva a intentar."));
+    setTimeout(check, 100);
+  })();
+});
 async function openTemplate(id) {
   const t = await api("GET", `/templates/${id}`);
   if (t.format === "docx") {
+    await waitForLibs(["PizZip", "docxtemplater"]);
     const f = await api("GET", `/templates/${id}/file`);
     t.bytes = D.b64ToBytes(f.base64);
     t.vars = D.docxVariables(t.bytes);
@@ -5406,7 +5416,7 @@ function pickChecklist(kind) {
 // Version 2.67: «Honorarios / Cuota de litis / Mixto» checklist of the services contract; the amounts are typed as plain
 // numbers and the contract writes them as «$2.000 (dos mil pesos m/cte.)». The three data are kept in the case.
 const FEE = { tipo: "campo.Tipo de honorarios", fijo: "campo.Honorarios valor", litis: "campo.Cuota de litis", cuotas: "campo.Cuotas de honorarios" };
-const FEE_VARS = ["honorarios.modalidad", "honorarios.fijo", "honorarios.litis_porcentaje", "honorarios.litis_valor", "honorarios.cuotas", "honorarios.numero_cuotas"];
+const FEE_VARS = ["honorarios.modalidad", "honorarios.fijo", "honorarios.litis_porcentaje", "honorarios.litis_valor", "honorarios.cuotas", "honorarios.numero_cuotas", "honorarios.anticipo", "honorarios.anticipo_fecha"];
 const usesFeeChecklist = () => !!tplActive?.vars.some((k) => FEE_VARS.includes(k));
 function feeChecklist(vals) {
   const tipo = vals[FEE.tipo] || "";
@@ -5434,15 +5444,22 @@ function installmentsBlock(vals, visible) {
   const text = vals[FEE.cuotas] || "", on = !!text.trim() && text !== "no";
   const total = L.pesosFromText(vals[FEE.fijo]);
   const st = L.parseInstallments(text), plan = L.installmentPlan(total, st);
-  const rows = plan.rows.map((r, i) => `<label class="inst-row">${escapeHtml(r.name)}: ${escapeHtml(L.fmtPesos(r.amount))}
+  const rows = plan.rows.filter((r) => r.name !== "Anticipo").map((r, i) => `<label class="inst-row">${escapeHtml(r.name)}: ${escapeHtml(L.fmtPesos(r.amount))}
       <input type="date" data-inst-date="${i}" value="${escapeHtml(r.date)}" class="${r.date ? "" : "missing"}" /></label>`).join("");
   const note = !on ? "" : !total ? "Escriba primero el valor de los honorarios."
-    : plan.over ? "Las cuotas suman más que los honorarios: baje el número o el valor de cada cuota."
-    : !st.n || !st.value ? "Indique el número de cuotas y el valor de cada una."
-    : plan.balance ? `Quedan ${L.fmtPesos(plan.balance)} de saldo: se toman como la última cuota.` : "Las cuotas cubren el total de los honorarios.";
+    : plan.over ? "El anticipo y las cuotas suman más que los honorarios: baje el anticipo, el número o el valor de cada cuota."
+    : !st.n && !st.advance ? "Indique el anticipo, o el número de cuotas y el valor de cada una."
+    : st.n && !st.value ? "Indique el valor de cada cuota."
+    : st.advance && !st.advanceDate ? "Indique la fecha de pago del anticipo."
+    : plan.balance ? `Quedan ${L.fmtPesos(plan.balance)} de saldo: se toman como la última cuota.` : "El anticipo y las cuotas cubren el total de los honorarios.";
+  // Version 2.3.18 (John): the advance and the installments are typed by hand; the advance goes first, then the installments, then the balance.
   return `<div class="fee-inst" data-inst-block ${visible ? "" : "hidden"}>
-    <label class="inline"><input type="checkbox" data-inst-on ${on ? "checked" : ""} /> Pagar los honorarios en cuotas</label>
-    ${on ? `<div class="fee-inst-fields"><label>Número de cuotas <input type="number" min="1" max="${L.MAX_INSTALLMENTS}" data-inst-n value="${st.n || ""}" placeholder="Ej. 3" /></label>
+    <label class="inline"><input type="checkbox" data-inst-on ${on ? "checked" : ""} /> Pagar los honorarios con anticipo o en cuotas</label>
+    ${on ? `<div class="fee-inst-fields">
+      <label>Anticipo (opcional) <input data-inst-adv inputmode="numeric" value="${st.advance ? escapeHtml(L.fmtPesos(st.advance)) : ""}" placeholder="Ej. 500000" />
+        <span class="muted" data-inst-places>${escapeHtml(L.placeValues(st.advance))}</span></label>
+      ${st.advance ? `<label class="inst-row">Fecha del anticipo <input type="date" data-inst-adv-date value="${escapeHtml(st.advanceDate)}" class="${st.advanceDate ? "" : "missing"}" /></label>` : ""}
+      <label>Número de cuotas <input type="number" min="0" max="${L.MAX_INSTALLMENTS}" data-inst-n value="${st.n || ""}" placeholder="Ej. 3" /></label>
       <label>Valor de cada cuota <input data-inst-value inputmode="numeric" value="${st.value ? escapeHtml(L.fmtPesos(st.value)) : ""}" placeholder="Ej. 1000000" />
         <span class="muted" data-inst-places>${escapeHtml(L.placeValues(st.value))}</span></label>
       <p class="muted">${escapeHtml(note)}</p>${rows}</div>` : ""}
@@ -5540,7 +5557,7 @@ $("#tpl-vars").addEventListener("input", (e) => {
 });
 // Version 2.2.55 (John): the value of each installment also shows thousands dots and its place values while it is typed.
 $("#tpl-vars").addEventListener("input", (e) => {
-  const box = e.target.closest("[data-inst-value]");
+  const box = e.target.closest("[data-inst-value], [data-inst-adv]");
   if (!box) return;
   const caret = box.selectionStart ?? box.value.length, digitsBefore = box.value.slice(0, caret).replace(/\D/g, "").length;
   const digits = box.value.replace(/\D/g, "");
@@ -5548,7 +5565,7 @@ $("#tpl-vars").addEventListener("input", (e) => {
   let at = 0, seen = 0;
   while (at < box.value.length && seen < digitsBefore) if (/\d/.test(box.value[at++])) seen++;
   box.setSelectionRange(at, at);
-  $("[data-inst-places]", box.closest("[data-inst-block]")).textContent = L.placeValues(L.pesosFromText(box.value));
+  $("[data-inst-places]", box.parentElement).textContent = L.placeValues(L.pesosFromText(box.value));
 });
 $("#tpl-vars").addEventListener("change", (e) => {
   const obj = e.target.closest("[data-pick]");
@@ -5564,7 +5581,8 @@ $("#tpl-vars").addEventListener("change", (e) => {
     else if (e.target.matches("[data-inst-on]")) tplOverrides[FEE.cuotas] = L.serializeInstallments({ n: 0, value: 0, dates: [] });
     else {
       const dates = $$("[data-inst-date]", box).map((x) => x.value);
-      tplOverrides[FEE.cuotas] = L.serializeInstallments({ n: Number($("[data-inst-n]", box)?.value) || 0, value: L.pesosFromText($("[data-inst-value]", box)?.value) || 0, dates });
+      tplOverrides[FEE.cuotas] = L.serializeInstallments({ n: Number($("[data-inst-n]", box)?.value) || 0, value: L.pesosFromText($("[data-inst-value]", box)?.value) || 0, dates,
+        advance: L.pesosFromText($("[data-inst-adv]", box)?.value) || 0, advanceDate: $("[data-inst-adv-date]", box)?.value || "" });
     }
     renderTplVars();
     if (!$("#tpl-edit-mode").checked) renderTplDoc();

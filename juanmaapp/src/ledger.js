@@ -250,7 +250,10 @@ export function feeTerms(tipo, fijo, litis, cuotas = "") {
     const plan = installmentPlan(n, cuotas);
     if (plan.ok) {
       out["honorarios.cuotas"] = plan.rows.map((r) => `${r.name}: ${money(r.amount)}, el ${longDateEs(r.date)}.`).join("\n");
-      out["honorarios.numero_cuotas"] = `${numeroEnLetras(plan.rows.length)} (${plan.rows.length})`;
+      const inst = plan.rows.filter((r) => r.name !== "Anticipo");
+      out["honorarios.numero_cuotas"] = `${numeroEnLetras(inst.length)} (${inst.length})`;
+      const adv = plan.rows.find((r) => r.name === "Anticipo");
+      if (adv) { out["honorarios.anticipo"] = money(adv.amount); out["honorarios.anticipo_fecha"] = longDateEs(adv.date); }
     }
   }
   const ok = (!wantFijo || out["honorarios.fijo"]) && (!wantLitis || out["honorarios.litis_porcentaje"]);
@@ -263,26 +266,26 @@ export function feeTerms(tipo, fijo, litis, cuotas = "") {
 const ORDINALS = ["Primera", "Segunda", "Tercera", "Cuarta", "Quinta", "Sexta", "Séptima", "Octava", "Novena", "Décima"];
 export const MAX_INSTALLMENTS = 36;
 export function parseInstallments(text) {
-  const [n, v, d] = String(text ?? "").split("|").map((x) => x.trim());
-  return { n: Math.min(parseInt(n, 10) || 0, MAX_INSTALLMENTS), value: pesosFromText(v) || 0, dates: (d || "").split(",").map((x) => x.trim()) };
+  const [n, v, d, a, ad] = String(text ?? "").split("|").map((x) => x.trim());
+  return { n: Math.min(parseInt(n, 10) || 0, MAX_INSTALLMENTS), value: pesosFromText(v) || 0, dates: (d || "").split(",").map((x) => x.trim()), advance: pesosFromText(a) || 0, advanceDate: ad || "" };
 }
-export const serializeInstallments = ({ n, value, dates }) => `${n || ""} | ${value || ""} | ${(dates || []).join(", ")}`;
+// Version 2.3.18 (John): the advance («anticipo») is typed by hand with its date; it is stored after the dates: «n | value | dates | advance | advanceDate».
+export const serializeInstallments = ({ n, value, dates, advance, advanceDate }) =>
+  `${n || ""} | ${value || ""} | ${(dates || []).join(", ")}${advance ? ` | ${advance} | ${advanceDate || ""}` : ""}`;
 /**
- * The plan for `total` pesos: `n` installments of `value` each; what is left over is taken as one last installment («saldo»).
- * Returns { ok, rows: [{name, amount, date}], balance, over }. `ok` only when every installment has its date and the sum is not above the total.
+ * The plan for `total` pesos: the advance (if any), then `n` installments of `value` each; what is left over is taken as one last installment («saldo»).
+ * Returns { ok, rows: [{name, amount, date}], balance, over }. `ok` only when every payment has its date and the sum is not above the total.
  */
 export function installmentPlan(total, text) {
-  const { n, value, dates } = typeof text === "object" && text ? text : parseInstallments(text);
+  const { n, value, dates, advance = 0, advanceDate = "" } = typeof text === "object" && text ? text : parseInstallments(text);
   const empty = { ok: false, rows: [], balance: 0, over: false };
-  if (!total || n < 1 || !value) return empty;
-  const balance = total - n * value;
+  if (!total || (n < 1 && !advance) || (n >= 1 && !value)) return empty;
+  const balance = total - advance - n * value;
   if (balance < 0) return { ...empty, over: true };
-  const count = n + (balance > 0 ? 1 : 0);
   const rows = [];
-  for (let i = 0; i < count; i++) {
-    const last = balance > 0 && i === n;
-    rows.push({ name: last ? "Cuota final (saldo)" : i < ORDINALS.length ? `${ORDINALS[i]} cuota` : `Cuota ${i + 1}`, amount: last ? balance : value, date: dates[i] || "" });
-  }
+  if (advance) rows.push({ name: "Anticipo", amount: advance, date: advanceDate });
+  for (let i = 0; i < n; i++) rows.push({ name: i < ORDINALS.length ? `${ORDINALS[i]} cuota` : `Cuota ${i + 1}`, amount: value, date: dates[i] || "" });
+  if (balance > 0) rows.push({ name: "Cuota final (saldo)", amount: balance, date: dates[n] || "" });
   return { ok: rows.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date)), rows, balance, over: false };
 }
 
@@ -301,7 +304,7 @@ export function feeVariables(charges, receipts = []) {
     "honorarios.valor": fmtCOP(total), "honorarios.valor_letras": pesosEnLetras(total),
     "honorarios.forma_pago": n > 1 ? `${n} cuotas: ${live.slice().sort((a, b) => a.due_date.localeCompare(b.due_date)).map((c) => `${fmtCOP(c.amount)} el ${longDateEs(c.due_date)}`).join("; ")}`
       : `un solo pago a más tardar el ${longDateEs(dates[0])}`,
-    "honorarios.cuotas": String(n), "honorarios.pagado": fmtCOP(paid), "honorarios.saldo": fmtCOP(Math.max(0, total - paid)),
+    "honorarios.numero_cuotas_registradas": String(n), "honorarios.pagado": fmtCOP(paid), "honorarios.saldo": fmtCOP(Math.max(0, total - paid)),
   };
 }
 
