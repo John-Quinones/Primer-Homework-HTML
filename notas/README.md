@@ -13,6 +13,7 @@ Estas notas viven fuera de `juanmaapp/`, así que cambiarlas no sube la versión
 | [costos-ia.md](costos-ia.md) | Qué gasta créditos de la API y con qué modelo |
 | [clientes.md](clientes.md) | Dónde está el código de clientes, lugares (DANE) y sus campos |
 | [importar.md](importar.md) | Módulo de importar: tres Excel (clientes, expedientes, despachos) |
+| [rendimiento.md](rendimiento.md) | Qué hacía lenta la App, cómo se mide y qué falta |
 | [pruebas-locales.md](pruebas-locales.md) | Trucos para probar la App en el contenedor |
 | [contacto-gerencia.md](contacto-gerencia.md) | Correo y WhatsApp de Gerencia y dónde se guardan |
 | [campana.md](campana.md) | Qué avisos muestra la campana y cuándo desaparecen |
