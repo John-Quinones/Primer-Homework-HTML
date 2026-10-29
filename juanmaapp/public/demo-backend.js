@@ -1892,6 +1892,7 @@
     signEvent(r, null, "completada", "Todos los firmantes firmaron.");
     const notes = await window.JuanmaStore.refresh?.("notes");
     if (notes) s.notes = notes.items;
+    auditAdd({ action: "Completó", module: "Firmas", entity: "solicitud de firma", record_id: r.id, summary: `Documento firmado por todos: «${r.title}»` }, { id: null, name: "Sistema" });
     s.notes.push({ id: nextId(), user_id: r.created_by, kind: "firma", title: "Documento firmado por todos", body: r.title, link: "#firmas", key: null, created_at: stamp(), read_at: null });
   }
   const signVisible = (r) => inScope(r.office_id) || r.created_by === me().id;

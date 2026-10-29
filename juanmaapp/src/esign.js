@@ -7,6 +7,7 @@ import express from "express";
 import { str } from "./http.js";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { can, scopeOf } from "./auth.js";
+import { auditSystem } from "./audit.js";
 import { sendEmail, sendSms, sendWhatsapp, sendWhatsappCode, channelReady } from "./notify.js";
 import { buildSignedPdf } from "./signed-pdf.js";
 import { newVerifyCode, normVerifyCode } from "./verify-code.js";
@@ -104,6 +105,7 @@ async function notifySigned(db, requestId, signerName) {
   if (!x?.created_by) return;
   const pending = db.prepare("SELECT COUNT(*) AS n FROM sign_signers WHERE request_id = ? AND status = 'pendiente'").get(requestId).n;
   if (pending) {
+    auditSystem(db, { action: "Registró", module: "Firmas", entity: "firma", record_id: requestId, summary: `${signerName} firmó «${x.title}» · faltan ${pending} firma(s)` });
     db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'firma', ?, ?, '#firmas')")
       .run(x.created_by, `${signerName} firmó`, `${x.title} · faltan ${pending} firma(s)`);
     const owner = x.notify && db.prepare("SELECT email FROM users WHERE id = ?").get(x.created_by);
@@ -183,6 +185,7 @@ function finishIfDone(db, requestId) {
     db.prepare("UPDATE sign_requests SET status = 'completada', completed_at = datetime('now') WHERE id = ? AND status = 'enviada'").run(requestId);
     event(db, requestId, null, "completada", "Todos los firmantes firmaron.");
     const r = db.prepare("SELECT created_by, title FROM sign_requests WHERE id = ?").get(requestId);
+    auditSystem(db, { action: "Completó", module: "Firmas", entity: "solicitud de firma", record_id: requestId, summary: `Documento firmado por todos: «${r.title}»` });
     if (r.created_by) {
       db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'firma', ?, ?, '#firmas')")
         .run(r.created_by, "Documento firmado por todos", r.title);

@@ -59,7 +59,8 @@ test("e-signature by link + e-mailed OTP, with evidence and audit trail", async 
   assert.ok(detail.signers[0].ip && detail.signers[0].user_agent);
   const events = detail.events.map((e) => e.event);
   for (const e of ["creada", "enlace_enviado", "abierto", "codigo_enviado", "codigo_incorrecto", "firmado", "firmado_presencial", "completada"]) assert.ok(events.includes(e), e);
-  assert.ok((await admin.call("GET", "/notifications")).body.items.some((n) => n.title === "Documento firmado por todos"));
+  assert.ok(!(await admin.call("GET", "/notifications")).body.items.some((n) => n.title === "Documento firmado por todos"), "v2.3.0: no longer in the bell");
+  assert.ok(srv.db.prepare("SELECT 1 FROM notifications WHERE title = ?").get("Documento firmado por todos") && srv.db.prepare("SELECT 1 FROM audit_log WHERE summary LIKE ?").get("Documento firmado por todos%"), "kept and logged in the Bitácora");
 });
 
 test("PDF documents, reminders replace the link, cancel and reject", async () => {

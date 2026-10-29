@@ -41,8 +41,10 @@ test("chat between users", async () => {
   assert.equal(seen.messages[0].body, "Hola Andrés");
   assert.equal((await andres.call("GET", "/chat/unread")).body.unread, 0);
   assert.equal((await laura.call("GET", `/chat/conversations/${d1}/messages?read=0`)).body.other_read_id, seen.messages[0].id);
-  // The bell tells the receiver once per unread streak.
-  const bell = (await andres.call("GET", "/notifications")).body.items.filter((n) => n.kind === "chat");
+  // v2.3.0: the notice is still kept once per unread streak, but the bell no longer lists it (the chat has its own badge).
+  assert.equal((await andres.call("GET", "/notifications")).body.items.some((n) => n.kind === "chat"), false);
+  const andresId = t.db.prepare("SELECT id FROM users WHERE name LIKE 'Andr%'").get().id;
+  const bell = t.db.prepare("SELECT * FROM notifications WHERE user_id = ? AND kind = 'chat'").all(andresId);
   assert.equal(bell.length, 1);
   assert.equal(bell[0].link, `#chat-${d1}`);
 
@@ -50,8 +52,10 @@ test("chat between users", async () => {
   await carla.call("GET", "/chat/conversations");
   const gen = list0[0].id;
   await laura.call("POST", `/chat/conversations/${gen}/messages`, { body: "Buenos días @Carla Prueba, ¿revisó el término?" });
-  assert.equal((await carla.call("GET", "/notifications")).body.items.some((n) => /mencion/.test(n.title)), true);
-  assert.equal((await andres.call("GET", "/notifications")).body.items.some((n) => /mencion/.test(n.title)), false);
+  const carlaId = t.db.prepare("SELECT id FROM users WHERE name LIKE 'Carla%'").get().id;
+  const mentioned = (uid) => t.db.prepare("SELECT title FROM notifications WHERE user_id = ?").all(uid).some((n) => /mencion/.test(n.title));
+  assert.equal(mentioned(carlaId), true);
+  assert.equal(mentioned(andresId), false);
   assert.equal((await carla.call("GET", "/chat/unread")).body.unread, 1);
 
   // Groups.

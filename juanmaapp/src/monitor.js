@@ -10,6 +10,7 @@ import { withDecisions } from "./decision.js";
 import { formatRadicado } from "./portals.js";
 import { backupIfDue } from "./backup.js";
 import { checkPublicaciones } from "./publicaciones.js";
+import { auditSystem } from "./audit.js";
 
 export const REPORT_HOURS = ["07:00", "13:00", "17:00"];
 
@@ -75,6 +76,7 @@ export async function checkCase(db, caseId) {
     db.prepare("INSERT INTO process_checks (case_id, ok, new_count) VALUES (?, 1, ?)").run(caseId, newCount);
     if (newCount) {
       const users = new Set([k.assigned_user_id].filter(Boolean));
+      auditSystem(db, { action: "Encontró", module: "Consulta de procesos", entity: "actuaciones nuevas", record_id: caseId, case_id: caseId, summary: `Encontró ${newCount} actuación(es) nueva(s) · radicado ${formatRadicado(k.radicado)}` });
       for (const u of users) {
         notify(db, u, "actuacion", `${newCount} actuación(es) nueva(s)`, `Radicado ${formatRadicado(k.radicado)}`, `#consulta`, null);
       }
@@ -208,6 +210,7 @@ export async function deliverReport(db, userId, trigger, now = new Date()) {
   if (p.by_whatsapp) results.push(await sendWhatsapp(p.whatsapp, r.text));
   db.prepare("INSERT INTO report_log (user_id, trigger, channels, summary) VALUES (?, ?, ?, ?)")
     .run(userId, trigger, JSON.stringify(results), r.text);
+  auditSystem(db, { action: "Envió", module: "Consulta de procesos", entity: "reporte de procesos", summary: `Reporte de procesos (${trigger === "manual" ? "manual" : trigger}) · ${r.caseCount} procesos · ${r.newCount} actuaciones nuevas` });
   notify(db, userId, "reporte", `Reporte de procesos (${trigger === "manual" ? "manual" : trigger})`,
     `${r.caseCount} procesos · ${r.newCount} actuaciones nuevas${r.publicacionesCount ? ` · ${r.publicacionesCount} publicaciones` : ""}`, "#consulta", null);
   return { ...r, channels: results };
@@ -287,6 +290,7 @@ export function startScheduler(db, { intervalMs = 60000 } = {}) {
       taskReminders(db, at);
       // Copy of the database every BACKUP_DAYS days (version 2.42); a failure rings Gerencia's bell.
       backupIfDue(db, { now: at.getTime(), onFail: (r) => {
+        auditSystem(db, { action: "Falló", module: "Configuración", entity: "copia de seguridad", summary: `No se pudo hacer la copia de seguridad: ${String(r.error).slice(0, 200)}`, ok: false });
         for (const u of db.prepare("SELECT id FROM users WHERE role = 'Gerencia' AND active = 1").all())
           notify(db, u.id, "respaldo", "No se pudo hacer la copia de seguridad", r.error, "#configuracion", `backup-fail:${bogota(at).slice(0, 10)}`);
       } });
