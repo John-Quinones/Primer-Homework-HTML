@@ -231,9 +231,11 @@ export function noteTaskId(n) {
  * arrives; read «actuaciones nuevas» notices stop showing. `task` is the task row, or null.
  */
 export function bellShows(n, task, nowMs, dueMs) {
-  if (n.kind === "actuacion" && n.read_at) return false;
   const id = noteTaskId(n);
-  if (id === null) return true;
+  // Version 2.3.0 (user's rule, 29/10/2026): the bell only carries tasks and hearings (and what is about them); every other
+  // record (actuaciones, reportes, firmas, acuses, respaldos, chat…) is read in the Bitácora. «asignada» covers the older
+  // «le notificó» notices that have no task key.
+  if (id === null) return n.kind === "asignada";
   if (!task || task.status !== "pendiente") return false;
   const reached = nowMs >= dueMs;
   if (task.kind === "audiencia") return !reached;

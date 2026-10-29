@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 import { taskReminders } from "../src/monitor.js";
 import { bellShows } from "../src/case-meta.js";
+import { auditSystem } from "../src/audit.js";
 
 let srv, admin, k, uid;
 const bell = async () => (await admin.call("GET", "/notifications")).body;
@@ -49,8 +50,18 @@ test("hearing alerts disappear when the date arrives; a pending deadline's «ven
   assert.equal(bellShows({ ...rem, kind: "termino" }, { kind: "termino", status: "pendiente" }, due + 1000, due), false);
   assert.equal(bellShows(over, { kind: "termino", status: "pendiente" }, due + 1000, due), true);
   assert.equal(bellShows(over, { kind: "termino", status: "hecha" }, due + 1000, due), false);
-  assert.equal(bellShows({ key: null, kind: "actuacion", read_at: "2026-10-23" }, null, 0, 0), false);
-  assert.equal(bellShows({ key: null, kind: "actuacion", read_at: null }, null, 0, 0), true);
+});
+
+test("v2.3.0: the bell holds only tasks and hearings; the rest goes to the Bitácora", async () => {
+  for (const kind of ["actuacion", "reporte", "firma", "acuse", "respaldo", "chat", "autorizacion"])
+    assert.equal(bellShows({ key: null, kind, read_at: null }, null, 0, 0), false, kind);
+  assert.equal(bellShows({ key: null, kind: "asignada", read_at: null }, null, 0, 0), true);
+  srv.db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'firma', 'Ana firmó', '', '#firmas')").run(uid);
+  assert.equal((await bell()).items.filter((n) => n.kind === "firma").length, 0);
+  auditSystem(srv.db, { action: "Registró", module: "Firmas", entity: "firma", summary: "Ana firmó «Poder»" });
+  const log = (await admin.call("GET", "/audit?q=Ana")).body;
+  const rows = log.items || log;
+  assert.ok(rows.some((e) => e.summary.includes("Ana firmó") && e.user_name === "Sistema"));
 });
 
 test("assignment notices clear too", async () => {

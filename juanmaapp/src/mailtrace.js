@@ -12,6 +12,7 @@ import { str } from "./http.js";
 import { createHash, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { scopeOf } from "./auth.js";
+import { auditSystem } from "./audit.js";
 import { mailTransport, GRAPH_MAX_MIME } from "./notify.js";
 import { publicUrl, issueLetterSignature } from "./esign.js";
 import { qrPng } from "./qr-png.js";
@@ -264,6 +265,7 @@ export function mailPublicRouter(db) {
     const a = list[Number(req.params.n) - 1];
     if (!a) return res.status(404).type("text/plain").send("El anexo no existe o el enlace no es válido.");
     mailEvent(db, m.id, "anexo_descargado", `${a.filename} · ${a.size} bytes · SHA-256 ${a.sha256}`, req);
+    auditSystem(db, { action: "Registró", module: "Correo certificado", entity: "anexo descargado", record_id: m.id, summary: `Anexo descargado: ${a.filename} · ${m.to_addr}` });
     if (m.created_by) {
       db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'acuse', ?, ?, '#correo')")
         .run(m.created_by, "Anexo descargado", `${a.filename} · ${m.to_addr}`);
@@ -286,6 +288,7 @@ export function mailPublicRouter(db) {
       db.prepare("UPDATE mail_messages SET confirmed_at = datetime('now'), confirm_ip = ?, confirm_ua = ?, confirm_name = ? WHERE id = ?")
         .run(clientIp(req), String(req.get("user-agent") || "").slice(0, 300), str(req.body?.name).slice(0, 120), m.id);
       mailEvent(db, m.id, "acuse_de_recibo", str(req.body?.name).slice(0, 120), req);
+      auditSystem(db, { action: "Registró", module: "Correo certificado", entity: "acuse de recibo", record_id: m.id, summary: `Acuse de recibo confirmado: ${m.to_addr} · ${m.subject}` });
       if (m.created_by) {
         db.prepare("INSERT INTO notifications (user_id, kind, title, body, link) VALUES (?, 'acuse', ?, ?, '#correo')")
           .run(m.created_by, "Acuse de recibo confirmado", `${m.to_addr} · ${m.subject}`);

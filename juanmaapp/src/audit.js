@@ -40,6 +40,11 @@ export function audit(db, req, { user = req.user, action, module = "Acceso", ent
   }
 }
 
+/** Version 2.3.0: an entry for something the system itself did (no request, no user), so the Bitácora shows what no longer rings the bell. */
+export function auditSystem(db, entry) {
+  audit(db, {}, { user: { id: null, name: "Sistema" }, ...entry });
+}
+
 // Rows read before and after a change, to know what changed.
 const SNAP = [
   [/^\/cases\/(\d+)$/, "SELECT * FROM cases WHERE id = ?"],
