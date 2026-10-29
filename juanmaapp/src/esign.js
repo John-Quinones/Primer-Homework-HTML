@@ -13,9 +13,11 @@ import { newVerifyCode, normVerifyCode } from "./verify-code.js";
 import { policiesFor, parseMailOpts, signConsentAnswers, recordConsents } from "./consents.js";
 import { legalVersion, legalDoc, signMailParts, mailOptions } from "./legal.js";
 import { signersProblem } from "./person.js";
+import { signerView } from "./solicitud-link-letter.js";
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const MAX_PDF = 10 * 1024 * 1024;
+const MAX_SELF_PDF = 30 * 1024 * 1024; // same limit as «Firmar y enviar por correo»
 const OTP_MINUTES = 10;
 const PNG = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
 
@@ -214,6 +216,30 @@ export function esignRouter(db) {
     const x = get(req, Number(req.params.id));
     if (!x?.doc_file) return res.status(404).json({ error: "La solicitud no tiene PDF." });
     res.json({ name: x.doc_name, base64: Buffer.from(x.doc_file).toString("base64") });
+  });
+
+  // Version 2.3.16: the user signs a PDF of the office with their own electronic signature and gets the signed PDF back, to send it by e-mail, WhatsApp or however they like.
+  r.post("/self", async (req, res) => {
+    const b = req.body ?? {};
+    const signer = signerView(req.user);
+    const missing = [!signer.name && "su nombre completo (Usuarios)", !signer.id_number && "su cédula (Usuarios)"].filter(Boolean);
+    if (missing.length) return res.status(400).json({ error: `Para firmar falta: ${missing.join(", ")}.` });
+    const pdf = Buffer.from(String(b.pdf_base64 || ""), "base64");
+    if (pdf.length < 100 || pdf.length > MAX_SELF_PDF || pdf.subarray(0, 5).toString("latin1") !== "%PDF-") {
+      return res.status(400).json({ error: pdf.length > MAX_SELF_PDF ? `El PDF pesa ${(pdf.length / 1048576).toFixed(1)} MB y el máximo es 30 MB.` : "El archivo no es un PDF válido." });
+    }
+    const name = str(b.filename).replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "documento";
+    let officeId = null;
+    if (b.case_id) {
+      const k = db.prepare("SELECT office_id FROM cases WHERE id = ?").get(Number(b.case_id));
+      const sc = scopeOf(req.user);
+      if (!k || (sc !== null && !sc.includes(k.office_id))) return res.status(404).json({ error: "El expediente no existe." });
+      officeId = k.office_id;
+    }
+    officeId ||= req.user.offices[0]?.id ?? null;
+    const sig = await issueLetterSignature(db, req, { title: str(b.title) || name, pdf, stampPos: b.stamp_pos, stampPage: str(b.stamp_page), caseId: Number(b.case_id) || null, officeId,
+      signer, docName: `${name}.pdf`, message: "Documento firmado por el usuario para enviarlo por el medio que elija" });
+    res.status(201).json({ id: sig.id, code: sig.code, name: `${name} - firmada.pdf`, sha256: sig.signed.sha256, base64: sig.signed.pdf.toString("base64"), verify_url: `${publicUrl(req)}/verificar.html#${sig.code}` });
   });
 
   r.post("/", async (req, res) => {

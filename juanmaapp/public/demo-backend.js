@@ -665,6 +665,7 @@
   const NEEDS_SERVER = {
     rama: "La consulta automática en la Rama Judicial necesita la app instalada en el servidor (este enlace no puede conectarse a sitios externos). Mientras tanto, use el botón «Portales» de cada expediente: copia el radicado y abre la Rama Judicial, Publicaciones Procesales, TYBA o SAMAI.",
     juris: "La búsqueda y la verificación en las relatorías oficiales se hacen en la App del servidor (Azure): use el botón «Buscar en la App del servidor». Aquí puede analizar una sentencia pegando su texto.",
+    selfSign: "Firmar un PDF y descargarlo necesita la app instalada en el servidor (la firma se emite y se verifica allí).",
     mail: "El envío de correos necesita la app instalada en el servidor con el correo de la firma configurado (SMTP).",
     consent: "El envío del enlace de autorizaciones necesita la app instalada en el servidor. En este enlace use «Firmar en la oficina».",
   };
@@ -2072,6 +2073,7 @@
     ["GET", /^\/mail\/status$/, () => { need("mail.send"); return { configured: false, message: NEEDS_SERVER.mail }; }],
     ["GET", /^\/mail$/, () => { need("mail.send"); return []; }],
     ["POST", /^\/mail$/, () => { need("mail.send"); fail(NEEDS_SERVER.mail); }],
+    ["POST", /^\/esign\/self$/, () => { need("esign.use"); fail(NEEDS_SERVER.selfSign); }],
   );
 
   // ----- payments: charges, receipts, portfolio, reminders (same rules as src/payments.js) -----

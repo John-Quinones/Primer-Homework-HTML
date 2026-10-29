@@ -1577,6 +1577,7 @@
         <select name="mode">
           <option value="pdf">Solo el PDF que subo (firma donde yo marque)</option>
           <option value="carta">Una carta con el membrete de la firma, y el PDF que subo como anexo</option>
+          <option value="solo">Solo firmar el PDF y descargarlo (lo envío yo por correo, WhatsApp u otro medio)</option>
         </select>
       </label>
       <fieldset id="fse-carta" hidden>
@@ -1640,7 +1641,7 @@
       <p class="form-error" hidden></p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate>Cancelar</button>
-        <button class="primary" value="save">Firmar y enviar</button>
+        <button class="primary" value="save" data-fse-submit>Firmar y enviar</button>
       </div>
     </form>
   </dialog>

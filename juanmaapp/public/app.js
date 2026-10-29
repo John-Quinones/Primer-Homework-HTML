@@ -6598,8 +6598,15 @@ function fseSetMode() {
   e.pdf.required = !carta;
   fseForm.classList.toggle("fse-side", !carta);
   // Version 2.3.13: with the letter, the e-mail carries the letter itself (HTML), so the plain message is not used.
-  e.body.required = !carta;
-  e.body.closest("label").hidden = carta;
+  // Version 2.3.16: «Solo firmar»: no recipients, message or OneDrive; the signed PDF is downloaded to be sent by any channel.
+  const solo = e.mode.value === "solo";
+  e.body.required = !carta && !solo;
+  e.body.closest("label").hidden = carta || solo;
+  for (const n of ["to", "cc"]) e[n].closest("label").hidden = solo;
+  e.to.required = !solo;
+  e.subject.required = !solo;
+  $(".onedrive-box", fseDlg).hidden = solo;
+  $("[data-fse-submit]", fseDlg).textContent = solo ? "Firmar y descargar" : "Firmar y enviar";
   $("[data-fse-spot]", fseDlg).hidden = !fseCanPlace() || !$$(".pdf-sheet", fseView).length;
   e.c_unir.disabled = carta && e.c_donde.value === "pdf";
   if (e.c_unir.disabled) e.c_unir.checked = true;
@@ -6621,6 +6628,17 @@ const u8ToB64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000
 wireDialog(fseDlg, async (form) => {
   const f = form.elements.pdf.files[0], carta = fseCarta();
   if (!f && !carta) throw new Error("Elija el archivo PDF.");
+  if (f && form.elements.mode.value === "solo") {
+    if (f.size > FSE_MAX) throw new Error(`El PDF pesa ${(f.size / 1048576).toFixed(1)} MB y el máximo es 30 MB.`);
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") throw new Error("El archivo no es un PDF válido.");
+    const r = await api("POST", "/esign/self", { pdf_base64: u8ToB64(bytes), filename: f.name, title: form.elements.subject.value, case_id: Number(form.elements.case_id.value) || null, stamp_page: fsePage(), stamp_pos: fsePos() });
+    const bin = atob(r.base64), out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    await saveFile(r.name, new Blob([out], { type: "application/pdf" }));
+    toast(`PDF firmado y descargado. Código de verificación ${r.code}; se comprueba en ${r.verify_url}. Envíelo por correo, WhatsApp o el medio que prefiera.`);
+    return;
+  }
   if (f && f.size > FSE_MAX) throw new Error(`El PDF pesa ${(f.size / 1048576).toFixed(1)} MB y el máximo es 30 MB.`);
   // Recipients: «Name: address» lines are fine, only the addresses are kept.
   const found = (s) => [...new Set(s.match(/[^\s@,;:<>]+@[^\s@,;<>]+\.[^\s@,;<>]+/g) || [])];
