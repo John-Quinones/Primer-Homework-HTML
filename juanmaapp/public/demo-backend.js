@@ -2171,13 +2171,19 @@
       const total = money(b.amount);
       total > 0 || fail("Escriba un valor mayor que cero.");
       DATE.test(str(b.due_date)) || fail("Indique la fecha de vencimiento.");
-      const n = Math.min(60, Math.max(1, Number(b.installments) || 1));
+      const parts = Array.isArray(b.parts) && b.parts.length ? b.parts.slice(0, 60).map((x) => ({ amount: money(x?.amount), due_date: str(x?.due_date) })) : null;
+      if (parts) {
+        parts.some((x) => !(x.amount > 0)) && fail("Cada cuota debe tener un valor mayor que cero.");
+        parts.some((x) => !DATE.test(x.due_date)) && fail("Cada cuota debe tener su fecha.");
+        parts.reduce((t, x) => t + x.amount, 0) !== total && fail("Las cuotas deben sumar exactamente el valor total.");
+      }
+      const n = parts ? parts.length : Math.min(60, Math.max(1, Number(b.installments) || 1));
       n > total && fail("Demasiadas cuotas para ese valor.");
       const step = b.every === "quincenal" ? (d, i) => LG.addDays(d, 15 * i) : b.every === "semanal" ? (d, i) => LG.addDays(d, 7 * i) : (d, i) => LG.addMonths(d, i);
       const officeId = payOffice(client, b.case_id);
-      const ids = LG.splitAmount(total, n).map((amount, i) => {
+      const ids = (parts ? parts.map((x) => x.amount) : LG.splitAmount(total, n)).map((amount, i) => {
         const c = { id: nextId(), client_id: client.id, case_id: +b.case_id || null, office_id: officeId, concept, plan_label: n > 1 ? `Cuota ${i + 1} de ${n}` : "",
-          amount, due_date: step(str(b.due_date), i), pay_link: str(b.pay_link), notes: str(b.notes), status: "vigente", void_reason: "",
+          amount, due_date: parts ? parts[i].due_date : step(str(b.due_date), i), pay_link: str(b.pay_link), notes: str(b.notes), status: "vigente", void_reason: "",
           last_reminder_at: null, created_by: me().id, created_at: stamp() };
         s.charges.push(c);
         return c.id;

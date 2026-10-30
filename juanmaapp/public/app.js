@@ -7912,9 +7912,33 @@ async function fillChargeCases(selected) {
     `<option value="${k.id}">${escapeHtml(k.type_name)}${k.radicado ? " · " + escapeHtml(formatRadicado(k.radicado)) : k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
   chargeForm.elements.case_id.value = selected || "";
 }
+// Version 2.3.22 (John): the fee total is typed once and each installment gets its own value and date by hand; the sum must match the total.
+const manualParts = () => $$("#charge-parts [data-part]").map((r) => ({ amount: parseMoney($("[data-pa]", r).value), due_date: $("[data-pd]", r).value }));
+function renderChargeParts() {
+  const f = chargeForm.elements, box = $("#charge-parts"), on = $("#charge-manual").checked && !f.id.value;
+  box.hidden = !on;
+  if (!on) return (box.innerHTML = "");
+  const total = parseMoney(f.amount.value), n = Math.max(1, Math.min(60, Number(f.installments.value) || 1));
+  const old = manualParts();
+  const base = total && n <= total ? L.splitAmount(total, n) : [];
+  const step = f.every.value === "quincenal" ? (i) => L.addDays(f.due_date.value, 15 * i) : f.every.value === "semanal" ? (i) => L.addDays(f.due_date.value, 7 * i) : (i) => L.addMonths(f.due_date.value, i);
+  box.innerHTML = Array.from({ length: n }, (_, i) => {
+    const o = old[i];
+    const amount = o ? o.amount : base[i] || 0, date = o ? o.due_date : f.due_date.value ? step(i) : "";
+    return `<div class="grid2" data-part><label>Cuota ${i + 1}: valor <input data-pa class="money" inputmode="numeric" value="${amount ? cop(amount) : ""}" placeholder="$ 0" /></label>
+      <label>Fecha <input data-pd type="date" value="${date}" /></label></div>`;
+  }).join("");
+}
+$("#charge-manual").addEventListener("change", () => { renderChargeParts(); chargePreview(); });
+chargeForm.elements.installments.addEventListener("change", renderChargeParts);
 function chargePreview() {
   const f = chargeForm.elements;
   if (f.id.value) return ($("#charge-preview").textContent = "");
+  if ($("#charge-manual").checked) {
+    const total = parseMoney(f.amount.value), sum = manualParts().reduce((t, p) => t + p.amount, 0), diff = total - sum;
+    return ($("#charge-preview").textContent = !total ? "" : diff === 0 ? `Cuotas cuadradas: ${cop(sum)} de ${cop(total)}.`
+      : `Suman ${cop(sum)} de ${cop(total)}: ${diff > 0 ? "faltan" : "sobran"} ${cop(Math.abs(diff))}.`);
+  }
   const total = parseMoney(f.amount.value), n = Math.max(1, Number(f.installments.value) || 1);
   if (!total || !f.due_date.value) return ($("#charge-preview").textContent = "");
   const parts = L.splitAmount(total, n);
@@ -7931,7 +7955,9 @@ async function openChargeDialog(c = null, clientId = null, caseId = null, fees =
   openDialog(dlg, c ? "Editar cobro" : fees ? "Registrar honorarios" : "Nuevo cobro o plan de cuotas", c ? { id: c.id, concept: c.concept, amount: cop(c.amount), due_date: c.due_date, pay_link: c.pay_link, notes: c.notes }
     : { due_date: localToday(), installments: 1, concept: fees ? "Honorarios" : "" });
   chargeForm.elements.client_id.disabled = !!c;
-  $("[data-plan]", dlg).hidden = !!c;
+  $$("[data-plan]", dlg).forEach((e) => (e.hidden = !!c));
+  $("#charge-manual").checked = false;
+  renderChargeParts();
   $("[data-amount-label]", dlg).textContent = c ? "Valor *" : "Valor total *";
   $("[data-due-label]", dlg).textContent = c ? "Vencimiento *" : "Primer vencimiento *";
   await fillChargeCases(c?.case_id ?? caseId);
@@ -7942,8 +7968,10 @@ wireDialog($("#charge-dialog"), async (form) => {
   const d = formData(form);
   if (d.id) await api("PUT", `/payments/charges/${d.id}`, { concept: d.concept, amount: parseMoney(d.amount), due_date: d.due_date, pay_link: d.pay_link, notes: d.notes });
   else {
+    const manual = $("#charge-manual").checked;
     const out = await api("POST", "/payments/charges", { client_id: Number(form.elements.client_id.value), case_id: Number(d.case_id) || null, concept: d.concept,
-      amount: parseMoney(d.amount), due_date: d.due_date, installments: Number(d.installments) || 1, every: d.every, pay_link: d.pay_link, notes: d.notes });
+      amount: parseMoney(d.amount), due_date: d.due_date, installments: Number(d.installments) || 1, every: d.every, pay_link: d.pay_link, notes: d.notes,
+      ...(manual ? { parts: manualParts() } : {}) });
     toast(out.ids.length > 1 ? `Plan creado: ${out.ids.length} cuotas.` : "Cobro creado.");
   }
   payTab = "cobros";

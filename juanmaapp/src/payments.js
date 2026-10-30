@@ -211,18 +211,25 @@ export function paymentsRouter(db) {
     const total = money(b.amount);
     if (!(total > 0)) throw new HttpError(400, "Escriba un valor mayor que cero.");
     if (!DATE.test(str(b.due_date))) throw new HttpError(400, "Indique la fecha de vencimiento.");
-    const n = Math.min(60, Math.max(1, Number(b.installments) || 1));
+    // Version 2.3.22: installments typed by hand (`parts`): each with its own value and date; they must add up to the total.
+    const parts = Array.isArray(b.parts) && b.parts.length ? b.parts.slice(0, 60).map((x) => ({ amount: money(x?.amount), due_date: str(x?.due_date) })) : null;
+    if (parts) {
+      if (parts.some((x) => !(x.amount > 0))) throw new HttpError(400, "Cada cuota debe tener un valor mayor que cero.");
+      if (parts.some((x) => !DATE.test(x.due_date))) throw new HttpError(400, "Cada cuota debe tener su fecha.");
+      if (parts.reduce((t, x) => t + x.amount, 0) !== total) throw new HttpError(400, "Las cuotas deben sumar exactamente el valor total.");
+    }
+    const n = parts ? parts.length : Math.min(60, Math.max(1, Number(b.installments) || 1));
     if (n > total) throw new HttpError(400, "Demasiadas cuotas para ese valor.");
     const step = b.every === "quincenal" ? (d, i) => addDays(d, 15 * i) : b.every === "semanal" ? (d, i) => addDays(d, 7 * i) : (d, i) => addMonths(d, i);
     const officeId = officeOf(req, client, b.case_id);
-    const amounts = splitAmount(total, n);
+    const amounts = parts ? parts.map((x) => x.amount) : splitAmount(total, n);
     const ins = db.prepare(`INSERT INTO charges (client_id, case_id, office_id, concept, plan_label, amount, due_date, pay_link, notes, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const ids = [];
     db.exec("BEGIN");
     try {
       amounts.forEach((amount, i) => ids.push(Number(ins.run(client.id, Number(b.case_id) || null, officeId, concept, n > 1 ? `Cuota ${i + 1} de ${n}` : "",
-        amount, step(str(b.due_date), i), str(b.pay_link), str(b.notes), req.user.id).lastInsertRowid)));
+        amount, parts ? parts[i].due_date : step(str(b.due_date), i), str(b.pay_link), str(b.notes), req.user.id).lastInsertRowid)));
       db.exec("COMMIT");
     } catch (err) { db.exec("ROLLBACK"); throw err; }
     res.status(201);
