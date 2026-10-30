@@ -1585,6 +1585,10 @@ dialog.chat-call[open] { display: flex; }
 .chat-mini-log .hint { margin: 0; }
 .chat-mini-form { display: flex; gap: 6px; }
 .chat-mini-form input { flex: 1; min-width: 0; }
+.chat-dock-hide { align-self: flex-end; padding: 2px 8px; font-size: .78rem; }
+.chat-dock.min { left: auto; right: 104px; width: auto; border-radius: 12px 12px 0 0; }
+.chat-dock.min .chat-dock-mini { display: none; }
+.chat-dock.min .chat-dock-bar { padding: 0 18px; }
 .chat-dock-bar { display: flex; align-items: center; justify-content: center; gap: 8px; height: 34px; border: 0; border-radius: 0; background: transparent; color: var(--text); font-weight: 600; cursor: pointer; box-shadow: none; }
 .chat-dock-bar:hover { background: var(--surface-muted); }
 .chat-dock-body { position: fixed; right: 104px; bottom: var(--dock-pad); z-index: 31; width: min(var(--dock-w), calc(100vw - 24px)); height: min(var(--dock-h), calc(100vh - 100px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px 12px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .4); overflow: hidden; }

@@ -1241,7 +1241,8 @@
     <div class="chat-dock-grip" id="chat-dock-grip" title="Arrastre para cambiar el tamaño de la ventana" aria-hidden="true"></div>
     <div class="chat-dock-head"><strong id="chat-dock-title">Chat</strong>
       <span><button type="button" class="mini" id="chat-dock-full" title="Abrir el chat en pantalla completa">⤢ Ampliar</button>
-      <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button></span></div>
+      <button type="button" class="mini" id="chat-dock-min" title="Plegar la ventana de chat" aria-label="Plegar el chat">▾</button>
+      <button type="button" class="mini" id="chat-dock-min2" title="Minimizar el chat a una pestaña" aria-label="Minimizar el chat">—</button></span></div>
   </div>
   <!-- Aviso de mensaje nuevo o videollamada entrante (versión 2.2.84) -->
   <!-- Timbre recibido (versión 2.2.96) -->
@@ -1257,6 +1258,7 @@
   </div>
   <div id="chat-dock" class="chat-dock" hidden>
     <div id="chat-dock-mini" class="chat-dock-mini">
+      <button type="button" class="mini chat-dock-hide" id="chat-dock-hide" title="Minimizar el chat" aria-label="Minimizar el chat">▾ Minimizar</button>
       <div id="chat-mini-log" class="chat-mini-log" role="button" tabindex="0" title="Toque para abrir el chat"></div>
       <form id="chat-mini-form" class="chat-mini-form" autocomplete="off">
         <input id="chat-mini-input" maxlength="4000" placeholder="Escriba un mensaje…" aria-label="Escribir un mensaje rápido" />

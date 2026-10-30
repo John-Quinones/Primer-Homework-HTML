@@ -50,6 +50,7 @@
     S.lastUnread = u.unread;
     S.calling = u.calling;
     if (!u.calling || callState) hideAlert("call");
+    if (newMsg || newCall) setMin(false);
     if ((newMsg || newCall) && !callState) announce(newMsg, newCall);
     showRings(u.rings || []);
     S.byConv = u.by_conversation;
@@ -152,6 +153,17 @@
   // The chat also lives in a window docked at the bottom of every screen (version 2.2.82): same #chat-app, moved there.
   let dockOpen = false;
   try { dockOpen = sessionStorage.getItem("jm_chat_dock") === "1"; } catch { /* storage may be blocked */ }
+  // Minimized (version 2.3.20): only a small "Chat" tab stays at the bottom, with no polling; it comes back by itself when a message or call
+  // arrives, when the tab is pressed, or when the chat is opened from an alert.
+  let dockMin = false;
+  try { dockMin = sessionStorage.getItem("jm_chat_min") === "1"; } catch { /* storage may be blocked */ }
+  function setMin(on) {
+    if (dockMin === on) return;
+    dockMin = on;
+    try { sessionStorage.setItem("jm_chat_min", on ? "1" : "0"); } catch { /* ignore */ }
+    if (!on) mini = null;
+    syncDock();
+  }
   const active = () => inChat() || dockOpen;
   const home = document.createComment("chat-app-home");
   $("#chat-app").before(home);
@@ -162,8 +174,9 @@
     if (document.body.classList.contains("has-chat-dock") !== show) document.body.classList.toggle("has-chat-dock", show);
     const root = document.documentElement.style;
     setCss(root, "--dock-left", (innerWidth > 760 ? ($(".sidenav")?.offsetWidth || 210) : 0) + "px");
-    setCss(root, "--dock-pad", (show ? dock.offsetHeight : 0) + "px");
+    setCss(root, "--dock-pad", (show ? (dockMin && !dockOpen ? 40 : dock.offsetHeight) : 0) + "px");
     const open = show && dockOpen;
+    setClass(dock, "min", show && dockMin && !dockOpen);
     setHidden($("#chat-dock-body"), !open);
     const exp = String(open);
     if ($("#chat-dock-bar").getAttribute("aria-expanded") !== exp) $("#chat-dock-bar").setAttribute("aria-expanded", exp);
@@ -173,8 +186,8 @@
     if (wantDock && app.parentElement !== $("#chat-dock-body")) { $("#chat-dock-body").append(app); app.classList.add("chat-docked"); dockLoad(); }
     if (!wantDock && app.parentElement === $("#chat-dock-body")) { home.after(app); app.classList.remove("chat-docked"); }
     setText($("#chat-dock-title"), open && S.cur && app.classList.contains("show-main") ? S.cur.title : "Chat");
-    if (show && !open && !miniTimer) { miniRefresh(); miniTimer = setInterval(miniRefresh, 6000); }
-    if ((!show || open) && miniTimer) { clearInterval(miniTimer); miniTimer = 0; }
+    if (show && !open && !dockMin && !miniTimer) { miniRefresh(); miniTimer = setInterval(miniRefresh, 6000); }
+    if ((!show || open || dockMin) && miniTimer) { clearInterval(miniTimer); miniTimer = 0; }
   }
 
   // The fixed bar: the last two messages of the conversation that matters (unread first, else the latest) and a line to answer.
@@ -189,7 +202,7 @@
     return `<p><b>${escapeHtml(m.mine ? "Usted" : m.user_name.split(" ")[0])}</b>: ${escapeHtml(text)}<small>${hhmm(m.created_at)}</small></p>`;
   };
   async function miniRefresh(markRead = false) {
-    if (SERVER_ONLY || !me || dockOpen || inChat() || document.hidden) return;
+    if (SERVER_ONLY || !me || dockOpen || dockMin || inChat() || document.hidden) return;
     if (markRead !== true) markRead = false;
     try {
       await loadConvs();
@@ -245,6 +258,7 @@
   }
   let pendingOpen = 0;
   function setDock(on) {
+    if (on) setMin(false);
     dockOpen = on;
     try { sessionStorage.setItem("jm_chat_dock", on ? "1" : "0"); } catch { /* ignore */ }
     if (on) dockLoaded = false;
@@ -785,7 +799,9 @@
     $("#chat-alert-go").addEventListener("click", () => guarded(alertGo));
     $("#chat-alert-x").addEventListener("click", () => hideAlert());
     document.addEventListener("click", () => { if (window.Notification?.permission === "default") Notification.requestPermission().catch(() => {}); }, { once: true });
-    $("#chat-dock-bar").addEventListener("click", () => setDock(!dockOpen));
+    $("#chat-dock-bar").addEventListener("click", () => { if (dockMin) setMin(false); else setDock(!dockOpen); });
+    $("#chat-dock-hide").addEventListener("click", () => setMin(true));
+    $("#chat-dock-min2").addEventListener("click", () => { setDock(false); setMin(true); });
     $("#chat-mini-form").addEventListener("submit", miniSend);
     $("#chat-mini-input").addEventListener("focus", () => { if (mini?.unread) miniRefresh(true); });
     const openFromMini = () => { pendingOpen = mini?.id || 0; setDock(true); };
