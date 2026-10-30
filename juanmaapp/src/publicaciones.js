@@ -145,18 +145,37 @@ export async function checkPublicaciones(db, caseIds, { today = new Date().toISO
   return res;
 }
 
+/** What a page looks like to the reader: title, links, forms and scripts, to tell a plain list from one drawn by JavaScript. */
+export function describePage(html, base) {
+  const h = String(html);
+  const links = [...h.matchAll(/<a\b[^>]*?href\s*=\s*["']([^"']+)["']/gi)].map((m) => decode(m[1]));
+  return {
+    title: decode((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(h)?.[1] ?? "").replace(/\s+/g, " ").trim()),
+    bytes: h.length,
+    links: links.length,
+    forms: (h.match(/<form\b/gi) || []).length,
+    selects: (h.match(/<select\b/gi) || []).length,
+    scripts: (h.match(/<script\b/gi) || []).length,
+    docs: listDocuments(h, base).length,
+    sample_links: links.filter((l) => !/^(#|javascript:)/i.test(l)).slice(0, 15),
+  };
+}
+
 /** Connection test from the server: does the configured page open and does it list documents? */
 export async function probePublicaciones(sampleCode = "050013103001") {
   const base = { site: SITE, template: urlTemplate(), configured: !!urlTemplate() };
+  const hasCode = urlTemplate().includes("{codigo}");
   let home;
-  try { home = { ok: true, status: "abre", docs: listDocuments(await get(SITE, "text"), SITE).length }; }
+  try { home = { ok: true, status: "abre", ...describePage(await get(SITE, "text"), SITE) }; }
   catch (err) { home = { ok: false, status: err.message, docs: 0 }; }
   if (!urlTemplate()) return { ...base, home, despacho: null };
   const page = despachoUrl(sampleCode);
+  const note = hasCode ? "" : "PUBLICACIONES_URL no trae {codigo}: se consulta la misma página para todos los despachos, que no filtra por despacho.";
   try {
-    const docs = listDocuments(await get(page, "text"), page);
-    return { ...base, home, despacho: { ok: true, url: page, docs: docs.length, sample: docs.slice(0, 3) } };
+    const html = await get(page, "text");
+    const docs = listDocuments(html, page);
+    return { ...base, home, note, despacho: { ok: true, url: page, docs: docs.length, sample: docs.slice(0, 3), page: describePage(html, page) } };
   } catch (err) {
-    return { ...base, home, despacho: { ok: false, url: page, error: err.message } };
+    return { ...base, home, note, despacho: { ok: false, url: page, error: err.message } };
   }
 }
