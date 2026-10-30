@@ -4,6 +4,9 @@
 // RAMA_API_BASE if the service moves.
 const BASE = process.env.RAMA_API_BASE || "https://consultaprocesos.ramajudicial.gov.co:448/api/v2";
 const TIMEOUT_MS = 20000;
+const RETRY_MS = Number(process.env.RAMA_RETRY_MS ?? 1500);
+/** What the user sees when the portal lists nothing: an empty list is not proof that the process does not exist. */
+export const NOT_LISTED_MSG = "La consulta a la Rama Judicial no devolvió ningún proceso para este radicado. Puede que el portal aún no lo muestre o que haya rechazado la consulta desde el servidor; no significa que no exista.";
 
 let fetchImpl = (...a) => fetch(...a);
 /** Tests swap in a stub. */
@@ -26,7 +29,8 @@ async function getJson(url) {
   try {
     const res = await fetchImpl(url, { headers: { Accept: "application/json" }, signal: ctrl.signal });
     if (!res.ok) throw new Error(`La Rama Judicial respondió ${res.status}.`);
-    return await res.json();
+    try { return await res.json(); }
+    catch { throw new Error("La Rama Judicial devolvió una respuesta que no es la esperada (posible bloqueo del portal)."); }
   } catch (err) {
     if (err.name === "AbortError") throw new Error("La Rama Judicial no respondió a tiempo.");
     throw err.message?.startsWith("La Rama") ? err : new Error(`No se pudo consultar la Rama Judicial: ${err.message}`);
@@ -37,11 +41,19 @@ async function getJson(url) {
 
 const day = (v) => (v ? String(v).slice(0, 10) : "");
 
-/** Processes registered under a 23-digit radicado. */
+// The key of a process is the 23-digit radicado; the last two digits (the appeal instance) can differ, so the first 21 count too.
+const sameRadicado = (key, digits) => { const k = String(key).replace(/\D/g, ""); return !k || k === digits || (k.length >= 21 && k.slice(0, 21) === digits.slice(0, 21)); };
+
+/** Processes registered under a 23-digit radicado. An empty list is retried once before it is believed. */
 export async function findByRadicado(radicado) {
-  const data = await getJson(`${BASE}/Procesos/Consulta/NumeroRadicacion?numero=${encodeURIComponent(String(radicado).replace(/\D/g, ""))}&SoloActivos=false&pagina=1`);
-  const list = pick(data, "procesos") || [];
-  return list.map((p) => ({
+  const digits = String(radicado).replace(/\D/g, "");
+  const url = `${BASE}/Procesos/Consulta/NumeroRadicacion?numero=${encodeURIComponent(digits)}&SoloActivos=false&pagina=1`;
+  let list = pick(await getJson(url), "procesos") || [];
+  if (!list.length) {
+    await new Promise((r) => setTimeout(r, RETRY_MS));
+    list = pick(await getJson(url), "procesos") || [];
+  }
+  return list.filter((p) => sameRadicado(pick(p, "llaveProceso") ?? "", digits)).map((p) => ({
     id: String(pick(p, "idProceso") ?? ""),
     radicado: String(pick(p, "llaveProceso") ?? ""),
     court: String(pick(p, "despacho") ?? "").trim(),
@@ -86,7 +98,7 @@ export async function processDetail(processId) {
 /** Judge of the process under a radicado (latest one when several share it): { judge, court } or null. */
 export async function judgeByRadicado(radicado) {
   const digits = String(radicado).replace(/\D/g, "");
-  const found = (await findByRadicado(digits)).filter((p) => !p.radicado || p.radicado === digits);
+  const found = await findByRadicado(digits);
   if (!found.length) return null;
   found.sort((a, b) => (b.lastAction || "").localeCompare(a.lastAction || ""));
   const d = await processDetail(found[0].id);

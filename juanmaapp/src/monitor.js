@@ -1,7 +1,7 @@
 // Process monitoring, task reminders and scheduled reports. Times are
 // Colombia local time (UTC-5, no daylight saving).
 import { TASK_KIND_LABEL } from "./case-meta.js";
-import { findByRadicado, actuaciones } from "./ramajudicial.js";
+import { findByRadicado, actuaciones, NOT_LISTED_MSG } from "./ramajudicial.js";
 import { sendEmail, sendWhatsapp } from "./notify.js";
 import { loadUser, scopeOf, inTransaction } from "./auth.js";
 import { LIVE_STATUSES } from "./case-meta.js";
@@ -57,8 +57,8 @@ export async function checkCase(db, caseId) {
   try {
     let processId = k.ext_process_id;
     if (!processId) {
-      const found = (await findByRadicado(k.radicado)).filter((p) => !p.radicado || p.radicado === k.radicado);
-      if (!found.length) throw new Error("La Rama Judicial no tiene registrado este radicado.");
+      const found = await findByRadicado(k.radicado);
+      if (!found.length) throw new Error(NOT_LISTED_MSG);
       found.sort((a, b) => (b.lastAction || "").localeCompare(a.lastAction || ""));
       processId = found[0].id;
       db.prepare(`UPDATE cases SET ext_process_id = ?, court_name = CASE WHEN court_name = '' THEN ? ELSE court_name END WHERE id = ?`)

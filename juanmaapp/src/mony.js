@@ -5,7 +5,7 @@
 // (Rama Judicial, the App's own database, the judicial calendar in terms.js) or with a
 // clear error; the system prompt forbids filling gaps from memory.
 import Anthropic from "@anthropic-ai/sdk";
-import { findByRadicado, actuaciones } from "./ramajudicial.js";
+import { findByRadicado, actuaciones, NOT_LISTED_MSG } from "./ramajudicial.js";
 import { addJudicialDays } from "./terms.js";
 import { addUsage } from "./ai-usage.js";
 import { scopeOf } from "./auth.js";
@@ -233,8 +233,8 @@ export async function runTool(name, input, { db, user, caseContext }) {
       throw new Error("Este usuario no tiene permiso para consultar procesos en la Rama Judicial.");
     }
     try {
-      const found = (await findByRadicado(radicado)).filter((p) => !p.radicado || p.radicado === radicado);
-      if (!found.length) throw new Error("La Rama Judicial no tiene registrado este radicado.");
+      const found = await findByRadicado(radicado);
+      if (!found.length) throw new Error(NOT_LISTED_MSG);
       found.sort((a, b) => (b.lastAction || "").localeCompare(a.lastAction || ""));
       const acts = (await actuaciones(found[0].id, { maxPages: 1 })).slice(0, 8)
         .map((a) => ({ fecha: a.fecha, actuacion: a.actuacion, anotacion: a.anotacion.slice(0, 400) }));

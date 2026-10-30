@@ -4,7 +4,7 @@ import express from "express";
 import { str } from "./http.js";
 import { can } from "./auth.js";
 import { courtCircuit, filterCourts } from "./case-meta.js";
-import { judgeByRadicado } from "./ramajudicial.js";
+import { judgeByRadicado, NOT_LISTED_MSG } from "./ramajudicial.js";
 import { properName } from "./person.js";
 import { AREAS, DIVIPOLA, canonicalDepartment, canonicalCity, cityFromText, cityCode, inferArea, registerAreas } from "./places.js";
 
@@ -132,7 +132,7 @@ export function courtsRouter(db) {
     if (radicado.length === 23) {
       try {
         out.rama = await judgeByRadicado(radicado);
-        if (!out.rama) out.rama_error = "La Rama Judicial no tiene registrado este radicado.";
+        if (!out.rama) out.rama_error = NOT_LISTED_MSG;
         else if (!out.rama.judge) out.rama_error = "La Rama Judicial no trae el nombre del juez para este proceso.";
       } catch (err) {
         out.rama_error = err.message;
