@@ -145,6 +145,21 @@ export async function checkPublicaciones(db, caseIds, { today = new Date().toISO
   return res;
 }
 
+/** Forms, selects and server-call addresses of a Liferay page, to learn how the despacho filters load their lists. */
+export function describeStructure(html) {
+  const h = String(html);
+  const attr = (tag, name) => decode(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(tag)?.[1] ?? "");
+  const forms = [...h.matchAll(/<form\b[^>]*>/gi)].map((m) => ({ id: attr(m[0], "id"), action: attr(m[0], "action").slice(0, 300), method: attr(m[0], "method") }));
+  const selects = [...h.matchAll(/(<select\b[^>]*>)([\s\S]*?)<\/select>/gi)].map((m) => {
+    const opts = [...m[2].matchAll(/(<option\b[^>]*>)([\s\S]*?)<\/option>/gi)];
+    return { id: attr(m[1], "id"), name: attr(m[1], "name"), options: opts.length, first: opts.slice(0, 4).map((o) => `${attr(o[1], "value")} = ${decode(o[2].replace(/<[^>]+>/g, "")).trim()}`) };
+  });
+  const calls = new Set();
+  for (const m of h.matchAll(/[^"'\s(]*(?:p_p_resource_id|p_p_lifecycle=2|serveResource|\/o\/[\w.-]+\/[\w/.-]*|\/api\/jsonws[\w/.-]*)[^"'\s)]*/gi)) { if (calls.size < 25) calls.add(decode(m[0]).slice(0, 300)); }
+  const names = [...new Set([...h.matchAll(/<input\b[^>]*>/gi)].map((m) => attr(m[0], "name")).filter(Boolean))].slice(0, 40);
+  return { forms, selects, inputs: names, calls: [...calls] };
+}
+
 /** What a page looks like to the reader: title, links, forms and scripts, to tell a plain list from one drawn by JavaScript. */
 export function describePage(html, base) {
   const h = String(html);
@@ -157,6 +172,7 @@ export function describePage(html, base) {
     selects: (h.match(/<select\b/gi) || []).length,
     scripts: (h.match(/<script\b/gi) || []).length,
     docs: listDocuments(h, base).length,
+    structure: describeStructure(h),
     sample_links: links.filter((l) => !/^(#|javascript:)/i.test(l)).slice(0, 15),
   };
 }
