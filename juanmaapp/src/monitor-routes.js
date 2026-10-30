@@ -77,7 +77,7 @@ export function monitorRouter(db) {
     let processes = [];
     if (check.ok) {
       try {
-        processes = (await findByRadicado(k.radicado)).filter((p) => !p.radicado || p.radicado === k.radicado);
+        processes = await findByRadicado(k.radicado);
         processes.sort((a, b) => (b.lastAction || "").localeCompare(a.lastAction || ""));
         if (processes[0]) processes[0].judge = (await processDetail(processes[0].id)).judge;
       } catch { /* the actuaciones are what matters */ }
