@@ -7094,7 +7094,10 @@ async function renderAgenda() {
   renderFollowTable(all);
   const now = bogotaNow();
   const groups = new Map();
-  for (const t of tasks) {
+  // Version 2.3.25: search by the client's name or surname (every word, any order, no accents), folder, radicado or title.
+  const words = plainText($("#agenda-client").value).split(/\s+/).filter(Boolean);
+  const shown = words.length ? tasks.filter((t) => { const hay = plainText([t.client_name, t.title, t.radicado, t.folder, t.type_name].join(" ")); return words.every((w) => hay.includes(w)); }) : tasks;
+  for (const t of shown) {
     const key = t.status === "pendiente" && t.due_at < now ? "vencidas" : t.due_at.slice(0, 10);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(t);
@@ -7138,9 +7141,12 @@ function renderFollowTable(all) {
         <td class="num">${r.ok}</td><td class="num">${r.tarde}</td><td class="num">${closed ? Math.round((r.ok / closed) * 100) + " %" : "—"}</td></tr>`;
     }).join("")}</tbody></table><p class="hint">Cumplimiento = cumplidas a tiempo sobre (cumplidas + vencidas sin cumplir).</p>` : '<p class="empty">Aún no hay tareas asignadas.</p>';
 }
+$("#agenda-client").addEventListener("input", () => guarded(renderAgenda));
 ["#agenda-mine", "#agenda-kind", "#agenda-status", "#agenda-user"].forEach((sel) => $(sel).addEventListener("change", () => guarded(renderAgenda)));
 
 const taskForm = $("#task-dialog form");
+// Version 2.3.25: the case is picked by typing the client's names, surnames, folder or radicado (any order, no accents).
+window.JuanmaCombo.searchSelect(taskForm.elements.case_id, { placeholder: "Escriba nombre o apellido del cliente, carpeta o radicado…", label: "Buscar cliente o expediente" });
 const TASK_TITLE_HINT = {
   audiencia: "Ej. Audiencia inicial art. 77 CPTSS", tarea: "Ej. Preparar alegatos de conclusión", termino: "Ej. Vence traslado de la demanda",
   recurso: "Ej. Recurso de apelación contra el auto del 10 de octubre", requerimiento: "Ej. Atender requerimiento del despacho: aportar poder",
@@ -7270,7 +7276,7 @@ async function openTaskDialog(t = null, caseId = null, kind = null, preset = {},
   if (own && !cases.some((x) => x.id === t.case_id)) cases.push({ id: t.case_id, client_name: t.client_name || "", type_name: t.type_name || "", title: "", office_id: t.office_id });
   if (!cases.length) { toast("Primero cree un expediente.", true); return; }
   taskCases = cases;
-  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}">${caseFolder(k) ? "Carpeta " + escapeHtml(caseFolder(k)) + " · " : ""}${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
+  taskForm.elements.case_id.innerHTML = cases.map((k) => `<option value="${k.id}" data-sub="${escapeHtml(k.radicado || "")}">${caseFolder(k) ? "Carpeta " + escapeHtml(caseFolder(k)) + " · " : ""}${escapeHtml(k.client_name)} · ${escapeHtml(k.type_name)}${k.title ? " · " + escapeHtml(k.title) : ""}</option>`).join("");
   const k0 = kind || "audiencia";
   openDialog($("#task-dialog"), t ? `Editar ${KIND_LABEL[t.kind].toLowerCase()}` : `Nuevo: ${KIND_LABEL[k0].toLowerCase()}`, t ? {
     id: t.id, kind: t.kind, title: t.title, location: t.location, notes: t.notes, due_at: t.due_at.replace(" ", "T"),
