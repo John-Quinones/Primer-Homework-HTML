@@ -147,12 +147,19 @@ async function notifyOwner(db, requestId, subject, text) {
   if (owner?.email) await sendEmail(owner.email, subject, text, `<p>${esc(text)}</p>`);
 }
 
-const requestOut = (db, r) => {
+// Version 2.3.26: the list leaves out each signer's drawn signature (about 20 KB apiece, only the detail screen shows it).
+const requestOut = (db, r, { light = false } = {}) => {
   const signers = db.prepare(`SELECT id, name, id_type, id_number, email, phone, status, method, signed_at, ip, user_agent, typed_name,
-      signature_png, reject_reason, otp_sent_at, otp_channel FROM sign_signers WHERE request_id = ? ORDER BY id`).all(r.id).map((x) => ({ ...x }));
+      ${light ? "'' AS signature_png" : "signature_png"}, reject_reason, otp_sent_at, otp_channel FROM sign_signers WHERE request_id = ? ORDER BY id`).all(r.id).map((x) => ({ ...x }));
   const events = db.prepare("SELECT * FROM sign_events WHERE request_id = ? ORDER BY id").all(r.id).map((x) => ({ ...x }));
-  const { doc_file, signed_pdf, ...rest } = r;
-  return { ...rest, has_pdf: !!doc_file, has_signed_pdf: !!signed_pdf, signers, events };
+  const { doc_file, signed_pdf, has_doc_file, has_signed_pdf, ...rest } = r;
+  return { ...rest, has_pdf: has_doc_file === undefined ? !!doc_file : !!has_doc_file, has_signed_pdf: has_signed_pdf === undefined ? !!signed_pdf : !!has_signed_pdf, signers, events };
+};
+// Version 2.3.26: the list never reads the PDFs themselves (each one up to 30 MB); it only asks whether they exist.
+const listColumns = new WeakMap();
+const listSelect = (db) => {
+  if (!listColumns.has(db)) listColumns.set(db, db.prepare("PRAGMA table_info(sign_requests)").all().map((c) => c.name).filter((n) => n !== "doc_file" && n !== "signed_pdf"));
+  return `${listColumns.get(db).join(", ")}, doc_file IS NOT NULL AS has_doc_file, signed_pdf IS NOT NULL AS has_signed_pdf`;
 };
 
 /**
@@ -205,8 +212,10 @@ export function esignRouter(db) {
   const get = (req, id) => db.prepare(`SELECT * FROM sign_requests WHERE id = ? AND ${officeCond(req)}`).get(id);
 
   r.get("/", (req, res) => {
-    const rows = db.prepare(`SELECT * FROM sign_requests WHERE ${officeCond(req)} ORDER BY id DESC LIMIT 300`).all();
-    res.json(rows.map((x) => requestOut(db, x)));
+    // ?caseId=: the case screen only needs that case's requests.
+    const caseId = Number(req.query.caseId) || 0;
+    const rows = db.prepare(`SELECT ${listSelect(db)} FROM sign_requests WHERE ${officeCond(req)}${caseId ? " AND case_id = ?" : ""} ORDER BY id DESC LIMIT 300`).all(...(caseId ? [caseId] : []));
+    res.json(rows.map((x) => requestOut(db, x, { light: true })));
   });
 
   r.get("/:id", (req, res) => {

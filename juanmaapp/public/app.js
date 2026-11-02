@@ -1137,7 +1137,7 @@ async function renderExpedienteFicha(id) {
     quiet(api("GET", `/cases/${id}/documents`)),
     can("payments.manage") ? quiet(api("GET", `/payments/charges?caseId=${id}&state=`)) : null,
     can("payments.manage") ? quiet(api("GET", `/payments/receipts?clientId=${k.client_id}`)) : null,
-    can("esign.use") ? quiet(api("GET", "/esign")) : null,
+    can("esign.use") ? quiet(api("GET", `/esign?caseId=${id}`)) : null,
     can("mail.send") ? quiet(api("GET", `/mail?caseId=${id}`)) : null,
     quiet(api("GET", `/audit?caseId=${id}`)),
     quiet(api("GET", `/task-log?caseId=${id}`)),
